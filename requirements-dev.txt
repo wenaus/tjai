@@ -1,0 +1,2 @@
+# Development dependencies for tjai
+pytest>=7.0
