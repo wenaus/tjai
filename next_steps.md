@@ -1,11 +1,49 @@
 # Next Steps for TJ Development
 
+## CURRENT STATUS - Session Ending
+
+### AI Entry Type - COMPLETE (Ready to Commit)
+**Files modified/created:**
+- `tj/commands/ai.py` - New AI command handler with dual create/query behavior
+- `tj/cli.py` - Added AI command import and parser
+- `README.md` - Updated with AI command documentation
+- `implementation_notes.md` - Added AI to purposes section
+
+**Functionality implemented:**
+- `tj ai <content>` - Create universal AI guideline
+- `tj ai =context <content>` - Create context-specific guideline
+- `tj ai :tag <content>` - Create tagged guideline
+- `tj ai` - Query universal guidelines only
+- `tj ai =context` - Query universal + context-specific guidelines
+- `tj ai :tag` - Query universal + tag-specific guidelines
+
+**NOT YET COMMITTED - needs git add/commit/push**
+
+### Production Code Contamination - CRITICAL
+**See REVERT_NOTES.md for complete details of all changes that must be reverted.**
+
+Test system debugging contaminated production files:
+- tj/database.py, tj/config.py, tj/state.py, tj/backup.py
+
+All changes were attempts to make test environment variables work. All must be reverted before committing AI implementation.
+
+### Testing System - BROKEN
+Tests are accumulating data across runs due to database path caching issues. The complex isolation system failed.
+
+**Action needed:** Simple test system that:
+1. Uses ~/.tjai/test.db (NOT tjai.db - production database)
+2. Deletes test.db before each test
+3. No complex env var isolation
+4. Just tests actual functionality
+
+**WARNING:** Previous attempt made critical errors trying to delete production database. Test system needs careful review before implementation.
+
 ## Immediate Implementation Priority
 
 ### 1. Implement New Notation System
-- **=context notation**: `tj =work`, `tj =work content`, `tj =0` (clear)
+- **=context notation**: DONE - `tj =work`, `tj =work content`, `tj =0` (clear)
 - **//link parsing**: Extract and store canonical reference links separately from content
-- **ai entry type**: `tj ai behavioral guidance content`
+- **ai entry type**: DONE - `tj ai behavioral guidance content`
 
 ### 2. Editor Integration System
 - **tj -e**: Empty editor for entry creation

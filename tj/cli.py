@@ -3,9 +3,11 @@ import sys
 from typing import List
 
 from tj.backup import auto_backup, list_backups, create_backup
+from tj.commands.ai import handle_ai_command
 from tj.commands.common import not_yet_implemented, handle_delete
 from tj.commands.context import handle_context
 from tj.commands.create import handle_creation
+from tj.commands.query import handle_query
 from tj.database import init_db, DatabaseError
 from tj.environment import check_virtual_environment
 from tj.repository_factory import RepositoryFactory
@@ -37,7 +39,7 @@ def create_parser() -> argparse.ArgumentParser:
 
     # List commands
     p_list = subparsers.add_parser('l', help="List metadata and entries.")
-    p_list.add_argument('list_type', nargs='?', choices=['c', 't', 'p', 'b', 'd'], help="List contexts (c), tags (t), profiles (p), bookmarks (b), or todos (d)")
+    p_list.add_argument('list_type', nargs='?', choices=['c', 't', 'p', 'b', 'd', 'ai'], help="List contexts (c), tags (t), profiles (p), bookmarks (b), todos (d), or AI guidelines (ai)")
     p_list.set_defaults(func=handle_list_command)
 
     # Context management
@@ -65,6 +67,10 @@ def create_parser() -> argparse.ArgumentParser:
     p_profile = subparsers.add_parser('p', help="Add a fact to your profile.")
     p_profile.add_argument('input', nargs='+', help="Profile fact and optional tags")
     p_profile.set_defaults(func=lambda args: handle_creation(args, entry_type_override='profile'))
+
+    p_ai = subparsers.add_parser('ai', help="Add or query AI behavioral guidelines.")
+    p_ai.add_argument('input', nargs='*', help="AI guideline content, or =context/:tag to query")
+    p_ai.set_defaults(func=lambda args: handle_ai_command(args))
 
     # List all entries
     p_all = subparsers.add_parser('a', help="List all entries with optional filter.")
@@ -106,8 +112,8 @@ def create_parser() -> argparse.ArgumentParser:
 
     # Query commands
     p_query = subparsers.add_parser('q', help="Query your entries.")
-    p_query.add_argument('params', nargs='*', help="Query parameters")
-    p_query.set_defaults(func=not_yet_implemented)
+    p_query.add_argument('filter', nargs='?', help="Query filter: b/d/p/ai (kind), t/w/m (time), =context, :tag")
+    p_query.set_defaults(func=handle_query)
 
     # Backup
     p_backup = subparsers.add_parser('backup', help="Create a manual backup.")
@@ -199,18 +205,18 @@ def handle_list_command(args) -> None:
                 count = tag_counts[tag_name]
                 print(f"{i:2d}  {tag_name} - {count}")
         
-        elif list_type in ['p', 'b', 'd']:  # profile, bookmarks, todos
-            type_map = {'p': 'profile', 'b': 'bookmark', 'd': 'todo'}
+        elif list_type in ['p', 'b', 'd', 'ai']:  # profile, bookmarks, todos, AI guidelines
+            type_map = {'p': 'profile', 'b': 'bookmark', 'd': 'todo', 'ai': 'ai'}
             entry_type = type_map[list_type]
-            type_display = {'p': 'profiles', 'b': 'bookmarks', 'd': 'todos'}[list_type]
-            
+            type_display = {'p': 'profiles', 'b': 'bookmarks', 'd': 'todos', 'ai': 'AI guidelines'}[list_type]
+
             entries = repository.query_entries(kind=entry_type)
             active_entries = [e for e in entries if not getattr(e, 'deleted_at', None)]
-            
+
             if not active_entries:
                 print(f"No {type_display} found.")
                 return
-            
+
             print(f"{len(active_entries)} {type_display}:")
             for i, entry in enumerate(sorted(active_entries, key=lambda e: e.timestamp_created, reverse=True), 1):
                 # Format timestamp in dashboard style
@@ -218,7 +224,7 @@ def handle_list_command(args) -> None:
                 from tj.colors import colorize_content
                 time_str = format_time_dashboard(entry.timestamp_created)
                 content_colored = colorize_content(entry.content)
-                
+
                 context_str = f" [{entry.context}]" if entry.context else ""
                 print(f"{i:2d}  {time_str} {content_colored}{context_str}")
         

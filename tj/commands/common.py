@@ -2,6 +2,18 @@ import sys
 from typing import Optional
 from tj.state import display_context
 
+
+def format_entry_for_display(entry) -> str:
+    """Format an entry for display with timestamp, content, and context."""
+    from tj.timezone_manager import format_time_dashboard
+    from tj.colors import colorize_content
+
+    time_str = format_time_dashboard(entry.timestamp_created)
+    content_colored = colorize_content(entry.content)
+    context_str = f" [{entry.context}]" if entry.context else ""
+
+    return f"{time_str} {content_colored}{context_str}"
+
 def not_yet_implemented(args, num_identifier: Optional[int] = None) -> None:
     display_context()
     if num_identifier:

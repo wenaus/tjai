@@ -7,6 +7,7 @@ from typing import Dict, Any
 from tj.database import APP_DIR
 
 CONFIG_FILE = APP_DIR / "config.json"
+
 DEFAULT_CONFIG = {
     "db_path": "~/Dropbox/Current/tjai.db",
     "backup_path": "~/Dropbox/Current/tjai_backups",

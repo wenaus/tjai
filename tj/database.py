@@ -16,15 +16,6 @@ def get_configured_db_path():
         # Fallback if config module isn't available
         return APP_DIR / "tjai.db"
 
-# Dynamic DB_PATH - gets path each time it's accessed
-@property 
-def DB_PATH():
-    return get_configured_db_path()
-
-# For backward compatibility, also create a function
-def get_db_path_configured():
-    return get_configured_db_path()
-
 class DatabaseError(Exception):
     """Custom exception for database operations."""
     pass

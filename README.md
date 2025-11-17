@@ -20,9 +20,10 @@ This project is built on an offline-first, distributed architecture. The `tj` cl
 *   Manages the background sync service.
 *   **DASHBOARD:** `tj hey`
     *   Shows a personal dashboard of context, todos, and other evolving information.
-*   **LIST:** `tj l [c|t]`
-    *   `l c`: Lists all unique context names, with last entry date and count.
-    *   `l t`: Lists all unique tag names, with last entry date and count.
+*   **LIST:** `tj l [c|t|p|b|d|ai]`
+    *   `l c`: Lists all contexts with entry counts.
+    *   `l t`: Lists all tags with counts.
+    *   `l p/b/d/ai`: Lists profiles/bookmarks/todos/AI guidelines.
 *   **CONTEXT:** `tj =<context>` with optional flags
     *   `tj =tjai`: Switch to/create context (terse name only)
     *   `tj =tjai -t AI app development`: Create with title
@@ -31,6 +32,7 @@ This project is built on an offline-first, distributed architecture. The `tj` cl
     *   `tj c`: Clear active context (with confirmation)
 *   **CREATE:**
     *   `tj p <fact>`: Adds a persistent fact to your profile.
+    *   `tj ai <guideline>`: Adds AI behavioral guideline or instruction.
     *   `tj <YYYYMMDD> ...`: Creates a new calendar entry.
     *   `tj <url> ...`: Creates a new bookmark.
     *   `tj [d|do|todo] ...`: Creates a new todo item.

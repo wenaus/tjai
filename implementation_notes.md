@@ -10,6 +10,7 @@ I want a LLM to act as a companion and memory aid in all things, and I want a ga
 - logger of all things. everything timestamped.
 - source of info about me. Structured "me descriptor" to feed to AIs. The sort of info that tbl's pods should hold about me.
 - maintain an easily extended profile of things I want AIs to know about me.
+- AI behavioral guidelines: instructions for how AI should interact, what to prioritize, guidelines to follow.
 - tracks the projects I work on, establishes project contexts.
 - functions as a personal dashboard, showing current context, todos, upcoming calendar items.
 - gathers, assimilates and presents to AIs my likes and tastes, by gathering music collection, books, film/tv, recipes, github repos, etc. 
