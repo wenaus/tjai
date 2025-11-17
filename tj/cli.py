@@ -1,6 +1,7 @@
 import argparse
 import sys
-from typing import List
+from typing import List, Optional, Tuple
+from datetime import datetime
 
 from tj.backup import auto_backup, list_backups, create_backup
 from tj.commands.ai import handle_ai_command
@@ -14,6 +15,83 @@ from tj.repository_factory import RepositoryFactory
 from tj.state import get_state
 from tj.timezone_manager import handle_timezone_command, get_current_timezone, format_time_in_timezone
 from tj.config import handle_config_command
+
+
+def parse_heredoc() -> Optional[str]:
+    """Parse heredoc input from stdin. Reads until line contains just '!'."""
+    lines = []
+    try:
+        for line in sys.stdin:
+            stripped = line.rstrip('\n\r')
+            if stripped == '!':
+                return '\n'.join(lines)
+            lines.append(stripped)
+    except EOFError:
+        pass
+    # If we get here, we didn't find the closing '!'
+    if lines:
+        print("Error: Heredoc not terminated with '!' on its own line", file=sys.stderr)
+    return None
+
+
+def parse_at_timestamp(args_list: List[str]) -> Tuple[Optional[float], List[str]]:
+    """Extract and parse at=YYYYMMDD/HH:MM from arguments.
+
+    Returns (timestamp_or_none, filtered_args)
+    """
+    timestamp = None
+    filtered = []
+
+    for arg in args_list:
+        if arg.startswith('at='):
+            # Parse format: at=20250907/23:57
+            time_str = arg[3:]  # Remove 'at='
+            try:
+                # Expected format: YYYYMMDD/HH:MM
+                if '/' not in time_str:
+                    print(f"Error: Invalid at= format. Expected at=YYYYMMDD/HH:MM, got: {arg}", file=sys.stderr)
+                    continue
+
+                date_part, time_part = time_str.split('/', 1)
+
+                # Parse date: YYYYMMDD
+                if len(date_part) != 8:
+                    print(f"Error: Date must be YYYYMMDD format, got: {date_part}", file=sys.stderr)
+                    continue
+
+                year = int(date_part[0:4])
+                month = int(date_part[4:6])
+                day = int(date_part[6:8])
+
+                # Parse time: HH:MM
+                if ':' not in time_part:
+                    print(f"Error: Time must be HH:MM format, got: {time_part}", file=sys.stderr)
+                    continue
+
+                hour_str, minute_str = time_part.split(':', 1)
+                hour = int(hour_str)
+                minute = int(minute_str)
+
+                # Create datetime and convert to timestamp
+                dt = datetime(year, month, day, hour, minute)
+                timestamp = dt.timestamp()
+
+            except (ValueError, IndexError) as e:
+                print(f"Error: Failed to parse at= timestamp '{arg}': {e}", file=sys.stderr)
+        else:
+            filtered.append(arg)
+
+    return timestamp, filtered
+
+
+def handle_creation_with_at(args, entry_type_override: Optional[str] = None):
+    """Wrapper for handle_creation that extracts at= timestamp from args.input."""
+    if hasattr(args, 'input') and args.input:
+        timestamp_override, filtered_input = parse_at_timestamp(args.input)
+        args.input = filtered_input
+        args.timestamp_override = timestamp_override
+    handle_creation(args, entry_type_override=entry_type_override)
+
 
 def create_parser() -> argparse.ArgumentParser:
     """Create and configure the argument parser."""
@@ -62,11 +140,11 @@ def create_parser() -> argparse.ArgumentParser:
     # Creation commands
     p_todo = subparsers.add_parser('d', help="Add a todo item.", aliases=['do', 'todo'])
     p_todo.add_argument('input', nargs='+', help="Todo content and optional tags")
-    p_todo.set_defaults(func=lambda args: handle_creation(args, entry_type_override='todo'))
+    p_todo.set_defaults(func=lambda args: handle_creation_with_at(args, entry_type_override='todo'))
 
     p_profile = subparsers.add_parser('p', help="Add a fact to your profile.")
     p_profile.add_argument('input', nargs='+', help="Profile fact and optional tags")
-    p_profile.set_defaults(func=lambda args: handle_creation(args, entry_type_override='profile'))
+    p_profile.set_defaults(func=lambda args: handle_creation_with_at(args, entry_type_override='profile'))
 
     p_ai = subparsers.add_parser('ai', help="Add or query AI behavioral guidelines.")
     p_ai.add_argument('input', nargs='*', help="AI guideline content, or =context/:tag to query")
@@ -919,6 +997,26 @@ def main(skip_venv_check: bool = False) -> None:
 
     first_arg = sys.argv[1]
 
+    # Check for heredoc input: <<!
+    if first_arg == '<<!':
+        content = parse_heredoc()
+        if content is None:
+            return  # Error already printed
+
+        # Extract at= timestamp and other args from remaining args
+        remaining_args = sys.argv[2:]
+        timestamp_override, filtered_args = parse_at_timestamp(remaining_args)
+
+        # Create args object with heredoc content
+        class Args:
+            def __init__(self):
+                self.input = [content] + filtered_args
+                self.timestamp_override = timestamp_override
+
+        args = Args()
+        handle_creation(args)
+        return
+
     # Check for =context syntax (tj =work, tj =0, tj =work content)
     if first_arg.startswith('='):
         remaining_args = sys.argv[2:] if len(sys.argv) > 2 else []
@@ -952,10 +1050,14 @@ def main(skip_venv_check: bool = False) -> None:
         return
     
     # Default: treat as content creation
+    # Extract at= timestamp if present
+    timestamp_override, filtered_input = parse_at_timestamp(sys.argv[1:])
+
     class Args:
         def __init__(self):
-            self.input = sys.argv[1:]
-    
+            self.input = filtered_input
+            self.timestamp_override = timestamp_override
+
     args = Args()
     handle_creation(args)
 

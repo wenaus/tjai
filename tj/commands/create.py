@@ -103,9 +103,15 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
                 entry_type = 'memory'
 
         repository = RepositoryFactory.get_repository()
-        
+
         entry_id = str(uuid.uuid4())
-        now = datetime.now(timezone.utc).timestamp()
+
+        # Use timestamp_override if provided, otherwise use current time
+        if hasattr(args, 'timestamp_override') and args.timestamp_override is not None:
+            now = args.timestamp_override
+        else:
+            now = datetime.now(timezone.utc).timestamp()
+
         state = get_state()
         
         # Prepare data JSON

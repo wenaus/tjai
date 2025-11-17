@@ -46,6 +46,12 @@ def handle_ai_command(args, num_identifier: Optional[int] = None) -> None:
         return
 
     # Creation: delegate to handle_creation with ai entry type
+    # Extract at= timestamp if present
+    from tj.cli import parse_at_timestamp
+    if hasattr(args, 'input') and args.input:
+        timestamp_override, filtered_input = parse_at_timestamp(args.input)
+        args.input = filtered_input
+        args.timestamp_override = timestamp_override
     handle_creation(args, entry_type_override='ai')
 
 
