@@ -2,6 +2,50 @@
 
 This document describes all the operators implemented in the TJ (Personal AI Memory Aid) CLI tool.
 
+## Editor Integration
+
+### tj -e / tj --edit
+Open editor for entry creation
+- `tj -e` (empty editor)
+- `tj --edit this is initial content` (editor with initial content)
+- `tj d -e` (todo with editor)
+- `tj p --edit profile content` (profile with editor)
+
+### Bulk Editing
+Launch $EDITOR for bulk entry modification (like git commit workflow)
+- Export current numbered entries to temp file
+- Launch $EDITOR and wait for completion  
+- Parse changes and update entries
+- Handle multi-line content naturally
+
+## Calendar/Journal System
+
+### tj j <date> <content>
+Add calendar/journal entries with flexible date parsing
+- `tj j 16:30 group meeting` (today with time)
+- `tj j group meeting` (today without time)
+- `tj j 1127 event description` (Nov 27, mmdd format)
+- `tj j 20251127 event description` (Nov 27, full date)
+- `tj j tomorrow event description` (tomorrow)
+- `tj j mon event description` (coming Monday)
+- `tj j wed event description` (coming Wednesday)
+
+### tj j -e [date/range]
+Bulk calendar editing in structured format
+- `tj j -e` (edit today's calendar)
+- `tj j -e week` (edit this week)
+- `tj j -e 1127` (edit specific date)
+
+Format supports nested structure:
+```
+20251110 Week 46
+  Mon Nov 10
+    [Event name](link)
+    Another event
+  Tue Nov 11
+    [Meeting](link)
+```
+
 ## Core Entry Operations
 
 ### tj . <number> <text>

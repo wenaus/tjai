@@ -42,6 +42,7 @@ I want a LLM to act as a companion and memory aid in all things, and I want a ga
 - entering just the 'tj' command should produce a comprehensive dashboard summary, then print the help.
 - time zone: US east is the default and start, but it needs to be changeable. we need a 'tj tz zone' command supporting eastern, central, pacific, euro. without zone specified, it reports current zone and lists the options. support also a +/-integer option for relative to UTC.
 - *anywhere* an item is shown it should have a number to accept operations. tags too. and contexts.
+- available characters: _ ^ / + .
 
 ## Client-Server Architecture
 
