@@ -1,9 +1,8 @@
 """Configuration management for tjai."""
 
 import json
-import os
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from tj.database import APP_DIR
 
