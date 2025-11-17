@@ -1,6 +1,6 @@
 # Implementation Notes
 
-Follow these guidelines in app design and implementation.
+Follow these guidelines in app design and implementation. CAVEAT: these are human written and may lag the design and implementation, ie aspects may be out of date. Other doc generally takes priority, in case of uncertainty, ask.
 
 ## Purposes
 
@@ -16,9 +16,37 @@ I want a LLM to act as a companion and memory aid in all things, and I want a ga
 - maps. They are an obsession of mine. More particularly, places. A proper geotagged personal place database, with notes. Can be integrated with mapping apps later.
 - mobile friendly in a later version. Keep the architecture open to mobile clients later. Incorporate mobile enrichment now in the schema and design.
 - support lists. shopping lists, task lists, wish lists, bucket lists, etc. Lists as single entries with sub-items added via '+' syntax.
-- suppo
+
+## Testing Philosophy
+
+- No frivolous tests. No mocking. Meaningful tests on a full function system.
+- Tests should verify actual behavior of the complete system, not isolated units with mocked dependencies.
+- Focus on integration tests that exercise real database operations and command workflows.
+
+## Sub-items vs Lists
+
+Two distinct mechanisms for organizing related content:
+
+### Sub-items (Hierarchical Entities)
+- Sub-items are **actual entities** (entries in the database) with their own IDs, timestamps, and full metadata.
+- They are **children** of a parent entry, one level down maximum (no deeper nesting).
+- Parent is the **last referenced parent level item** in the conversation/session.
+- Created via: `tj . content` (adds sub-item to current parent context)
+- Use cases: Follow-up notes, detailed breakdowns, hierarchical note-taking.
+- Limitation: **Only 1 level deep** - no grandchildren allowed.
+
+### Lists (Embedded JSON)
+- List items are **NOT separate entities** - they're embedded in the parent entry's JSON data field.
+- Lightweight mechanism for simple lists like shopping lists, task lists, wish lists.
+- Created via: `tj shopping list` (creates list entity), then `tj + milk`, `tj + bread` (adds items to JSON).
+- List items have no individual IDs, timestamps, or metadata - they're just strings in an array.
+- Use cases: Shopping lists, simple checklists, quick collections where items don't need individual tracking.
+
+**Key distinction**: If the items need to be queried, tagged, timestamped, or treated as independent entries, use sub-items. If you just need a simple collection within a parent, use lists.
 
 ## Design and implementation
+
+- Python: Current stable Python 3.x (not locked to specific version).
 
 - cloud service. must be distributed. local sqlite for speed and airplane mode.
 - REST based. sync service. syncs local db to cloud.
@@ -30,8 +58,8 @@ I want a LLM to act as a companion and memory aid in all things, and I want a ga
 - every piece of info is timestamped. every one has a unique uuid. the uuid is generated locally, client side. 
 - designed so that there is no possibility of clashes between client updates, e.g. from different computers. each entry is unique by construction (uuid + timestamp).
 - schema must be highly flexible to incorporate new types of info over time. use json structure for transparent extensibility.
-- the essential obvious constantly searched on schema columns should be columns. e.g. timestamp, context, type, is_dirty. the json is for everything else, including probably tags.
-- the 'type' should be a string, not an enum, to allow new types to be added without schema changes. And don't call it 'type'.
+- the essential obvious constantly searched on schema columns should be columns. e.g. timestamp, context, kind, is_dirty. the json is for everything else.
+- the entry classification field 'kind' should be a string, not an enum, to allow new types to be added without schema changes. Use 'kind' consistently (not 'type').
 - sqlite db and other local materials should be kept in ~/.tjai/ directory.
 - written in python. well motivated dependencies are fine.
 - command line interface. GUI on the web service side.
@@ -82,8 +110,9 @@ Primary Architecture: Cloud-first distributed service
 - smart input interpretation. tj detects URLs, dates (YYYYMMDD format), etc automatically.
 - tj doesn't conflict with common linux commands (confirmed safe).
 - default action is "remember" - tj <text> creates a memory, no explicit command needed.
-- tags use # syntax anywhere in input: tj "some text #tag1 #tag2".
+- tags use : syntax anywhere in input: tj "some text :tag1 :tag2".
 - the entry contains the tags as-is, don't remove them from the text.
+- use :tagname consistently throughout codebase and docs (not #tags).
 - context system: tj c <name> sets context, tj c clears it. context auto-applies to all new entries.
 - interactive context creation: when setting unknown context, prompt "Context 'name' not found. Create? [y/N]".
 - query results are numbered for easy reference: tj 3 a "sub-note", tj 5 x (delete).
@@ -91,7 +120,7 @@ Primary Architecture: Cloud-first distributed service
 
 ## Command Structure Details
 
-- LIST: tj l c (contexts with usage stats), tj l # (tags with counts and last used date)
+- LIST: tj l c (contexts with usage stats), tj l t (tags with counts and last used date)
 - QUERY: tj q [b|r|d|p] (by type), tj q [t|w|m] (time periods), tj q c <name> (by context), tj q #<tag>
 - CALENDAR: tj 20251225 "Christmas dinner" - YYYYMMDD format auto-detected
 - PROFILE: tj p "facts about me" - builds the "me descriptor"

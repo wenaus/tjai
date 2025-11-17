@@ -5,8 +5,9 @@ This document captures design decisions, conventions, and architectural choices 
 ## Notation Conventions
 
 ### Established Patterns
-- **Tags**: `:tagname` (light green coloring in terminal) - using `:` because `#` gets interpreted as comments
+- **Tags**: `:tagname` (light green coloring in terminal) - using `:` because `#` gets interpreted as comments in bash
 - **Places**: `@place` (using @ because "at" has direct semantic meaning - "at the office", "at home")
+- **NOTE**: Use `:tagname` consistently throughout codebase and docs (not `#tags`)
 
 ### Context System - Beautiful Consistency
 **Decided**: Use `=` for all context operations

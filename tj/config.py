@@ -7,10 +7,13 @@ from typing import Dict, Any, Optional
 
 from tj.database import APP_DIR
 
-CONFIG_FILE = APP_DIR / "config"
+CONFIG_FILE = APP_DIR / "config.json"
 DEFAULT_CONFIG = {
     "db_path": "~/Dropbox/Current/tjai.db",
-    "backup_path": "~/Dropbox/Current/tjai_backups"
+    "backup_path": "~/Dropbox/Current/tjai_backups",
+    "backup_interval_hours": 1,
+    "recent_entries_hours": 24,
+    "backup_retention_days": 7
 }
 
 
@@ -98,12 +101,30 @@ def show_config() -> None:
             print(f"  {key}: {value}")
 
 
+def get_backup_interval_hours() -> int:
+    """Get the backup interval in hours."""
+    config = get_config()
+    return config.get("backup_interval_hours", DEFAULT_CONFIG["backup_interval_hours"])
+
+
+def get_recent_entries_hours() -> int:
+    """Get the recent entries window in hours."""
+    config = get_config()
+    return config.get("recent_entries_hours", DEFAULT_CONFIG["recent_entries_hours"])
+
+
+def get_backup_retention_days() -> int:
+    """Get the backup retention period in days."""
+    config = get_config()
+    return config.get("backup_retention_days", DEFAULT_CONFIG["backup_retention_days"])
+
+
 def handle_config_command(args) -> None:
     """Handle the config command."""
     if not hasattr(args, 'action') or not args.action:
         show_config()
         return
-    
+
     if args.action == "show":
         show_config()
     elif args.action == "db-path":

@@ -20,7 +20,15 @@ def get_backup_dir():
         # Fallback if config module isn't available
         return APP_DIR / "backups"
 
-BACKUP_INTERVAL_HOURS = 1
+
+def get_backup_interval_hours():
+    """Get the configured backup interval in hours."""
+    try:
+        from tj.config import get_backup_interval_hours as config_get_interval
+        return config_get_interval()
+    except ImportError:
+        # Fallback if config module isn't available
+        return 1
 
 
 def get_last_backup_time() -> Optional[float]:
@@ -68,29 +76,38 @@ def needs_backup() -> bool:
     last_backup = get_last_backup_time()
     if last_backup is None:
         return True
-    
+
     now = datetime.now().timestamp()
     hours_since_backup = (now - last_backup) / 3600
-    
-    return hours_since_backup >= BACKUP_INTERVAL_HOURS
+    backup_interval = get_backup_interval_hours()
+
+    return hours_since_backup >= backup_interval
 
 
 def cleanup_old_backups() -> None:
     """Clean up old backups according to retention policy.
-    
+
     Retention policy:
     - Today: Keep all hourly backups (no cleanup)
     - Yesterday+: Keep only the latest backup from each day
-    - After 1 week: Keep only one backup per week
+    - After N days: Keep only one backup per week (N from config)
     """
     try:
         backups = list_backups()
         if len(backups) <= 1:
             return  # Nothing to clean up
-        
+
         now = datetime.now()
         today = now.date()
-        one_week_ago = now - timedelta(days=7)
+
+        # Get retention days from config
+        try:
+            from tj.config import get_backup_retention_days
+            retention_days = get_backup_retention_days()
+        except ImportError:
+            retention_days = 7  # Fallback
+
+        retention_cutoff = now - timedelta(days=retention_days)
         
         # Group backups by date
         backups_by_date = defaultdict(list)
@@ -106,8 +123,8 @@ def cleanup_old_backups() -> None:
             if backup_date == today:
                 # Today: Keep ALL hourly backups, don't purge anything
                 continue
-            elif backup_date >= one_week_ago.date():
-                # Recent days (yesterday through 6 days ago): Keep only latest per day
+            elif backup_date >= retention_cutoff.date():
+                # Recent days (yesterday through retention period): Keep only latest per day
                 date_backups.sort(key=lambda x: x['modified'], reverse=True)
                 files_to_delete.extend(date_backups[1:])  # Delete all but the latest
             else:

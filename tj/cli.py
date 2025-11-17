@@ -227,18 +227,19 @@ def handle_list_all(args) -> None:
     """Handle listing all entries with optional filter (text or day count)."""
     try:
         repository = RepositoryFactory.get_repository()
-        
+
         # Get all active entries
         all_entries = repository.query_entries()
         active_entries = [e for e in all_entries if not getattr(e, 'deleted_at', None)]
-        
+
         # Apply filter - could be day count or text filter
         if args.filter:
             if args.filter.isdigit():
                 # Day count filter (tj a 3)
                 days = int(args.filter)
                 from datetime import datetime
-                days_ago = datetime.now().timestamp() - (days * 24 * 60 * 60)
+                seconds_per_day = 24 * 60 * 60
+                days_ago = datetime.now().timestamp() - (days * seconds_per_day)
                 filtered_entries = [e for e in active_entries if e.timestamp_created >= days_ago]
             else:
                 # Text filter (tj a test)
@@ -292,9 +293,14 @@ def get_entry_from_recent_list(entry_num: int):
     try:
         repository = RepositoryFactory.get_repository()
         from datetime import datetime
+        from tj.config import get_recent_entries_hours
+
         all_entries = repository.query_entries()
         active_entries = [e for e in all_entries if not getattr(e, 'deleted_at', None)]
-        twenty_four_hours_ago = datetime.now().timestamp() - (24 * 60 * 60)
+
+        recent_hours = get_recent_entries_hours()
+        recent_cutoff = datetime.now().timestamp() - (recent_hours * 60 * 60)
+        twenty_four_hours_ago = recent_cutoff  # Preserve variable name for compatibility
         recent_entries = [e for e in active_entries if e.timestamp_created >= twenty_four_hours_ago]
         recent_entries = sorted(recent_entries, key=lambda e: e.timestamp_created, reverse=True)
         
@@ -710,9 +716,12 @@ def show_status() -> None:
         for entry in active_entries:
             type_counts[entry.kind] = type_counts.get(entry.kind, 0) + 1
         
-        # Get last 24 hours entries
+        # Get recent entries (configurable window)
         from datetime import datetime, timezone
-        twenty_four_hours_ago = datetime.now().timestamp() - (24 * 60 * 60)
+        from tj.config import get_recent_entries_hours
+
+        recent_hours = get_recent_entries_hours()
+        twenty_four_hours_ago = datetime.now().timestamp() - (recent_hours * 60 * 60)
         today_entries = [e for e in active_entries if e.timestamp_created >= twenty_four_hours_ago]
         today_entries = sorted(today_entries, key=lambda e: e.timestamp_created, reverse=True)
         

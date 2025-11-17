@@ -31,7 +31,7 @@ This project is built on an offline-first, distributed architecture. The `tj` cl
     *   `tj <url> ...`: Creates a new bookmark.
     *   `tj [d|do|todo] ...`: Creates a new todo item.
     *   `tj <text> ...`: Default; creates a new memory.
-    *   *(All creation commands auto-apply context and can include `#tags`)*.
+    *   *(All creation commands auto-apply context and can include `:tags`)*.
 *   **MODIFY:**
     *   `tj a <text>`: Adds a sub-note to the **last** item created.
     *   `tj <n> a <text>`: Adds a sub-note to item `<n>` from the **last query**.
@@ -40,7 +40,7 @@ This project is built on an offline-first, distributed architecture. The `tj` cl
 *   **QUERY:** `tj q ...`
     *   `q [b|r|d|p]`: By type: **b**ookmark, **r**emembered, **d**o, **p**rofile.
     *   `q [t|w|m]`: By time: **t**oday, **w**eek, **m**onth.  *   `q c <name>`: By **c**ontext.
-    *   `q #[tag]`: By **#tag**.
+    *   `q :<tag>`: By **:tag**.
 *   **SYNC:** `tj sync`
     *   Forces a manual sync with the remote server.
 *   **HELP:** `tj h`
