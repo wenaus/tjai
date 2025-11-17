@@ -84,6 +84,7 @@ def init_db() -> None:
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS contexts (
             name TEXT PRIMARY KEY,
+            title TEXT,
             description TEXT,
             timestamp_created REAL NOT NULL,
             timestamp_modified REAL NOT NULL

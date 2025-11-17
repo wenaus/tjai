@@ -7,58 +7,60 @@ def handle_context(args, num_identifier: Optional[int] = None) -> None:
     from tj.repository_factory import RepositoryFactory
     from tj.repository import Context
     from datetime import datetime, timezone
-    
+
     state = get_state()
-    
+
     if args.name:
         repository = RepositoryFactory.get_repository()
-        
+
         # Check if context already exists
         existing_context = repository.get_context(args.name)
-        
-        if args.description:
-            # Creating/updating context with description
-            description = " ".join(args.description)
-            now = datetime.now(timezone.utc).timestamp()
-            
-            if existing_context:
-                # Context exists - ask for confirmation to update description
-                print(f"Context '{args.name}' exists with description: '{existing_context.description}'")
-                response = input(f"Update description to '{description}' [y/N]: ").strip().lower()
-                
-                if response in ['y', 'yes']:
-                    # Update existing context
-                    repository.update_context(args.name, description=description, timestamp_modified=now)
-                    print(f"Context '{args.name}' description updated.")
-                else:
-                    print("Context update cancelled.")
-                    return
+
+        # Extract title and description from args
+        title = getattr(args, 'title', None)
+        description = " ".join(args.description) if args.description else None
+
+        now = datetime.now(timezone.utc).timestamp()
+
+        if existing_context:
+            # Context exists - update if title or description provided
+            if title or description:
+                updates = {}
+                if title:
+                    updates['title'] = title
+                if description:
+                    updates['description'] = description
+                updates['timestamp_modified'] = now
+
+                repository.update_context(args.name, **updates)
+
+                parts = []
+                if title:
+                    parts.append(f"title='{title}'")
+                if description:
+                    parts.append(f"description='{description}'")
+                print(f"Context '{args.name}' updated with {', '.join(parts)}.")
             else:
-                # Create new context
-                new_context = Context(
-                    name=args.name,
-                    description=description,
-                    timestamp_created=now,
-                    timestamp_modified=now
-                )
-                repository.create_context(new_context)
-                print(f"Context '{args.name}' created with description: '{description}'")
-        else:
-            # Just setting context without description
-            if not existing_context:
-                # Create context with empty description
-                now = datetime.now(timezone.utc).timestamp()
-                new_context = Context(
-                    name=args.name,
-                    description="",
-                    timestamp_created=now,
-                    timestamp_modified=now
-                )
-                repository.create_context(new_context)
-                print(f"Context '{args.name}' created.")
-            else:
+                # Just switching to existing context
                 print(f"Context set to: {args.name}")
-        
+        else:
+            # Create new context
+            new_context = Context(
+                name=args.name,
+                title=title,
+                description=description,
+                timestamp_created=now,
+                timestamp_modified=now
+            )
+            repository.create_context(new_context)
+
+            parts = [f"'{args.name}'"]
+            if title:
+                parts.append(f"title='{title}'")
+            if description:
+                parts.append(f"description='{description}'")
+            print(f"Context {' with '.join(parts)} created.")
+
         # Set as current context
         state["current_context"] = args.name
         save_state(state)

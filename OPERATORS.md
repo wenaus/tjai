@@ -104,6 +104,7 @@ List contexts with descriptions and entry counts
 - Shows current context
 - Displays: `number  context_name - entry_count - description *`
 - Asterisk (*) marks current context
+- Note: Use `tj =<context>` to switch contexts
 
 ### tj l t
 List all tags with usage counts
@@ -113,11 +114,27 @@ List profiles/bookmarks/todos respectively
 
 ## Context Management
 
-### tj c <name> [description]
-Create or set context with optional description
-- `tj c work` (create/set work context)
-- `tj c tjai "Personal AI memory system development"` (with description)
-- Confirms before updating existing context descriptions
+Contexts are specific projects, events, or activities (e.g., "tjai", "hawaii2025", "chep2024"), not broad categories like "work" or "personal".
+
+### tj =<context>
+Switch to/create context (terse nickname only)
+- `tj =tjai` (switch to or create 'tjai' context)
+- `tj =0` (clear context - zero means none)
+
+### tj =<context> -t <title>
+Create context with title (rest of line after -t)
+- `tj =tjai -t AI app development` (name="tjai", title="AI app development")
+- `tj =hawaii2025 -t Hawaii vacation planning`
+
+### tj =<context> -t <title> -d <description>
+Create context with title and description
+- `tj =tjai -t AI app -d Personal AI assistant project`
+- `tj =chep2024 -t CHEP conference -d San Francisco November 2024`
+
+### tj =<context> <content>
+Inline context switch + entry creation (no -t flag)
+- `tj =tjai meeting notes` (switch to tjai, create entry "meeting notes")
+- `tj d =projectx finish report` (switch to projectx, create todo)
 
 ### tj c
 Clear current context (requires confirmation, defaults to N)

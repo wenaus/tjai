@@ -20,27 +20,32 @@ This project is built on an offline-first, distributed architecture. The `tj` cl
 *   Manages the background sync service.
 *   **DASHBOARD:** `tj hey`
     *   Shows a personal dashboard of context, todos, and other evolving information.
-*   **LIST:** `tj l [c|#]`
+*   **LIST:** `tj l [c|t]`
     *   `l c`: Lists all unique context names, with last entry date and count.
-    *   `l #`: Lists all unique tag names, with last entry date and count.
-*   **CONTEXT:** `tj c [name]`
-    *   Sets or clears the active context. Prompts to create if context is new.
+    *   `l t`: Lists all unique tag names, with last entry date and count.
+*   **CONTEXT:** `tj =<context>` with optional flags
+    *   `tj =tjai`: Switch to/create context (terse name only)
+    *   `tj =tjai -t AI app development`: Create with title
+    *   `tj =tjai -t AI app -d Personal project notes`: Create with title + description
+    *   `tj =0`: Clear active context
+    *   `tj c`: Clear active context (with confirmation)
 *   **CREATE:**
     *   `tj p <fact>`: Adds a persistent fact to your profile.
     *   `tj <YYYYMMDD> ...`: Creates a new calendar entry.
     *   `tj <url> ...`: Creates a new bookmark.
     *   `tj [d|do|todo] ...`: Creates a new todo item.
     *   `tj <text> ...`: Default; creates a new memory.
-    *   *(All creation commands auto-apply context and can include `:tags`)*.
+    *   *(All creation commands auto-apply current context and can include `:tags`)*.
+    *   Inline context: `tj =tjai meeting notes` (switches to tjai, creates entry)
 *   **MODIFY:**
-    *   `tj a <text>`: Adds a sub-note to the **last** item created.
-    *   `tj <n> a <text>`: Adds a sub-note to item `<n>` from the **last query**.
+    *   `tj . <n> <text>`: Adds a sub-note to item `<n>`.
     *   `tj x <id>`: Deletes an entry by its unique ID.
-    *   `tj <n> x`: Deletes item `<n>` from the **last query**.
+    *   `tj <n> x`: Deletes item `<n>` from recent entries.
 *   **QUERY:** `tj q ...`
     *   `q [b|r|d|p]`: By type: **b**ookmark, **r**emembered, **d**o, **p**rofile.
-    *   `q [t|w|m]`: By time: **t**oday, **w**eek, **m**onth.  *   `q c <name>`: By **c**ontext.
-    *   `q :<tag>`: By **:tag**.
+    *   `q [t|w|m]`: By time: **t**oday, **w**eek, **m**onth.
+    *   `q =<context>`: By context.
+    *   `q :<tag>`: By tag.
 *   **SYNC:** `tj sync`
     *   Forces a manual sync with the remote server.
 *   **HELP:** `tj h`

@@ -13,21 +13,56 @@ from tj.state import get_state, save_state, display_context
 def handle_creation(args, entry_type_override: Optional[str] = None, num_identifier: Optional[int] = None) -> None:
     """Handles the creation of a new entry."""
     display_context()
-    
+
     if not hasattr(args, 'input') or not args.input:
         print("Error: No content provided for entry.", file=sys.stderr)
         return
-    
+
     try:
-        # Keep the full content including tags, but extract tags separately
-        content = " ".join(args.input).strip()
+        # Extract inline =context if present
+        inline_context = None
+        filtered_input = []
+        for part in args.input:
+            if part.startswith('='):
+                context_name = part[1:]
+                if context_name == '0':
+                    # Clear context inline
+                    inline_context = None
+                    state = get_state()
+                    state["current_context"] = None
+                    save_state(state)
+                elif context_name:
+                    # Set inline context
+                    inline_context = context_name
+                    state = get_state()
+                    state["current_context"] = inline_context
+                    save_state(state)
+                    # Auto-create context if it doesn't exist
+                    from tj.repository import Context
+                    repository = RepositoryFactory.get_repository()
+                    if not repository.get_context(inline_context):
+                        now = datetime.now(timezone.utc).timestamp()
+                        new_context = Context(
+                            name=inline_context,
+                            title=None,
+                            description=None,
+                            timestamp_created=now,
+                            timestamp_modified=now
+                        )
+                        repository.create_context(new_context)
+                # Don't add =context to the content
+            else:
+                filtered_input.append(part)
+
+        # Use filtered input without =context
+        content = " ".join(filtered_input).strip()
         if not content:
             print("Error: Entry content cannot be empty.", file=sys.stderr)
             return
-        
+
         # Extract tags for separate storage, but leave them in the content
         tags = set()
-        for part in args.input:
+        for part in filtered_input:
             if part.startswith(':'):
                 tag_name = part[1:]
                 if tag_name:  # Ensure tag is not empty

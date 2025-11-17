@@ -29,8 +29,23 @@ class Tag:
 
 @dataclass
 class Context:
-    """Data model for contexts."""
+    """Data model for contexts.
+
+    Contexts are specific projects, events, or activities, not broad categories.
+
+    Fields:
+    - name: terse nickname used in commands (e.g., "tjai", "hawaii2025")
+    - title: optional short title via -t flag (e.g., "AI app", "Hawaii vacation")
+    - description: optional longer description (remaining text after -t)
+
+    Examples:
+    - tj =tjai → name="tjai"
+    - tj =tjai -t "AI app" → name="tjai", title="AI app"
+    - tj =hawaii2025 Family trip to Maui → name="hawaii2025", description="Family trip to Maui"
+    - tj =chep2024 -t "CHEP conference" San Francisco November 2024 → all three fields
+    """
     name: str
+    title: Optional[str]
     description: Optional[str]
     timestamp_created: float
     timestamp_modified: float

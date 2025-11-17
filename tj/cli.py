@@ -171,15 +171,17 @@ def handle_list_command(args) -> None:
                 # Count entries in this context
                 entries = repository.query_entries(context=context.name)
                 active_entries = [e for e in entries if not getattr(e, 'deleted_at', None)]
-                
+
                 # Mark current context
                 current_marker = " *" if context.name == current_context else ""
-                
-                # Show context with description
+
+                # Show context with title and/or description
+                display_parts = [f"{i:2d}  {context.name}", f"{len(active_entries)}"]
+                if context.title:
+                    display_parts.insert(1, f'"{context.title}"')
                 if context.description:
-                    print(f"{i:2d}  {context.name} - {len(active_entries)} - {context.description}{current_marker}")
-                else:
-                    print(f"{i:2d}  {context.name} - {len(active_entries)}{current_marker}")
+                    display_parts.append(context.description)
+                print(" - ".join(display_parts) + current_marker)
         
         elif list_type == 't':  # tags
             all_tags = repository.get_all_tags()
@@ -789,26 +791,133 @@ def show_status() -> None:
         print(f"Status unavailable: {e}")
         print("Try: tj \"your memory here\", tj h for help")
 
+def handle_context_syntax(first_arg: str, remaining_args: list) -> None:
+    """Handle =context syntax for setting/clearing context.
+
+    Syntax:
+    Context definition (has -t flag):
+    - tj =context -t title text → title = rest of line after -t
+    - tj =context -t title -d description text → title + description (rest after -d)
+
+    Entry creation (no -t flag):
+    - tj =context entry content → switch context, create entry
+    """
+    from tj.commands.context import handle_context
+    from tj.commands.create import handle_creation
+    from tj.state import get_state, save_state
+
+    if first_arg == '=0':
+        # Clear context directly without confirmation
+        state = get_state()
+        current_context = state.get("current_context")
+        if current_context:
+            state["current_context"] = None
+            save_state(state)
+            print(f"Context '{current_context}' cleared.")
+        else:
+            print("No context to clear.")
+        return
+
+    # Extract context name (everything after =)
+    context_name = first_arg[1:]  # Remove the = prefix
+
+    if not context_name:
+        print("Error: Empty context name. Use =<context> or =0 to clear.", file=sys.stderr)
+        return
+
+    if not remaining_args:
+        # Just setting context: tj =tjai
+        class Args:
+            def __init__(self):
+                self.name = context_name
+                self.title = None
+                self.description = []
+        args = Args()
+        handle_context(args)
+    elif '-t' in remaining_args:
+        # Context definition: -t flag means metadata, not entry creation
+        # tj =context -t title text
+        # tj =context -t title text -d description text
+        try:
+            t_index = remaining_args.index('-t')
+            if t_index + 1 >= len(remaining_args):
+                print("Error: -t flag requires a title.", file=sys.stderr)
+                return
+
+            # Find -d flag if present
+            if '-d' in remaining_args:
+                d_index = remaining_args.index('-d')
+                if d_index <= t_index + 1:
+                    print("Error: -d must come after title text.", file=sys.stderr)
+                    return
+                if d_index + 1 >= len(remaining_args):
+                    print("Error: -d flag requires description text.", file=sys.stderr)
+                    return
+
+                # Title is between -t and -d
+                title = " ".join(remaining_args[t_index + 1:d_index])
+                # Description is after -d
+                description = " ".join(remaining_args[d_index + 1:])
+            else:
+                # No -d flag, everything after -t is title
+                title = " ".join(remaining_args[t_index + 1:])
+                description = None
+
+            class Args:
+                def __init__(self):
+                    self.name = context_name
+                    self.title = title
+                    self.description = [description] if description else []
+            args = Args()
+            handle_context(args)
+        except ValueError as e:
+            print(f"Error parsing context flags: {e}", file=sys.stderr)
+            return
+    else:
+        # Inline context with content creation: tj =work meeting notes
+        # First set the context
+        class ContextArgs:
+            def __init__(self):
+                self.name = context_name
+                self.title = None
+                self.description = []
+        context_args = ContextArgs()
+        handle_context(context_args)
+
+        # Then create the entry with the remaining content
+        class CreateArgs:
+            def __init__(self):
+                self.input = remaining_args
+        create_args = CreateArgs()
+        handle_creation(create_args)
+
+
 def main(skip_venv_check: bool = False) -> None:
     """Main function to parse arguments and dispatch commands."""
     parser = create_parser()
-    
+
     if len(sys.argv) == 1:
         show_status()
         return
-    
+
     # Check for global flags first
     if '--no-venv-check' in sys.argv:
         skip_venv_check = True
         # Remove the flag so it doesn't interfere with other parsing
         sys.argv = [arg for arg in sys.argv if arg != '--no-venv-check']
-        
+
         # If only the flag was provided, show status
         if len(sys.argv) == 1:
             show_status()
             return
-    
+
     first_arg = sys.argv[1]
+
+    # Check for =context syntax (tj =work, tj =0, tj =work content)
+    if first_arg.startswith('='):
+        remaining_args = sys.argv[2:] if len(sys.argv) > 2 else []
+        handle_context_syntax(first_arg, remaining_args)
+        return
     
     # Check if first argument is a small number (for numbered commands like '5 x')
     # Avoid treating dates (YYYYMMDD) as numbered commands

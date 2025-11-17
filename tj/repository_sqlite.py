@@ -272,17 +272,17 @@ class SQLiteRepository(EntryRepository):
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             cursor.execute("""
-                INSERT OR REPLACE INTO contexts 
-                (name, description, timestamp_created, timestamp_modified)
-                VALUES (?, ?, ?, ?)
-            """, (context.name, context.description, context.timestamp_created, context.timestamp_modified))
-            
+                INSERT OR REPLACE INTO contexts
+                (name, title, description, timestamp_created, timestamp_modified)
+                VALUES (?, ?, ?, ?, ?)
+            """, (context.name, context.title, context.description, context.timestamp_created, context.timestamp_modified))
+
             conn.commit()
             conn.close()
             return True
-            
+
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to create context: {e}")
     
@@ -291,25 +291,26 @@ class SQLiteRepository(EntryRepository):
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             cursor.execute("""
-                SELECT name, description, timestamp_created, timestamp_modified
+                SELECT name, title, description, timestamp_created, timestamp_modified
                 FROM contexts WHERE name = ?
             """, (name,))
-            
+
             row = cursor.fetchone()
             conn.close()
-            
+
             if row:
                 from tj.repository import Context
                 return Context(
                     name=row['name'],
+                    title=row['title'],
                     description=row['description'],
                     timestamp_created=row['timestamp_created'],
                     timestamp_modified=row['timestamp_modified']
                 )
             return None
-            
+
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to get context: {e}")
     
@@ -318,23 +319,24 @@ class SQLiteRepository(EntryRepository):
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             cursor.execute("""
-                SELECT name, description, timestamp_created, timestamp_modified
+                SELECT name, title, description, timestamp_created, timestamp_modified
                 FROM contexts ORDER BY timestamp_created DESC
             """)
-            
+
             rows = cursor.fetchall()
             conn.close()
-            
+
             from tj.repository import Context
             return [Context(
                 name=row['name'],
+                title=row['title'],
                 description=row['description'],
                 timestamp_created=row['timestamp_created'],
                 timestamp_modified=row['timestamp_modified']
             ) for row in rows]
-            
+
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to get all contexts: {e}")
     

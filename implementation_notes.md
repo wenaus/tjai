@@ -113,15 +113,17 @@ Primary Architecture: Cloud-first distributed service
 - tags use : syntax anywhere in input: tj "some text :tag1 :tag2".
 - the entry contains the tags as-is, don't remove them from the text.
 - use :tagname consistently throughout codebase and docs (not #tags).
-- context system: tj c <name> sets context, tj c clears it. context auto-applies to all new entries.
-- interactive context creation: when setting unknown context, prompt "Context 'name' not found. Create? [y/N]".
+- context system: tj =<name> sets context, tj =0 or tj c clears it. context auto-applies to all new entries.
+- context definition: tj =context -t title -d description (optional -d)
+- inline context: tj =context content (no -t flag) switches context and creates entry in one command.
+- contexts are specific projects/events (tjai, hawaii2025, chep2024), not broad categories (work, personal).
 - query results are numbered for easy reference: tj 3 a "sub-note", tj 5 x (delete).
 - command aliases: d/do/todo for todos, single letters where memorable.
 
 ## Command Structure Details
 
 - LIST: tj l c (contexts with usage stats), tj l t (tags with counts and last used date)
-- QUERY: tj q [b|r|d|p] (by type), tj q [t|w|m] (time periods), tj q c <name> (by context), tj q #<tag>
+- QUERY: tj q [b|r|d|p] (by type), tj q [t|w|m] (time periods), tj q =<name> (by context), tj q :<tag> (by tag)
 - CALENDAR: tj 20251225 "Christmas dinner" - YYYYMMDD format auto-detected
 - PROFILE: tj p "facts about me" - builds the "me descriptor"
 - DASHBOARD: tj hey - personal status, context, todos, external data (weather, github, etc)
