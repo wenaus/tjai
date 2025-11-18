@@ -1,19 +1,12 @@
-### 1. Editor Integration System
-- `tj -e`: Empty editor for entry creation (multi-line via tempfile)
-- `tj --edit <n>`: Edit existing entry in editor
-- Bulk editing workflow (like git commit)
-
-### 2. Calendar/Journal System
-- `tj j 16:30 meeting` (today with time)
-- `tj j tomorrow event`, `tj j mon event` (relative dates)
-- Flexible date parsing
-
-### 3. Lists and Sub-notes
-- Sub-notes: `tj . content` (hierarchical, 1 level max)
-- Lists: `tj + item` (JSON within entry)
-
-### 4. Link Parsing
-- `//link` notation - extract canonical reference links
+### 1. Alias Auto-Quoting Enhancement
+**Problem:** Bash interprets special chars in unquoted args (`[`, `]`, `()`, etc.)
+**Solution:** Define alias that auto-quotes: `alias tj='tj.py "$*"'`
+**Impact:** User never needs quotes, saves typing errors
+**Implementation:**
+- Manual flag extraction before argparse (regex for `--db=`, `--no-venv-check`)
+- Join remaining args as single content string
+- Parse content with current metadata extraction logic
+**Trade-off:** More work for developer, huge UX improvement for user
 
 ## Commit Strategy
 

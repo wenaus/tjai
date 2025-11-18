@@ -12,10 +12,12 @@ from tj.commands.delete import handle_delete_new
 from tj.commands.dump import handle_dump
 from tj.commands.journal import handle_journal
 from tj.commands.list import handle_list_command, handle_list_all
+from tj.commands.lists import handle_add_list_item
 from tj.commands.modify import (
-    handle_add_subnote, handle_edit, handle_tag_command,
+    handle_edit, handle_tag_command,
     handle_move, handle_show, handle_pin
 )
+from tj.commands.subitems import handle_add_subitem
 from tj.commands.query import handle_query
 from tj.database import init_db, DatabaseError
 from tj.environment import check_virtual_environment
@@ -165,11 +167,14 @@ def create_parser() -> argparse.ArgumentParser:
     p_all.add_argument('filter', nargs='?', help="Optional text filter")
     p_all.set_defaults(func=handle_list_all)
     
-    # Modification commands  
-    p_subnote = subparsers.add_parser('.', help="Add a sub-note to an entry.")
-    p_subnote.add_argument('entry_num', help="Entry number")
-    p_subnote.add_argument('text', nargs='+', help="Sub-note content")
-    p_subnote.set_defaults(func=handle_add_subnote)
+    # Modification commands
+    p_subitem = subparsers.add_parser('.', help="Add sub-item to last parent.")
+    p_subitem.add_argument('input', nargs='+', help="Sub-item content")
+    p_subitem.set_defaults(func=handle_add_subitem)
+
+    p_list_add = subparsers.add_parser('+', help="Add item to current list.")
+    p_list_add.add_argument('input', nargs='+', help="List item text")
+    p_list_add.set_defaults(func=handle_add_list_item)
     
     p_edit = subparsers.add_parser('e', help="Edit or create entry in editor.")
     p_edit.add_argument('entry_num', nargs='?', help="Entry number (optional, omit to create new entry)")

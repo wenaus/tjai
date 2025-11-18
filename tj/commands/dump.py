@@ -51,7 +51,19 @@ def format_entry_command(entry: Entry, tags: List[str], db_path: str = None) -> 
     # 3. Add timestamp
     cmd_parts.append(format_timestamp(entry.timestamp_created))
 
-    # 4. Build the command
+    # 4. Add links if present
+    if entry.data and 'links' in entry.data:
+        links = entry.data['links']
+        for link in links:
+            title = link.get('title', 'Link')
+            url = link.get('url', '')
+            # Special case: title "Link" uses // notation
+            if title == 'Link':
+                cmd_parts.append(f'//{url}')
+            else:
+                cmd_parts.append(f'[{title}]({url})')
+
+    # 5. Build the command
     if has_newlines:
         # Use command substitution with cat heredoc (works when sourced)
         cmd_line = ' '.join(cmd_parts)

@@ -8,7 +8,8 @@ from typing import Optional
 from tj.database import DatabaseError
 from tj.repository import Entry
 from tj.repository_factory import RepositoryFactory
-from tj.state import get_state, save_state, display_context
+from tj.state import get_state, save_state, display_context, set_last_parent, set_last_list
+from tj.commands.lists import detect_list_creation
 
 def handle_creation(args, entry_type_override: Optional[str] = None, num_identifier: Optional[int] = None) -> None:
     """Handles the creation of a new entry."""
@@ -19,7 +20,7 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
         return
 
     try:
-        # Extract inline =context if present
+        # Step 1: Extract inline =context (must be per-arg)
         inline_context = None
         filtered_input = []
         for part in args.input:
@@ -54,17 +55,44 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
             else:
                 filtered_input.append(part)
 
-        # Use filtered input without =context
+        # Step 2: Join to get full content string
         content = " ".join(filtered_input).strip()
         if not content:
             print("Error: Entry content cannot be empty.", file=sys.stderr)
             return
 
-        # Extract tags for separate storage, but leave them in the content
+        # Step 3: Extract links from content (//url and [title](url))
+        links = []
+
+        # Extract //url patterns
+        url_pattern = re.compile(r'//(?:https?://[^\s]+)')
+        for match in url_pattern.finditer(content):
+            url = match.group()[2:]  # Remove //
+            links.append({"title": "Link", "url": url})
+        # Remove //url from content
+        content = url_pattern.sub('', content)
+
+        # Extract [title](url) patterns
+        md_link_pattern = re.compile(r'\[([^\]]+)\]\((https?://[^\)]+)\)')
+        for match in md_link_pattern.finditer(content):
+            title = match.group(1)
+            url = match.group(2)
+            links.append({"title": title, "url": url})
+        # Remove [title](url) from content
+        content = md_link_pattern.sub('', content)
+
+        # Clean up extra whitespace after link removal
+        content = ' '.join(content.split()).strip()
+
+        if not content:
+            print("Error: Entry content cannot be empty after link extraction.", file=sys.stderr)
+            return
+
+        # Step 4: Extract tags for separate storage, but leave them in the content
         tags = set()
-        for part in filtered_input:
-            if part.startswith(':'):
-                tag_name = part[1:]
+        for word in content.split():
+            if word.startswith(':'):
+                tag_name = word[1:]
                 if tag_name:  # Ensure tag is not empty
                     tags.add(tag_name)
             
@@ -97,13 +125,17 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
                 elif re.match(r'^https?://', content_parts[0]):
                     extracted_url = content_parts[0]
                     entry_type = 'bookmark'
-                    
+
                     # If there's additional text after the URL, reformat as "text url"
                     if len(content_parts) > 1:
                         description = " ".join(content_parts[1:])
                         content = f"{description} {extracted_url}"
                     # If URL only, keep as is
-                    
+
+                # List detection - content ends with "list" or "checklist"
+                elif detect_list_creation(content):
+                    entry_type = 'list'
+
                 else:
                     entry_type = 'memory'
             else:
@@ -127,6 +159,10 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
             data['event_date'] = event_date
         if extracted_url:
             data['url'] = extracted_url
+        if entry_type == 'list':
+            data['items'] = []
+        if links:
+            data['links'] = links
         
         # Create entry object
         entry = Entry(
@@ -146,11 +182,19 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
         # Add tags
         for tag in tags:
             repository.add_tag(entry_id, tag)
-        
+
         # Update last entry ID for 'a' command
         state["last_entry_id"] = entry_id
         save_state(state)
-        
+
+        # Set as last parent for sub-items (if not a sub-item itself)
+        if not entry.parent_id:
+            set_last_parent(entry_id)
+
+        # If it's a list, also track as last list
+        if entry_type == 'list':
+            set_last_list(entry_id)
+
         print(f"Created {entry_type}: {content[:50]}{'...' if len(content) > 50 else ''}")
         
     except DatabaseError as e:

@@ -224,6 +224,23 @@ def handle_show(args) -> None:
         if tags:
             print(f"  Tags: {', '.join(tags)}")
 
+        # Show links if present
+        if entry.data and 'links' in entry.data:
+            links = entry.data['links']
+            if links:
+                print("  Links:")
+                for link in links:
+                    title = link.get('title', 'Link')
+                    url = link.get('url', '')
+                    # Color URL cyan
+                    colored_url = f"\033[96m{url}\033[0m"
+                    print(f"    {title}: {colored_url}")
+
+        # Set as last parent for sub-items (if not a sub-item itself)
+        if not entry.parent_id:
+            from tj.state import set_last_parent
+            set_last_parent(entry.id)
+
     except (ValueError, TypeError):
         print("Error: Invalid entry number.", file=sys.stderr)
     except Exception as e:
