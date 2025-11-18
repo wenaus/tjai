@@ -30,47 +30,66 @@ def handle_add_subnote(args) -> None:
 
 
 def handle_edit(args) -> None:
-    """Handle editing an entry (requires confirmation)."""
+    """Handle editing an entry.
+
+    Three modes:
+    - tj e → create new entry in editor
+    - tj e <n> → edit entry <n> in editor
+    - tj e <n> text → replace entry <n> content with text (requires confirmation)
+    """
+    from tj.commands.editor import handle_editor_create, handle_editor_edit
+
+    # Case 1: No args → create in editor
+    if not args.entry_num:
+        handle_editor_create()
+        return
+
+    # Try to parse entry_num as integer
     try:
         entry_num = int(args.entry_num)
-        new_text = " ".join(args.text)
-
-        entry = get_entry_from_recent_list(entry_num)
-        if not entry:
-            print(f"Error: Entry {entry_num} not found in recent list.", file=sys.stderr)
-            return
-
-        # Show current content and confirm
-        old_preview = entry.content
-        new_preview = new_text
-
-        print(f"Edit entry {entry_num}:")
-        print(f"  Old: {old_preview}")
-        print(f"  New: {new_preview}")
-
-        response = input("\nConfirm edit? [y/N]: ").strip().lower()
-        if response not in ['y', 'yes']:
-            print("Edit cancelled.")
-            return
-
-        # Update entry
-        repository = RepositoryFactory.get_repository()
-        success = repository.update_entry(
-            entry.id,
-            content=new_text,
-            timestamp_modified=datetime.now(timezone.utc).timestamp(),
-            is_dirty=True
-        )
-
-        if success:
-            print("Entry updated successfully.")
-        else:
-            print("Error: Failed to update entry.", file=sys.stderr)
-
     except (ValueError, TypeError):
-        print("Error: Invalid entry number.", file=sys.stderr)
-    except Exception as e:
-        print(f"Edit error: {e}", file=sys.stderr)
+        print("Error: First argument must be an entry number.", file=sys.stderr)
+        return
+
+    # Case 2: Entry number but no text → edit in editor
+    if not args.text:
+        handle_editor_edit(entry_num)
+        return
+
+    # Case 3: Entry number + text → command-line edit with confirmation
+    new_text = " ".join(args.text)
+
+    entry = get_entry_from_recent_list(entry_num)
+    if not entry:
+        print(f"Error: Entry {entry_num} not found in recent list.", file=sys.stderr)
+        return
+
+    # Show current content and confirm
+    old_preview = entry.content
+    new_preview = new_text
+
+    print(f"Edit entry {entry_num}:")
+    print(f"  Old: {old_preview}")
+    print(f"  New: {new_preview}")
+
+    response = input("\nConfirm edit? [y/N]: ").strip().lower()
+    if response not in ['y', 'yes']:
+        print("Edit cancelled.")
+        return
+
+    # Update entry
+    repository = RepositoryFactory.get_repository()
+    success = repository.update_entry(
+        entry.id,
+        content=new_text,
+        timestamp_modified=datetime.now(timezone.utc).timestamp(),
+        is_dirty=True
+    )
+
+    if success:
+        print("Entry updated successfully.")
+    else:
+        print("Error: Failed to update entry.", file=sys.stderr)
 
 
 def handle_tag_command(args) -> None:

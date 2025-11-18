@@ -10,6 +10,7 @@ from tj.commands.context import handle_context
 from tj.commands.create import handle_creation
 from tj.commands.delete import handle_delete_new
 from tj.commands.dump import handle_dump
+from tj.commands.journal import handle_journal
 from tj.commands.list import handle_list_command, handle_list_all
 from tj.commands.modify import (
     handle_add_subnote, handle_edit, handle_tag_command,
@@ -155,6 +156,10 @@ def create_parser() -> argparse.ArgumentParser:
     p_ai.add_argument('input', nargs='*', help="AI guideline content, or =context/:tag to query")
     p_ai.set_defaults(func=lambda args: handle_ai_command(args))
 
+    p_journal = subparsers.add_parser('j', help="Add calendar/journal entry with flexible date parsing.")
+    p_journal.add_argument('input', nargs='+', help="Date/time spec and content (e.g., 'tomorrow meeting' or '16:30 dentist')")
+    p_journal.set_defaults(func=handle_journal)
+
     # List all entries
     p_all = subparsers.add_parser('a', help="List all entries with optional filter.")
     p_all.add_argument('filter', nargs='?', help="Optional text filter")
@@ -166,10 +171,14 @@ def create_parser() -> argparse.ArgumentParser:
     p_subnote.add_argument('text', nargs='+', help="Sub-note content")
     p_subnote.set_defaults(func=handle_add_subnote)
     
-    p_edit = subparsers.add_parser('e', help="Edit an entry.")
-    p_edit.add_argument('entry_num', help="Entry number")
-    p_edit.add_argument('text', nargs='+', help="New entry content")
+    p_edit = subparsers.add_parser('e', help="Edit or create entry in editor.")
+    p_edit.add_argument('entry_num', nargs='?', help="Entry number (optional, omit to create new entry)")
+    p_edit.add_argument('text', nargs='*', help="New entry content (optional, omit to use editor)")
     p_edit.set_defaults(func=handle_edit)
+
+    # Alias for editor creation
+    p_edit_flag = subparsers.add_parser('-e', help="Create entry in editor.")
+    p_edit_flag.set_defaults(func=lambda args: handle_edit(type('Args', (), {'entry_num': None, 'text': []})()))
     
     p_tag = subparsers.add_parser('t', help="Add tag to entry or list entries with tag.")
     p_tag.add_argument('entry_num', help="Entry number or tag name to search")

@@ -71,6 +71,13 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
         entry_type = entry_type_override
         event_date = None
 
+        # Check for event_date_override from journal command
+        if hasattr(args, 'event_date_override') and args.event_date_override is not None:
+            event_date = args.event_date_override
+            # If entry_type not already set, default to calendar
+            if not entry_type:
+                entry_type = 'calendar'
+
         # Smart type detection and URL extraction
         extracted_url = None
         if not entry_type:
