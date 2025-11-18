@@ -108,9 +108,9 @@ def create_parser() -> argparse.ArgumentParser:
     )
     
     # Global options
-    parser.add_argument('--no-venv-check', action='store_true', 
-                       help='Skip virtual environment check (for development/testing)')
-    
+    parser.add_argument('--test', action='store_true',
+                       help='Use test database at tjai/test.db')
+
     subparsers = parser.add_subparsers(dest='command')
 
     # System commands
@@ -537,17 +537,15 @@ def main(skip_venv_check: bool = False) -> None:
 def entrypoint() -> None:
     """Main entry point with error handling."""
     try:
-        # Check if venv check should be skipped
-        skip_venv_check = '--no-venv-check' in sys.argv
-        
-        if not skip_venv_check:
-            check_virtual_environment()
-            
+        test_mode = '--test' in sys.argv
+
+        check_virtual_environment()
         init_db()
-        
-        # Auto-backup on every command execution
-        auto_backup()
-        
+
+        # Auto-backup on every command execution (skip in test mode)
+        if not test_mode:
+            auto_backup()
+
         main()
     except DatabaseError as e:
         print(f"Database error: {e}", file=sys.stderr)

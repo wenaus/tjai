@@ -9,6 +9,11 @@ APP_DIR = Path(os.environ.get("TJAI_APP_DIR", Path.home() / ".tjai"))
 
 def get_configured_db_path():
     """Get the configured database path."""
+    # Test mode: hardwired to tjai/test.db
+    if '--test' in sys.argv:
+        repo_root = Path(__file__).parent.parent
+        return repo_root / 'test.db'
+
     try:
         from tj.config import get_db_path
         return get_db_path()

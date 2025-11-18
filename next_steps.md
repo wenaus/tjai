@@ -1,125 +1,114 @@
 # Next Steps for TJ Development
 
-## CURRENT STATUS - Session Ending
+## CURRENT STATUS - Session Ending Nov 17
 
-### AI Entry Type - COMPLETE (Ready to Commit)
-**Files modified/created:**
-- `tj/commands/ai.py` - New AI command handler with dual create/query behavior
-- `tj/cli.py` - Added AI command import and parser
-- `README.md` - Updated with AI command documentation
-- `implementation_notes.md` - Added AI to purposes section
+### Test System Rewrite - INCOMPLETE (One Bug Remaining)
 
-**Functionality implemented:**
-- `tj ai <content>` - Create universal AI guideline
-- `tj ai =context <content>` - Create context-specific guideline
-- `tj ai :tag <content>` - Create tagged guideline
-- `tj ai` - Query universal guidelines only
-- `tj ai =context` - Query universal + context-specific guidelines
-- `tj ai :tag` - Query universal + tag-specific guidelines
+**What was accomplished:**
+- Deleted tests/ directory (pytest-based tests completely removed)
+- Removed `--no-venv-check` flag (was only used for broken pytest tests)
+- Added `--test` flag to tj.py that hardwires DB path to `tjai/test.db`
+- Modified `database.py` get_configured_db_path() to check `--test` in sys.argv
+- Created `test.py` - round-trip test: load sample_dump.sh → dump DB → compare outputs
+- Created `sample_dump.sh` - executable shell script with plain `tj` commands
+- Updated `.gitignore` to exclude `test.db`
 
-**NOT YET COMMITTED - needs git add/commit/push**
+**Testing approach:**
+- No mocking, no frameworks
+- sample_dump.sh contains plain tj commands (e.g., `tj =work -t "Title"`)
+- test.py runs it with bash alias: `alias tj='./tj.py --test'`
+- Dumps database back out
+- Compares for exact match (round-trip verification)
 
-### Production Code Contamination - CRITICAL
-**See REVERT_NOTES.md for complete details of all changes that must be reverted.**
+**Current bug:**
+- When running `./tj.py --test dump`, the `--test` flag remains in sys.argv
+- main() sees it and creates entry with content "--test dump"
+- Dump output is "Created memory: --test dump" instead of actual dump
+- Test fails with output mismatch
 
-Test system debugging contaminated production files:
-- tj/database.py, tj/config.py, tj/state.py, tj/backup.py
+**Fix needed:**
+One of these approaches:
+1. Remove `--test` from sys.argv after detecting it in entrypoint()
+2. Restructure to use argparse properly (parse args, check args.test, consume it)
+3. Filter dump output in test.py to only lines starting with `tj ` or `#`
 
-All changes were attempts to make test environment variables work. All must be reverted before committing AI implementation.
+User rejected option 1 as "dirty hack" and didn't approve the other options before session end.
 
-### Testing System - BROKEN
-Tests are accumulating data across runs due to database path caching issues. The complex isolation system failed.
+**Files modified:**
+- `tj/cli.py` - Added --test flag, removed --no-venv-check, detect test mode
+- `tj/database.py` - Check for --test in sys.argv, return hardwired path
+- `test.py` - New test script (needs --test bug fix to work)
+- `sample_dump.sh` - New sample dump file
+- `.gitignore` - Added test.db
 
-**Action needed:** Simple test system that:
-1. Uses ~/.tjai/test.db (NOT tjai.db - production database)
-2. Deletes test.db before each test
-3. No complex env var isolation
-4. Just tests actual functionality
+### Phase 1 Refactoring - COMPLETE
 
-**WARNING:** Previous attempt made critical errors trying to delete production database. Test system needs careful review before implementation.
+**Accomplished:**
+- Reduced cli.py from 1,101 to 560 lines (49% reduction)
+- Created modular command handlers:
+  - `tj/commands/list.py` (161 lines) - contexts, tags, entries listing
+  - `tj/commands/modify.py` (242 lines) - edit, tag, move, show, pin
+  - `tj/commands/delete.py` (147 lines) - delete operations
+- Moved `get_entry_from_recent_list()` to `tj/commands/common.py`
+- All commands tested and working
+- Code is now organized by domain for easier maintenance
 
-## Immediate Implementation Priority
+**Status:** Committed in 175864b
 
-### 1. Implement New Notation System
-- **=context notation**: DONE - `tj =work`, `tj =work content`, `tj =0` (clear)
-- **//link parsing**: Extract and store canonical reference links separately from content
-- **ai entry type**: DONE - `tj ai behavioral guidance content`
+### Dump Command Implementation - COMPLETE
 
-### 2. Editor Integration System
-- **tj -e**: Empty editor for entry creation
-- **tj --edit**: Editor with initial content
-- **Bulk editing**: Export numbered entries → launch $EDITOR → parse changes → update entries
-- **State management**: Store entry mappings during editor sessions
+**Accomplished:**
+- `tj dump` outputs entire database as executable tj commands
+- Contexts output first with -t/-d flags
+- Entries in ROWID order (actual insertion order)
+- Multi-line entries use heredoc format
+- Tags preserved inline with :tag notation
+- Timestamps preserved via at=YYYYMMDD/HH:MM
+- Heredoc syntax fixed: `at=` now comes BEFORE `<<!` (intuitive order)
 
-### 3. Calendar/Journal System
-- **tj j**: Journal entries with flexible date parsing
-  - `tj j 16:30 meeting` (today with time)
-  - `tj j meeting` (today without time)  
-  - `tj j 1127 event` (mmdd), `tj j 20251127 event` (full date)
-  - `tj j tomorrow event`, `tj j mon event` (relative/day names)
-- **tj j -e**: Bulk calendar editing with structured format
+**Status:** Committed in 33ca4ea
 
-### 4. Lists and Sub-notes Implementation
-- **Sub-notes**: `tj . content` creates hierarchical entries (1 level max)
-  - Pattern: `tj top level item` → `tj . second level 1` → `tj . second level 2`
-- **Lists**: `tj + item` adds to JSON within current list entry
-  - Pattern: `tj shopping list` → `tj + milk` → `tj + bread`
+## Immediate Next Steps
 
-## Architecture Topics to Address
+1. **Fix --test flag bug** (choose and implement one approach)
+2. **Verify test.py works** (should show exact round-trip match)
+3. **Test with larger dump files** to measure performance
+4. **Commit test system rewrite**
 
-### Terminal Sessions
-User mentioned this twice as critical for broader architecture. Need to discuss:
-- Session boundaries and state management
-- Cross-session data persistence
-- Multi-terminal coordination
+## Future Implementation Priorities
 
-### AIs as Direct Users
-Beyond just `ai` entry type, need programmatic access patterns:
-- API for AIs to query context-specific guidance
-- Behavioral instruction retrieval based on current context
-- Integration with external AI systems
+### 1. Editor Integration System
+- `tj -e`: Empty editor for entry creation
+- `tj --edit`: Editor with initial content
+- Bulk editing workflow (like git commit)
 
-### Lost Design Discussion
-Major lists implementation discussion occurred but wasn't documented. Need to reconstruct:
-- How lists work within entry JSON structure
-- List management operations
-- Display and editing of list contents
+### 2. Calendar/Journal System
+- `tj j 16:30 meeting` (today with time)
+- `tj j tomorrow event`, `tj j mon event` (relative dates)
+- Flexible date parsing
 
-## Implementation Notes
+### 3. Lists and Sub-notes
+- Sub-notes: `tj . content` (hierarchical, 1 level max)
+- Lists: `tj + item` (JSON within entry)
 
-### Current Architecture Status
-- Comprehensive operator system implemented and working
-- Context entities with descriptions functional
-- Database schema supports contexts table
-- Coloration system implemented (cyan URLs, green tags)
-- No content truncation across all views
+### 4. Link Parsing
+- `//link` notation - extract canonical reference links
 
-### Available Notation Characters
-From weekend research: `_ ^ / + .` remain available for future features
-- `=` used for contexts
-- `:` used for tags  
-- `@` used for places
-- `//` used for links
-- `+` designated for lists
-- `.` designated for sub-notes
+## Architecture Notes
 
-### Key Files to Reference
-- `implementation_notes.md`: User's comprehensive architectural decisions
-- `NOTES.md`: Session-specific design discussions and decisions  
-- `OPERATORS.md`: Current operator documentation (needs updating with new features)
+**Available notation characters:** `_ ^ / + .`
+- `=` contexts
+- `:` tags
+- `@` places
+- `//` links
+- `+` lists (planned)
+- `.` sub-notes (planned)
 
-## Testing Strategy
-- Test new notation parsing in all entry creation commands
-- Verify editor integration workflow matches git-style experience
-- Test date parsing for all supported formats
-- Validate hierarchy limits for sub-notes
-- Test list JSON structure and operations
-
-## Documentation Updates Needed
-- Update OPERATORS.md with new notation and commands
-- Document editor integration workflow
-- Add calendar/journal system documentation
-- Clarify lists vs sub-notes distinction with examples
+**Key documentation:**
+- `implementation_notes.md` - Testing philosophy: "No mocking. Meaningful tests on full function system."
+- `OPERATORS.md` - Operator reference
+- `CLAUDE.md` - Critical rules including git push requirement
 
 ## Commit Strategy
-Remember to push commits immediately, especially when user indicates session ending. The weekend work loss incident must not repeat - all work must be available across locations.
+
+**CRITICAL:** Always push immediately after committing. Weekend work loss must not repeat.
