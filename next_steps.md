@@ -45,11 +45,10 @@ The flag removal timing creates a fundamental conflict:
 - main() needs `--test` removed so it doesn't parse as content
 - No clean ordering satisfies all three requirements
 
-**Possible solutions:**
-1. Don't remove flags from sys.argv - teach main() to ignore processed flags
-2. Pass processed flags as parameters through the call chain
-3. Use global/module-level state (rejected - introduces side effects)
-4. Restructure with proper argparse that separates global flags from commands
+**Solution:**
+Save original command at start of entrypoint(): `original_command = sys.argv.copy()`
+Then use original_command where needed for audit/backup purposes.
+This preserves the actual command with all flags while still allowing sys.argv modification.
 
 **Files modified:**
 - `tj/cli.py` - General flag handling, flag removal moved after init_db()
