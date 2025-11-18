@@ -537,10 +537,22 @@ def main(skip_venv_check: bool = False) -> None:
 def entrypoint() -> None:
     """Main entry point with error handling."""
     try:
-        test_mode = '--test' in sys.argv
+        # Process global flags and remove from sys.argv before command parsing
+        test_mode = False
+        flags_to_remove = []
+
+        for arg in sys.argv[1:]:
+            if arg == '--test':
+                test_mode = True
+                flags_to_remove.append(arg)
+            # Future flags: --verbose, --debug, --dry-run, etc.
 
         check_virtual_environment()
         init_db()
+
+        # Remove processed flags from sys.argv AFTER init_db() so database.py can see them
+        for flag in flags_to_remove:
+            sys.argv.remove(flag)
 
         # Auto-backup on every command execution (skip in test mode)
         if not test_mode:

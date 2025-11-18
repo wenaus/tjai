@@ -1,8 +1,8 @@
 # Next Steps for TJ Development
 
-## CURRENT STATUS - Session Ending Nov 17
+## CURRENT STATUS - Session Ending Nov 17 (Second Session)
 
-### Test System Rewrite - INCOMPLETE (One Bug Remaining)
+### Test System Rewrite - INCOMPLETE (Architectural Issue Discovered)
 
 **What was accomplished:**
 - Deleted tests/ directory (pytest-based tests completely removed)
@@ -12,6 +12,7 @@
 - Created `test.py` - round-trip test: load sample_dump.sh → dump DB → compare outputs
 - Created `sample_dump.sh` - executable shell script with plain `tj` commands
 - Updated `.gitignore` to exclude `test.db`
+- Implemented general flag handling mechanism in entrypoint()
 
 **Testing approach:**
 - No mocking, no frameworks
@@ -20,24 +21,40 @@
 - Dumps database back out
 - Compares for exact match (round-trip verification)
 
-**Current bug:**
-- When running `./tj.py --test dump`, the `--test` flag remains in sys.argv
-- main() sees it and creates entry with content "--test dump"
-- Dump output is "Created memory: --test dump" instead of actual dump
-- Test fails with output mismatch
+**Current architectural issue:**
+The flag removal timing creates a fundamental conflict:
 
-**Fix needed:**
-One of these approaches:
-1. Remove `--test` from sys.argv after detecting it in entrypoint()
-2. Restructure to use argparse properly (parse args, check args.test, consume it)
-3. Filter dump output in test.py to only lines starting with `tj ` or `#`
+1. **Original bug (FIXED):** Removed flags before init_db()
+   - entrypoint() removed `--test` from sys.argv at line 552
+   - Then called init_db() at line 555
+   - database.py checked `if '--test' in sys.argv` - already gone!
+   - Result: Used production DB instead of test.db
+   - **Fix applied:** Move flag removal to AFTER init_db() (now at line 554)
 
-User rejected option 1 as "dirty hack" and didn't approve the other options before session end.
+2. **New issue (DISCOVERED):** Flags removed before backup loses command context
+   - Options affect commands and should be preserved for audit trails
+   - auto_backup() should record what command triggered each backup
+   - Removing flags before backup means command recording would be incomplete
+   - Example: `tj --test dump` would be recorded as `tj dump` (wrong)
+   - Currently auto_backup() doesn't record commands, but it SHOULD
+   - This is a "bad error" - backup system ignoring the actual command
+
+**The conflict:**
+- database.py needs `--test` in sys.argv to select correct DB path
+- backup system needs original sys.argv for command recording
+- main() needs `--test` removed so it doesn't parse as content
+- No clean ordering satisfies all three requirements
+
+**Possible solutions:**
+1. Don't remove flags from sys.argv - teach main() to ignore processed flags
+2. Pass processed flags as parameters through the call chain
+3. Use global/module-level state (rejected - introduces side effects)
+4. Restructure with proper argparse that separates global flags from commands
 
 **Files modified:**
-- `tj/cli.py` - Added --test flag, removed --no-venv-check, detect test mode
+- `tj/cli.py` - General flag handling, flag removal moved after init_db()
 - `tj/database.py` - Check for --test in sys.argv, return hardwired path
-- `test.py` - New test script (needs --test bug fix to work)
+- `test.py` - New test script (not yet tested due to architectural issue)
 - `sample_dump.sh` - New sample dump file
 - `.gitignore` - Added test.db
 
