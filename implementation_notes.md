@@ -61,7 +61,9 @@ Two distinct mechanisms for organizing related content:
 - schema must be highly flexible to incorporate new types of info over time. use json structure for transparent extensibility.
 - the essential obvious constantly searched on schema columns should be columns. e.g. timestamp, context, kind, is_dirty. the json is for everything else.
 - the entry classification field 'kind' should be a string, not an enum, to allow new types to be added without schema changes. Use 'kind' consistently (not 'type').
-- sqlite db and other local materials should be kept in ~/.tjai/ directory.
+- Configuration and state files are kept in ~/.tjai/ directory (config.json, state.json).
+- Database location is configurable via ~/.tjai/config.json (db_path field). Default is ~/.tjai/tjai.db but can be set to Dropbox, iCloud, or any other location.
+- Use `tj config show` to check current database path and other configuration settings.
 - written in python. well motivated dependencies are fine.
 - command line interface. GUI on the web service side.
 - keep track of machines syncing to the cloud service. IP etc. And last update time.

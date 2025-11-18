@@ -8,6 +8,7 @@ from tj.commands.ai import handle_ai_command
 from tj.commands.common import not_yet_implemented, handle_delete
 from tj.commands.context import handle_context
 from tj.commands.create import handle_creation
+from tj.commands.dump import handle_dump
 from tj.commands.query import handle_query
 from tj.database import init_db, DatabaseError
 from tj.environment import check_virtual_environment
@@ -196,7 +197,11 @@ def create_parser() -> argparse.ArgumentParser:
     # Backup
     p_backup = subparsers.add_parser('backup', help="Create a manual backup.")
     p_backup.set_defaults(func=lambda args: handle_backup_command())
-    
+
+    # Dump
+    p_dump = subparsers.add_parser('dump', help="Output database as executable tj commands.")
+    p_dump.set_defaults(func=handle_dump)
+
     # Sync
     p_sync = subparsers.add_parser('sync', help="Force a manual sync.")
     p_sync.set_defaults(func=not_yet_implemented)
@@ -997,15 +1002,24 @@ def main(skip_venv_check: bool = False) -> None:
 
     first_arg = sys.argv[1]
 
-    # Check for heredoc input: <<!
-    if first_arg == '<<!':
+    # Check for heredoc input: <<! (can appear anywhere in args)
+    if '<<!' in sys.argv:
+        heredoc_index = sys.argv.index('<<!')
+
+        # Everything before <<! are parameters (like at=20251115/10:00)
+        params_before = sys.argv[1:heredoc_index]
+
+        # Everything after <<! are additional args (rare, but supported)
+        params_after = sys.argv[heredoc_index + 1:] if heredoc_index + 1 < len(sys.argv) else []
+
+        # Parse heredoc content from stdin
         content = parse_heredoc()
         if content is None:
             return  # Error already printed
 
-        # Extract at= timestamp and other args from remaining args
-        remaining_args = sys.argv[2:]
-        timestamp_override, filtered_args = parse_at_timestamp(remaining_args)
+        # Combine all parameters and extract at= timestamp
+        all_params = params_before + params_after
+        timestamp_override, filtered_args = parse_at_timestamp(all_params)
 
         # Create args object with heredoc content
         class Args:
