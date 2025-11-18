@@ -19,7 +19,7 @@ def escape_content_for_heredoc(content: str) -> str:
     return content
 
 
-def format_entry_command(entry: Entry, tags: List[str]) -> str:
+def format_entry_command(entry: Entry, tags: List[str], db_path: str = None) -> str:
     """Format a single entry as a tj command.
 
     Returns the command string to recreate this entry.
@@ -30,16 +30,19 @@ def format_entry_command(entry: Entry, tags: List[str]) -> str:
     # Build command parts
     cmd_parts = []
 
-    # 1. Base command based on kind
-    if entry.kind == 'todo':
-        cmd_parts.append('tj d')
-    elif entry.kind == 'profile':
-        cmd_parts.append('tj p')
-    elif entry.kind == 'ai':
-        cmd_parts.append('tj ai')
+    # 0. Add db path if provided
+    if db_path:
+        cmd_parts.append(f'tj --db={db_path}')
     else:
-        # Default command for memory, bookmark, calendar, etc.
         cmd_parts.append('tj')
+
+    # 1. Add kind-specific command
+    if entry.kind == 'todo':
+        cmd_parts[0] += ' d'
+    elif entry.kind == 'profile':
+        cmd_parts[0] += ' p'
+    elif entry.kind == 'ai':
+        cmd_parts[0] += ' ai'
 
     # 2. Add context if present (inline context switching)
     if entry.context:
@@ -50,20 +53,15 @@ def format_entry_command(entry: Entry, tags: List[str]) -> str:
 
     # 4. Build the command
     if has_newlines:
-        # Use heredoc format
-        cmd_line = ' '.join(cmd_parts) + ' <<!'
+        # Use command substitution with cat heredoc (works when sourced)
+        cmd_line = ' '.join(cmd_parts)
         content_block = escape_content_for_heredoc(entry.content)
-        # Add tags to the last line of content if present
-        if tags:
-            content_block += ' ' + ' '.join(f':{tag}' for tag in tags)
-        return f"{cmd_line}\n{content_block}\n!"
+        # Tags are already embedded in content, don't add again
+        return f"{cmd_line} \"$(cat <<'END'\n{content_block}\nEND\n)\""
     else:
         # Single line format
-        # Content with tags inline
-        content = entry.content
-        if tags:
-            content += ' ' + ' '.join(f':{tag}' for tag in tags)
-        cmd_parts.append(content)
+        # Tags are already embedded in content, don't add again
+        cmd_parts.append(entry.content)
         return ' '.join(cmd_parts)
 
 
@@ -72,16 +70,25 @@ def handle_dump(args) -> None:
     try:
         repository = RepositoryFactory.get_repository()
 
+        # Get current db path to include in dump
+        from tj.database import get_configured_db_path, _DB_OVERRIDE
+        db_path = _DB_OVERRIDE.name if _DB_OVERRIDE else None
+
         # 1. Dump context definitions first
         contexts = repository.get_all_contexts()
         if contexts:
             print("# Context definitions")
             for context in sorted(contexts, key=lambda c: c.timestamp_created):
-                cmd_parts = [f'tj ={context.name}']
+                cmd_parts = []
+                if db_path:
+                    cmd_parts.append(f'tj --db={db_path}')
+                else:
+                    cmd_parts.append('tj')
+                cmd_parts.append(f'={context.name}')
                 if context.title:
-                    cmd_parts.append(f'-t {context.title}')
+                    cmd_parts.append(f'-t "{context.title}"')
                 if context.description:
-                    cmd_parts.append(f'-d {context.description}')
+                    cmd_parts.append(f'-d "{context.description}"')
                 print(' '.join(cmd_parts))
             print()  # Blank line after contexts
 
@@ -123,11 +130,14 @@ def handle_dump(args) -> None:
                 tags = repository.get_tags(entry.id)
 
                 # Format and output command
-                cmd = format_entry_command(entry, tags)
+                cmd = format_entry_command(entry, tags, db_path)
                 print(cmd)
 
+        # Blank line at end
+        print()
+
         # Stats
-        print(f"\n# Dumped {len(contexts)} contexts, {len(rows)} entries", file=sys.stderr)
+        print(f"# Dumped {len(contexts)} contexts, {len(rows)} entries", file=sys.stderr)
 
     except Exception as e:
         print(f"Dump error: {e}", file=sys.stderr)

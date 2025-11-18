@@ -7,12 +7,18 @@ from typing import Optional
 # --- Constants and Configuration ---
 APP_DIR = Path(os.environ.get("TJAI_APP_DIR", Path.home() / ".tjai"))
 
+# Check for --db option in sys.argv
+_DB_OVERRIDE = None
+for arg in sys.argv:
+    if arg.startswith('--db='):
+        _DB_OVERRIDE = Path(arg.split('=', 1)[1])
+        break
+
 def get_configured_db_path():
     """Get the configured database path."""
-    # Test mode: hardwired to tjai/test.db
-    if '--test' in sys.argv:
-        repo_root = Path(__file__).parent.parent
-        return repo_root / 'test.db'
+    # Check for --db= override
+    if _DB_OVERRIDE:
+        return _DB_OVERRIDE
 
     try:
         from tj.config import get_db_path

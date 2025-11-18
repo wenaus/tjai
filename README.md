@@ -113,6 +113,8 @@ To set up your development environment and run tests:
 
     *Remember to activate the virtual environment (`source .venv/bin/activate`) in each new terminal session where you want to work on `tjai`.*
 
+    **For AI assistants:** Venv doesn't persist between shell commands. Chain activation: `cd tjai && source .venv/bin/activate && python3 test.py`
+
 2.  **Set up `tj` Alias (Recommended):**
     For convenience, add an alias to your shell's startup file e.g. `~/.bashrc`. Add:
 
@@ -126,7 +128,7 @@ To set up your development environment and run tests:
     With the virtual environment active, run the test suite:
 
     ```bash
-    pytest
+    python3 test.py
     ```
 
 ### Testing Heredoc Input

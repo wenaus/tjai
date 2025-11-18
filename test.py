@@ -17,10 +17,10 @@ def main():
         TEST_DB.unlink()
         print(f"Deleted {TEST_DB}")
 
-    # Run sample_dump.sh with tj alias
+    # Execute sample_dump.sh with tj as alias
     print(f"\nLoading {SAMPLE_DUMP}...")
     result = subprocess.run(
-        ['bash', '-c', f'shopt -s expand_aliases && alias tj="{TJ_SCRIPT} --test" && source {SAMPLE_DUMP}'],
+        ['bash', '-c', f'shopt -s expand_aliases && alias tj="{TJ_SCRIPT}" && source {SAMPLE_DUMP}'],
         capture_output=True, text=True
     )
     if result.returncode != 0:
@@ -30,7 +30,7 @@ def main():
     # Dump the database
     print("Dumping database...")
     result = subprocess.run(
-        [str(TJ_SCRIPT), '--test', 'dump'],
+        [str(TJ_SCRIPT), '--db=test.db', 'dump'],
         capture_output=True, text=True
     )
     if result.returncode != 0:

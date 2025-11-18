@@ -1,73 +1,69 @@
 # Next Steps for TJ Development
 
-## CURRENT STATUS - Session Ending Nov 17 (Second Session)
+## CURRENT STATUS - Session Ending Nov 18
 
-### Test System Rewrite - INCOMPLETE (Architectural Issue Discovered)
+### Test System Implementation - NEARLY COMPLETE (1 Issue Remaining)
 
-**What was accomplished:**
-- Deleted tests/ directory (pytest-based tests completely removed)
-- Removed `--no-venv-check` flag (was only used for broken pytest tests)
-- Added `--test` flag to tj.py that hardwires DB path to `tjai/test.db`
-- Modified `database.py` get_configured_db_path() to check `--test` in sys.argv
-- Created `test.py` - round-trip test: load sample_dump.sh → dump DB → compare outputs
-- Created `sample_dump.sh` - executable shell script with plain `tj` commands
-- Updated `.gitignore` to exclude `test.db`
-- Implemented general flag handling mechanism in entrypoint()
-
-**Testing approach:**
-- No mocking, no frameworks
-- sample_dump.sh contains plain tj commands (e.g., `tj =work -t "Title"`)
-- test.py runs it with bash alias: `alias tj='./tj.py --test'`
-- Dumps database back out
-- Compares for exact match (round-trip verification)
-
-**Current architectural issue:**
-The flag removal timing creates a fundamental conflict:
-
-1. **Original bug (FIXED):** Removed flags before init_db()
-   - entrypoint() removed `--test` from sys.argv at line 552
-   - Then called init_db() at line 555
-   - database.py checked `if '--test' in sys.argv` - already gone!
-   - Result: Used production DB instead of test.db
-   - **Fix applied:** Move flag removal to AFTER init_db() (now at line 554)
-
-2. **New issue (DISCOVERED):** Flags removed before backup loses command context
-   - Options affect commands and should be preserved for audit trails
-   - auto_backup() should record what command triggered each backup
-   - Removing flags before backup means command recording would be incomplete
-   - Example: `tj --test dump` would be recorded as `tj dump` (wrong)
-   - Currently auto_backup() doesn't record commands, but it SHOULD
-   - This is a "bad error" - backup system ignoring the actual command
-
-**The conflict:**
-- database.py needs `--test` in sys.argv to select correct DB path
-- backup system needs original sys.argv for command recording
-- main() needs `--test` removed so it doesn't parse as content
-- No clean ordering satisfies all three requirements
-
-**Solution:**
-Save original command at start of entrypoint(): `original_command = sys.argv.copy()`
-Then use original_command where needed for audit/backup purposes.
-This preserves the actual command with all flags while still allowing sys.argv modification.
+**What was accomplished this session:**
+- Replaced `--test` flag with `--db=path` option (cleaner, explicit)
+  - `--db=` appears in dump output, making dumps self-contained
+  - Database path now specified explicitly in every command
+- Implemented `original_command = sys.argv.copy()` for audit/backup
+- Fixed multi-line entry format for dump:
+  - Changed from `tj <<!` to `tj "$(cat <<'END'...END)"`
+  - Reason: bash consumes `<<!` heredoc when sourcing scripts
+  - New format works correctly when sourced
+- Fixed inline context with timestamps: `tj =work at=20250101/09:00 content` now parses `at=` correctly
+- Dump includes `--db=` on all commands
+- Dump quotes context titles/descriptions
+- Added blank line at end of dump output
 
 **Files modified:**
-- `tj/cli.py` - General flag handling, flag removal moved after init_db()
-- `tj/database.py` - Check for --test in sys.argv, return hardwired path
-- `test.py` - New test script (not yet tested due to architectural issue)
-- `sample_dump.sh` - New sample dump file
-- `.gitignore` - Added test.db
+- `tj/cli.py` - Replaced `--test` with `--db=`, added `original_command` save, fixed inline context timestamp parsing
+- `tj/database.py` - Check for `--db=` in sys.argv, cache at module load
+- `tj/commands/dump.py` - Multi-line format changed, `--db=` prefix added, quote titles/descriptions
+- `test.py` - Round-trip test (load → dump → compare)
+- `sample_dump.sh` - Test data file
+- `README.md` - Added note about venv persistence for AI assistants
+
+**Current issue:**
+- Test failing because `sample_dump.sh` doesn't match actual database contents
+- Entries have wrong contexts (some missing `=work`)
+- Solution: Regenerate `sample_dump.sh` from actual dump of clean test database
+
+**How to fix:**
+```bash
+rm test.db
+# Manually create clean test data
+./tj.py --db=test.db =work -t "Work Projects"
+./tj.py --db=test.db =personal
+./tj.py --db=test.db =work at=20250101/09:00 First work entry :project :urgent
+./tj.py --db=test.db =personal at=20250101/10:00 "$(cat <<'END'
+This is a multi-line entry
+with several lines of content
+testing heredoc format
+END
+)"
+./tj.py --db=test.db d =work at=20250101/11:00 Complete testing
+./tj.py --db=test.db p =work at=20250102/14:00 I prefer simple solutions :philosophy
+./tj.py --db=test.db =work at=20250103/15:00 General memory entry
+# Dump and save
+./tj.py --db=test.db dump > sample_dump.sh
+chmod +x sample_dump.sh
+# Now test should pass
+python3 test.py
+```
 
 ### Phase 1 Refactoring - COMPLETE
 
 **Accomplished:**
-- Reduced cli.py from 1,101 to 560 lines (49% reduction)
+- Reduced cli.py from 1,101 to 571 lines (48% reduction)
 - Created modular command handlers:
   - `tj/commands/list.py` (161 lines) - contexts, tags, entries listing
   - `tj/commands/modify.py` (242 lines) - edit, tag, move, show, pin
   - `tj/commands/delete.py` (147 lines) - delete operations
 - Moved `get_entry_from_recent_list()` to `tj/commands/common.py`
 - All commands tested and working
-- Code is now organized by domain for easier maintenance
 
 **Status:** Committed in 175864b
 
@@ -75,27 +71,27 @@ This preserves the actual command with all flags while still allowing sys.argv m
 
 **Accomplished:**
 - `tj dump` outputs entire database as executable tj commands
-- Contexts output first with -t/-d flags
+- Contexts output first with -t/-d flags (quoted)
 - Entries in ROWID order (actual insertion order)
-- Multi-line entries use heredoc format
+- Multi-line entries use `"$(cat <<'END'...END)"` format (works when sourced)
 - Tags preserved inline with :tag notation
 - Timestamps preserved via at=YYYYMMDD/HH:MM
-- Heredoc syntax fixed: `at=` now comes BEFORE `<<!` (intuitive order)
+- `--db=` prefix on all commands for self-contained dumps
 
 **Status:** Committed in 33ca4ea
 
 ## Immediate Next Steps
 
-1. **Fix --test flag bug** (choose and implement one approach)
-2. **Verify test.py works** (should show exact round-trip match)
+1. **Fix sample_dump.sh** - Regenerate from clean test database dump (see instructions above)
+2. **Verify test.py passes** - Should show exact round-trip match
 3. **Test with larger dump files** to measure performance
-4. **Commit test system rewrite**
+4. **Commit test system** with push
 
 ## Future Implementation Priorities
 
 ### 1. Editor Integration System
-- `tj -e`: Empty editor for entry creation
-- `tj --edit`: Editor with initial content
+- `tj -e`: Empty editor for entry creation (multi-line via tempfile)
+- `tj --edit <n>`: Edit existing entry in editor
 - Bulk editing workflow (like git commit)
 
 ### 2. Calendar/Journal System
@@ -124,6 +120,7 @@ This preserves the actual command with all flags while still allowing sys.argv m
 - `implementation_notes.md` - Testing philosophy: "No mocking. Meaningful tests on full function system."
 - `OPERATORS.md` - Operator reference
 - `CLAUDE.md` - Critical rules including git push requirement
+- `README.md` - User docs, now includes AI assistant guidance on venv
 
 ## Commit Strategy
 

@@ -103,13 +103,11 @@ def handle_creation_with_at(args, entry_type_override: Optional[str] = None):
 def create_parser() -> argparse.ArgumentParser:
     """Create and configure the argument parser."""
     parser = argparse.ArgumentParser(
-        description="tj - Your Personal AI Memory Aid.", 
+        description="tj - Your Personal AI Memory Aid.",
         add_help=False
     )
-    
-    # Global options
-    parser.add_argument('--test', action='store_true',
-                       help='Use test database at tjai/test.db')
+
+    # Note: --db= is handled in entrypoint() before command parsing
 
     subparsers = parser.add_subparsers(dest='command')
 
@@ -437,7 +435,7 @@ def handle_context_syntax(first_arg: str, remaining_args: list) -> None:
             def __init__(self):
                 self.input = remaining_args
         create_args = CreateArgs()
-        handle_creation(create_args)
+        handle_creation_with_at(create_args)
 
 
 def main(skip_venv_check: bool = False) -> None:
@@ -537,25 +535,26 @@ def main(skip_venv_check: bool = False) -> None:
 def entrypoint() -> None:
     """Main entry point with error handling."""
     try:
+        # Save original command for audit/backup purposes (before any modifications)
+        original_command = sys.argv.copy()
+
         # Process global flags and remove from sys.argv before command parsing
-        test_mode = False
         flags_to_remove = []
 
         for arg in sys.argv[1:]:
-            if arg == '--test':
-                test_mode = True
+            if arg.startswith('--db='):
                 flags_to_remove.append(arg)
             # Future flags: --verbose, --debug, --dry-run, etc.
 
         check_virtual_environment()
         init_db()
 
-        # Remove processed flags from sys.argv AFTER init_db() so database.py can see them
+        # Remove processed flags for command parsing (database.py already cached them)
         for flag in flags_to_remove:
             sys.argv.remove(flag)
 
-        # Auto-backup on every command execution (skip in test mode)
-        if not test_mode:
+        # Auto-backup on every command execution (skip if using non-default db)
+        if not any(arg.startswith('--db=') for arg in original_command):
             auto_backup()
 
         main()
