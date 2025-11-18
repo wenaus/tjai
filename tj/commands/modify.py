@@ -1,0 +1,242 @@
+"""Modification command handlers for tj."""
+
+import sys
+from datetime import datetime, timezone
+
+from tj.colors import colorize_content
+from tj.commands.common import get_entry_from_recent_list
+from tj.repository_factory import RepositoryFactory
+from tj.timezone_manager import format_time_dashboard
+
+
+def handle_add_subnote(args) -> None:
+    """Handle adding a sub-note to an entry."""
+    try:
+        entry_num = int(args.entry_num)
+        text = " ".join(args.text)
+
+        entry = get_entry_from_recent_list(entry_num)
+        if not entry:
+            print(f"Error: Entry {entry_num} not found in recent list.", file=sys.stderr)
+            return
+
+        # TODO: Implement sub-note creation in repository
+        print(f"Sub-note added to entry {entry_num}: {text[:50]}...")
+
+    except (ValueError, TypeError):
+        print("Error: Invalid entry number.", file=sys.stderr)
+    except Exception as e:
+        print(f"Add sub-note error: {e}", file=sys.stderr)
+
+
+def handle_edit(args) -> None:
+    """Handle editing an entry (requires confirmation)."""
+    try:
+        entry_num = int(args.entry_num)
+        new_text = " ".join(args.text)
+
+        entry = get_entry_from_recent_list(entry_num)
+        if not entry:
+            print(f"Error: Entry {entry_num} not found in recent list.", file=sys.stderr)
+            return
+
+        # Show current content and confirm
+        old_preview = entry.content
+        new_preview = new_text
+
+        print(f"Edit entry {entry_num}:")
+        print(f"  Old: {old_preview}")
+        print(f"  New: {new_preview}")
+
+        response = input("\nConfirm edit? [y/N]: ").strip().lower()
+        if response not in ['y', 'yes']:
+            print("Edit cancelled.")
+            return
+
+        # Update entry
+        repository = RepositoryFactory.get_repository()
+        success = repository.update_entry(
+            entry.id,
+            content=new_text,
+            timestamp_modified=datetime.now(timezone.utc).timestamp(),
+            is_dirty=True
+        )
+
+        if success:
+            print("Entry updated successfully.")
+        else:
+            print("Error: Failed to update entry.", file=sys.stderr)
+
+    except (ValueError, TypeError):
+        print("Error: Invalid entry number.", file=sys.stderr)
+    except Exception as e:
+        print(f"Edit error: {e}", file=sys.stderr)
+
+
+def handle_tag_command(args) -> None:
+    """Handle tag command - either add tag to entry or list entries with tag."""
+    try:
+        if args.tag:
+            # Two arguments: tj t <number> <tag> - add tag to entry
+            entry_num = int(args.entry_num)
+            tag = args.tag.strip()
+
+            entry = get_entry_from_recent_list(entry_num)
+            if not entry:
+                print(f"Error: Entry {entry_num} not found in recent list.", file=sys.stderr)
+                return
+
+            repository = RepositoryFactory.get_repository()
+            repository.add_tag(entry.id, tag)
+            print(f"Tag '{tag}' added to entry {entry_num}.")
+
+        else:
+            # One argument: tj t <tagname> - list entries with tag
+            tagname = args.entry_num  # actually the tag name in this case
+
+            # Use repository to find entries with this tag
+            repository = RepositoryFactory.get_repository()
+            all_entries = repository.query_entries(tag=tagname)
+            active_entries = [e for e in all_entries if not getattr(e, 'deleted_at', None)]
+
+            if not active_entries:
+                print(f"No entries found with tag '{tagname}'.")
+                return
+
+            # Sort by timestamp (newest first)
+            sorted_entries = sorted(active_entries, key=lambda e: e.timestamp_created, reverse=True)
+
+            print(f"{len(sorted_entries)} entries with tag '{tagname}':")
+
+            for i, entry in enumerate(sorted_entries, 1):
+                content_colored = colorize_content(entry.content)
+                time_str = format_time_dashboard(entry.timestamp_created)
+
+                context_str = f" [{entry.context}]" if entry.context else ""
+                if entry.kind == 'todo':
+                    print(f"{i:2d}  {time_str} ToDo: {content_colored}{context_str}")
+                elif entry.kind in ['memory', 'bookmark']:
+                    print(f"{i:2d}  {time_str} {content_colored}{context_str}")
+                else:
+                    print(f"{i:2d}  {time_str} [{entry.kind}] {content_colored}{context_str}")
+
+    except (ValueError, TypeError):
+        print("Error: Invalid entry number.", file=sys.stderr)
+    except Exception as e:
+        print(f"Tag command error: {e}", file=sys.stderr)
+
+
+def handle_add_tag(args) -> None:
+    """Handle adding a tag to an entry."""
+    try:
+        entry_num = int(args.entry_num)
+        tag = args.tag.strip()
+
+        entry = get_entry_from_recent_list(entry_num)
+        if not entry:
+            print(f"Error: Entry {entry_num} not found in recent list.", file=sys.stderr)
+            return
+
+        repository = RepositoryFactory.get_repository()
+        repository.add_tag(entry.id, tag)
+        print(f"Tag '{tag}' added to entry {entry_num}.")
+
+    except (ValueError, TypeError):
+        print("Error: Invalid entry number.", file=sys.stderr)
+    except Exception as e:
+        print(f"Add tag error: {e}", file=sys.stderr)
+
+
+def handle_move(args) -> None:
+    """Handle moving an entry to a context."""
+    try:
+        entry_num = int(args.entry_num)
+        context = args.context.strip() if args.context else None
+
+        entry = get_entry_from_recent_list(entry_num)
+        if not entry:
+            print(f"Error: Entry {entry_num} not found in recent list.", file=sys.stderr)
+            return
+
+        repository = RepositoryFactory.get_repository()
+        success = repository.update_entry(
+            entry.id,
+            context=context,
+            timestamp_modified=datetime.now(timezone.utc).timestamp(),
+            is_dirty=True
+        )
+
+        if success:
+            if context:
+                print(f"Entry {entry_num} moved to context '{context}'.")
+            else:
+                print(f"Entry {entry_num} removed from context.")
+        else:
+            print("Error: Failed to move entry.", file=sys.stderr)
+
+    except (ValueError, TypeError):
+        print("Error: Invalid entry number.", file=sys.stderr)
+    except Exception as e:
+        print(f"Move error: {e}", file=sys.stderr)
+
+
+def handle_show(args) -> None:
+    """Handle showing entry details."""
+    try:
+        entry_num = int(args.entry_num)
+
+        entry = get_entry_from_recent_list(entry_num)
+        if not entry:
+            print(f"Error: Entry {entry_num} not found in recent list.", file=sys.stderr)
+            return
+
+        time_str = format_time_dashboard(entry.timestamp_created)
+
+        print(f"Entry {entry_num}:")
+        print(f"  Content: {entry.content}")
+        print(f"  Created: {time_str}")
+        print(f"  Type: {entry.kind}")
+        if entry.context:
+            print(f"  Context: {entry.context}")
+
+        # Show tags
+        repository = RepositoryFactory.get_repository()
+        tags = repository.get_tags(entry.id)
+        if tags:
+            print(f"  Tags: {', '.join(tags)}")
+
+    except (ValueError, TypeError):
+        print("Error: Invalid entry number.", file=sys.stderr)
+    except Exception as e:
+        print(f"Show error: {e}", file=sys.stderr)
+
+
+def handle_pin(args) -> None:
+    """Handle moving an entry to top (update timestamp)."""
+    try:
+        entry_num = int(args.entry_num)
+
+        entry = get_entry_from_recent_list(entry_num)
+        if not entry:
+            print(f"Error: Entry {entry_num} not found in recent list.", file=sys.stderr)
+            return
+
+        # Update timestamp to now to move to top
+        now = datetime.now(timezone.utc).timestamp()
+
+        repository = RepositoryFactory.get_repository()
+        success = repository.update_entry(
+            entry.id,
+            timestamp_modified=now,
+            is_dirty=True
+        )
+
+        if success:
+            print(f"Entry {entry_num} moved to top.")
+        else:
+            print("Error: Failed to move entry to top.", file=sys.stderr)
+
+    except (ValueError, TypeError):
+        print("Error: Invalid entry number.", file=sys.stderr)
+    except Exception as e:
+        print(f"Pin error: {e}", file=sys.stderr)

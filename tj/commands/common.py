@@ -1,6 +1,35 @@
 import sys
+from datetime import datetime
 from typing import Optional
+
+from tj.config import get_recent_entries_hours
+from tj.repository import Entry
 from tj.state import display_context
+
+
+def get_entry_from_recent_list(entry_num: int) -> Optional[Entry]:
+    """Get entry from recent list by number.
+
+    Returns the entry if found, None otherwise.
+    """
+    try:
+        from tj.repository_factory import RepositoryFactory
+
+        repository = RepositoryFactory.get_repository()
+
+        all_entries = repository.query_entries()
+        active_entries = [e for e in all_entries if not getattr(e, 'deleted_at', None)]
+
+        recent_hours = get_recent_entries_hours()
+        recent_cutoff = datetime.now().timestamp() - (recent_hours * 60 * 60)
+        recent_entries = [e for e in active_entries if e.timestamp_created >= recent_cutoff]
+        recent_entries = sorted(recent_entries, key=lambda e: e.timestamp_created, reverse=True)
+
+        if 1 <= entry_num <= len(recent_entries):
+            return recent_entries[entry_num - 1]
+        return None
+    except Exception:
+        return None
 
 
 def format_entry_for_display(entry) -> str:
