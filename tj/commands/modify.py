@@ -3,7 +3,7 @@
 import sys
 from datetime import datetime, timezone
 
-from tj.colors import colorize_content, colorize_context, colorize_timestamp
+from tj.colors import colorize_content, colorize_context, colorize_timestamp, colorize_entry_number
 from tj.commands.common import get_entry_from_recent_list
 from tj.repository_factory import RepositoryFactory
 from tj.timezone_manager import format_time_dashboard
@@ -31,6 +31,103 @@ def handle_add_subnote(args) -> None:
         print(f"Add sub-note error: {e}", file=sys.stderr)
 
 
+def _edit_entry_in_editor(entry, entry_identifier="entry"):
+    """Helper function to edit an entry in the editor.
+
+    Args:
+        entry: The Entry object to edit
+        entry_identifier: String identifier for messages (e.g., "@name" or "entry")
+
+    Returns:
+        bool: True if edit was successful, False otherwise
+    """
+    from tj.commands.editor import open_editor
+
+    # Prepare initial content with =context prefix if present
+    if entry.context:
+        initial_content = f"={entry.context} {entry.content}"
+    else:
+        initial_content = entry.content
+
+    # Open editor
+    new_content = open_editor(initial_content)
+    if new_content is None:
+        return False
+
+    # Parse for =context on first line
+    lines = new_content.split('\n', 1)
+    first_line = lines[0]
+    rest = lines[1] if len(lines) > 1 else None
+
+    first_parts = first_line.split()
+    new_context = entry.context
+    content_parts = []
+    found_context_marker = False
+
+    for part in first_parts:
+        if part.startswith('='):
+            found_context_marker = True
+            ctx = part[1:]
+            if ctx == '0':
+                new_context = None
+            elif ctx:
+                new_context = ctx
+        else:
+            content_parts.append(part)
+
+    # If entry had context but user removed =context marker, clear it
+    if entry.context and not found_context_marker:
+        new_context = None
+
+    # Reconstruct content without =context
+    if content_parts:
+        first_content = ' '.join(content_parts)
+        if rest:
+            final_content = first_content + '\n' + rest
+        else:
+            final_content = first_content
+    elif rest:
+        final_content = rest
+    else:
+        print("Error: Entry content cannot be empty.", file=sys.stderr)
+        return False
+
+    # Extract tags from new content
+    new_tags = set()
+    for line in final_content.split('\n'):
+        for part in line.split():
+            if part.startswith(':'):
+                tag = part[1:]
+                if tag:
+                    new_tags.add(tag)
+
+    # Update entry
+    repository = RepositoryFactory.get_repository()
+    success = repository.update_entry(
+        entry.id,
+        content=final_content,
+        context=new_context,
+        timestamp_modified=datetime.now(timezone.utc).timestamp(),
+        is_dirty=True
+    )
+
+    if not success:
+        print("Error: Failed to update entry.", file=sys.stderr)
+        return False
+
+    # Update tags (add new, remove old)
+    existing_tags = set(repository.get_tags(entry.id))
+
+    for tag in new_tags - existing_tags:
+        repository.add_tag(entry.id, tag)
+
+    for tag in existing_tags - new_tags:
+        repository.remove_tag(entry.id, tag)
+
+    print("Entry updated successfully.")
+    return True
+
+
 def handle_edit(args) -> None:
     """Handle editing an entry.
 
@@ -47,10 +144,6 @@ def handle_edit(args) -> None:
 
     # Case 1: No args → edit most recent entry
     if not args.entry_num:
-        from tj.repository_factory import RepositoryFactory
-        from tj.commands.editor import open_editor
-        from datetime import datetime, timezone
-
         repository = RepositoryFactory.get_repository()
         all_entries = repository.query_entries()
         active_entries = [e for e in all_entries if not getattr(e, 'deleted_at', None)]
@@ -60,89 +153,7 @@ def handle_edit(args) -> None:
         # Sort by modification time, get most recent
         active_entries.sort(key=lambda e: e.timestamp_modified, reverse=True)
         entry = active_entries[0]
-
-        # Prepare initial content with =context prefix if present
-        if entry.context:
-            initial_content = f"={entry.context} {entry.content}"
-        else:
-            initial_content = entry.content
-
-        # Open editor
-        new_content = open_editor(initial_content)
-
-        if new_content is None:
-            return
-
-        # Parse for =context on first line
-        lines = new_content.split('\n', 1)
-        first_line = lines[0]
-        rest = lines[1] if len(lines) > 1 else None
-
-        first_parts = first_line.split()
-        new_context = entry.context  # Default to current context
-        content_parts = []
-        found_context_marker = False
-
-        for part in first_parts:
-            if part.startswith('='):
-                found_context_marker = True
-                ctx = part[1:]
-                if ctx == '0':
-                    new_context = None
-                elif ctx:
-                    new_context = ctx
-            else:
-                content_parts.append(part)
-
-        # If entry had context but user removed =context marker, clear it
-        if entry.context and not found_context_marker:
-            new_context = None
-
-        # Reconstruct content without =context
-        if content_parts:
-            first_content = ' '.join(content_parts)
-            if rest:
-                final_content = first_content + '\n' + rest
-            else:
-                final_content = first_content
-        elif rest:
-            final_content = rest
-        else:
-            print("Error: Entry content cannot be empty.", file=sys.stderr)
-            return
-
-        # Extract tags from new content
-        new_tags = set()
-        for line in final_content.split('\n'):
-            for part in line.split():
-                if part.startswith(':'):
-                    tag = part[1:]
-                    if tag:
-                        new_tags.add(tag)
-
-        # Update entry
-        success = repository.update_entry(
-            entry.id,
-            content=final_content,
-            context=new_context,
-            timestamp_modified=datetime.now(timezone.utc).timestamp(),
-            is_dirty=True
-        )
-
-        if not success:
-            print("Error: Failed to update entry.", file=sys.stderr)
-            return
-
-        # Update tags (add new, remove old)
-        existing_tags = set(repository.get_tags(entry.id))
-
-        for tag in new_tags - existing_tags:
-            repository.add_tag(entry.id, tag)
-
-        for tag in existing_tags - new_tags:
-            repository.remove_tag(entry.id, tag)
-
-        print("Entry updated successfully.")
+        _edit_entry_in_editor(entry, "most recent entry")
         return
 
     # Check if entry_num is a kind type
@@ -167,7 +178,7 @@ def handle_edit(args) -> None:
 
     # Check if entry_num is @name reference
     if isinstance(args.entry_num, str) and args.entry_num.startswith('@'):
-        # Edit named entry - use get_entry_from_recent_list which supports @name
+        # Edit named entry
         entry = get_entry_from_recent_list(args.entry_num)
         if not entry:
             print(f"Error: Entry {args.entry_num} not found.", file=sys.stderr)
@@ -199,88 +210,8 @@ def handle_edit(args) -> None:
                 print("Error: Failed to update entry.", file=sys.stderr)
             return
 
-        # No text - edit in editor (inline same logic as "no args" case)
-        from tj.commands.editor import open_editor
-
-        if entry.context:
-            initial_content = f"={entry.context} {entry.content}"
-        else:
-            initial_content = entry.content
-
-        new_content = open_editor(initial_content)
-        if new_content is None:
-            return
-
-        # Parse for =context on first line
-        lines = new_content.split('\n', 1)
-        first_line = lines[0]
-        rest = lines[1] if len(lines) > 1 else None
-
-        first_parts = first_line.split()
-        new_context = entry.context
-        content_parts = []
-        found_context_marker = False
-
-        for part in first_parts:
-            if part.startswith('='):
-                found_context_marker = True
-                ctx = part[1:]
-                if ctx == '0':
-                    new_context = None
-                elif ctx:
-                    new_context = ctx
-            else:
-                content_parts.append(part)
-
-        if entry.context and not found_context_marker:
-            new_context = None
-
-        # Reconstruct content without =context
-        if content_parts:
-            first_content = ' '.join(content_parts)
-            if rest:
-                final_content = first_content + '\n' + rest
-            else:
-                final_content = first_content
-        elif rest:
-            final_content = rest
-        else:
-            print("Error: Entry content cannot be empty.", file=sys.stderr)
-            return
-
-        # Extract tags from new content
-        new_tags = set()
-        for line in final_content.split('\n'):
-            for part in line.split():
-                if part.startswith(':'):
-                    tag = part[1:]
-                    if tag:
-                        new_tags.add(tag)
-
-        # Update entry
-        repository = RepositoryFactory.get_repository()
-        success = repository.update_entry(
-            entry.id,
-            content=final_content,
-            context=new_context,
-            timestamp_modified=datetime.now(timezone.utc).timestamp(),
-            is_dirty=True
-        )
-
-        if not success:
-            print("Error: Failed to update entry.", file=sys.stderr)
-            return
-
-        # Update tags (add new, remove old)
-        existing_tags = set(repository.get_tags(entry.id))
-
-        for tag in new_tags - existing_tags:
-            repository.add_tag(entry.id, tag)
-
-        for tag in existing_tags - new_tags:
-            repository.remove_tag(entry.id, tag)
-
-        print("Entry updated successfully.")
+        # No text - edit in editor using helper
+        _edit_entry_in_editor(entry, args.entry_num)
         return
 
     # Try to parse entry_num as integer
@@ -304,12 +235,9 @@ def handle_edit(args) -> None:
         return
 
     # Show current content and confirm
-    old_preview = entry.content
-    new_preview = new_text
-
     print(f"Edit entry {entry_num}:")
-    print(f"  Old: {old_preview}")
-    print(f"  New: {new_preview}")
+    print(f"  Old: {entry.content}")
+    print(f"  New: {new_text}")
 
     response = input("\nConfirm edit? [y/N]: ").strip().lower()
     if response not in ['y', 'yes']:
@@ -374,11 +302,11 @@ def handle_tag_command(args) -> None:
 
                 context_str = f" {colorize_context(entry.context)}" if entry.context else ""
                 if entry.kind == 'todo':
-                    print(f"{i:2d}  {time_str} ToDo: {content_colored}{context_str}")
+                    print(f"{colorize_entry_number(i)}  {time_str} ToDo: {content_colored}{context_str}")
                 elif entry.kind in ['memory', 'bookmark']:
-                    print(f"{i:2d}  {time_str} {content_colored}{context_str}")
+                    print(f"{colorize_entry_number(i)}  {time_str} {content_colored}{context_str}")
                 else:
-                    print(f"{i:2d}  {time_str} [{entry.kind}] {content_colored}{context_str}")
+                    print(f"{colorize_entry_number(i)}  {time_str} [{entry.kind}] {content_colored}{context_str}")
 
     except (ValueError, TypeError):
         print("Error: Invalid entry number.", file=sys.stderr)

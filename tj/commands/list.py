@@ -3,7 +3,7 @@
 import sys
 from datetime import datetime, timedelta
 
-from tj.colors import colorize_content, colorize_context, colorize_kind, colorize_timestamp, colorize_creation_timestamp
+from tj.colors import colorize_content, colorize_context, colorize_kind, colorize_timestamp, colorize_creation_timestamp, colorize_entry_number
 from tj.repository_factory import RepositoryFactory
 from tj.state import get_state, save_state, display_context
 from tj.timezone_manager import format_time_dashboard
@@ -103,7 +103,7 @@ def _list_named_entries(repository):
         time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_modified))
         content_preview = entry.content[:60] + "..." if len(entry.content) > 60 else entry.content
         context_str = f" {colorize_context(entry.context)}" if entry.context else ""
-        print(f"{i:2d}  @{entry.name} {time_str}{context_str} {content_preview}")
+        print(f"{colorize_entry_number(i)}  @{entry.name} {time_str}{context_str} {content_preview}")
 
     # Store numbered entries in state for numbered operations
     state = get_state()
@@ -127,7 +127,7 @@ def _list_tags(repository):
     print(f"{len(tag_counts)} tags:")
     for i, tag_name in enumerate(sorted(tag_counts.keys()), 1):
         count = tag_counts[tag_name]
-        print(f"{i:2d}  {tag_name} - {count}")
+        print(f"{colorize_entry_number(i)}  {tag_name} - {count}")
 
 
 def _list_entries_with_filters(repository, filters):
@@ -299,7 +299,7 @@ def _list_entries_with_filters(repository, filters):
         # Show context after event date
         context_str = f"{colorize_context(entry.context)} " if entry.context else ""
 
-        print(f"{i:2d}  {time_str} {type_prefix}{event_date_str}{context_str}{content_colored}")
+        print(f"{colorize_entry_number(i)}  {time_str} {type_prefix}{event_date_str}{context_str}{content_colored}")
 
     # Store numbered entries in state for numbered operations
     state = get_state()
@@ -361,11 +361,11 @@ def handle_list_all(args) -> None:
 
             context_str = f" {colorize_context(entry.context)}" if entry.context else ""
             if entry.kind == 'todo':
-                print(f"{i:2d}  {time_str} ToDo: {content_colored}{context_str}")
+                print(f"{colorize_entry_number(i)}  {time_str} ToDo: {content_colored}{context_str}")
             elif entry.kind in ['memory', 'bookmark']:
-                print(f"{i:2d}  {time_str} {content_colored}{context_str}")
+                print(f"{colorize_entry_number(i)}  {time_str} {content_colored}{context_str}")
             else:
-                print(f"{i:2d}  {time_str} [{entry.kind}] {content_colored}{context_str}")
+                print(f"{colorize_entry_number(i)}  {time_str} [{entry.kind}] {content_colored}{context_str}")
 
     except Exception as e:
         print(f"List all error: {e}", file=sys.stderr)

@@ -8,6 +8,7 @@ LIGHT_MAUVE = '\033[38;5;183m'  # Very light mauve for contexts
 TERRACOTTA = '\033[38;5;216m'  # Terracotta for event timestamps (calendar)
 SOFT_GREY = '\033[38;5;245m'  # Soft grey for creation timestamps
 LIGHT_GOLD = '\033[38;5;221m'  # Light gold for kind brackets
+BRIGHT_YELLOW = '\033[38;5;226m'  # Bright yellow for entry numbers
 BOLD = '\033[1m'  # Bold text
 RESET = '\033[0m'
 
@@ -44,6 +45,10 @@ def colorize_timestamp(timestamp: str) -> str:
 def colorize_creation_timestamp(timestamp: str) -> str:
     """Colorize creation timestamp with soft grey."""
     return f'{SOFT_GREY}{timestamp}{RESET}'
+
+def colorize_entry_number(number: int) -> str:
+    """Colorize entry number with bright yellow."""
+    return f'{BRIGHT_YELLOW}{number:2d}{RESET}'
 
 def colorize_content(text: str) -> str:
     """Apply all content colorization."""
