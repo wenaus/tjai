@@ -1,8 +1,9 @@
 """Simple ANSI color utilities for tj."""
 
 # ANSI color codes (optimized for dark mode)
-CYAN = '\033[96m'  # Bright cyan for URLs - better on dark backgrounds
-LIGHT_GREEN = '\033[92m'
+CYAN = '\033[96m'  # Bright cyan for URLs
+LIGHT_GREEN = '\033[92m'  # Light green for tags
+LIGHT_MAGENTA = '\033[38;5;141m'  # Light purple for contexts (256-color mode)
 RESET = '\033[0m'
 
 def colorize_url(text: str) -> str:
@@ -18,6 +19,10 @@ def colorize_tags(text: str) -> str:
     # Find :tag patterns and colorize them
     tag_pattern = r':[a-zA-Z0-9_-]+'
     return re.sub(tag_pattern, f'{LIGHT_GREEN}\\g<0>{RESET}', text)
+
+def colorize_context(context: str) -> str:
+    """Colorize context with light purple."""
+    return f'{LIGHT_MAGENTA}={context}{RESET}'
 
 def colorize_content(text: str) -> str:
     """Apply all content colorization."""

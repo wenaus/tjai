@@ -184,9 +184,11 @@ def handle_editor_edit(entry_num: int) -> None:
     first_parts = first_line.split()
     new_context = entry.context  # Default to current context
     content_parts = []
+    found_context_marker = False
 
     for part in first_parts:
         if part.startswith('='):
+            found_context_marker = True
             ctx = part[1:]
             if ctx == '0':
                 new_context = None
@@ -194,6 +196,10 @@ def handle_editor_edit(entry_num: int) -> None:
                 new_context = ctx
         else:
             content_parts.append(part)
+
+    # If entry had context but user removed =context marker, clear it
+    if entry.context and not found_context_marker:
+        new_context = None
 
     # Reconstruct content without =context
     if content_parts:

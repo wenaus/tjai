@@ -426,16 +426,27 @@ def handle_context_syntax(first_arg: str, remaining_args: list) -> None:
     from tj.state import get_state, save_state
 
     if first_arg == '=0':
-        # Clear context directly without confirmation
-        state = get_state()
-        current_context = state.get("current_context")
-        if current_context:
-            state["current_context"] = None
-            save_state(state)
-            print(f"Context '{current_context}' cleared.")
+        if not remaining_args:
+            # No args: clear active context
+            state = get_state()
+            current_context = state.get("current_context")
+            if current_context:
+                state["current_context"] = None
+                save_state(state)
+                print(f"Context '{current_context}' cleared.")
+            else:
+                print("No context to clear.")
+            return
         else:
-            print("No context to clear.")
-        return
+            # Has args: create context-free entry
+            input_list = ['=0'] + remaining_args
+            class Args:
+                def __init__(self):
+                    self.input = input_list
+                    self.timestamp_override = None
+            args = Args()
+            handle_creation(args)
+            return
 
     # Extract context name (everything after =)
     context_name = first_arg[1:]  # Remove the = prefix

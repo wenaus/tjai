@@ -14,6 +14,54 @@ This project is built on an offline-first, distributed architecture. The `tj` cl
 *   **Timestamped:** Every piece of information is automatically timestamped.
 *   **Interactive:** Query results are numbered, allowing for easy modification of entries.
 
+## Installation & Quick Start
+
+### 1. Make the script executable
+
+```bash
+cd /path/to/tjai
+chmod +x tj.py
+```
+
+### 2. Set up the `tj` command
+
+Add this bash function to `~/.bashrc`:
+
+```bash
+tj() { /path/to/tjai/tj.py "$*"; }
+```
+
+Replace `/path/to/tjai` with your actual path. Example:
+
+```bash
+tj() { ~/github/tjrepo/tjai/tj.py "$*"; }
+```
+
+Reload your shell:
+
+```bash
+source ~/.bashrc
+```
+
+**Why a function?** Enables natural, unquoted commands: `tj my memory entry` instead of `tj "my memory entry"`
+
+### 3. Verify installation
+
+```bash
+tj h  # Show help
+tj    # Show status (creates ~/.tjai/tjai.db on first run)
+```
+
+### 4. Start using tj
+
+```bash
+tj p I prefer dark mode in all applications     # Add profile fact
+tj =myproject                                   # Switch to project context
+tj https://example.com Useful resource          # Bookmark a URL
+tj d Review PRs                                 # Add a todo
+tj l                                            # List all entries
+```
+
 ## Command Structure
 
 *   **SYSTEM:** `tj sys [install|uninstall|start|stop|status]`
@@ -28,8 +76,9 @@ This project is built on an offline-first, distributed architecture. The `tj` cl
     *   `tj =tjai`: Switch to/create context (terse name only)
     *   `tj =tjai -t AI app development`: Create with title
     *   `tj =tjai -t AI app -d Personal project notes`: Create with title + description
+    *   `tj =context <text>`: Create entry in specified context (overrides active context)
     *   `tj =0`: Clear active context
-    *   `tj c`: Clear active context (with confirmation)
+    *   `tj =0 <text>`: Create context-free entry
 *   **CREATE:**
     *   `tj p <fact>`: Adds a persistent fact to your profile.
     *   `tj ai <guideline>`: Adds AI behavioral guideline or instruction.

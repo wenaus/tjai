@@ -3,7 +3,7 @@
 import sys
 from datetime import datetime, timezone
 
-from tj.colors import colorize_content
+from tj.colors import colorize_content, colorize_context
 from tj.commands.common import get_entry_from_recent_list
 from tj.repository_factory import RepositoryFactory
 from tj.timezone_manager import format_time_dashboard
@@ -152,7 +152,7 @@ def handle_tag_command(args) -> None:
                 content_colored = colorize_content(entry.content)
                 time_str = format_time_dashboard(entry.timestamp_created)
 
-                context_str = f" [{entry.context}]" if entry.context else ""
+                context_str = f" {colorize_context(entry.context)}" if entry.context else ""
                 if entry.kind == 'todo':
                     print(f"{i:2d}  {time_str} ToDo: {content_colored}{context_str}")
                 elif entry.kind in ['memory', 'bookmark']:
@@ -193,6 +193,14 @@ def handle_move(args) -> None:
         entry_num = int(args.entry_num)
         context = args.context.strip() if args.context else None
 
+        # Strip leading = if present (support both "tj m 4 ctx" and "tj m 4 =ctx")
+        if context and context.startswith('='):
+            context = context[1:]
+
+        # Treat "0" as "clear context"
+        if context == "0":
+            context = None
+
         entry = get_entry_from_recent_list(entry_num)
         if not entry:
             print(f"Error: Entry {entry_num} not found in recent list.", file=sys.stderr)
@@ -210,7 +218,7 @@ def handle_move(args) -> None:
             if context:
                 print(f"Entry {entry_num} moved to context '{context}'.")
             else:
-                print(f"Entry {entry_num} removed from context.")
+                print(f"Entry {entry_num} context cleared.")
         else:
             print("Error: Failed to move entry.", file=sys.stderr)
 
