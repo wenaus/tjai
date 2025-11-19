@@ -35,10 +35,14 @@ def save_state(state: Dict[str, Any]) -> None:
         json.dump(state, f, indent=2)
 
 def display_context() -> None:
-    """Prints the current context if it's set."""
+    """Prints the current context at the start of every command response."""
+    from tj.colors import colorize_context
     state = get_state()
-    if state.get("current_context"):
-        print(f"Context: {state['current_context']}", file=sys.stderr)
+    context = state.get("current_context")
+    if context:
+        print(f"{colorize_context(context)}")
+    else:
+        print("[none]")
 
 
 def set_last_parent(entry_id: str) -> None:

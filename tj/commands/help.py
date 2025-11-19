@@ -5,6 +5,8 @@ import sys
 
 def handle_help(args) -> None:
     """Display concise command reference."""
+    from tj.state import display_context
+    display_context()
 
     help_text = """tj - Personal AI Memory Aid
 
@@ -38,7 +40,7 @@ tj c w-1        Last week       tj backup       Manual backup
 
 METADATA (inline)               SETUP
 @name           Named entry     tj() { ~/github/tjrepo/tjai/tj.py "$*"; }
-p=N             Priority        Add to ~/.bashrc or ~/.zshrc
+p=N             Priority        Add to ~/.bashrc
 s=status        Status value
 :tag            Tag
 //url [T](url)  Links

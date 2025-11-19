@@ -1,6 +1,6 @@
 import sys
 from typing import Optional
-from tj.state import get_state, save_state
+from tj.state import get_state, save_state, display_context
 
 def handle_context(args, num_identifier: Optional[int] = None) -> None:
     """Handles setting or clearing the context."""

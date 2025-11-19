@@ -20,6 +20,8 @@ def handle_ai_command(args, num_identifier: Optional[int] = None) -> None:
     - tj ai =context - list universal + context-specific AI guidelines
     - tj ai :tag - list universal + tag-specific AI guidelines
     """
+    from tj.state import display_context
+    display_context()
     if not hasattr(args, 'input') or not args.input:
         # No args: list universal AI guidelines only
         query_ai_guidelines(context=None, tag=None)

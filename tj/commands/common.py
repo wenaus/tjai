@@ -31,6 +31,16 @@ def get_entry_from_recent_list(entry_identifier) -> Optional[Entry]:
         # Otherwise treat as entry number
         entry_num = int(entry_identifier)
 
+        # First check if there's a recent query result list
+        state = get_state()
+        if "last_query_results" in state and state["last_query_results"]:
+            entry_ids = state["last_query_results"]
+            if 1 <= entry_num <= len(entry_ids):
+                entry_id = entry_ids[entry_num - 1]
+                return repository.get_entry(entry_id)
+            return None
+
+        # Fallback to recent entries if no query results
         all_entries = repository.query_entries()
         active_entries = [e for e in all_entries if not getattr(e, 'deleted_at', None)]
 

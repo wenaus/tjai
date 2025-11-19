@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 from tj.colors import colorize_content, colorize_context, colorize_kind, colorize_timestamp, colorize_creation_timestamp
 from tj.repository_factory import RepositoryFactory
-from tj.state import get_state, save_state
+from tj.state import get_state, save_state, display_context
 from tj.timezone_manager import format_time_dashboard
 
 
@@ -22,17 +22,21 @@ def handle_list_command(args) -> None:
     - tj l p=1 s=active - composite filters
     - tj l t/w/m - time filters
     """
+    display_context()
     try:
         repository = RepositoryFactory.get_repository()
         filters = args.filters if hasattr(args, 'filters') and args.filters else []
 
-        # Check for metadata commands first (c=contexts, t=tags)
+        # Check for metadata commands first (c=contexts, t=tags, @=named entries)
         if len(filters) == 1:
             if filters[0] == 'c':
                 _list_contexts(repository)
                 return
             elif filters[0] == 't':
                 _list_tags(repository)
+                return
+            elif filters[0] == '@':
+                _list_named_entries(repository)
                 return
 
         # Otherwise, list entries with filters
@@ -59,22 +63,53 @@ def _list_contexts(repository):
         print("No contexts found.")
         return
 
-    print(f"{len(context_entities)} contexts:")
+    print(f"Contexts ({len(context_entities)}):")
     for i, context in enumerate(sorted(context_entities, key=lambda c: c.name), 1):
         # Count entries in this context
         entries = repository.query_entries(context=context.name)
         active_entries = [e for e in entries if not getattr(e, 'deleted_at', None)]
 
-        # Mark current context
-        current_marker = " *" if context.name == current_context else ""
+        # Colorize current context (colorize_context adds = prefix, just use the color)
+        if context.name == current_context:
+            from tj.colors import LIGHT_MAUVE, RESET
+            context_name = f"{LIGHT_MAUVE}{context.name}{RESET}"
+        else:
+            context_name = context.name
 
-        # Show context with title and/or description
-        display_parts = [f"{i:2d}  {context.name}", f"{len(active_entries)}"]
+        # Build display parts: name - title - description - N entries
+        display_parts = [f"{i:2d}  {context_name}"]
         if context.title:
-            display_parts.insert(1, f'"{context.title}"')
+            display_parts.append(context.title)
         if context.description:
             display_parts.append(context.description)
-        print(" - ".join(display_parts) + current_marker)
+        display_parts.append(f"{len(active_entries)} entries")
+        print(" - ".join(display_parts))
+
+
+def _list_named_entries(repository):
+    """List all named entries."""
+    all_entries = repository.query_entries()
+    named_entries = [e for e in all_entries if e.name and not getattr(e, 'deleted_at', None)]
+
+    if not named_entries:
+        print("No named entries found.")
+        return
+
+    # Sort by modification time, oldest first (newest at bottom)
+    named_entries.sort(key=lambda e: e.timestamp_modified, reverse=False)
+
+    print(f"Named entries ({len(named_entries)}):")
+    for i, entry in enumerate(named_entries, 1):
+        time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_modified))
+        content_preview = entry.content[:60] + "..." if len(entry.content) > 60 else entry.content
+        context_str = f" {colorize_context(entry.context)}" if entry.context else ""
+        print(f"{i:2d}  @{entry.name} {time_str}{context_str} {content_preview}")
+
+    # Store numbered entries in state for numbered operations
+    state = get_state()
+    state["last_query_results"] = [e.id for e in named_entries]
+    state["last_query_time"] = datetime.now().timestamp()
+    save_state(state)
 
 
 def _list_tags(repository):
@@ -126,7 +161,7 @@ def _list_entries_with_filters(repository, filters):
                 'j': 'calendar'
             }
             kind = kind_map[filter_arg]
-            query_parts.append(f"kind={kind}")
+            query_parts.append(kind)
 
         # Query by time
         elif filter_arg in ['t', 'w', 'm']:
@@ -150,7 +185,7 @@ def _list_entries_with_filters(repository, filters):
             if not context:
                 print("Error: Empty context name.", file=sys.stderr)
                 return
-            query_parts.append(f"context={context}")
+            query_parts.append(f"{filter_arg}")
 
         # Query by tag
         elif filter_arg.startswith(':'):
@@ -158,13 +193,13 @@ def _list_entries_with_filters(repository, filters):
             if not tag:
                 print("Error: Empty tag name.", file=sys.stderr)
                 return
-            query_parts.append(f"tag={tag}")
+            query_parts.append(f"{filter_arg}")
 
         # Query by priority
         elif filter_arg.startswith('p='):
             try:
                 priority = int(filter_arg[2:])
-                query_parts.append(f"priority={priority}")
+                query_parts.append(f"{filter_arg}")
             except ValueError:
                 print(f"Error: Invalid priority value '{filter_arg}'", file=sys.stderr)
                 return
@@ -175,12 +210,12 @@ def _list_entries_with_filters(repository, filters):
             if not status:
                 print("Error: Empty status value.", file=sys.stderr)
                 return
-            query_parts.append(f"status={status}")
+            query_parts.append(f"{filter_arg}")
 
         else:
             # Treat as text filter
             text_filter = filter_arg.lower()
-            query_parts.append(f"text={filter_arg}")
+            query_parts.append(f"text:{filter_arg}")
 
     # Execute query
     entries = repository.query_entries(
@@ -200,23 +235,32 @@ def _list_entries_with_filters(repository, filters):
         entries = [e for e in entries if text_filter in e.content.lower()]
 
     # Build query description
-    query_desc = " AND ".join(query_parts) if query_parts else "all entries"
+    if query_parts:
+        # Check if it's just a kind filter for cleaner display
+        if len(query_parts) == 1 and query_parts[0] in ['bookmark', 'todo', 'profile', 'ai', 'memory', 'calendar']:
+            query_desc = f"{query_parts[0]}"
+        else:
+            query_desc = " ".join(query_parts)
+    else:
+        query_desc = "all"
 
     # Filter out deleted entries
     active_entries = [e for e in entries if not getattr(e, 'deleted_at', None)]
 
     # Sort by timestamp, oldest first (newest at bottom)
-    active_entries.sort(key=lambda e: e.timestamp_created, reverse=False)
+    active_entries.sort(key=lambda e: e.timestamp_modified, reverse=False)
 
     # Display results
     if not active_entries:
-        print(f"No entries found for {query_desc}")
+        print(f"No {query_desc} entries found")
         return
 
-    print(f"{len(active_entries)} entries for {query_desc}:")
+    # Capitalize first letter of query_desc for display
+    display_desc = query_desc.capitalize() if query_desc else "All"
+    print(f"{display_desc} entries ({len(active_entries)}):")
     for i, entry in enumerate(active_entries, 1):
-        # Format creation timestamp uniformly for all entries
-        time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_created))
+        # Format modification timestamp uniformly for all entries
+        time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_modified))
         content_colored = colorize_content(entry.content)
 
         # Show type prefix for non-memory entries (use short codes)
@@ -299,7 +343,7 @@ def handle_list_all(args) -> None:
             return
 
         # Sort by timestamp (newest first)
-        sorted_entries = sorted(filtered_entries, key=lambda e: e.timestamp_created, reverse=True)
+        sorted_entries = sorted(filtered_entries, key=lambda e: e.timestamp_modified, reverse=False)
 
         # Display results
         if args.filter:

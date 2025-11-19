@@ -15,6 +15,8 @@ def handle_add_subitem(args) -> None:
     Sub-items are full Entry objects with their own IDs and timestamps,
     but linked to a parent via parent_id field. Max 1 level deep.
     """
+    from tj.state import display_context
+    display_context()
     if not hasattr(args, 'input') or not args.input:
         print("Error: No content provided for sub-item.", file=sys.stderr)
         return

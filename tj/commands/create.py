@@ -75,8 +75,8 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
         entry_priority = None
         entry_status = None
 
-        # Extract @name (must start with letter, then alphanumeric/underscore/dash)
-        name_pattern = re.compile(r'@([a-zA-Z][a-zA-Z0-9_-]*)')
+        # Extract @name (must be at start of content, start with letter, then alphanumeric/underscore/dash)
+        name_pattern = re.compile(r'^@([a-zA-Z][a-zA-Z0-9_-]*)')
         name_match = name_pattern.search(content)
         if name_match:
             entry_name = name_match.group(1)

@@ -328,19 +328,21 @@ def handle_numbered_command(parser: argparse.ArgumentParser, num_identifier: int
 
 def show_status() -> None:
     """Show status dashboard when no arguments provided."""
+    from tj.state import display_context
+    display_context()
     try:
         repository = RepositoryFactory.get_repository()
         state = get_state()
-        
+
         # Get basic stats
         all_entries = repository.query_entries()
         active_entries = [e for e in all_entries if not getattr(e, 'deleted_at', None)]
-        
+
         # Count by type
         type_counts = {}
         for entry in active_entries:
             type_counts[entry.kind] = type_counts.get(entry.kind, 0) + 1
-        
+
         # Get recent entries (configurable window)
         from datetime import datetime, timezone
         from tj.config import get_recent_entries_hours
@@ -349,16 +351,10 @@ def show_status() -> None:
         twenty_four_hours_ago = datetime.now().timestamp() - (recent_hours * 60 * 60)
         today_entries = [e for e in active_entries if e.timestamp_created >= twenty_four_hours_ago]
         today_entries = sorted(today_entries, key=lambda e: e.timestamp_created, reverse=True)
-        
-        # Context display
-        current_context = state.get("current_context")
+
+        # Get context info for counts
         all_contexts = repository.get_all_contexts()
         context_count = len(all_contexts)
-        
-        if current_context:
-            print(f"Context: {current_context}")
-        else:
-            print(f"Context: none")
         
         # Entry counts with tags, key types, and contexts
         all_tags = repository.get_all_tags()

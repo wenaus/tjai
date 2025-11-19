@@ -11,6 +11,8 @@ from tj.timezone_manager import format_time_dashboard
 
 def handle_add_subnote(args) -> None:
     """Handle adding a sub-note to an entry."""
+    from tj.state import display_context
+    display_context()
     try:
         entry_num = int(args.entry_num)
         text = " ".join(args.text)
@@ -33,16 +35,114 @@ def handle_edit(args) -> None:
     """Handle editing an entry.
 
     Modes:
-    - tj e → create new memory in editor
+    - tj e → edit most recent entry in editor
     - tj e <kind> → create new entry of type in editor (ai, d, p, b, j)
     - tj e <n> → edit entry <n> in editor
     - tj e <n> text → replace entry <n> content with text (requires confirmation)
     """
     from tj.commands.editor import handle_editor_create, handle_editor_edit
+    from tj.state import display_context
 
-    # Case 1: No args → create memory in editor
+    display_context()
+
+    # Case 1: No args → edit most recent entry
     if not args.entry_num:
-        handle_editor_create()
+        from tj.repository_factory import RepositoryFactory
+        from tj.commands.editor import open_editor
+        from datetime import datetime, timezone
+
+        repository = RepositoryFactory.get_repository()
+        all_entries = repository.query_entries()
+        active_entries = [e for e in all_entries if not getattr(e, 'deleted_at', None)]
+        if not active_entries:
+            print("No entries to edit.", file=sys.stderr)
+            return
+        # Sort by modification time, get most recent
+        active_entries.sort(key=lambda e: e.timestamp_modified, reverse=True)
+        entry = active_entries[0]
+
+        # Prepare initial content with =context prefix if present
+        if entry.context:
+            initial_content = f"={entry.context} {entry.content}"
+        else:
+            initial_content = entry.content
+
+        # Open editor
+        new_content = open_editor(initial_content)
+
+        if new_content is None:
+            return
+
+        # Parse for =context on first line
+        lines = new_content.split('\n', 1)
+        first_line = lines[0]
+        rest = lines[1] if len(lines) > 1 else None
+
+        first_parts = first_line.split()
+        new_context = entry.context  # Default to current context
+        content_parts = []
+        found_context_marker = False
+
+        for part in first_parts:
+            if part.startswith('='):
+                found_context_marker = True
+                ctx = part[1:]
+                if ctx == '0':
+                    new_context = None
+                elif ctx:
+                    new_context = ctx
+            else:
+                content_parts.append(part)
+
+        # If entry had context but user removed =context marker, clear it
+        if entry.context and not found_context_marker:
+            new_context = None
+
+        # Reconstruct content without =context
+        if content_parts:
+            first_content = ' '.join(content_parts)
+            if rest:
+                final_content = first_content + '\n' + rest
+            else:
+                final_content = first_content
+        elif rest:
+            final_content = rest
+        else:
+            print("Error: Entry content cannot be empty.", file=sys.stderr)
+            return
+
+        # Extract tags from new content
+        new_tags = set()
+        for line in final_content.split('\n'):
+            for part in line.split():
+                if part.startswith(':'):
+                    tag = part[1:]
+                    if tag:
+                        new_tags.add(tag)
+
+        # Update entry
+        success = repository.update_entry(
+            entry.id,
+            content=final_content,
+            context=new_context,
+            timestamp_modified=datetime.now(timezone.utc).timestamp(),
+            is_dirty=True
+        )
+
+        if not success:
+            print("Error: Failed to update entry.", file=sys.stderr)
+            return
+
+        # Update tags (add new, remove old)
+        existing_tags = set(repository.get_tags(entry.id))
+
+        for tag in new_tags - existing_tags:
+            repository.add_tag(entry.id, tag)
+
+        for tag in existing_tags - new_tags:
+            repository.remove_tag(entry.id, tag)
+
+        print("Entry updated successfully.")
         return
 
     # Check if entry_num is a kind type
@@ -115,6 +215,8 @@ def handle_edit(args) -> None:
 
 def handle_tag_command(args) -> None:
     """Handle tag command - either add tag to entry or list entries with tag."""
+    from tj.state import display_context
+    display_context()
     try:
         if args.tag:
             # Two arguments: tj t <number> <tag> - add tag to entry
@@ -168,6 +270,8 @@ def handle_tag_command(args) -> None:
 
 def handle_add_tag(args) -> None:
     """Handle adding a tag to an entry."""
+    from tj.state import display_context
+    display_context()
     try:
         entry_num = int(args.entry_num)
         tag = args.tag.strip()
@@ -189,6 +293,8 @@ def handle_add_tag(args) -> None:
 
 def handle_move(args) -> None:
     """Handle moving an entry to a context."""
+    from tj.state import display_context
+    display_context()
     try:
         entry_num = int(args.entry_num)
         context = args.context.strip() if args.context else None
@@ -230,6 +336,8 @@ def handle_move(args) -> None:
 
 def handle_show(args) -> None:
     """Handle showing entry details."""
+    from tj.state import display_context
+    display_context()
     try:
         entry_identifier = args.entry_num  # Can be number or @name
 
@@ -286,6 +394,8 @@ def handle_show(args) -> None:
 
 def handle_pin(args) -> None:
     """Handle moving an entry to top (update timestamp)."""
+    from tj.state import display_context
+    display_context()
     try:
         entry_num = int(args.entry_num)
 
