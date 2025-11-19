@@ -8,11 +8,12 @@ def handle_help(args) -> None:
 
     help_text = """tj - Personal AI Memory Aid
 
-STATUS                          QUERY
-tj              Status          tj q [b|r|d|p]           By type
-tj hey          Need to know    tj q [t|w|m]             By time
-tj config show  Show config     tj q =ctx :tag p=N s=val Composite
-                                tj l [c|t|p|b|d|ai]      List items
+STATUS                          LIST/FILTER
+tj              Status          tj l                     All entries
+tj hey          Need to know    tj l [b|d|p|ai|j]        By type
+tj config show  Show config     tj l [t|w|m]             By time
+                                tj l =ctx :tag p=N s=val Composite
+                                tj l [c|t]               Metadata (contexts/tags)
 CREATE
 tj <text>       Memory
 tj d <text>     Todo            MODIFY
@@ -47,7 +48,7 @@ Examples:
   tj =tjai @roadmap v2 planning p=1 s=active :design
   tj =projectX Meeting notes //https://doc.url :important
   tj j fri 15:00 Sprint review
-  tj q p=1 s=active :urgent
+  tj l p=1 s=active :urgent
 """
 
     print(help_text, file=sys.stdout)

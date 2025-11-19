@@ -20,7 +20,6 @@ from tj.commands.modify import (
     handle_move, handle_show, handle_pin
 )
 from tj.commands.subitems import handle_add_subitem
-from tj.commands.query import handle_query
 from tj.database import init_db, DatabaseError
 from tj.repository_factory import RepositoryFactory
 from tj.state import get_state
@@ -109,7 +108,7 @@ def create_parser() -> argparse.ArgumentParser:
 
     # List commands
     p_list = subparsers.add_parser('l', help="List metadata and entries.")
-    p_list.add_argument('list_type', nargs='?', choices=['c', 't', 'p', 'b', 'd', 'ai'], help="List contexts (c), tags (t), profiles (p), bookmarks (b), todos (d), or AI guidelines (ai)")
+    p_list.add_argument('filters', nargs='*', help="Filters: c/t (metadata), d/p/b/j/ai (type), =ctx, :tag, p=N, s=val, t/w/m (time)")
     p_list.set_defaults(func=handle_list_command)
 
     # Calendar view
@@ -189,11 +188,6 @@ def create_parser() -> argparse.ArgumentParser:
     p_delete = subparsers.add_parser('x', help="Delete an entry or tag.")
     p_delete.add_argument('args', nargs='*', help="Arguments for delete operation")
     p_delete.set_defaults(func=handle_delete_new)
-
-    # Query commands
-    p_query = subparsers.add_parser('q', help="Query your entries.")
-    p_query.add_argument('filter', nargs='*', help="Query filters: b/d/p/ai (kind), t/w/m (time), =context, :tag, p=N, s=value")
-    p_query.set_defaults(func=handle_query)
 
     # Backup
     p_backup = subparsers.add_parser('backup', help="Create a manual backup.")
