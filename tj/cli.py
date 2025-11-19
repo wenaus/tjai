@@ -394,10 +394,17 @@ def show_status() -> None:
             from tj.backup import get_backup_dir
             backup_dir = get_backup_dir()
             if backups:
-                total_size_bytes = sum(backup['size'] for backup in backups)
-                total_size_mb = total_size_bytes / (1024 * 1024)
-                latest_backup = backups[0]['modified'].strftime('%Y-%m-%d %H:%M')
-                print(f"\nBackups: {len(backups)} files, {total_size_mb:.1f} MB (latest: {latest_backup}) [{backup_dir}]")
+                print(f"\nBackups ({len(backups)} files) [{backup_dir}]:")
+                # Show latest 10 backups
+                for backup in backups[:10]:
+                    size_kb = backup['size'] / 1024
+                    if size_kb < 1024:
+                        size_str = f"{size_kb:.0f}K"
+                    else:
+                        size_mb = size_kb / 1024
+                        size_str = f"{size_mb:.1f}M"
+                    timestamp = backup['modified'].strftime('%Y-%m-%d %H:%M')
+                    print(f"  {backup['filename']:<30} {size_str:>8}  {timestamp}")
             else:
                 print(f"\nBackups: No backups found [{backup_dir}]")
         except Exception:

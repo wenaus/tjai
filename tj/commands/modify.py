@@ -37,8 +37,8 @@ def handle_edit(args) -> None:
     Modes:
     - tj e → edit most recent entry in editor
     - tj e <kind> → create new entry of type in editor (ai, d, p, b, j)
-    - tj e <n> → edit entry <n> in editor
-    - tj e <n> text → replace entry <n> content with text (requires confirmation)
+    - tj e <n|@name> → edit entry <n> or @name in editor
+    - tj e <n|@name> text → replace entry content with text (requires confirmation)
     """
     from tj.commands.editor import handle_editor_create, handle_editor_edit
     from tj.state import display_context
@@ -165,11 +165,129 @@ def handle_edit(args) -> None:
         handle_editor_create(entry_type=entry_type, extra_args=args.text if args.text else [])
         return
 
+    # Check if entry_num is @name reference
+    if isinstance(args.entry_num, str) and args.entry_num.startswith('@'):
+        # Edit named entry - use get_entry_from_recent_list which supports @name
+        entry = get_entry_from_recent_list(args.entry_num)
+        if not entry:
+            print(f"Error: Entry {args.entry_num} not found.", file=sys.stderr)
+            return
+
+        # If there's text, do command-line edit with confirmation
+        if args.text:
+            new_text = " ".join(args.text)
+            print(f"Edit entry {args.entry_num}:")
+            print(f"  Old: {entry.content}")
+            print(f"  New: {new_text}")
+
+            response = input("\nConfirm edit? [y/N]: ").strip().lower()
+            if response not in ['y', 'yes']:
+                print("Edit cancelled.")
+                return
+
+            repository = RepositoryFactory.get_repository()
+            success = repository.update_entry(
+                entry.id,
+                content=new_text,
+                timestamp_modified=datetime.now(timezone.utc).timestamp(),
+                is_dirty=True
+            )
+
+            if success:
+                print("Entry updated successfully.")
+            else:
+                print("Error: Failed to update entry.", file=sys.stderr)
+            return
+
+        # No text - edit in editor (inline same logic as "no args" case)
+        from tj.commands.editor import open_editor
+
+        if entry.context:
+            initial_content = f"={entry.context} {entry.content}"
+        else:
+            initial_content = entry.content
+
+        new_content = open_editor(initial_content)
+        if new_content is None:
+            return
+
+        # Parse for =context on first line
+        lines = new_content.split('\n', 1)
+        first_line = lines[0]
+        rest = lines[1] if len(lines) > 1 else None
+
+        first_parts = first_line.split()
+        new_context = entry.context
+        content_parts = []
+        found_context_marker = False
+
+        for part in first_parts:
+            if part.startswith('='):
+                found_context_marker = True
+                ctx = part[1:]
+                if ctx == '0':
+                    new_context = None
+                elif ctx:
+                    new_context = ctx
+            else:
+                content_parts.append(part)
+
+        if entry.context and not found_context_marker:
+            new_context = None
+
+        # Reconstruct content without =context
+        if content_parts:
+            first_content = ' '.join(content_parts)
+            if rest:
+                final_content = first_content + '\n' + rest
+            else:
+                final_content = first_content
+        elif rest:
+            final_content = rest
+        else:
+            print("Error: Entry content cannot be empty.", file=sys.stderr)
+            return
+
+        # Extract tags from new content
+        new_tags = set()
+        for line in final_content.split('\n'):
+            for part in line.split():
+                if part.startswith(':'):
+                    tag = part[1:]
+                    if tag:
+                        new_tags.add(tag)
+
+        # Update entry
+        repository = RepositoryFactory.get_repository()
+        success = repository.update_entry(
+            entry.id,
+            content=final_content,
+            context=new_context,
+            timestamp_modified=datetime.now(timezone.utc).timestamp(),
+            is_dirty=True
+        )
+
+        if not success:
+            print("Error: Failed to update entry.", file=sys.stderr)
+            return
+
+        # Update tags (add new, remove old)
+        existing_tags = set(repository.get_tags(entry.id))
+
+        for tag in new_tags - existing_tags:
+            repository.add_tag(entry.id, tag)
+
+        for tag in existing_tags - new_tags:
+            repository.remove_tag(entry.id, tag)
+
+        print("Entry updated successfully.")
+        return
+
     # Try to parse entry_num as integer
     try:
         entry_num = int(args.entry_num)
     except (ValueError, TypeError):
-        print("Error: First argument must be an entry number or type (ai, d, p, b, j).", file=sys.stderr)
+        print("Error: First argument must be an entry number, @name, or type (ai, d, p, b, j).", file=sys.stderr)
         return
 
     # Case 2: Entry number but no text → edit in editor

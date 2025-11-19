@@ -74,17 +74,30 @@ class SQLiteRepository(EntryRepository):
             raise DatabaseError(f"Failed to get entry: {e}")
 
     def get_entry_by_name(self, name: str, context: Optional[str] = None) -> Optional[Entry]:
-        """Get entry by name within a context."""
+        """Get entry by name, optionally within a context.
+
+        If context is None, searches globally across all contexts.
+        """
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
 
-            cursor.execute("""
-                SELECT id, parent_id, content, kind, timestamp_created,
-                       timestamp_modified, context, is_dirty, name, priority, status, data
-                FROM entries
-                WHERE name = ? AND context IS ?
-            """, (name, context))
+            if context is None:
+                # Search globally, ignoring context
+                cursor.execute("""
+                    SELECT id, parent_id, content, kind, timestamp_created,
+                           timestamp_modified, context, is_dirty, name, priority, status, data
+                    FROM entries
+                    WHERE name = ? AND deleted_at IS NULL
+                """, (name,))
+            else:
+                # Search within specific context
+                cursor.execute("""
+                    SELECT id, parent_id, content, kind, timestamp_created,
+                           timestamp_modified, context, is_dirty, name, priority, status, data
+                    FROM entries
+                    WHERE name = ? AND context IS ? AND deleted_at IS NULL
+                """, (name, context))
 
             row = cursor.fetchone()
             conn.close()

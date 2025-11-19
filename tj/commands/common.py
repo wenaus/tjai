@@ -24,9 +24,8 @@ def get_entry_from_recent_list(entry_identifier) -> Optional[Entry]:
         # Check if it's a @name reference
         if isinstance(entry_identifier, str) and entry_identifier.startswith('@'):
             name = entry_identifier[1:]  # Remove @
-            state = get_state()
-            current_context = state.get("current_context")
-            return repository.get_entry_by_name(name, current_context)
+            # Named entries are looked up globally, not restricted by context
+            return repository.get_entry_by_name(name, None)
 
         # Otherwise treat as entry number
         entry_num = int(entry_identifier)
