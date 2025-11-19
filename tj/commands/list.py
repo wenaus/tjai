@@ -3,7 +3,7 @@
 import sys
 from datetime import datetime, timedelta
 
-from tj.colors import colorize_content, colorize_context, colorize_kind, colorize_timestamp
+from tj.colors import colorize_content, colorize_context, colorize_kind, colorize_timestamp, colorize_creation_timestamp
 from tj.repository_factory import RepositoryFactory
 from tj.state import get_state, save_state
 from tj.timezone_manager import format_time_dashboard
@@ -204,7 +204,7 @@ def _list_entries_with_filters(repository, filters):
     print(f"{len(active_entries)} entries for {query_desc}:")
     for i, entry in enumerate(active_entries, 1):
         # Format creation timestamp uniformly for all entries
-        time_str = colorize_timestamp(format_time_dashboard(entry.timestamp_created))
+        time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_created))
         content_colored = colorize_content(entry.content)
 
         # Show type prefix for non-memory entries (use short codes)
@@ -220,21 +220,30 @@ def _list_entries_with_filters(repository, filters):
         else:
             type_prefix = ""
 
-        # Show context in square brackets after type
-        context_str = f"{colorize_context(entry.context)} " if entry.context else ""
-
-        # For calendar entries, show event date/time after metadata, before content
+        # For calendar entries, show event date/time after type, before context
         event_date_str = ""
         if entry.kind == 'calendar' and entry.data and 'event_date' in entry.data:
-            event_dt = datetime.fromtimestamp(entry.data['event_date'])
-            # If time is midnight (00:00), show just date as YYYYMMDD
-            if event_dt.hour == 0 and event_dt.minute == 0:
-                event_date_str = f"{colorize_timestamp(event_dt.strftime('%Y%m%d'))} "
-            else:
-                # Show full date and time as YYYYMMDD/HH:MM
-                event_date_str = f"{colorize_timestamp(event_dt.strftime('%Y%m%d/%H:%M'))} "
+            from tj.timezone_manager import get_current_timezone
+            from zoneinfo import ZoneInfo
 
-        print(f"{i:2d}  {time_str} {type_prefix}{context_str}{event_date_str}{content_colored}")
+            tz_name = get_current_timezone()
+            try:
+                tz = ZoneInfo(tz_name)
+                event_dt = datetime.fromtimestamp(entry.data['event_date'], tz=tz)
+            except Exception:
+                event_dt = datetime.fromtimestamp(entry.data['event_date'])
+
+            # If time is midnight (00:00), show just date with weekday
+            if event_dt.hour == 0 and event_dt.minute == 0:
+                event_date_str = f"{colorize_timestamp(event_dt.strftime('%a %m/%d'))} "
+            else:
+                # Show full date and time with weekday
+                event_date_str = f"{colorize_timestamp(event_dt.strftime('%a %m/%d/%H:%M'))} "
+
+        # Show context after event date
+        context_str = f"{colorize_context(entry.context)} " if entry.context else ""
+
+        print(f"{i:2d}  {time_str} {type_prefix}{event_date_str}{context_str}{content_colored}")
 
     # Store numbered entries in state for numbered operations
     state = get_state()
@@ -292,7 +301,7 @@ def handle_list_all(args) -> None:
 
         for i, entry in enumerate(sorted_entries, 1):
             content_colored = colorize_content(entry.content)
-            time_str = colorize_timestamp(format_time_dashboard(entry.timestamp_created))
+            time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_created))
 
             context_str = f" {colorize_context(entry.context)}" if entry.context else ""
             if entry.kind == 'todo':

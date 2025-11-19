@@ -231,8 +231,8 @@ def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
             year = now.year
             event_date = date(year, month, day)
 
-            # Check for time as next arg
-            if remaining and ':' in remaining[0]:
+            # Check for time as next arg (HH:MM or am/pm format)
+            if remaining and (':' in remaining[0] or remaining[0].lower().endswith(('am', 'pm'))):
                 try:
                     hour, minute = parse_time(remaining[0])
                     remaining = remaining[1:]
@@ -260,8 +260,8 @@ def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
             day = int(first[6:8])
             event_date = date(year, month, day)
 
-            # Check for time as next arg
-            if remaining and ':' in remaining[0]:
+            # Check for time as next arg (HH:MM or am/pm format)
+            if remaining and (':' in remaining[0] or remaining[0].lower().endswith(('am', 'pm'))):
                 try:
                     hour, minute = parse_time(remaining[0])
                     remaining = remaining[1:]
@@ -298,8 +298,18 @@ def handle_journal(args) -> None:
         return
 
     try:
+        # Skip context markers at the beginning for date parsing
+        input_args = args.input
+        context_prefix = []
+        while input_args and input_args[0].startswith('='):
+            context_prefix.append(input_args[0])
+            input_args = input_args[1:]
+
         # Parse date/time specification
-        event_timestamp, remaining_args = parse_date_spec(args.input)
+        event_timestamp, remaining_args = parse_date_spec(input_args)
+
+        # Add context back to remaining args
+        remaining_args = context_prefix + remaining_args
 
         if not remaining_args:
             print("Error: Journal entry must have content after date/time.", file=sys.stderr)

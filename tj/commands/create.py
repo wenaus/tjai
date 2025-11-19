@@ -57,6 +57,15 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
 
         # Step 2: Join to get full content string
         content = " ".join(filtered_input).strip()
+
+        # Step 2.1: Append file content if provided via -f flag
+        import tj.cli
+        if hasattr(tj.cli, 'file_content') and tj.cli.file_content:
+            if content:
+                content = content + "\n" + tj.cli.file_content
+            else:
+                content = tj.cli.file_content
+
         if not content:
             print("Error: Entry content cannot be empty.", file=sys.stderr)
             return
@@ -87,9 +96,6 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
             entry_status = status_match.group(1)
             content = status_pattern.sub('', content)
 
-        # Clean up extra whitespace after metadata removal
-        content = ' '.join(content.split()).strip()
-
         if not content:
             print("Error: Entry content cannot be empty after metadata extraction.", file=sys.stderr)
             return
@@ -113,10 +119,7 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
             links.append({"title": title, "url": url})
         # Keep [title](url) in content - do NOT remove it
 
-        # Clean up extra whitespace
-        content = ' '.join(content.split()).strip()
-
-        if not content:
+        if not content.strip():
             print("Error: Entry content cannot be empty.", file=sys.stderr)
             return
 

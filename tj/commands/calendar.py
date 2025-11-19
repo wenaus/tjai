@@ -16,8 +16,9 @@ def parse_timeframe(timeframe: Optional[str]) -> Tuple[str, float, float]:
     """Parse timeframe argument and return (description, start_timestamp, end_timestamp).
 
     Supports:
-    - None, 't' -> today
-    - 'w' -> this week
+    - None -> this week (Monday-Sunday), same as 'w'
+    - 't' -> today only
+    - 'w' -> this week (Monday-Sunday)
     - 'm' -> this month
     - 't+N', 't-N' -> N days forward/back
     - 'w+N', 'w-N' -> N weeks forward/back
@@ -30,11 +31,15 @@ def parse_timeframe(timeframe: Optional[str]) -> Tuple[str, float, float]:
     except Exception:
         now = datetime.now()
 
-    # Default to today
-    if not timeframe or timeframe == 't':
+    # Explicit 't' shows only today
+    if timeframe == 't':
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         end = start + timedelta(days=1)
         return "Today", start.timestamp(), end.timestamp()
+
+    # Default (no arg) shows this week (Monday-Sunday), same as 'w'
+    if not timeframe:
+        timeframe = 'w'
 
     # Parse offset if present
     offset_pattern = re.match(r'^([twm])([+-]\d+)$', timeframe)
@@ -178,9 +183,12 @@ def handle_calendar_view(args) -> None:
         # Sort dates
         sorted_dates = sorted(entries_by_date.keys())
 
+        # Determine if showing multiple days
+        is_multi_day = (end_ts - start_ts) > (24 * 60 * 60 + 1)  # More than one day
+
         # Determine timeframe unit for header
-        timeframe_str = args.timeframe if hasattr(args, 'timeframe') and args.timeframe else 't'
-        unit = timeframe_str[0] if timeframe_str else 't'
+        timeframe_str = args.timeframe if hasattr(args, 'timeframe') and args.timeframe else None
+        unit = timeframe_str[0] if timeframe_str else None
 
         if tz:
             start_dt = datetime.fromtimestamp(start_ts, tz=tz)
@@ -198,8 +206,11 @@ def handle_calendar_view(args) -> None:
                 print(colorize_timestamp(f"{start_dt.strftime('%Y%m%d')} Week {week_num}"))
         elif unit == 'm':
             print(colorize_timestamp(f"{start_dt.strftime('%Y%m')} {start_dt.strftime('%B %Y')}"))
+        elif is_multi_day:
+            # Multi-day view (no explicit unit, default behavior)
+            print(colorize_timestamp(desc))
         else:
-            # Day view - just show the day
+            # Single day view
             print(colorize_timestamp(start_dt.strftime('%a %b %d, %Y')))
 
         # Print entries grouped by day
@@ -208,10 +219,23 @@ def handle_calendar_view(args) -> None:
             # Sort entries within day by time
             entries.sort(key=lambda x: x[0])
 
-            # Print day header (except for single day view)
-            if unit != 't':
+            # Print day header for multi-day views
+            if is_multi_day:
                 day_name = entries[0][1].strftime('%a %b %d')
-                print(f"  {colorize_timestamp(day_name)}")
+                # Bold today's date and show current time
+                event_date = entries[0][1].date()
+                if tz:
+                    now_dt = datetime.now(tz)
+                    today = now_dt.date()
+                else:
+                    now_dt = datetime.now()
+                    today = now_dt.date()
+                if event_date == today:
+                    from tj.colors import BOLD, RESET
+                    current_time = now_dt.strftime('%H:%M')
+                    print(f"  {BOLD}{colorize_timestamp(f'{day_name} {current_time}')}")
+                else:
+                    print(f"  {colorize_timestamp(day_name)}")
 
             # Print entries
             for event_ts, event_dt, entry in entries:
@@ -235,12 +259,12 @@ def handle_calendar_view(args) -> None:
                 # Show time if not midnight
                 if event_dt.hour != 0 or event_dt.minute != 0:
                     time_str = colorize_timestamp(event_dt.strftime('%H:%M'))
-                    if unit == 't':
-                        first_indent = "  "
-                        subsequent_indent = "    "
-                    else:
+                    if is_multi_day:
                         first_indent = "    "
                         subsequent_indent = "      "
+                    else:
+                        first_indent = "  "
+                        subsequent_indent = "    "
 
                     # Print first line with time
                     print(f"{first_indent}{time_str} {lines[0]}")
@@ -249,12 +273,12 @@ def handle_calendar_view(args) -> None:
                         print(f"{subsequent_indent}{line}")
                 else:
                     # Midnight = all-day event, no time shown
-                    if unit == 't':
-                        first_indent = "  "
-                        subsequent_indent = "    "
-                    else:
+                    if is_multi_day:
                         first_indent = "    "
                         subsequent_indent = "      "
+                    else:
+                        first_indent = "  "
+                        subsequent_indent = "    "
 
                     # Print first line
                     print(f"{first_indent}{lines[0]}")

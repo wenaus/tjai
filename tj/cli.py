@@ -3,6 +3,9 @@ import sys
 from typing import List, Optional, Tuple
 from datetime import datetime
 
+# Global variable for file content from -f flag
+file_content = None
+
 from tj.backup import auto_backup, list_backups, create_backup
 from tj.commands.ai import handle_ai_command
 from tj.commands.calendar import handle_calendar_view
@@ -625,14 +628,12 @@ def entrypoint() -> None:
         for flag in flags_to_remove:
             sys.argv.remove(flag)
 
-        # Handle file input
+        # Handle file input - store globally for commands to access
+        global file_content
         if file_path:
             try:
                 from pathlib import Path
-                content = Path(file_path).read_text().strip()
-                # Replace argv with file content + any remaining args
-                remaining_args = sys.argv[1:]  # After flag removal
-                sys.argv = ['tj.py', content] + remaining_args
+                file_content = Path(file_path).read_text().strip()
             except FileNotFoundError:
                 print(f"Error: File not found: {file_path}", file=sys.stderr)
                 sys.exit(1)

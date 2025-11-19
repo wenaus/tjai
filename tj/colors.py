@@ -5,8 +5,10 @@ MEDIUM_BLUE = '\033[38;5;111m'  # Medium blue for URLs
 BRIGHT_CYAN_BLUE = '\033[38;5;81m'  # Bright cyan-blue for markdown link titles
 LIGHT_MINT_GREEN = '\033[38;5;156m'  # Light mint green for tags
 LIGHT_MAUVE = '\033[38;5;183m'  # Very light mauve for contexts
-TERRACOTTA = '\033[38;5;216m'  # Terracotta for timestamps
+TERRACOTTA = '\033[38;5;216m'  # Terracotta for event timestamps (calendar)
+SOFT_GREY = '\033[38;5;245m'  # Soft grey for creation timestamps
 LIGHT_GOLD = '\033[38;5;221m'  # Light gold for kind brackets
+BOLD = '\033[1m'  # Bold text
 RESET = '\033[0m'
 
 def colorize_url(text: str) -> str:
@@ -36,8 +38,12 @@ def colorize_kind(kind: str) -> str:
     return f'{LIGHT_GOLD}[{kind}]{RESET}'
 
 def colorize_timestamp(timestamp: str) -> str:
-    """Colorize timestamp with terracotta."""
+    """Colorize event timestamp with terracotta."""
     return f'{TERRACOTTA}{timestamp}{RESET}'
+
+def colorize_creation_timestamp(timestamp: str) -> str:
+    """Colorize creation timestamp with soft grey."""
+    return f'{SOFT_GREY}{timestamp}{RESET}'
 
 def colorize_content(text: str) -> str:
     """Apply all content colorization."""

@@ -2,7 +2,7 @@
 
 import sys
 
-from tj.colors import colorize_context, colorize_timestamp
+from tj.colors import colorize_context, colorize_creation_timestamp
 from tj.commands.common import get_entry_from_recent_list
 from tj.repository_factory import RepositoryFactory
 from tj.timezone_manager import format_time_dashboard
@@ -14,72 +14,113 @@ def handle_delete_new(args) -> None:
         if not args.args:
             print("Error: Please specify what to delete.", file=sys.stderr)
             print("Usage:")
-            print("  tj x <number>        - Delete entry")
-            print("  tj x <number> t <tag> - Delete tag from entry")
-            print("  tj x t <tagname>     - Delete all instances of tag")
+            print("  tj x <number>           - Delete entry")
+            print("  tj x <n1> <n2> <n3>...  - Delete multiple entries")
+            print("  tj x <n1-n2>            - Delete range of entries")
+            print("  tj x <number> t <tag>   - Delete tag from entry")
+            print("  tj x t <tagname>        - Delete all instances of tag")
             return
 
-        # Parse the arguments
-        if len(args.args) == 1:
-            # tj x <number> or tj x <invalid>
-            arg = args.args[0]
-            if arg.isdigit():
-                # tj x <number> - delete entry
-                handle_delete_entry(int(arg))
-            else:
-                print(f"Error: Invalid entry number '{arg}'.", file=sys.stderr)
-
-        elif len(args.args) == 2 and args.args[0] == 't':
+        # Check for tag operations first
+        if len(args.args) == 2 and args.args[0] == 't':
             # tj x t <tagname> - delete all tag instances
             tagname = args.args[1]
             handle_delete_all_tag_instances(tagname)
+            return
 
-        elif len(args.args) == 3 and args.args[1] == 't':
+        if len(args.args) == 3 and args.args[1] == 't':
             # tj x <number> t <tag> - delete tag from entry
             if args.args[0].isdigit():
                 entry_num = int(args.args[0])
                 tag = args.args[2]
                 handle_delete_tag_from_entry(entry_num, tag)
+                return
             else:
                 print(f"Error: Invalid entry number '{args.args[0]}'.", file=sys.stderr)
+                return
+
+        # Parse entry numbers - could be single, multiple, or range
+        entry_nums = []
+        for arg in args.args:
+            if '-' in arg and not arg.startswith('-'):
+                # Range: 1-10
+                parts = arg.split('-')
+                if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                    start = int(parts[0])
+                    end = int(parts[1])
+                    if start <= end:
+                        entry_nums.extend(range(start, end + 1))
+                    else:
+                        print(f"Error: Invalid range '{arg}' (start must be <= end).", file=sys.stderr)
+                        return
+                else:
+                    print(f"Error: Invalid range format '{arg}'.", file=sys.stderr)
+                    return
+            elif arg.isdigit():
+                entry_nums.append(int(arg))
+            else:
+                print(f"Error: Invalid entry number '{arg}'.", file=sys.stderr)
+                return
+
+        if entry_nums:
+            handle_delete_entries(entry_nums)
         else:
-            print("Error: Invalid delete command format.", file=sys.stderr)
-            print("Usage:")
-            print("  tj x <number>        - Delete entry")
-            print("  tj x <number> t <tag> - Delete tag from entry")
-            print("  tj x t <tagname>     - Delete all instances of tag")
+            print("Error: No valid entry numbers specified.", file=sys.stderr)
 
     except Exception as e:
         print(f"Delete error: {e}", file=sys.stderr)
 
 
-def handle_delete_entry(entry_num: int) -> None:
-    """Delete an entry (requires confirmation)."""
+def handle_delete_entries(entry_nums: list) -> None:
+    """Delete multiple entries (requires confirmation)."""
     try:
-        entry = get_entry_from_recent_list(entry_num)
-        if not entry:
-            print(f"Error: Entry {entry_num} not found in recent list.", file=sys.stderr)
-            return
+        repository = RepositoryFactory.get_repository()
 
-        # Show entry and ask for confirmation
-        time_str = colorize_timestamp(format_time_dashboard(entry.timestamp_created))
+        # Get all entries and validate they exist
+        entries_to_delete = []
+        for num in entry_nums:
+            entry = get_entry_from_recent_list(num)
+            if not entry:
+                print(f"Error: Entry {num} not found in recent list.", file=sys.stderr)
+                return
+            entries_to_delete.append((num, entry))
 
-        context_str = f" {colorize_context(entry.context)}" if entry.context else ""
-        response = input(f"Delete: {time_str} {entry.content}{context_str} [y/N]: ").strip().lower()
+        # Show what will be deleted
+        if len(entries_to_delete) == 1:
+            num, entry = entries_to_delete[0]
+            time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_created))
+            context_str = f" {colorize_context(entry.context)}" if entry.context else ""
+            response = input(f"Delete: {time_str} {entry.content}{context_str} [y/N]: ").strip().lower()
+        else:
+            print(f"Delete {len(entries_to_delete)} entries:")
+            for num, entry in entries_to_delete:
+                time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_created))
+                content_preview = entry.content[:60] + "..." if len(entry.content) > 60 else entry.content
+                print(f"  {num}: {time_str} {content_preview}")
+            response = input(f"\nDelete these {len(entries_to_delete)} entries? [y/N]: ").strip().lower()
+
         if response not in ['y', 'yes']:
             print("Delete cancelled.")
             return
 
-        # Perform deletion
-        repository = RepositoryFactory.get_repository()
-        success = repository.delete_entry(entry.id)
-        if success:
-            print("Entry deleted successfully.")
+        # Perform deletions
+        deleted_count = 0
+        for num, entry in entries_to_delete:
+            if repository.delete_entry(entry.id):
+                deleted_count += 1
+
+        if deleted_count == len(entries_to_delete):
+            print(f"Deleted {deleted_count} entries successfully.")
         else:
-            print("Error: Failed to delete entry.", file=sys.stderr)
+            print(f"Deleted {deleted_count} of {len(entries_to_delete)} entries.", file=sys.stderr)
 
     except Exception as e:
-        print(f"Delete entry error: {e}", file=sys.stderr)
+        print(f"Delete entries error: {e}", file=sys.stderr)
+
+
+def handle_delete_entry(entry_num: int) -> None:
+    """Delete an entry (requires confirmation)."""
+    handle_delete_entries([entry_num])
 
 
 def handle_delete_tag_from_entry(entry_num: int, tag: str) -> None:
