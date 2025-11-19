@@ -16,12 +16,22 @@ def handle_list_command(args) -> None:
         list_type = args.list_type
 
         if not list_type:
-            print("Available list commands:")
-            print("  tj l c  - List contexts")
-            print("  tj l t  - List tags")
-            print("  tj l p  - List profiles")
-            print("  tj l b  - List bookmarks")
-            print("  tj l d  - List todos")
+            # Default: list memories
+            entries = repository.query_entries(kind='memory')
+            active_entries = [e for e in entries if not getattr(e, 'deleted_at', None)]
+
+            if not active_entries:
+                print("No memories found.")
+                return
+
+            print(f"{len(active_entries)} memories:")
+            for i, entry in enumerate(sorted(active_entries, key=lambda e: e.timestamp_created, reverse=True), 1):
+                # Format timestamp in dashboard style
+                time_str = format_time_dashboard(entry.timestamp_created)
+                content_colored = colorize_content(entry.content)
+
+                context_str = f" [{entry.context}]" if entry.context else ""
+                print(f"{i:2d}  {time_str} {content_colored}{context_str}")
             return
 
         if list_type == 'c':  # contexts
