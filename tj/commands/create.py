@@ -105,20 +105,19 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
         # Remove //url from content
         content = url_pattern.sub('', content)
 
-        # Extract [title](url) patterns
+        # Extract [title](url) patterns - keep markdown in content, also store separately
         md_link_pattern = re.compile(r'\[([^\]]+)\]\((https?://[^\)]+)\)')
         for match in md_link_pattern.finditer(content):
             title = match.group(1)
             url = match.group(2)
             links.append({"title": title, "url": url})
-        # Remove [title](url) from content
-        content = md_link_pattern.sub('', content)
+        # Keep [title](url) in content - do NOT remove it
 
-        # Clean up extra whitespace after link removal
+        # Clean up extra whitespace
         content = ' '.join(content.split()).strip()
 
         if not content:
-            print("Error: Entry content cannot be empty after link extraction.", file=sys.stderr)
+            print("Error: Entry content cannot be empty.", file=sys.stderr)
             return
 
         # Step 4: Extract tags for separate storage, but leave them in the content
@@ -144,8 +143,16 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
         if not entry_type:
             content_parts = content.split()
             if content_parts:
+                # Bookmark detection - starts with 'b' followed by markdown link
+                if content_parts[0] == 'b' and len(content_parts) > 1 and content_parts[1].startswith('['):
+                    entry_type = 'bookmark'
+                    # Remove the 'b' prefix from content
+                    content = ' '.join(content_parts[1:])
+                # Bookmark detection - starts with markdown link
+                elif re.match(r'^\[.+\]\(https?://', content):
+                    entry_type = 'bookmark'
                 # Date detection (YYYYMMDD format)
-                if re.match(r'^\d{8}$', content_parts[0]):
+                elif re.match(r'^\d{8}$', content_parts[0]):
                     try:
                         date_str = content_parts[0]
                         event_dt = datetime.strptime(date_str, "%Y%m%d")

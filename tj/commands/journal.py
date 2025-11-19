@@ -126,6 +126,39 @@ def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
 
         return dt.timestamp(), remaining
 
+    # Check for relative date specs: t+1, t-1, w+2, w-1, m+1, m-1
+    import re
+    relative_match = re.match(r'^([twm])([+-]\d+)$', first)
+    if relative_match:
+        unit = relative_match.group(1)
+        offset_str = relative_match.group(2)
+        offset = int(offset_str)
+
+        if unit == 't':  # days
+            target_date = now.date() + timedelta(days=offset)
+        elif unit == 'w':  # weeks
+            target_date = now.date() + timedelta(weeks=offset)
+        elif unit == 'm':  # months (approximate as 30 days)
+            target_date = now.date() + timedelta(days=offset * 30)
+
+        # Check for time as next arg
+        if remaining and ':' in remaining[0]:
+            try:
+                hour, minute = parse_time(remaining[0])
+                remaining = remaining[1:]
+            except ValueError as e:
+                print(f"Warning: {e}, using midnight", file=sys.stderr)
+                hour, minute = 0, 0
+        else:
+            hour, minute = 0, 0
+
+        if tz:
+            dt = datetime.combine(target_date, time(hour, minute, tzinfo=tz))
+        else:
+            dt = datetime.combine(target_date, time(hour, minute))
+
+        return dt.timestamp(), remaining
+
     # Check for 'tomorrow'
     if first == 'tomorrow':
         tomorrow = now.date() + timedelta(days=1)
