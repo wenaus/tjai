@@ -13,7 +13,7 @@ DEFAULT_CONFIG = {
     "backup_path": "~/Dropbox/Current/tjai_backups",
     "backup_interval_hours": 1,
     "recent_entries_hours": 24,
-    "backup_retention_days": 7
+    "backup_retention_days": 14
 }
 
 

@@ -89,8 +89,8 @@ def cleanup_old_backups() -> None:
 
     Retention policy:
     - Today: Keep all hourly backups (no cleanup)
-    - Yesterday+: Keep only the latest backup from each day
-    - After N days: Keep only one backup per week (N from config)
+    - Days 1-14: Keep only the latest backup from each day
+    - After 14 days: Keep only one backup per week (configurable via backup_retention_days)
     """
     try:
         backups = list_backups()
@@ -128,7 +128,7 @@ def cleanup_old_backups() -> None:
                 date_backups.sort(key=lambda x: x['modified'], reverse=True)
                 files_to_delete.extend(date_backups[1:])  # Delete all but the latest
             else:
-                # Older than 1 week: Group by week, keep only latest per week
+                # Older than retention period: Group by week, keep only latest per week
                 weeks = defaultdict(list)
                 for backup in date_backups:
                     # Get Monday of the week for grouping
@@ -162,10 +162,10 @@ def create_backup() -> bool:
     try:
         # Get configured backup directory
         backup_dir = get_backup_dir()
-        
-        # Generate backup filename with date (YYYYMMDD format)
-        date_str = datetime.now().strftime("%Y%m%d")
-        backup_filename = f"tjai_backup_{date_str}.db"
+
+        # Generate backup filename with date and hour (YYYYMMDD_HH format)
+        datetime_str = datetime.now().strftime("%Y%m%d_%H")
+        backup_filename = f"tjai_backup_{datetime_str}.db"
         backup_path = backup_dir / backup_filename
         
         print("Backing up...")
