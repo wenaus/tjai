@@ -76,8 +76,13 @@ def open_editor(initial_content: str = "") -> Optional[str]:
             pass
 
 
-def handle_editor_create() -> None:
-    """Handle creating entry via editor (tj e with no args)."""
+def handle_editor_create(entry_type: Optional[str] = None, extra_args: Optional[list] = None) -> None:
+    """Handle creating entry via editor.
+
+    Args:
+        entry_type: Optional entry type (ai, todo, profile, bookmark, calendar)
+        extra_args: Optional extra arguments like =context
+    """
     content = open_editor()
 
     if content is None:
@@ -98,6 +103,10 @@ def handle_editor_create() -> None:
             metadata.append(part)
         else:
             content_parts.append(part)
+
+    # Add extra_args (like =context from command line)
+    if extra_args:
+        metadata.extend(extra_args)
 
     # Reconstruct full content (without =context on first line)
     if content_parts:
@@ -125,7 +134,7 @@ def handle_editor_create() -> None:
 
     # Call existing creation handler
     from tj.commands.create import handle_creation
-    handle_creation(args)
+    handle_creation(args, entry_type_override=entry_type)
 
 
 def handle_editor_edit(entry_num: int) -> None:

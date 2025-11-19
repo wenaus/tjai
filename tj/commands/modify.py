@@ -32,23 +32,44 @@ def handle_add_subnote(args) -> None:
 def handle_edit(args) -> None:
     """Handle editing an entry.
 
-    Three modes:
-    - tj e → create new entry in editor
+    Modes:
+    - tj e → create new memory in editor
+    - tj e <kind> → create new entry of type in editor (ai, d, p, b, j)
     - tj e <n> → edit entry <n> in editor
     - tj e <n> text → replace entry <n> content with text (requires confirmation)
     """
     from tj.commands.editor import handle_editor_create, handle_editor_edit
 
-    # Case 1: No args → create in editor
+    # Case 1: No args → create memory in editor
     if not args.entry_num:
         handle_editor_create()
+        return
+
+    # Check if entry_num is a kind type
+    kind_map = {
+        'ai': 'ai',
+        'd': 'todo',
+        'todo': 'todo',
+        'p': 'profile',
+        'profile': 'profile',
+        'b': 'bookmark',
+        'bookmark': 'bookmark',
+        'j': 'calendar',
+        'calendar': 'calendar'
+    }
+
+    if args.entry_num in kind_map:
+        # Create entry of specified type in editor
+        entry_type = kind_map[args.entry_num]
+        # Text becomes context/tags
+        handle_editor_create(entry_type=entry_type, extra_args=args.text if args.text else [])
         return
 
     # Try to parse entry_num as integer
     try:
         entry_num = int(args.entry_num)
     except (ValueError, TypeError):
-        print("Error: First argument must be an entry number.", file=sys.stderr)
+        print("Error: First argument must be an entry number or type (ai, d, p, b, j).", file=sys.stderr)
         return
 
     # Case 2: Entry number but no text → edit in editor
