@@ -35,9 +35,21 @@ def open_editor(initial_content: str = "") -> Optional[str]:
         # Get editor command
         editor = get_editor_command()
 
+        # Build command with wait flag for known editors
+        editor_cmd = [editor, temp_path]
+
+        # Add --wait flag for editors that need it
+        editor_name = os.path.basename(editor).lower()
+        if editor_name in ['bbedit', 'mate', 'subl', 'code']:
+            # BBEdit, TextMate, Sublime, VS Code need --wait
+            editor_cmd = [editor, '--wait', temp_path]
+        elif editor_name == 'nano':
+            # nano blocks by default
+            editor_cmd = [editor, temp_path]
+
         # Launch editor (blocks until user closes)
         try:
-            result = subprocess.call([editor, temp_path])
+            result = subprocess.call(editor_cmd)
         except FileNotFoundError:
             print(f"Error: Editor '{editor}' not found")
             return None
