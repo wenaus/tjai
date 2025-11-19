@@ -65,21 +65,23 @@ def parse_timeframe(timeframe: Optional[str]) -> Tuple[str, float, float]:
         return desc, start.timestamp(), end.timestamp()
 
     elif unit == 'w':
-        # Week with offset
-        target_week_start = now - timedelta(days=now.weekday()) + timedelta(weeks=offset)
-        start = target_week_start.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = start + timedelta(days=7)
-
+        # Week with offset - different behavior based on offset
         if offset == 0:
+            # This week only
+            target_week_start = now - timedelta(days=now.weekday())
+            start = target_week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = start + timedelta(days=7)
             desc = "This week"
-        elif offset == 1:
-            desc = "Next week"
-        elif offset == -1:
-            desc = "Last week"
         elif offset > 0:
-            desc = f"{offset} weeks from now"
+            # Next N weeks (starting from today)
+            start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = start + timedelta(weeks=offset)
+            desc = f"Next {offset} weeks" if offset > 1 else "Next week"
         else:
-            desc = f"{abs(offset)} weeks ago"
+            # Previous N weeks (ending today)
+            end = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+            start = end + timedelta(weeks=offset)
+            desc = f"Previous {abs(offset)} weeks" if abs(offset) > 1 else "Last week"
 
         return desc, start.timestamp(), end.timestamp()
 
@@ -126,8 +128,20 @@ def handle_calendar_view(args) -> None:
     try:
         repository = RepositoryFactory.get_repository()
 
-        # Parse timeframe
+        # Parse timeframe - combine with offset if provided
         timeframe = args.timeframe if hasattr(args, 'timeframe') else None
+        offset = args.offset if hasattr(args, 'offset') and args.offset else None
+
+        # If offset provided separately, combine with timeframe
+        if offset and timeframe in ['t', 'w', 'm']:
+            try:
+                # Support both positive and negative numbers
+                offset_num = int(offset)
+                timeframe = f"{timeframe}{offset_num:+d}"
+            except ValueError:
+                print(f"Error: Invalid offset '{offset}'. Must be a number.", file=sys.stderr)
+                return
+
         desc, start_ts, end_ts = parse_timeframe(timeframe)
 
         # Get timezone for display
@@ -175,8 +189,13 @@ def handle_calendar_view(args) -> None:
 
         # Print header based on timeframe
         if unit == 'w':
-            week_num = start_dt.isocalendar()[1]
-            print(colorize_timestamp(f"{start_dt.strftime('%Y%m%d')} Week {week_num}"))
+            # For multi-week view, show date range instead of just week number
+            end_dt = datetime.fromtimestamp(end_ts, tz=tz) if tz else datetime.fromtimestamp(end_ts)
+            if (end_ts - start_ts) > (7 * 24 * 60 * 60):  # More than one week
+                print(colorize_timestamp(f"{start_dt.strftime('%Y%m%d')}-{end_dt.strftime('%Y%m%d')} {desc}"))
+            else:
+                week_num = start_dt.isocalendar()[1]
+                print(colorize_timestamp(f"{start_dt.strftime('%Y%m%d')} Week {week_num}"))
         elif unit == 'm':
             print(colorize_timestamp(f"{start_dt.strftime('%Y%m')} {start_dt.strftime('%B %Y')}"))
         else:

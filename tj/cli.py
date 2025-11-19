@@ -113,7 +113,8 @@ def create_parser() -> argparse.ArgumentParser:
 
     # Calendar view
     p_calendar = subparsers.add_parser('c', help="View calendar entries.")
-    p_calendar.add_argument('timeframe', nargs='?', help="t/w/m with optional +N/-N (e.g., t+1, w-1, m+2)")
+    p_calendar.add_argument('timeframe', nargs='?', help="t/w/m with optional offset (e.g., 't+1', 'w 4', 'w -2')")
+    p_calendar.add_argument('offset', nargs='?', help="Optional numeric offset for timeframe")
     p_calendar.set_defaults(func=lambda args: handle_calendar_view(args))
     
     # Timezone management

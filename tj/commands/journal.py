@@ -23,10 +23,10 @@ def get_timezone_object():
 
 
 def parse_time(time_str: str) -> Tuple[int, int]:
-    """Parse HH:MM time string.
+    """Parse time string in HH:MM or am/pm format.
 
     Args:
-        time_str: Time in HH:MM format
+        time_str: Time in HH:MM (24-hour) or H:MMam/pm or Ham/pm format
 
     Returns:
         Tuple of (hour, minute)
@@ -34,12 +34,37 @@ def parse_time(time_str: str) -> Tuple[int, int]:
     Raises:
         ValueError: If time format is invalid
     """
+    import re
+
+    # Check for am/pm format: 6pm, 6:30pm, 6am, 6:30am
+    am_pm_match = re.match(r'^(\d{1,2})(?::(\d{2}))?(am|pm)$', time_str.lower())
+    if am_pm_match:
+        hour = int(am_pm_match.group(1))
+        minute = int(am_pm_match.group(2)) if am_pm_match.group(2) else 0
+        am_pm = am_pm_match.group(3)
+
+        if not (1 <= hour <= 12):
+            raise ValueError(f"Hour must be 1-12 for am/pm format, got: {hour}")
+        if not (0 <= minute <= 59):
+            raise ValueError(f"Minute must be 0-59, got: {minute}")
+
+        # Convert to 24-hour
+        if am_pm == 'am':
+            if hour == 12:
+                hour = 0
+        else:  # pm
+            if hour != 12:
+                hour += 12
+
+        return hour, minute
+
+    # Check for HH:MM format (24-hour)
     if ':' not in time_str:
-        raise ValueError(f"Time must be in HH:MM format, got: {time_str}")
+        raise ValueError(f"Time must be in HH:MM or am/pm format, got: {time_str}")
 
     parts = time_str.split(':')
     if len(parts) != 2:
-        raise ValueError(f"Time must be in HH:MM format, got: {time_str}")
+        raise ValueError(f"Time must be in HH:MM or am/pm format, got: {time_str}")
 
     try:
         hour = int(parts[0])
@@ -108,8 +133,8 @@ def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
             days_ahead = 7  # Next occurrence, not today
         event_date = today + timedelta(days=days_ahead)
 
-        # Check if next arg is time
-        if remaining and ':' in remaining[0]:
+        # Check if next arg is time (HH:MM or am/pm format)
+        if remaining and (':' in remaining[0] or remaining[0].lower().endswith(('am', 'pm'))):
             try:
                 hour, minute = parse_time(remaining[0])
                 remaining = remaining[1:]
@@ -142,7 +167,7 @@ def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
             target_date = now.date() + timedelta(days=offset * 30)
 
         # Check for time as next arg
-        if remaining and ':' in remaining[0]:
+        if remaining and (':' in remaining[0] or remaining[0].lower().endswith(('am', 'pm'))):
             try:
                 hour, minute = parse_time(remaining[0])
                 remaining = remaining[1:]
@@ -164,7 +189,7 @@ def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
         tomorrow = now.date() + timedelta(days=1)
 
         # Check for time
-        if remaining and ':' in remaining[0]:
+        if remaining and (':' in remaining[0] or remaining[0].lower().endswith(('am', 'pm'))):
             try:
                 hour, minute = parse_time(remaining[0])
                 remaining = remaining[1:]

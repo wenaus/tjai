@@ -1,5 +1,6 @@
 ## Next Steps
 
+- Make `tj c` default to today plus rest of week (through Sunday)
 - Test multi-line calendar entry indentation
 - Fix `-f` file input for journal command
 - Distributed version with cloud sync
