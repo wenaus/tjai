@@ -47,8 +47,8 @@ def colorize_creation_timestamp(timestamp: str) -> str:
     return f'{SOFT_GREY}{timestamp}{RESET}'
 
 def colorize_entry_number(number: int) -> str:
-    """Colorize entry number with bright yellow."""
-    return f'{BRIGHT_YELLOW}{number:2d}{RESET}'
+    """Colorize entry number with bright yellow and === prefix."""
+    return f'{BRIGHT_YELLOW}==={number:2d}{RESET}'
 
 def colorize_content(text: str) -> str:
     """Apply all content colorization."""
