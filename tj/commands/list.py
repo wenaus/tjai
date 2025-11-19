@@ -104,9 +104,17 @@ def _list_entries_with_filters(repository, filters):
     priority = None
     status = None
     time_cutoff = None
+    text_filter = None
     query_parts = []
 
     for filter_arg in filters:
+        # Check for numeric day limit
+        if filter_arg.isdigit():
+            days_back = int(filter_arg)
+            now = datetime.now()
+            time_cutoff = (now - timedelta(days=days_back)).timestamp()
+            query_parts.append(f"last {days_back} days")
+            continue
         # Query by kind
         if filter_arg in ['b', 'd', 'p', 'ai', 'r', 'j']:
             kind_map = {
@@ -170,9 +178,9 @@ def _list_entries_with_filters(repository, filters):
             query_parts.append(f"status={status}")
 
         else:
-            print(f"Error: Unknown filter '{filter_arg}'", file=sys.stderr)
-            print("Usage: tj l [c|t|d|p|b|j|ai|=ctx|:tag|p=N|s=val|t/w/m]", file=sys.stderr)
-            return
+            # Treat as text filter
+            text_filter = filter_arg.lower()
+            query_parts.append(f"text={filter_arg}")
 
     # Execute query
     entries = repository.query_entries(
@@ -187,14 +195,18 @@ def _list_entries_with_filters(repository, filters):
     if time_cutoff:
         entries = [e for e in entries if e.timestamp_created >= time_cutoff]
 
+    # Apply text filter (post-query, case-insensitive)
+    if text_filter:
+        entries = [e for e in entries if text_filter in e.content.lower()]
+
     # Build query description
     query_desc = " AND ".join(query_parts) if query_parts else "all entries"
 
     # Filter out deleted entries
     active_entries = [e for e in entries if not getattr(e, 'deleted_at', None)]
 
-    # Sort by timestamp, newest first
-    active_entries.sort(key=lambda e: e.timestamp_created, reverse=True)
+    # Sort by timestamp, oldest first (newest at bottom)
+    active_entries.sort(key=lambda e: e.timestamp_created, reverse=False)
 
     # Display results
     if not active_entries:
