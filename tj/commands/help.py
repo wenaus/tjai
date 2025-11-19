@@ -13,9 +13,9 @@ def handle_help(args) -> None:
 STATUS                          LIST/FILTER
 tj              Status          tj l                     All entries
 tj hey          Need to know    tj l [b|d|p|ai|j]        By type
-tj config show  Show config     tj l [t|w|m]             By time
+tj config       Show config     tj l [t|w|m|N]           By time (N=days)
                                 tj l =ctx :tag p=N s=val Composite
-                                tj l [c|t]               Metadata (contexts/tags)
+                                tj l [c|t|@]             Metadata (c/t/@=named)
 CREATE
 tj <text>       Memory
 tj d <text>     Todo            MODIFY
@@ -34,9 +34,9 @@ tj j tomorrow <text>            tj <n> p=N      Set priority
 tj j mon 14:30 Team meeting     tj <n> s=val    Set status
 tj j 0615 10:00 Doctor appt
 tj c [t|w|m]    View calendar   DATA
-tj c t+1        Tomorrow         tj dump         Export as commands
+tj c t+1        Tomorrow        tj dump         Export as commands
 tj c w-1        Last week       tj backup       Manual backup
-                                tj sync         Force sync
+tj c 4          Next 4 weeks    tj sync         Force sync
 
 METADATA (inline)               SETUP
 @name           Named entry     tj() { ~/github/tjrepo/tjai/tj.py "$*"; }
