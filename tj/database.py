@@ -49,7 +49,7 @@ def init_db() -> None:
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        
+
         # Main entries table - core columns + JSON for extensibility
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS entries (
@@ -62,7 +62,10 @@ def init_db() -> None:
             context TEXT,
             is_dirty INTEGER DEFAULT 1,
             deleted_at REAL, -- Soft delete timestamp
-            data JSON, -- Extensible data: event_date, priority, metadata, etc.
+            name TEXT, -- Optional unique name for stable references
+            priority INTEGER, -- Priority level (1-5 typical, unrestricted)
+            status TEXT, -- Workflow status (done, blocked, waiting, etc.)
+            data JSON, -- Extensible data: event_date, links, metadata, etc.
             FOREIGN KEY (parent_id) REFERENCES entries (id)
         );
         """)
@@ -125,7 +128,13 @@ def init_db() -> None:
             is_active INTEGER DEFAULT 1
         );
         """)
-        
+
+        # Create unique index on (context, name) for named entries
+        cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_entries_context_name
+        ON entries(context, name) WHERE name IS NOT NULL
+        """)
+
         conn.commit()
         conn.close()
     except sqlite3.Error as e:

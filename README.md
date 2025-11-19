@@ -33,18 +33,33 @@ This project is built on an offline-first, distributed architecture. The `tj` cl
 *   **CREATE:**
     *   `tj p <fact>`: Adds a persistent fact to your profile.
     *   `tj ai <guideline>`: Adds AI behavioral guideline or instruction.
+    *   `tj j <date/time> <content>`: Creates calendar entry (tomorrow, mon-sun, HH:MM, mmdd, YYYYMMDD)
     *   `tj <YYYYMMDD> ...`: Creates a new calendar entry.
     *   `tj <url> ...`: Creates a new bookmark.
     *   `tj [d|do|todo] ...`: Creates a new todo item.
     *   `tj <text> ...`: Default; creates a new memory.
     *   *(All creation commands auto-apply current context and can include `:tags`)*.
+    *   **Named entries:** `tj @budget Q4 planning` creates named entry
+    *   **Priority:** `tj task p=1` sets priority (1=highest)
+    *   **Status:** `tj task s=active` sets status (active, done, blocked, etc.)
+    *   **Links:** `tj meeting //https://url` or `tj meeting [Title](https://url)`
     *   Inline context: `tj =tjai meeting notes` (switches to tjai, creates entry)
-    *   Multi-line input: `tj at=20251115/10:00 <<!` then type content, end with `!` on its own line
+    *   Multi-line input: `tj -f filename.txt` or `tj e` (opens editor)
     *   Timestamp override: `tj at=YYYYMMDD/HH:MM <content>` to set custom creation time
 *   **MODIFY:**
-    *   `tj . <n> <text>`: Adds a sub-note to item `<n>`.
-    *   `tj x <id>`: Deletes an entry by its unique ID.
-    *   `tj <n> x`: Deletes item `<n>` from recent entries.
+    *   `tj . <content>`: Adds a sub-item to last parent entry.
+    *   `tj + <item>`: Adds item to current list.
+    *   `tj e`: Create new entry in $EDITOR.
+    *   `tj e <n>`: Edit entry `<n>` in $EDITOR.
+    *   `tj e <n> <text>`: Replace entry `<n>` content (with confirmation).
+    *   `tj s <n>` or `tj s @name`: Show entry details.
+    *   `tj t <n> <tag>`: Add tag to entry.
+    *   `tj m <n> <context>`: Move entry to context.
+    *   `tj ^ <n>`: Pin entry to top (update timestamp).
+    *   `tj <n> @name`: Assign name to entry.
+    *   `tj <n> p=N`: Set priority on entry.
+    *   `tj <n> s=status`: Set status on entry.
+    *   `tj x <n>` or `tj x @name`: Delete entry (with confirmation).
 *   **QUERY:** `tj q ...`
     *   `q [b|r|d|p]`: By type: **b**ookmark, **r**emembered, **d**o, **p**rofile.
     *   `q [t|w|m]`: By time: **t**oday, **w**eek, **m**onth.
@@ -101,49 +116,49 @@ The dump format outputs all contexts and entries as `tj` commands with original 
 
 To set up your development environment and run tests:
 
-1.  **Initialize and Activate Virtual Environment, Install Dependencies, and Make Executable:**
-    Run the following commands from the `tjai` directory. This creates a virtual environment, activates it, installs all necessary packages, and makes the main script executable.
+1.  **Make Executable:**
+    Run the following command from the `tjai` directory:
 
     ```bash
-    python3 -m venv .venv
-    source .venv/bin/activate
-    pip install -r requirements.txt -r requirements-dev.txt
     chmod +x tj.py
     ```
 
-    *Remember to activate the virtual environment (`source .venv/bin/activate`) in each new terminal session where you want to work on `tjai`.*
+    **Note:** No external dependencies required - uses Python standard library only.
 
-    **For AI assistants:** Venv doesn't persist between shell commands. Chain activation: `cd tjai && source .venv/bin/activate && python3 test.py`
-
-2.  **Set up `tj` Alias (Recommended):**
-    For convenience, add an alias to your shell's startup file e.g. `~/.bashrc`. Add:
+2.  **Set up `tj` Function (Recommended):**
+    For convenience, add this function to your shell's startup file (e.g., `~/.bashrc` or `~/.zshrc`):
 
     ```bash
-    alias tj='~/github/tjrepo/tjai/tj.py'
+    tj() { ~/github/tjrepo/tjai/tj.py "$*"; }
     ```
 
-    Then `source ~/.bashrc`.
+    Then `source ~/.bashrc` (or `source ~/.zshrc`).
+
+    This allows you to use natural commands without quoting:
+    - `tj my memory entry`
+    - `tj =work meeting notes`
+    - `tj @budget Q4 planning p=1 s=active`
 
 3.  **Run Tests:**
-    With the virtual environment active, run the test suite:
+    Run the comprehensive test suite:
 
     ```bash
-    python3 test.py
+    ./test_all.sh
     ```
 
-### Testing Heredoc Input
+### Testing Multi-line Input
 
-When testing multi-line heredoc input from the command line, you need to quote `<<!` so the shell passes it as a literal argument, then use shell heredoc syntax to provide stdin:
+For multi-line entries, use file input:
 
 ```bash
-./tj.py at=20250101/00:00 '<<!' <<'END'
-Multi-line content here
+echo "Multi-line content here
 More lines
-!
-END
+Even more" > /tmp/entry.txt
+tj -f /tmp/entry.txt
 ```
 
-This works because:
-- The quoted `'<<!'` is passed as an argument to tj.py
-- The shell heredoc (`<<'END'...END`) provides stdin to the script
-- tj.py sees `<<!` in argv and reads from stdin until it finds `!` on its own line
+Or use the editor command:
+
+```bash
+tj e  # Opens $EDITOR for new entry
+```

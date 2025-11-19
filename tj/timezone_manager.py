@@ -2,6 +2,7 @@
 
 import sqlite3
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Optional, Dict
 
 from tj.database import get_db_connection, DatabaseError
@@ -84,24 +85,11 @@ def parse_timezone(tz_input: str) -> Optional[str]:
 def format_time_in_timezone(timestamp: float, timezone: str) -> str:
     """Format a timestamp in the specified timezone."""
     try:
-        try:
-            import pytz
-            if timezone.startswith('Etc/GMT'):
-                # Handle UTC offsets
-                tz = pytz.timezone(timezone)
-            else:
-                tz = pytz.timezone(timezone)
-            
-            dt = datetime.fromtimestamp(timestamp, tz=tz)
-            return dt.strftime('%m/%d %I:%M%p').lower()
-            
-        except ImportError:
-            # Fallback without pytz - use local time
-            dt = datetime.fromtimestamp(timestamp)
-            return dt.strftime('%m/%d %I:%M%p').lower()
-            
+        tz = ZoneInfo(timezone)
+        dt = datetime.fromtimestamp(timestamp, tz=tz)
+        return dt.strftime('%m/%d %I:%M%p').lower()
     except Exception:
-        # Fallback for any timezone errors
+        # Fallback for any timezone errors - use local time
         dt = datetime.fromtimestamp(timestamp)
         return dt.strftime('%m/%d %I:%M%p').lower()
 
@@ -110,18 +98,11 @@ def format_time_dashboard(timestamp: float) -> str:
     """Format timestamp in dashboard style (DD/HH:MM)."""
     try:
         current_tz = get_current_timezone()
-        try:
-            import pytz
-            if current_tz.startswith('Etc/GMT'):
-                tz = pytz.timezone(current_tz)
-            else:
-                tz = pytz.timezone(current_tz)
-            entry_time = datetime.fromtimestamp(timestamp, tz=tz)
-        except ImportError:
-            entry_time = datetime.fromtimestamp(timestamp)
-        
+        tz = ZoneInfo(current_tz)
+        entry_time = datetime.fromtimestamp(timestamp, tz=tz)
         return entry_time.strftime("%d/%H:%M")
     except Exception:
+        # Fallback on any error
         return "--/--:--"
 
 

@@ -17,22 +17,23 @@ class SQLiteRepository(EntryRepository):
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             cursor.execute("""
-                INSERT INTO entries (id, parent_id, content, kind, timestamp_created, 
-                                   timestamp_modified, context, is_dirty, data)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO entries (id, parent_id, content, kind, timestamp_created,
+                                   timestamp_modified, context, is_dirty, name, priority, status, data)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 entry.id, entry.parent_id, entry.content, entry.kind,
                 entry.timestamp_created, entry.timestamp_modified,
                 entry.context, 1 if entry.is_dirty else 0,
+                entry.name, entry.priority, entry.status,
                 json.dumps(entry.data) if entry.data else None
             ))
-            
+
             conn.commit()
             conn.close()
             return entry.id
-            
+
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to create entry: {e}")
     
@@ -44,16 +45,16 @@ class SQLiteRepository(EntryRepository):
             
             cursor.execute("""
                 SELECT id, parent_id, content, kind, timestamp_created,
-                       timestamp_modified, context, is_dirty, data
+                       timestamp_modified, context, is_dirty, name, priority, status, data
                 FROM entries WHERE id = ?
             """, (entry_id,))
-            
+
             row = cursor.fetchone()
             conn.close()
-            
+
             if not row:
                 return None
-                
+
             return Entry(
                 id=row['id'],
                 parent_id=row['parent_id'],
@@ -63,12 +64,52 @@ class SQLiteRepository(EntryRepository):
                 timestamp_modified=row['timestamp_modified'],
                 context=row['context'],
                 is_dirty=bool(row['is_dirty']),
+                name=row['name'],
+                priority=row['priority'],
+                status=row['status'],
                 data=json.loads(row['data']) if row['data'] else None
             )
             
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to get entry: {e}")
-    
+
+    def get_entry_by_name(self, name: str, context: Optional[str] = None) -> Optional[Entry]:
+        """Get entry by name within a context."""
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT id, parent_id, content, kind, timestamp_created,
+                       timestamp_modified, context, is_dirty, name, priority, status, data
+                FROM entries
+                WHERE name = ? AND context IS ?
+            """, (name, context))
+
+            row = cursor.fetchone()
+            conn.close()
+
+            if not row:
+                return None
+
+            return Entry(
+                id=row['id'],
+                parent_id=row['parent_id'],
+                content=row['content'],
+                kind=row['kind'],
+                timestamp_created=row['timestamp_created'],
+                timestamp_modified=row['timestamp_modified'],
+                context=row['context'],
+                is_dirty=bool(row['is_dirty']),
+                name=row['name'],
+                priority=row['priority'],
+                status=row['status'],
+                data=json.loads(row['data']) if row['data'] else None
+            )
+
+        except sqlite3.Error as e:
+            raise DatabaseError(f"Failed to get entry by name: {e}")
+
     def update_entry(self, entry_id: str, **changes) -> bool:
         """Update an entry with the given changes."""
         try:
@@ -86,8 +127,11 @@ class SQLiteRepository(EntryRepository):
                 if field == 'data' and isinstance(value, dict):
                     set_clauses.append("data = ?")
                     values.append(json.dumps(value))
-                elif field in ['content', 'kind', 'context', 'parent_id']:
+                elif field in ['content', 'kind', 'context', 'parent_id', 'name', 'status']:
                     set_clauses.append(f"{field} = ?")
+                    values.append(value)
+                elif field == 'priority':
+                    set_clauses.append("priority = ?")
                     values.append(value)
                 elif field == 'is_dirty':
                     set_clauses.append("is_dirty = ?")
@@ -134,49 +178,59 @@ class SQLiteRepository(EntryRepository):
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to delete entry: {e}")
     
-    def query_entries(self, 
+    def query_entries(self,
                      kind: Optional[str] = None,
                      context: Optional[str] = None,
                      tag: Optional[str] = None,
+                     priority: Optional[int] = None,
+                     status: Optional[str] = None,
                      limit: Optional[int] = None) -> List[Entry]:
         """Query entries with optional filters."""
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             # Build dynamic query
             conditions = ["deleted_at IS NULL"]  # Exclude soft-deleted entries
             params = []
-            
+
             if kind:
                 conditions.append("kind = ?")
                 params.append(kind)
-            
+
             if context:
                 conditions.append("context = ?")
                 params.append(context)
-            
+
             if tag:
                 conditions.append("id IN (SELECT entry_id FROM tags WHERE tag_name = ?)")
                 params.append(tag)
+
+            if priority is not None:
+                conditions.append("priority = ?")
+                params.append(priority)
+
+            if status:
+                conditions.append("status = ?")
+                params.append(status)
             
             where_clause = " AND ".join(conditions)
             query = f"""
                 SELECT id, parent_id, content, kind, timestamp_created,
-                       timestamp_modified, context, is_dirty, data
-                FROM entries 
+                       timestamp_modified, context, is_dirty, name, priority, status, data
+                FROM entries
                 WHERE {where_clause}
                 ORDER BY timestamp_created DESC
             """
-            
+
             if limit:
                 query += " LIMIT ?"
                 params.append(limit)
-            
+
             cursor.execute(query, params)
             rows = cursor.fetchall()
             conn.close()
-            
+
             return [
                 Entry(
                     id=row['id'],
@@ -187,6 +241,9 @@ class SQLiteRepository(EntryRepository):
                     timestamp_modified=row['timestamp_modified'],
                     context=row['context'],
                     is_dirty=bool(row['is_dirty']),
+                    name=row['name'],
+                    priority=row['priority'],
+                    status=row['status'],
                     data=json.loads(row['data']) if row['data'] else None
                 ) for row in rows
             ]

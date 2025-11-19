@@ -1,3 +1,2 @@
 # Dependencies for tjai
-pytest
-pytz>=2021.1  # Timezone support for US Eastern display
+# No external dependencies - uses Python standard library

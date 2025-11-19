@@ -7,15 +7,29 @@ from tj.repository import Entry
 from tj.state import display_context
 
 
-def get_entry_from_recent_list(entry_num: int) -> Optional[Entry]:
-    """Get entry from recent list by number.
+def get_entry_from_recent_list(entry_identifier) -> Optional[Entry]:
+    """Get entry from recent list by number or @name.
+
+    Args:
+        entry_identifier: Either an integer (entry number) or string starting with @ (name)
 
     Returns the entry if found, None otherwise.
     """
     try:
         from tj.repository_factory import RepositoryFactory
+        from tj.state import get_state
 
         repository = RepositoryFactory.get_repository()
+
+        # Check if it's a @name reference
+        if isinstance(entry_identifier, str) and entry_identifier.startswith('@'):
+            name = entry_identifier[1:]  # Remove @
+            state = get_state()
+            current_context = state.get("current_context")
+            return repository.get_entry_by_name(name, current_context)
+
+        # Otherwise treat as entry number
+        entry_num = int(entry_identifier)
 
         all_entries = repository.query_entries()
         active_entries = [e for e in all_entries if not getattr(e, 'deleted_at', None)]

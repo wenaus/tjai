@@ -51,7 +51,19 @@ def format_entry_command(entry: Entry, tags: List[str], db_path: str = None) -> 
     # 3. Add timestamp
     cmd_parts.append(format_timestamp(entry.timestamp_created))
 
-    # 4. Add links if present
+    # 4. Add name if present
+    if entry.name:
+        cmd_parts.append(f'@{entry.name}')
+
+    # 5. Add priority if present
+    if entry.priority is not None:
+        cmd_parts.append(f'p={entry.priority}')
+
+    # 6. Add status if present
+    if entry.status:
+        cmd_parts.append(f's={entry.status}')
+
+    # 7. Add links if present
     if entry.data and 'links' in entry.data:
         links = entry.data['links']
         for link in links:
@@ -63,7 +75,7 @@ def format_entry_command(entry: Entry, tags: List[str], db_path: str = None) -> 
             else:
                 cmd_parts.append(f'[{title}]({url})')
 
-    # 5. Build the command
+    # 8. Build the command
     if has_newlines:
         # Use command substitution with cat heredoc (works when sourced)
         cmd_line = ' '.join(cmd_parts)
@@ -112,7 +124,7 @@ def handle_dump(args) -> None:
 
         cursor.execute("""
             SELECT id, parent_id, content, kind, timestamp_created,
-                   timestamp_modified, context, is_dirty, data
+                   timestamp_modified, context, is_dirty, name, priority, status, data
             FROM entries
             WHERE deleted_at IS NULL
             ORDER BY ROWID
@@ -135,6 +147,9 @@ def handle_dump(args) -> None:
                     timestamp_modified=row['timestamp_modified'],
                     context=row['context'],
                     is_dirty=bool(row['is_dirty']),
+                    name=row['name'],
+                    priority=row['priority'],
+                    status=row['status'],
                     data=json.loads(row['data']) if row['data'] else None
                 )
 

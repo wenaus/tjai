@@ -5,11 +5,13 @@ from datetime import datetime
 
 from tj.backup import auto_backup, list_backups, create_backup
 from tj.commands.ai import handle_ai_command
+from tj.commands.calendar import handle_calendar_view
 from tj.commands.common import not_yet_implemented, handle_delete
 from tj.commands.context import handle_context
 from tj.commands.create import handle_creation
 from tj.commands.delete import handle_delete_new
 from tj.commands.dump import handle_dump
+from tj.commands.help import handle_help
 from tj.commands.journal import handle_journal
 from tj.commands.list import handle_list_command, handle_list_all
 from tj.commands.lists import handle_add_list_item
@@ -20,28 +22,10 @@ from tj.commands.modify import (
 from tj.commands.subitems import handle_add_subitem
 from tj.commands.query import handle_query
 from tj.database import init_db, DatabaseError
-from tj.environment import check_virtual_environment
 from tj.repository_factory import RepositoryFactory
 from tj.state import get_state
 from tj.timezone_manager import handle_timezone_command, get_current_timezone, format_time_in_timezone
 from tj.config import handle_config_command
-
-
-def parse_heredoc() -> Optional[str]:
-    """Parse heredoc input from stdin. Reads until line contains just '!'."""
-    lines = []
-    try:
-        for line in sys.stdin:
-            stripped = line.rstrip('\n\r')
-            if stripped == '!':
-                return '\n'.join(lines)
-            lines.append(stripped)
-    except EOFError:
-        pass
-    # If we get here, we didn't find the closing '!'
-    if lines:
-        print("Error: Heredoc not terminated with '!' on its own line", file=sys.stderr)
-    return None
 
 
 def parse_at_timestamp(args_list: List[str]) -> Tuple[Optional[float], List[str]]:
@@ -128,11 +112,10 @@ def create_parser() -> argparse.ArgumentParser:
     p_list.add_argument('list_type', nargs='?', choices=['c', 't', 'p', 'b', 'd', 'ai'], help="List contexts (c), tags (t), profiles (p), bookmarks (b), todos (d), or AI guidelines (ai)")
     p_list.set_defaults(func=handle_list_command)
 
-    # Context management
-    p_context = subparsers.add_parser('c', help="Set or clear the active context.")
-    p_context.add_argument('name', nargs='?', help="The name of the context to set.")
-    p_context.add_argument('description', nargs='*', help="Description for the context.")
-    p_context.set_defaults(func=handle_context)
+    # Calendar view
+    p_calendar = subparsers.add_parser('c', help="View calendar entries.")
+    p_calendar.add_argument('timeframe', nargs='?', help="t/w/m with optional +N/-N (e.g., t+1, w-1, m+2)")
+    p_calendar.set_defaults(func=lambda args: handle_calendar_view(args))
     
     # Timezone management
     p_tz = subparsers.add_parser('tz', help="Set or show timezone.")
@@ -209,7 +192,7 @@ def create_parser() -> argparse.ArgumentParser:
 
     # Query commands
     p_query = subparsers.add_parser('q', help="Query your entries.")
-    p_query.add_argument('filter', nargs='?', help="Query filter: b/d/p/ai (kind), t/w/m (time), =context, :tag")
+    p_query.add_argument('filter', nargs='*', help="Query filters: b/d/p/ai (kind), t/w/m (time), =context, :tag, p=N, s=value")
     p_query.set_defaults(func=handle_query)
 
     # Backup
@@ -226,7 +209,7 @@ def create_parser() -> argparse.ArgumentParser:
 
     # Help
     p_help = subparsers.add_parser('h', help="Show this help message.", add_help=False)
-    p_help.set_defaults(func=lambda args: parser.print_help())
+    p_help.set_defaults(func=handle_help)
 
     return parser
 
@@ -243,12 +226,94 @@ def handle_backup_command() -> None:
 
 def handle_numbered_command(parser: argparse.ArgumentParser, num_identifier: int, action_command: str, remaining_args: List[str]) -> None:
     """Handle commands prefixed with a number (e.g., '5 x' or '3 a text')."""
+    import re
+    from tj.commands.common import get_entry_from_recent_list
+    from datetime import datetime, timezone
+
+    # Check if action_command is metadata assignment: @name, p=N, s=status
+    if action_command.startswith('@'):
+        # Assign name to entry
+        name = action_command[1:]
+        if not re.match(r'^[a-zA-Z][a-zA-Z0-9_-]*$', name):
+            print(f"Error: Invalid name '{name}'. Must start with letter, then alphanumeric/underscore/dash.", file=sys.stderr)
+            return
+
+        entry = get_entry_from_recent_list(num_identifier)
+        if not entry:
+            print(f"Error: Entry {num_identifier} not found in recent list.", file=sys.stderr)
+            return
+
+        repository = RepositoryFactory.get_repository()
+        success = repository.update_entry(
+            entry.id,
+            name=name,
+            timestamp_modified=datetime.now(timezone.utc).timestamp(),
+            is_dirty=True
+        )
+        if success:
+            print(f"Entry {num_identifier} named '@{name}'")
+        else:
+            print("Error: Failed to name entry.", file=sys.stderr)
+        return
+
+    elif action_command.startswith('p='):
+        # Set priority
+        try:
+            priority = int(action_command[2:])
+        except ValueError:
+            print(f"Error: Invalid priority '{action_command}'. Use p=N where N is a number.", file=sys.stderr)
+            return
+
+        entry = get_entry_from_recent_list(num_identifier)
+        if not entry:
+            print(f"Error: Entry {num_identifier} not found in recent list.", file=sys.stderr)
+            return
+
+        repository = RepositoryFactory.get_repository()
+        success = repository.update_entry(
+            entry.id,
+            priority=priority,
+            timestamp_modified=datetime.now(timezone.utc).timestamp(),
+            is_dirty=True
+        )
+        if success:
+            print(f"Entry {num_identifier} priority set to {priority}")
+        else:
+            print("Error: Failed to set priority.", file=sys.stderr)
+        return
+
+    elif action_command.startswith('s='):
+        # Set status
+        status = action_command[2:]
+        if not re.match(r'^\w+$', status):
+            print(f"Error: Invalid status '{status}'. Must be alphanumeric.", file=sys.stderr)
+            return
+
+        entry = get_entry_from_recent_list(num_identifier)
+        if not entry:
+            print(f"Error: Entry {num_identifier} not found in recent list.", file=sys.stderr)
+            return
+
+        repository = RepositoryFactory.get_repository()
+        success = repository.update_entry(
+            entry.id,
+            status=status,
+            timestamp_modified=datetime.now(timezone.utc).timestamp(),
+            is_dirty=True
+        )
+        if success:
+            print(f"Entry {num_identifier} status set to '{status}'")
+        else:
+            print("Error: Failed to set status.", file=sys.stderr)
+        return
+
+    # Otherwise, handle as regular command
     known_commands = set(parser._subparsers._group_actions[0].choices.keys())
-    
+
     if action_command not in known_commands:
         print(f"Error: Unknown action '{action_command}' for numbered command.", file=sys.stderr)
         return
-    
+
     # Parse the action command with remaining arguments
     try:
         temp_argv = ['tj', action_command] + remaining_args
@@ -452,7 +517,7 @@ def handle_context_syntax(first_arg: str, remaining_args: list) -> None:
         handle_creation_with_at(create_args)
 
 
-def main(skip_venv_check: bool = False) -> None:
+def main() -> None:
     """Main function to parse arguments and dispatch commands."""
     parser = create_parser()
 
@@ -460,47 +525,7 @@ def main(skip_venv_check: bool = False) -> None:
         show_status()
         return
 
-    # Check for global flags first
-    if '--no-venv-check' in sys.argv:
-        skip_venv_check = True
-        # Remove the flag so it doesn't interfere with other parsing
-        sys.argv = [arg for arg in sys.argv if arg != '--no-venv-check']
-
-        # If only the flag was provided, show status
-        if len(sys.argv) == 1:
-            show_status()
-            return
-
     first_arg = sys.argv[1]
-
-    # Check for heredoc input: <<! (can appear anywhere in args)
-    if '<<!' in sys.argv:
-        heredoc_index = sys.argv.index('<<!')
-
-        # Everything before <<! are parameters (like at=20251115/10:00)
-        params_before = sys.argv[1:heredoc_index]
-
-        # Everything after <<! are additional args (rare, but supported)
-        params_after = sys.argv[heredoc_index + 1:] if heredoc_index + 1 < len(sys.argv) else []
-
-        # Parse heredoc content from stdin
-        content = parse_heredoc()
-        if content is None:
-            return  # Error already printed
-
-        # Combine all parameters and extract at= timestamp
-        all_params = params_before + params_after
-        timestamp_override, filtered_args = parse_at_timestamp(all_params)
-
-        # Create args object with heredoc content
-        class Args:
-            def __init__(self):
-                self.input = [content] + filtered_args
-                self.timestamp_override = timestamp_override
-
-        args = Args()
-        handle_creation(args)
-        return
 
     # Check for =context syntax (tj =work, tj =0, tj =work content)
     if first_arg.startswith('='):
@@ -552,20 +577,62 @@ def entrypoint() -> None:
         # Save original command for audit/backup purposes (before any modifications)
         original_command = sys.argv.copy()
 
-        # Process global flags and remove from sys.argv before command parsing
-        flags_to_remove = []
+        # Tokenize single string arg FIRST (from alias/function wrapper)
+        # When using: alias tj='tj.py "$*"' or function tj() { tj.py "$*"; }
+        # Result: sys.argv = ['tj.py', '--db=test.db', 'entire command as single string']
+        # We need to tokenize before processing flags
+        if len(sys.argv) >= 2:
+            # Check if last arg looks like a compound command (has spaces and isn't a flag)
+            last_arg = sys.argv[-1]
+            if last_arg == '':
+                # Empty string from "$*" with no args - remove it
+                sys.argv = sys.argv[:-1]
+            elif ' ' in last_arg and not last_arg.startswith('--'):
+                import shlex
+                tokens = shlex.split(last_arg)
+                sys.argv = sys.argv[:-1] + tokens
 
-        for arg in sys.argv[1:]:
+        # Process global flags and file input
+        flags_to_remove = []
+        file_path = None
+
+        i = 1
+        while i < len(sys.argv):
+            arg = sys.argv[i]
             if arg.startswith('--db='):
                 flags_to_remove.append(arg)
-            # Future flags: --verbose, --debug, --dry-run, etc.
+            elif arg in ['-f', '--file']:
+                # Next arg is file path
+                if i + 1 < len(sys.argv):
+                    file_path = sys.argv[i + 1]
+                    flags_to_remove.append(arg)
+                    flags_to_remove.append(sys.argv[i + 1])
+                    i += 1  # Skip next arg
+                else:
+                    print("Error: -f/--file requires a file path", file=sys.stderr)
+                    sys.exit(1)
+            i += 1
 
-        check_virtual_environment()
         init_db()
 
         # Remove processed flags for command parsing (database.py already cached them)
         for flag in flags_to_remove:
             sys.argv.remove(flag)
+
+        # Handle file input
+        if file_path:
+            try:
+                from pathlib import Path
+                content = Path(file_path).read_text().strip()
+                # Replace argv with file content + any remaining args
+                remaining_args = sys.argv[1:]  # After flag removal
+                sys.argv = ['tj.py', content] + remaining_args
+            except FileNotFoundError:
+                print(f"Error: File not found: {file_path}", file=sys.stderr)
+                sys.exit(1)
+            except Exception as e:
+                print(f"Error reading file: {e}", file=sys.stderr)
+                sys.exit(1)
 
         # Auto-backup on every command execution (skip if using non-default db)
         if not any(arg.startswith('--db=') for arg in original_command):

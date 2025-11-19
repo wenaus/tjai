@@ -202,21 +202,29 @@ def handle_move(args) -> None:
 def handle_show(args) -> None:
     """Handle showing entry details."""
     try:
-        entry_num = int(args.entry_num)
+        entry_identifier = args.entry_num  # Can be number or @name
 
-        entry = get_entry_from_recent_list(entry_num)
+        entry = get_entry_from_recent_list(entry_identifier)
         if not entry:
-            print(f"Error: Entry {entry_num} not found in recent list.", file=sys.stderr)
+            print(f"Error: Entry {entry_identifier} not found.", file=sys.stderr)
             return
 
         time_str = format_time_dashboard(entry.timestamp_created)
 
-        print(f"Entry {entry_num}:")
+        # Display identifier (name or number)
+        display_id = f"@{entry.name}" if entry.name else entry_identifier
+        print(f"Entry {display_id}:")
         print(f"  Content: {entry.content}")
         print(f"  Created: {time_str}")
         print(f"  Type: {entry.kind}")
         if entry.context:
             print(f"  Context: {entry.context}")
+        if entry.name:
+            print(f"  Name: @{entry.name}")
+        if entry.priority is not None:
+            print(f"  Priority: {entry.priority}")
+        if entry.status:
+            print(f"  Status: {entry.status}")
 
         # Show tags
         repository = RepositoryFactory.get_repository()

@@ -2,6 +2,7 @@
 
 import sys
 from datetime import datetime, date, time, timedelta
+from zoneinfo import ZoneInfo
 from typing import Tuple, List, Optional
 
 from tj.timezone_manager import get_current_timezone
@@ -10,16 +11,12 @@ from tj.timezone_manager import get_current_timezone
 def get_timezone_object():
     """Get timezone object for current user timezone.
 
-    Returns pytz timezone if available, otherwise None (uses local time).
+    Returns ZoneInfo timezone object, or None on error (uses local time).
     """
     tz_name = get_current_timezone()
 
     try:
-        import pytz
-        return pytz.timezone(tz_name)
-    except ImportError:
-        # Fallback to local timezone if pytz not available
-        return None
+        return ZoneInfo(tz_name)
     except Exception:
         # Invalid timezone name, fallback to local
         return None
@@ -123,7 +120,7 @@ def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
             hour, minute = 0, 0
 
         if tz:
-            dt = tz.localize(datetime.combine(event_date, time(hour, minute)))
+            dt = datetime.combine(event_date, time(hour, minute, tzinfo=tz))
         else:
             dt = datetime.combine(event_date, time(hour, minute))
 
@@ -145,7 +142,7 @@ def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
             hour, minute = 0, 0
 
         if tz:
-            dt = tz.localize(datetime.combine(tomorrow, time(hour, minute)))
+            dt = datetime.combine(tomorrow, time(hour, minute, tzinfo=tz))
         else:
             dt = datetime.combine(tomorrow, time(hour, minute))
 
@@ -158,7 +155,7 @@ def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
             today = now.date()
 
             if tz:
-                dt = tz.localize(datetime.combine(today, time(hour, minute)))
+                dt = datetime.combine(today, time(hour, minute, tzinfo=tz))
             else:
                 dt = datetime.combine(today, time(hour, minute))
 
@@ -188,7 +185,7 @@ def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
                 hour, minute = 0, 0
 
             if tz:
-                dt = tz.localize(datetime.combine(event_date, time(hour, minute)))
+                dt = datetime.combine(event_date, time(hour, minute, tzinfo=tz))
             else:
                 dt = datetime.combine(event_date, time(hour, minute))
 
@@ -217,7 +214,7 @@ def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
                 hour, minute = 0, 0
 
             if tz:
-                dt = tz.localize(datetime.combine(event_date, time(hour, minute)))
+                dt = datetime.combine(event_date, time(hour, minute, tzinfo=tz))
             else:
                 dt = datetime.combine(event_date, time(hour, minute))
 

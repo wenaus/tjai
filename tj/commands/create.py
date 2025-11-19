@@ -61,6 +61,39 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
             print("Error: Entry content cannot be empty.", file=sys.stderr)
             return
 
+        # Step 2.5: Extract @name, p=, s= from content
+        entry_name = None
+        entry_priority = None
+        entry_status = None
+
+        # Extract @name (must start with letter, then alphanumeric/underscore/dash)
+        name_pattern = re.compile(r'@([a-zA-Z][a-zA-Z0-9_-]*)')
+        name_match = name_pattern.search(content)
+        if name_match:
+            entry_name = name_match.group(1)
+            content = name_pattern.sub('', content, count=1)  # Remove only first occurrence
+
+        # Extract p=N (priority)
+        priority_pattern = re.compile(r'\bp=(\d+)\b')
+        priority_match = priority_pattern.search(content)
+        if priority_match:
+            entry_priority = int(priority_match.group(1))
+            content = priority_pattern.sub('', content)
+
+        # Extract s=value (status)
+        status_pattern = re.compile(r'\bs=(\w+)\b')
+        status_match = status_pattern.search(content)
+        if status_match:
+            entry_status = status_match.group(1)
+            content = status_pattern.sub('', content)
+
+        # Clean up extra whitespace after metadata removal
+        content = ' '.join(content.split()).strip()
+
+        if not content:
+            print("Error: Entry content cannot be empty after metadata extraction.", file=sys.stderr)
+            return
+
         # Step 3: Extract links from content (//url and [title](url))
         links = []
 
@@ -173,6 +206,9 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
             timestamp_modified=now,
             context=state.get("current_context"),
             is_dirty=True,
+            name=entry_name,
+            priority=entry_priority,
+            status=entry_status,
             data=data if data else None
         )
         

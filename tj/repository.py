@@ -17,6 +17,9 @@ class Entry:
     parent_id: Optional[str] = None
     context: Optional[str] = None
     is_dirty: bool = True
+    name: Optional[str] = None
+    priority: Optional[int] = None
+    status: Optional[str] = None
     data: Optional[Dict[str, Any]] = None
 
 
@@ -75,10 +78,12 @@ class EntryRepository(ABC):
         pass
     
     @abstractmethod
-    def query_entries(self, 
+    def query_entries(self,
                      kind: Optional[str] = None,
                      context: Optional[str] = None,
                      tag: Optional[str] = None,
+                     priority: Optional[int] = None,
+                     status: Optional[str] = None,
                      limit: Optional[int] = None) -> List[Entry]:
         """Query entries with optional filters."""
         pass
