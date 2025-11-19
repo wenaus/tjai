@@ -3,7 +3,7 @@
 import sys
 from datetime import datetime, timezone
 
-from tj.colors import colorize_content, colorize_context
+from tj.colors import colorize_content, colorize_context, colorize_timestamp
 from tj.commands.common import get_entry_from_recent_list
 from tj.repository_factory import RepositoryFactory
 from tj.timezone_manager import format_time_dashboard
@@ -150,7 +150,7 @@ def handle_tag_command(args) -> None:
 
             for i, entry in enumerate(sorted_entries, 1):
                 content_colored = colorize_content(entry.content)
-                time_str = format_time_dashboard(entry.timestamp_created)
+                time_str = colorize_timestamp(format_time_dashboard(entry.timestamp_created))
 
                 context_str = f" {colorize_context(entry.context)}" if entry.context else ""
                 if entry.kind == 'todo':

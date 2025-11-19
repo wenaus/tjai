@@ -49,9 +49,9 @@ def get_entry_from_recent_list(entry_identifier) -> Optional[Entry]:
 def format_entry_for_display(entry) -> str:
     """Format an entry for display with timestamp, content, and context."""
     from tj.timezone_manager import format_time_dashboard
-    from tj.colors import colorize_content, colorize_context
+    from tj.colors import colorize_content, colorize_context, colorize_timestamp
 
-    time_str = format_time_dashboard(entry.timestamp_created)
+    time_str = colorize_timestamp(format_time_dashboard(entry.timestamp_created))
     content_colored = colorize_content(entry.content)
     context_str = f" {colorize_context(entry.context)}" if entry.context else ""
 

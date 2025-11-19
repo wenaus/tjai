@@ -5,6 +5,7 @@ import re
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 
+from tj.colors import colorize_timestamp
 from tj.repository_factory import RepositoryFactory
 from tj.commands.common import format_entry_for_display
 from tj.timezone_manager import get_current_timezone
@@ -175,12 +176,12 @@ def handle_calendar_view(args) -> None:
         # Print header based on timeframe
         if unit == 'w':
             week_num = start_dt.isocalendar()[1]
-            print(f"{start_dt.strftime('%Y%m%d')} Week {week_num}")
+            print(colorize_timestamp(f"{start_dt.strftime('%Y%m%d')} Week {week_num}"))
         elif unit == 'm':
-            print(f"{start_dt.strftime('%Y%m')} {start_dt.strftime('%B %Y')}")
+            print(colorize_timestamp(f"{start_dt.strftime('%Y%m')} {start_dt.strftime('%B %Y')}"))
         else:
             # Day view - just show the day
-            print(f"{start_dt.strftime('%a %b %d, %Y')}")
+            print(colorize_timestamp(start_dt.strftime('%a %b %d, %Y')))
 
         # Print entries grouped by day
         for date_key in sorted_dates:
@@ -191,12 +192,10 @@ def handle_calendar_view(args) -> None:
             # Print day header (except for single day view)
             if unit != 't':
                 day_name = entries[0][1].strftime('%a %b %d')
-                print(day_name)
+                print(f"  {colorize_timestamp(day_name)}")
 
             # Print entries
             for event_ts, event_dt, entry in entries:
-                time_str = event_dt.strftime('%H:%M')
-
                 # Format entry with links
                 display_text = entry.content
                 if entry.data and 'links' in entry.data:
@@ -211,12 +210,38 @@ def handle_calendar_view(args) -> None:
                                 link_strs.append(link['url'])
                         display_text = f"{display_text} {' '.join(link_strs)}"
 
-                if unit == 't':
-                    # Single day: show time + content
-                    print(f"  {time_str} {display_text}")
+                # Handle multi-line content
+                lines = display_text.split('\n')
+
+                # Show time if not midnight
+                if event_dt.hour != 0 or event_dt.minute != 0:
+                    time_str = colorize_timestamp(event_dt.strftime('%H:%M'))
+                    if unit == 't':
+                        first_indent = "  "
+                        subsequent_indent = "    "
+                    else:
+                        first_indent = "    "
+                        subsequent_indent = "      "
+
+                    # Print first line with time
+                    print(f"{first_indent}{time_str} {lines[0]}")
+                    # Print subsequent lines with extra indent
+                    for line in lines[1:]:
+                        print(f"{subsequent_indent}{line}")
                 else:
-                    # Week/month: indent under day
-                    print(f"  {display_text}")
+                    # Midnight = all-day event, no time shown
+                    if unit == 't':
+                        first_indent = "  "
+                        subsequent_indent = "    "
+                    else:
+                        first_indent = "    "
+                        subsequent_indent = "      "
+
+                    # Print first line
+                    print(f"{first_indent}{lines[0]}")
+                    # Print subsequent lines with extra indent
+                    for line in lines[1:]:
+                        print(f"{subsequent_indent}{line}")
 
     except Exception as e:
         print(f"Calendar view error: {e}", file=sys.stderr)

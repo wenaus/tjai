@@ -2,7 +2,7 @@
 
 import sys
 
-from tj.colors import colorize_context
+from tj.colors import colorize_context, colorize_timestamp
 from tj.commands.common import get_entry_from_recent_list
 from tj.repository_factory import RepositoryFactory
 from tj.timezone_manager import format_time_dashboard
@@ -62,7 +62,7 @@ def handle_delete_entry(entry_num: int) -> None:
             return
 
         # Show entry and ask for confirmation
-        time_str = format_time_dashboard(entry.timestamp_created)
+        time_str = colorize_timestamp(format_time_dashboard(entry.timestamp_created))
 
         context_str = f" {colorize_context(entry.context)}" if entry.context else ""
         response = input(f"Delete: {time_str} {entry.content}{context_str} [y/N]: ").strip().lower()

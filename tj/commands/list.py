@@ -3,7 +3,7 @@
 import sys
 from datetime import datetime, timedelta
 
-from tj.colors import colorize_content, colorize_context
+from tj.colors import colorize_content, colorize_context, colorize_kind, colorize_timestamp
 from tj.repository_factory import RepositoryFactory
 from tj.state import get_state, save_state
 from tj.timezone_manager import format_time_dashboard
@@ -204,7 +204,7 @@ def _list_entries_with_filters(repository, filters):
     print(f"{len(active_entries)} entries for {query_desc}:")
     for i, entry in enumerate(active_entries, 1):
         # Format creation timestamp uniformly for all entries
-        time_str = format_time_dashboard(entry.timestamp_created)
+        time_str = colorize_timestamp(format_time_dashboard(entry.timestamp_created))
         content_colored = colorize_content(entry.content)
 
         # Show type prefix for non-memory entries (use short codes)
@@ -216,7 +216,7 @@ def _list_entries_with_filters(repository, filters):
             'bookmark': 'b'
         }
         if entry.kind in kind_display:
-            type_prefix = f"[{kind_display[entry.kind]}] "
+            type_prefix = f"{colorize_kind(kind_display[entry.kind])} "
         else:
             type_prefix = ""
 
@@ -229,10 +229,10 @@ def _list_entries_with_filters(repository, filters):
             event_dt = datetime.fromtimestamp(entry.data['event_date'])
             # If time is midnight (00:00), show just date as YYYYMMDD
             if event_dt.hour == 0 and event_dt.minute == 0:
-                event_date_str = f"{event_dt.strftime('%Y%m%d')} "
+                event_date_str = f"{colorize_timestamp(event_dt.strftime('%Y%m%d'))} "
             else:
                 # Show full date and time as YYYYMMDD/HH:MM
-                event_date_str = f"{event_dt.strftime('%Y%m%d/%H:%M')} "
+                event_date_str = f"{colorize_timestamp(event_dt.strftime('%Y%m%d/%H:%M'))} "
 
         print(f"{i:2d}  {time_str} {type_prefix}{context_str}{event_date_str}{content_colored}")
 
@@ -292,7 +292,7 @@ def handle_list_all(args) -> None:
 
         for i, entry in enumerate(sorted_entries, 1):
             content_colored = colorize_content(entry.content)
-            time_str = format_time_dashboard(entry.timestamp_created)
+            time_str = colorize_timestamp(format_time_dashboard(entry.timestamp_created))
 
             context_str = f" {colorize_context(entry.context)}" if entry.context else ""
             if entry.kind == 'todo':

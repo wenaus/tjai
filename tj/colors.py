@@ -1,28 +1,43 @@
 """Simple ANSI color utilities for tj."""
 
 # ANSI color codes (optimized for dark mode)
-CYAN = '\033[96m'  # Bright cyan for URLs
-LIGHT_GREEN = '\033[92m'  # Light green for tags
-LIGHT_MAGENTA = '\033[38;5;141m'  # Light purple for contexts (256-color mode)
+MEDIUM_BLUE = '\033[38;5;111m'  # Medium blue for URLs
+BRIGHT_CYAN_BLUE = '\033[38;5;81m'  # Bright cyan-blue for markdown link titles
+LIGHT_MINT_GREEN = '\033[38;5;156m'  # Light mint green for tags
+LIGHT_MAUVE = '\033[38;5;183m'  # Very light mauve for contexts
+LIGHT_GOLD = '\033[38;5;221m'  # Light gold for kind brackets
+LAVENDER_PINK = '\033[38;5;189m'  # Lavender pink for dates
 RESET = '\033[0m'
 
 def colorize_url(text: str) -> str:
-    """Colorize URLs in text with bright cyan."""
+    """Colorize URLs and markdown links."""
     import re
-    # Find URLs and colorize them
+    # First handle markdown links [title](url) - colorize title and url separately
+    md_link_pattern = r'\[([^\]]+)\]\((https?://[^\)]+)\)'
+    text = re.sub(md_link_pattern, f'{BRIGHT_CYAN_BLUE}[\\1]{RESET}({MEDIUM_BLUE}\\2{RESET})', text)
+    # Then handle bare URLs
     url_pattern = r'https?://[^\s]+'
-    return re.sub(url_pattern, f'{CYAN}\\g<0>{RESET}', text)
+    text = re.sub(url_pattern, f'{MEDIUM_BLUE}\\g<0>{RESET}', text)
+    return text
 
 def colorize_tags(text: str) -> str:
-    """Colorize :tags in text with light green."""
+    """Colorize :tags in text with light mint green."""
     import re
-    # Find :tag patterns and colorize them
-    tag_pattern = r':[a-zA-Z0-9_-]+'
-    return re.sub(tag_pattern, f'{LIGHT_GREEN}\\g<0>{RESET}', text)
+    # Find :tag patterns and colorize them (must contain at least one letter)
+    tag_pattern = r':[a-zA-Z][a-zA-Z0-9_-]*'
+    return re.sub(tag_pattern, f'{LIGHT_MINT_GREEN}\\g<0>{RESET}', text)
 
 def colorize_context(context: str) -> str:
-    """Colorize context with light purple."""
-    return f'{LIGHT_MAGENTA}={context}{RESET}'
+    """Colorize context with very light mauve."""
+    return f'{LIGHT_MAUVE}={context}{RESET}'
+
+def colorize_kind(kind: str) -> str:
+    """Colorize kind brackets with light gold."""
+    return f'{LIGHT_GOLD}[{kind}]{RESET}'
+
+def colorize_timestamp(timestamp: str) -> str:
+    """Colorize timestamp with lavender pink."""
+    return f'{LAVENDER_PINK}{timestamp}{RESET}'
 
 def colorize_content(text: str) -> str:
     """Apply all content colorization."""

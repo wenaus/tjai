@@ -95,15 +95,15 @@ def format_time_in_timezone(timestamp: float, timezone: str) -> str:
 
 
 def format_time_dashboard(timestamp: float) -> str:
-    """Format timestamp in dashboard style (DD/HH:MM)."""
+    """Format timestamp in dashboard style (MM/DD/HH:MM)."""
     try:
         current_tz = get_current_timezone()
         tz = ZoneInfo(current_tz)
         entry_time = datetime.fromtimestamp(timestamp, tz=tz)
-        return entry_time.strftime("%d/%H:%M")
+        return entry_time.strftime("%m/%d/%H:%M")
     except Exception:
         # Fallback on any error
-        return "--/--:--"
+        return "--/--/--:--"
 
 
 def get_timezone_info() -> Dict[str, str]:

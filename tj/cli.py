@@ -376,10 +376,10 @@ def show_status() -> None:
         if today_entries:
             print("Recent:")
             from tj.timezone_manager import format_time_dashboard
-            from tj.colors import colorize_content
+            from tj.colors import colorize_content, colorize_timestamp
             for i, entry in enumerate(today_entries, 1):
                 content_colored = colorize_content(entry.content)
-                time_str = format_time_dashboard(entry.timestamp_created)
+                time_str = colorize_timestamp(format_time_dashboard(entry.timestamp_created))
                 
                 if entry.kind in ['memory', 'bookmark']:
                     print(f"{i:2d}  {time_str} {content_colored}")
