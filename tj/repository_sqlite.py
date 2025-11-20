@@ -381,6 +381,10 @@ class SQLiteRepository(EntryRepository):
     
     def create_context(self, context: 'Context') -> bool:
         """Create a new context entity."""
+        # Validate context name - reject names containing '='
+        if '=' in context.name:
+            raise DatabaseError(f"Invalid context name '{context.name}': context names cannot contain '='")
+
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
