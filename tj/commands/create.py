@@ -70,6 +70,11 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
             print("Error: Entry content cannot be empty.", file=sys.stderr)
             return
 
+        # Step 2.3: Convert word=url to [word](url) markdown format
+        # Match pattern: word (alphanumeric/underscore/dash) followed by = and a URL
+        word_url_pattern = re.compile(r'\b([a-zA-Z][a-zA-Z0-9_-]*)=(https?://[^\s]+)')
+        content = word_url_pattern.sub(r'[\1](\2)', content)
+
         # Step 2.5: Extract @name, p=, s= from content
         entry_name = None
         entry_priority = None
