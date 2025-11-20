@@ -73,11 +73,13 @@ def set_last_backup_time(timestamp: float) -> None:
 
 def needs_backup() -> bool:
     """Check if a backup is needed based on the interval."""
+    from datetime import timezone as tz
+
     last_backup = get_last_backup_time()
     if last_backup is None:
         return True
 
-    now = datetime.now().timestamp()
+    now = datetime.now(tz.utc).timestamp()
     hours_since_backup = (now - last_backup) / 3600
     backup_interval = get_backup_interval_hours()
 
@@ -93,11 +95,13 @@ def cleanup_old_backups() -> None:
     - After 14 days: Keep only one backup per week (configurable via backup_retention_days)
     """
     try:
+        from datetime import timezone as tz
+
         backups = list_backups()
         if len(backups) <= 1:
             return  # Nothing to clean up
 
-        now = datetime.now()
+        now = datetime.now(tz.utc)
         today = now.date()
 
         # Get retention days from config
@@ -163,8 +167,9 @@ def create_backup() -> bool:
         # Get configured backup directory
         backup_dir = get_backup_dir()
 
-        # Generate backup filename with date and hour (YYYYMMDD_HH format)
-        datetime_str = datetime.now().strftime("%Y%m%d_%H")
+        # Generate backup filename with date and hour in UTC (YYYYMMDD_HH format)
+        from datetime import timezone as tz
+        datetime_str = datetime.now(tz.utc).strftime("%Y%m%d_%H")
         backup_filename = f"tjai_backup_{datetime_str}.db"
         backup_path = backup_dir / backup_filename
         
@@ -174,9 +179,9 @@ def create_backup() -> bool:
         db_path = get_configured_db_path()
         if db_path.exists():
             shutil.copy2(db_path, backup_path)
-            
+
             # Update last backup time
-            now = datetime.now().timestamp()
+            now = datetime.now(tz.utc).timestamp()
             set_last_backup_time(now)
             
             # Clean up old backups after successful backup
@@ -206,10 +211,12 @@ def auto_backup() -> None:
 
 def list_backups() -> list:
     """List available backup files."""
+    from datetime import timezone as tz
+
     backup_dir = get_backup_dir()
     if not backup_dir.exists():
         return []
-    
+
     backups = []
     for backup_file in backup_dir.glob("tjai_backup_*.db"):
         stat = backup_file.stat()
@@ -217,9 +224,9 @@ def list_backups() -> list:
             'filename': backup_file.name,
             'path': backup_file,
             'size': stat.st_size,
-            'modified': datetime.fromtimestamp(stat.st_mtime)
+            'modified': datetime.fromtimestamp(stat.st_mtime, tz=tz.utc)
         })
-    
+
     # Sort by modification time, newest first
     backups.sort(key=lambda x: x['modified'], reverse=True)
     return backups
@@ -235,10 +242,12 @@ def restore_backup(backup_filename: str) -> bool:
         return False
     
     try:
+        from datetime import timezone as tz
+
         # Create a backup of current database before restoring
         db_path = get_configured_db_path()
         backup_dir = get_backup_dir()
-        current_backup = backup_dir / f"pre_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+        current_backup = backup_dir / f"pre_restore_{datetime.now(tz.utc).strftime('%Y%m%d_%H%M%S')}.db"
         if db_path.exists():
             shutil.copy2(db_path, current_backup)
             print(f"Current database backed up to: {current_backup.name}")
