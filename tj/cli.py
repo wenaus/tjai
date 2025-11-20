@@ -92,7 +92,7 @@ def handle_creation_with_at(args, entry_type_override: Optional[str] = None):
 def create_parser() -> argparse.ArgumentParser:
     """Create and configure the argument parser."""
     parser = argparse.ArgumentParser(
-        description="tj - Your Personal AI Memory Aid.",
+        description="tj - A memory-augmenting knowledge DB and me descriptor",
         add_help=False
     )
 

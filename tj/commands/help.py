@@ -8,7 +8,7 @@ def handle_help(args) -> None:
     from tj.state import display_context
     display_context()
 
-    help_text = """tj - Personal AI Memory Aid
+    help_text = """tj - A memory-augmenting knowledge DB and me descriptor
 
 STATUS                          LIST/FILTER
 tj              Status          tj l                     All entries
