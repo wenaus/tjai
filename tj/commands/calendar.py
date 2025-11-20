@@ -5,7 +5,7 @@ import re
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 
-from tj.colors import colorize_timestamp
+from tj.colors import colorize_timestamp, colorize_content
 from tj.repository_factory import RepositoryFactory
 from tj.commands.common import format_entry_for_display
 from tj.timezone_manager import get_current_timezone
@@ -17,6 +17,7 @@ def parse_timeframe(timeframe: Optional[str]) -> Tuple[str, float, float]:
 
     Supports:
     - None -> this week (Monday-Sunday), same as 'w'
+    - N (number) -> next N days from today (N>0) or last N days (N<0)
     - 't' -> today only
     - 'w' -> this week (Monday-Sunday)
     - 'm' -> this month
@@ -31,15 +32,31 @@ def parse_timeframe(timeframe: Optional[str]) -> Tuple[str, float, float]:
     except Exception:
         now = datetime.now()
 
+    # Default (no arg) shows configured number of days (default 30)
+    if not timeframe:
+        from tj.config import get_calendar_default_days
+        timeframe = str(get_calendar_default_days())
+
+    # Check for bare number (e.g., "30" or "-30")
+    if timeframe.isdigit() or (timeframe.startswith('-') and timeframe[1:].isdigit()):
+        days = int(timeframe)
+        if days > 0:
+            # Next N days
+            start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = start + timedelta(days=days)
+            desc = f"Next {days} days" if days > 1 else "Next day"
+        else:
+            # Last N days (days is negative)
+            end = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+            start = end + timedelta(days=days)
+            desc = f"Last {abs(days)} days" if abs(days) > 1 else "Yesterday"
+        return desc, start.timestamp(), end.timestamp()
+
     # Explicit 't' shows only today
     if timeframe == 't':
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         end = start + timedelta(days=1)
         return "Today", start.timestamp(), end.timestamp()
-
-    # Default (no arg) shows this week (Monday-Sunday), same as 'w'
-    if not timeframe:
-        timeframe = 'w'
 
     # Parse offset if present
     offset_pattern = re.match(r'^([twm])([+-]\d+)$', timeframe)
@@ -241,19 +258,8 @@ def handle_calendar_view(args) -> None:
 
             # Print entries
             for event_ts, event_dt, entry in entries:
-                # Format entry with links
-                display_text = entry.content
-                if entry.data and 'links' in entry.data:
-                    links = entry.data['links']
-                    if links:
-                        # Show links in [title](url) format
-                        link_strs = []
-                        for link in links:
-                            if link.get('title'):
-                                link_strs.append(f"[{link['title']}]({link['url']})")
-                            else:
-                                link_strs.append(link['url'])
-                        display_text = f"{display_text} {' '.join(link_strs)}"
+                # Colorize content (converts markdown links to clickable terminal links)
+                display_text = colorize_content(entry.content)
 
                 # Handle multi-line content
                 lines = display_text.split('\n')

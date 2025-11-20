@@ -176,13 +176,13 @@ To set up your development environment and run tests:
     **Note:** No external dependencies required - uses Python standard library only.
 
 2.  **Set up `tj` Function (Recommended):**
-    For convenience, add this function to your shell's startup file (e.g., `~/.bashrc` or `~/.zshrc`):
+    For convenience, add this function to `~/.bashrc`:
 
     ```bash
     tj() { ~/github/tjrepo/tjai/tj.py "$*"; }
     ```
 
-    Then `source ~/.bashrc` (or `source ~/.zshrc`).
+    Then `source ~/.bashrc`.
 
     This allows you to use natural commands without quoting:
     - `tj my memory entry`

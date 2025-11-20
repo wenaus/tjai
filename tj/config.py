@@ -13,7 +13,8 @@ DEFAULT_CONFIG = {
     "backup_path": "~/Dropbox/Current/tjai_backups",
     "backup_interval_hours": 1,
     "recent_entries_hours": 24,
-    "backup_retention_days": 14
+    "backup_retention_days": 14,
+    "calendar_default_days": 30
 }
 
 
@@ -117,6 +118,12 @@ def get_backup_retention_days() -> int:
     """Get the backup retention period in days."""
     config = get_config()
     return config.get("backup_retention_days", DEFAULT_CONFIG["backup_retention_days"])
+
+
+def get_calendar_default_days() -> int:
+    """Get the default number of days to show in calendar view."""
+    config = get_config()
+    return config.get("calendar_default_days", DEFAULT_CONFIG["calendar_default_days"])
 
 
 def handle_config_command(args) -> None:

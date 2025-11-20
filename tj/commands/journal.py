@@ -206,6 +206,106 @@ def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
 
         return dt.timestamp(), remaining
 
+    # Check for slash-formatted dates FIRST (mm/dd, mm/dd/HH:MM, yyyy/mm/dd, yyyy/mm/dd/HH:MM)
+    # Must come before time-only check since mm/dd/HH:MM contains ':'
+    if '/' in first and not first.startswith('http'):
+        parts = first.split('/')
+        try:
+            if len(parts) == 2:
+                # Could be mm/dd or yyyy/mm
+                if len(parts[0]) == 4:
+                    # yyyy/mm format (date without day - invalid)
+                    pass  # Fall through to next check
+                else:
+                    # mm/dd format
+                    month = int(parts[0])
+                    day = int(parts[1])
+                    year = now.year
+                    event_date = date(year, month, day)
+
+                    # Check for time as next arg
+                    if remaining and (':' in remaining[0] or remaining[0].lower().endswith(('am', 'pm'))):
+                        try:
+                            hour, minute = parse_time(remaining[0])
+                            remaining = remaining[1:]
+                        except ValueError as e:
+                            print(f"Warning: {e}, using midnight", file=sys.stderr)
+                            hour, minute = 0, 0
+                    else:
+                        hour, minute = 0, 0
+
+                    if tz:
+                        dt = datetime.combine(event_date, time(hour, minute, tzinfo=tz))
+                    else:
+                        dt = datetime.combine(event_date, time(hour, minute))
+
+                    return dt.timestamp(), remaining
+
+            elif len(parts) == 3:
+                # Could be mm/dd/HH:MM or yyyy/mm/dd
+                if len(parts[0]) == 4:
+                    # yyyy/mm/dd format
+                    year = int(parts[0])
+                    month = int(parts[1])
+                    day = int(parts[2])
+                    event_date = date(year, month, day)
+
+                    # Check for time as next arg
+                    if remaining and (':' in remaining[0] or remaining[0].lower().endswith(('am', 'pm'))):
+                        try:
+                            hour, minute = parse_time(remaining[0])
+                            remaining = remaining[1:]
+                        except ValueError as e:
+                            print(f"Warning: {e}, using midnight", file=sys.stderr)
+                            hour, minute = 0, 0
+                    else:
+                        hour, minute = 0, 0
+                else:
+                    # mm/dd/HH:MM format
+                    month = int(parts[0])
+                    day = int(parts[1])
+                    year = now.year
+                    event_date = date(year, month, day)
+
+                    # Parse time from third part
+                    try:
+                        hour, minute = parse_time(parts[2])
+                    except ValueError as e:
+                        print(f"Warning: {e}, using midnight", file=sys.stderr)
+                        hour, minute = 0, 0
+
+                if tz:
+                    dt = datetime.combine(event_date, time(hour, minute, tzinfo=tz))
+                else:
+                    dt = datetime.combine(event_date, time(hour, minute))
+
+                return dt.timestamp(), remaining
+
+            elif len(parts) == 4:
+                # yyyy/mm/dd/HH:MM format
+                year = int(parts[0])
+                month = int(parts[1])
+                day = int(parts[2])
+                event_date = date(year, month, day)
+
+                # Parse time from fourth part
+                try:
+                    hour, minute = parse_time(parts[3])
+                except ValueError as e:
+                    print(f"Warning: {e}, using midnight", file=sys.stderr)
+                    hour, minute = 0, 0
+
+                if tz:
+                    dt = datetime.combine(event_date, time(hour, minute, tzinfo=tz))
+                else:
+                    dt = datetime.combine(event_date, time(hour, minute))
+
+                return dt.timestamp(), remaining
+
+        except (ValueError, IndexError):
+            # Not a valid date format, continue to next format check
+            pass
+
     # Check for time only (HH:MM or am/pm format)
     if ':' in first or first.lower().endswith(('am', 'pm')):
         try:

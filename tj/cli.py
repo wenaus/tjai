@@ -530,20 +530,73 @@ def handle_context_syntax(first_arg: str, remaining_args: list) -> None:
 
 def main() -> None:
     """Main function to parse arguments and dispatch commands."""
+    # Filter =context from sys.argv FIRST, before any command parsing
+    from tj.state import get_state, save_state
+
+    filtered_argv = [sys.argv[0]]  # Keep script name
+    context_arg = None
+    remaining_args = []
+
+    for arg in sys.argv[1:]:
+        if arg.startswith('='):
+            context_arg = arg
+            # Don't add to filtered_argv - extract it
+        else:
+            remaining_args.append(arg)
+            filtered_argv.append(arg)
+
+    # Handle context setting/clearing if present
+    if context_arg:
+        context_name = context_arg[1:]
+
+        # Check for metadata flags (-t, -d) - delegate to full handler
+        if '-t' in remaining_args or '-d' in remaining_args:
+            handle_context_syntax(context_arg, remaining_args)
+            return
+
+        state = get_state()
+
+        if context_name == '0':
+            # Clear context
+            state["current_context"] = None
+            save_state(state)
+        elif context_name:
+            # Set context (auto-create if doesn't exist)
+            state["current_context"] = context_name
+            save_state(state)
+
+            from tj.repository_factory import RepositoryFactory
+            from tj.repository import Context
+            from datetime import datetime, timezone
+
+            repository = RepositoryFactory.get_repository()
+            if not repository.get_context(context_name):
+                now = datetime.now(timezone.utc).timestamp()
+                new_context = Context(
+                    name=context_name,
+                    title=None,
+                    description=None,
+                    timestamp_created=now,
+                    timestamp_modified=now
+                )
+                repository.create_context(new_context)
+
+    # Update sys.argv with filtered version (context removed)
+    sys.argv = filtered_argv
+
     parser = create_parser()
 
     if len(sys.argv) == 1:
-        show_status()
+        # Only context arg, no other args
+        if context_arg:
+            from tj.state import display_context
+            display_context()
+        else:
+            show_status()
         return
 
     first_arg = sys.argv[1]
 
-    # Check for =context syntax (tj =work, tj =0, tj =work content)
-    if first_arg.startswith('='):
-        remaining_args = sys.argv[2:] if len(sys.argv) > 2 else []
-        handle_context_syntax(first_arg, remaining_args)
-        return
-    
     # Check if first argument is a small number (for numbered commands like '5 x')
     # Avoid treating dates (YYYYMMDD) as numbered commands
     if first_arg.isdigit() and len(first_arg) <= 3:

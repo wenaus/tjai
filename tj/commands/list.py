@@ -338,11 +338,11 @@ def _list_entries_with_filters(repository, filters):
                     minutes = (total_seconds % 3600) // 60
 
                     if hours > 0:
-                        time_str = f"{hours}h {minutes}m"
+                        countdown_str = f"{hours}h {minutes}m"
                     else:
-                        time_str = f"{minutes}m"
+                        countdown_str = f"{minutes}m"
 
-                    event_date_str += f"{TERRACOTTA}{BOLD}Today in {time_str}{RESET} "
+                    event_date_str += f"{TERRACOTTA}{BOLD}Today in {countdown_str}{RESET} "
 
         # Show context after event date
         context_str = f"{colorize_context(entry.context)} " if entry.context else ""

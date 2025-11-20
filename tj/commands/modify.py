@@ -9,6 +9,74 @@ from tj.repository_factory import RepositoryFactory
 from tj.timezone_manager import format_time_dashboard
 
 
+def _parse_metadata_from_content(content: str, entry):
+    """Extract metadata from content and return update fields.
+
+    Args:
+        content: The content string to parse
+        entry: The existing entry (for defaults)
+
+    Returns:
+        Tuple of (cleaned_content, update_fields_dict, new_tags_set)
+    """
+    import re
+
+    # Extract @name (must be at start of content)
+    entry_name = entry.name  # Keep existing if not specified
+    name_pattern = re.compile(r'^@([a-zA-Z][a-zA-Z0-9_-]*)')
+    name_match = name_pattern.search(content)
+    if name_match:
+        entry_name = name_match.group(1)
+        content = name_pattern.sub('', content, count=1)
+
+    # Extract p=N (priority)
+    entry_priority = entry.priority  # Keep existing if not specified
+    priority_pattern = re.compile(r'\bp=(\d+)\b')
+    priority_match = priority_pattern.search(content)
+    if priority_match:
+        entry_priority = int(priority_match.group(1))
+        content = priority_pattern.sub('', content)
+
+    # Extract s=value (status)
+    entry_status = entry.status  # Keep existing if not specified
+    status_pattern = re.compile(r'\bs=(\w+)\b')
+    status_match = status_pattern.search(content)
+    if status_match:
+        entry_status = status_match.group(1)
+        content = status_pattern.sub('', content)
+
+    # Extract tags
+    new_tags = set()
+    for line in content.split('\n'):
+        for part in line.split():
+            if part.startswith(':'):
+                tag = part[1:]
+                if tag:
+                    new_tags.add(tag)
+
+    # For calendar entries, re-parse event date from content
+    entry_data = entry.data
+    if entry.kind == 'calendar':
+        from tj.commands.journal import parse_date_spec
+        # Parse date from content
+        content_words = content.strip().split()
+        event_timestamp, remaining_words = parse_date_spec(content_words)
+        # Rebuild content without the date/time prefix
+        content = ' '.join(remaining_words) if remaining_words else content
+        # Update entry.data with new event_date - MUST COPY to trigger DB update
+        entry_data = dict(entry.data) if entry.data else {}
+        entry_data['event_date'] = event_timestamp
+
+    update_fields = {
+        'name': entry_name,
+        'priority': entry_priority,
+        'status': entry_status,
+        'data': entry_data
+    }
+
+    return content.strip(), update_fields, new_tags
+
+
 def handle_add_subnote(args) -> None:
     """Handle adding a sub-note to an entry."""
     from tj.state import display_context
@@ -92,24 +160,21 @@ def _edit_entry_in_editor(entry, entry_identifier="entry"):
         print("Error: Entry content cannot be empty.", file=sys.stderr)
         return False
 
-    # Extract tags from new content
-    new_tags = set()
-    for line in final_content.split('\n'):
-        for part in line.split():
-            if part.startswith(':'):
-                tag = part[1:]
-                if tag:
-                    new_tags.add(tag)
+    # Parse metadata from edited content
+    cleaned_content, metadata_fields, new_tags = _parse_metadata_from_content(final_content, entry)
+
+    # Build update fields
+    update_fields = {
+        'content': cleaned_content,
+        'context': new_context,
+        'timestamp_modified': datetime.now(timezone.utc).timestamp(),
+        'is_dirty': True
+    }
+    update_fields.update(metadata_fields)
 
     # Update entry
     repository = RepositoryFactory.get_repository()
-    success = repository.update_entry(
-        entry.id,
-        content=final_content,
-        context=new_context,
-        timestamp_modified=datetime.now(timezone.utc).timestamp(),
-        is_dirty=True
-    )
+    success = repository.update_entry(entry.id, **update_fields)
 
     if not success:
         print("Error: Failed to update entry.", file=sys.stderr)
@@ -137,7 +202,7 @@ def handle_edit(args) -> None:
     - tj e <n|@name> → edit entry <n> or @name in editor
     - tj e <n|@name> text → replace entry content with text (requires confirmation)
     """
-    from tj.commands.editor import handle_editor_create, handle_editor_edit
+    from tj.commands.editor import handle_editor_create
     from tj.state import display_context
     from tj.commands.common import extract_context_from_args
 
@@ -221,15 +286,27 @@ def handle_edit(args) -> None:
                     print("Edit cancelled.")
                     return
 
+                # Parse metadata from new content
+                cleaned_content, metadata_fields, new_tags = _parse_metadata_from_content(new_text, entry)
+
+                # Build update fields
+                update_fields = {
+                    'content': cleaned_content,
+                    'timestamp_modified': datetime.now(timezone.utc).timestamp(),
+                    'is_dirty': True
+                }
+                update_fields.update(metadata_fields)
+
                 repository = RepositoryFactory.get_repository()
-                success = repository.update_entry(
-                    entry.id,
-                    content=new_text,
-                    timestamp_modified=datetime.now(timezone.utc).timestamp(),
-                    is_dirty=True
-                )
+                success = repository.update_entry(entry.id, **update_fields)
 
                 if success:
+                    # Update tags
+                    existing_tags = set(repository.get_tags(entry.id))
+                    for tag in new_tags - existing_tags:
+                        repository.add_tag(entry.id, tag)
+                    for tag in existing_tags - new_tags:
+                        repository.remove_tag(entry.id, tag)
                     print("Entry updated successfully.")
                 else:
                     print("Error: Failed to update entry.", file=sys.stderr)
@@ -244,7 +321,11 @@ def handle_edit(args) -> None:
 
     # Case 2: Entry number but no text → edit in editor
     if not args.text:
-        handle_editor_edit(entry_num)
+        entry = get_entry_from_recent_list(entry_num)
+        if not entry:
+            print(f"Error: Entry {entry_num} not found in recent list.", file=sys.stderr)
+            return
+        _edit_entry_in_editor(entry, str(entry_num))
         return
 
     # Case 3: Entry number + text → command-line edit with confirmation
@@ -265,16 +346,28 @@ def handle_edit(args) -> None:
         print("Edit cancelled.")
         return
 
+    # Parse metadata from new content
+    cleaned_content, metadata_fields, new_tags = _parse_metadata_from_content(new_text, entry)
+
+    # Build update fields
+    update_fields = {
+        'content': cleaned_content,
+        'timestamp_modified': datetime.now(timezone.utc).timestamp(),
+        'is_dirty': True
+    }
+    update_fields.update(metadata_fields)
+
     # Update entry
     repository = RepositoryFactory.get_repository()
-    success = repository.update_entry(
-        entry.id,
-        content=new_text,
-        timestamp_modified=datetime.now(timezone.utc).timestamp(),
-        is_dirty=True
-    )
+    success = repository.update_entry(entry.id, **update_fields)
 
     if success:
+        # Update tags
+        existing_tags = set(repository.get_tags(entry.id))
+        for tag in new_tags - existing_tags:
+            repository.add_tag(entry.id, tag)
+        for tag in existing_tags - new_tags:
+            repository.remove_tag(entry.id, tag)
         print("Entry updated successfully.")
     else:
         print("Error: Failed to update entry.", file=sys.stderr)
