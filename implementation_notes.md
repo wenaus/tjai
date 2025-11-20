@@ -4,19 +4,53 @@ Follow these guidelines in app design and implementation. CAVEAT: these are huma
 
 ## Purposes
 
-I want a LLM to act as a companion and memory aid in all things, and I want a gatherer and provider of information about me to LLMs so they can serve as a knowledgeable companion. Compensate for my forgetful brain. Be aware of everything I do and keep learning, and not forgetting, about me. Such an app seems not to exist, amazingly, since every human will want one. So I will implement myself. An ensemble of tools to marshal data and make AIs knowledgeable about different aspects of my life and interests. A CLI tool to enter and retrieve information. Server side services for DB with REST API, web UI, vector DB, MCP and other AI interfacing services. My own personal pod and information wrangler, and its connections to AIs.
+I want a LLM to act as a companion and memory aid in all things, and I want a gatherer and provider of information about me to LLMs so they can serve as a knowledgeable companion. Compensate for my forgetful brain. Be aware of everything I do and keep learning, and not forgetting, about me. Such an app seems not to exist, amazingly, since every human will want one. So I will implement myself. An ensemble of tools to marshal data and make AIs knowledgeable about different aspects of my life and interests. A CLI tool to enter and retrieve information. Server side services for DB with REST API, web UI, vector DB, MCP and other AI interfacing services. My own personal pod and information wrangler, and its connections to AIs. **Currently: local SQLite app with Dropbox sync for multi-device access.**
 
 - memory aid for personal use.
 - logger of all things. everything timestamped.
-- source of info about me. Structured "me descriptor" to feed to AIs. The sort of info that tbl's pods should hold about me.
+- source of info about me. Structured "me descriptor" to feed to AIs.
 - maintain an easily extended profile of things I want AIs to know about me.
 - AI behavioral guidelines: instructions for how AI should interact, what to prioritize, guidelines to follow.
 - tracks the projects I work on, establishes project contexts.
 - functions as a personal dashboard, showing current context, todos, upcoming calendar items.
-- gathers, assimilates and presents to AIs my likes and tastes, by gathering music collection, books, film/tv, recipes, github repos, etc. 
-- maps. They are an obsession of mine. More particularly, places. A proper geotagged personal place database, with notes. Can be integrated with mapping apps later.
-- mobile friendly in a later version. Keep the architecture open to mobile clients later. Incorporate mobile enrichment now in the schema and design.
-- support lists. shopping lists, task lists, wish lists, bucket lists, etc. Lists as single entries with sub-items added via '+' syntax.
+- gathers, assimilates and presents to AIs my likes and tastes.
+- **Future:** maps, geotagged personal place database.
+- **Future:** mobile friendly version.
+- supports lists: shopping lists, task lists, wish lists, bucket lists, etc. Lists as single entries with sub-items added via '+' syntax.
+
+## Current Architecture (v1.0)
+
+**Local-First with Dropbox Sync**
+- Primary data store: Local SQLite database
+- Multi-device sync: Dropbox file sync (configurable location via ~/.tjai/config.json)
+- Offline-first: Always works locally, no network required
+- Data protection: Automatic hourly backups to ~/.tjai/backups (configurable retention)
+- Config/state: ~/.tjai/config.json and ~/.tjai/state.json
+
+**What's Working Now:**
+- Full CRUD operations (create, read, update, delete)
+- Context system (tj =ctx, tj =0)
+- Calendar/journal entries (tj j)
+- Tags (:tag), priority (p=N), status (s=val)
+- Named entries (@name)
+- Sub-items (tj .) for hierarchical notes
+- Lists (tj +) for simple collections
+- AI guidelines (tj ai)
+- Entry copying (tj cp)
+- Content truncation (configurable)
+- Timezone support (tj tz)
+- Editor integration (tj e)
+- Comprehensive listing/filtering (tj l)
+
+## Planned Architecture (v2.0+)
+
+**Cloud-First Distributed Service**
+- Primary data store: Personal cloud server (REST API)
+- Local SQLite: Cache/offline copy, not primary storage
+- Background sync daemon: Automatic bidirectional sync
+- Vector DB/RAG: Augment AIs with personal info
+- Web UI: Browser-based interface
+- Mobile clients: iOS/Android support
 
 ## Testing Philosophy
 
@@ -24,9 +58,12 @@ I want a LLM to act as a companion and memory aid in all things, and I want a ga
 - Tests should verify actual behavior of the complete system, not isolated units with mocked dependencies.
 - Focus on integration tests that exercise real database operations and command workflows.
 
-## Sub-items vs Lists
+## Sub-items vs Lists vs conventional entries
 
-Two distinct mechanisms for organizing related content:
+Two distinct mechanisms for organizing related content, sub-items and lists, are foreseen.
+However, since editor-based multiline support is now implemented these variants are much less needed.
+Sub-items and lists can be created in the editor. The editor treats the body as markdown so
+it is easy to make bulleted hierarchical notes or simple lists.
 
 ### Sub-items (Hierarchical Entities)
 - Sub-items are **actual entities** (entries in the database) with their own IDs, timestamps, and full metadata.
@@ -45,111 +82,139 @@ Two distinct mechanisms for organizing related content:
 
 **Key distinction**: If the items need to be queried, tagged, timestamped, or treated as independent entries, use sub-items. If you just need a simple collection within a parent, use lists.
 
-## Design and implementation
+## Design and Implementation
 
-- Python: Current stable Python 3.x (not locked to specific version).
+### Core Principles
+- **Python**: Current stable Python 3.x (not locked to specific version).
+- **Conciseness**: Every command should be as short as possible.
+- **Smart interpretation**: Auto-detect URLs, dates, times, contexts, tags.
+- **Default action is remember**: `tj <text>` creates a memory, no explicit command needed.
+- **Numbered references**: Query results numbered for easy operations (tj 3 x, tj 5 a "note").
+- **Editor integration**: Full power of $EDITOR when needed (tj e, tj e <n>).
 
-- cloud service. must be distributed. local sqlite for speed and airplane mode.
-- REST based. sync service. syncs local db to cloud.
-- offline first. local first. always works locally, even if cloud is down.
-- agent daemon, a user level system service, manages sync in background. every tj command triggers a sync.
-- goal is when I go home from work, I do not leave any updates trapped on my work desktop. they will have been automatically and promptly transparently synced to cloud.
-- the agent passively updates from the cloud db, every few minutes. If I want an immediate update I use `tj sync`.
-- creates a vector DB/RAG augmenting AIs with my personal info. So that at a LLM prompt interface, the LLM knows everything about me and about my projects.
-- every piece of info is timestamped. every one has a unique uuid. the uuid is generated locally, client side. 
-- designed so that there is no possibility of clashes between client updates, e.g. from different computers. each entry is unique by construction (uuid + timestamp).
-- schema must be highly flexible to incorporate new types of info over time. use json structure for transparent extensibility.
-- the essential obvious constantly searched on schema columns should be columns. e.g. timestamp, context, kind, is_dirty. the json is for everything else.
-- the entry classification field 'kind' should be a string, not an enum, to allow new types to be added without schema changes. Use 'kind' consistently (not 'type').
-- Configuration and state files are kept in ~/.tjai/ directory (config.json, state.json).
-- Database location is configurable via ~/.tjai/config.json (db_path field). Default is ~/.tjai/tjai.db but can be set to Dropbox, iCloud, or any other location.
-- Use `tj config show` to check current database path and other configuration settings.
-- written in python. well motivated dependencies are fine.
-- command line interface. GUI on the web service side.
-- keep track of machines syncing to the cloud service. IP etc. And last update time.
-- security: all communication with cloud service must be encrypted (https). authentication via api keys.
-- extremely important that auth be as user friendly as possible. no friction.
-- This app is fundamentally client-server. for sure the queries are against the server. this is not a local sqlite app. we should start treating it as client server from the beginning. the local sqlite is an addon, not vice versa.
-- entering just the 'tj' command should produce a comprehensive dashboard summary, then print the help.
-- time zone: US east is the default and start, but it needs to be changeable. we need a 'tj tz zone' command supporting eastern, central, pacific, euro. without zone specified, it reports current zone and lists the options. support also a +/-integer option for relative to UTC.
-- *anywhere* an item is shown it should have a number to accept operations. tags too. and contexts.
-- available characters: _ ^ / + .
+### Data Model
+- **Timestamped everything**: Creation and modification timestamps on all entries.
+- **UUIDs**: Client-generated to prevent conflicts across devices.
+- **Kind field**: String (not enum) for extensibility - memory, todo, profile, ai, calendar, bookmark, list.
+- **Flexible schema**: Core columns (id, kind, content, context, timestamp_created, timestamp_modified, is_dirty) + JSON data field for extensibility.
+- **Tags**: Inline :tag syntax, tags preserved in content.
+- **Contexts**: Project/event-specific (tjai, hawaii2025), not broad categories (work, personal).
+- **Named entries**: @name for reusable/updateable entries.
+- **Metadata**: Priority (p=N), status (s=val), inline in content or as separate fields.
 
-## Client-Server Architecture
+### Configuration
+- Config file: ~/.tjai/config.json
+  - db_path: Database location (default ~/Dropbox/Current/tjai.db)
+  - backup_path: Backup directory (default ~/Dropbox/Current/tjai_backups)
+  - backup_interval_hours: Auto-backup frequency (default 1)
+  - recent_entries_hours: Recent list window (default 24)
+  - backup_retention_days: Backup retention period (default 14)
+  - calendar_default_days: Default calendar view range (default 30)
+  - content_truncate_length: Max lines in list/calendar views (default 100)
+- State file: ~/.tjai/state.json (current context, last parent ID)
 
-Primary Architecture: Cloud-first distributed service
+### Backup Strategy
+- Automatic: Every command checks if >1hr since last backup, triggers backup if needed.
+- Manual: `tj backup` for immediate backup.
+- Format: Daily backups (YYYYMMDD.db) in backup_path.
+- Retention: Configurable days, default 14.
+- Same-day backups overwrite previous (hourly backups OK).
 
-- Primary data store: Personal cloud server (REST API)
-- Local SQLite: Cache/offline copy only, not primary storage
-- All operations should hit server first, fall back to local cache if offline
-- Queries: Server-first, with local fallback for offline scenarios
-- Creates: Must be instant (no server latency), write local first, agent syncs to server
-- Updates/Deletes: Server operations with local cache updates
+### Calendar/Journal Entries
+- Flexible date/time parsing: YYYYMMDD, MM/DD, weekdays (tomorrow, fri), times (14:30, 2pm).
+- Copy entries: `tj cp <n> <datetime>` preserves time if not specified.
+- Edit behavior:
+  - No date: preserves original event date/time.
+  - Time only (10:00): preserves date, updates time.
+  - Full date/time: updates both.
+- Calendar views: `tj c` (default 30 days), `tj c t/w/m` (today/week/month), `tj c N` (N days), `tj c -N` (last N days).
 
-## Implementation Priority
+### AI Guidelines
+- Universal guidelines: Apply to all AI interactions.
+- Context-specific guidelines: Apply when in specific context.
+- Query: `tj ai` shows universal + current context, `tj ai =ctx` shows specific context.
+- Create: `tj ai <text>` (universal), `tj ai =ctx <text>` (context-specific).
 
-1. REST API client layer for server communication
-2. HTTP request/response handling with proper error handling
-3. Offline detection and graceful degradation
-4. Local SQLite as secondary cache system
-5. Sync logic to keep cache updated
+## Command Reference (Current Implementation)
 
-## Data Flow
+**Create:**
+- `tj <text>` - Memory (default)
+- `tj do <text>` - Todo
+- `tj p <text>` - Profile fact
+- `tj ai <text>` - AI guideline
+- `tj j <datetime> <text>` - Calendar/journal entry
+- `tj <url> <text>` - Bookmark (auto-detected)
 
-- tj create: POST to server, cache locally, confirm success
-- tj query: GET from server, update local cache, display results
-- tj offline: use local cache, mark as "cached results, may be outdated"
-- Background sync: periodic server polls, update local cache
+**Query/List:**
+- `tj l` - All entries
+- `tj l [ai|b|do|j|m|p]` - By type
+- `tj l [t|w|N]` - By time
+- `tj l =ctx :tag p=N s=val` - Composite filters
+- `tj l [c|t|@]` - Contexts/tags/named entries
+- `tj c [t|w|m|N|-N]` - Calendar view
 
-## Performance Requirements
+**Modify:**
+- `tj e` - New entry in $EDITOR
+- `tj e <n>` - Edit entry in $EDITOR
+- `tj s <n|@name>` - Show entry details
+- `tj s =ctx` - Show context details
+- `tj <n> @name` - Assign name
+- `tj <n> p=N` - Set priority
+- `tj <n> s=val` - Set status
+- `tj t <n> <tag>` - Tag entry
+- `tj mv <n> <ctx>` - Move to context
+- `tj cp <n> <datetime>` - Copy journal entry
+- `tj ^ <n>` - Pin to top (update timestamp)
+- `tj d <n|@name>` - Delete
 
-- Additions must not see server latency - they need to be fast
-- Local cache first for creates, background agent handles server sync
-- Agent daemon is necessary for async server communication
+**Context:**
+- `tj =ctx` - Switch/create context
+- `tj =ctx -t title` - Set context title
+- `tj =ctx -t title -d desc` - Set title and description
+- `tj =0` - Clear context
 
-## CLI Design Philosophy
+**Hierarchy:**
+- `tj . <text>` - Add sub-item to last parent
+- `tj + <item>` - Add to current list
 
-- conciseness is paramount. every command should be as short as possible.
-- smart input interpretation. tj detects URLs, dates (YYYYMMDD format), etc automatically.
-- tj doesn't conflict with common linux commands (confirmed safe).
-- default action is "remember" - tj <text> creates a memory, no explicit command needed.
-- tags use : syntax anywhere in input: tj "some text :tag1 :tag2".
-- the entry contains the tags as-is, don't remove them from the text.
-- use :tagname consistently throughout codebase and docs (not #tags).
-- context system: tj =<name> sets context, tj =0 or tj c clears it. context auto-applies to all new entries.
-- context definition: tj =context -t title -d description (optional -d)
-- inline context: tj =context content (no -t flag) switches context and creates entry in one command.
-- contexts are specific projects/events (tjai, hawaii2025, chep2024), not broad categories (work, personal).
-- query results are numbered for easy reference: tj 3 a "sub-note", tj 5 x (delete).
-- command aliases: d/do/todo for todos, single letters where memorable.
+**System:**
+- `tj` - Status dashboard
+- `tj hey` - Personal dashboard (todos, calendar)
+- `tj config` - Show configuration
+- `tj backup` - Manual backup
+- `tj dump` - Export as commands
+- `tj tz [zone]` - Set/show timezone
+- `tj h` - Help
 
-## Command Structure Details
+**Metadata (inline):**
+- `@name` - Named entry
+- `p=N` - Priority
+- `s=status` - Status value
+- `:tag` - Tag
+- `//url` or `[title](url)` - Links
+- `-f file` - File input
 
-- LIST: tj l c (contexts with usage stats), tj l t (tags with counts and last used date)
-- QUERY: tj q [b|r|d|p] (by type), tj q [t|w|m] (time periods), tj q =<name> (by context), tj q :<tag> (by tag)
-- CALENDAR: tj 20251225 "Christmas dinner" - YYYYMMDD format auto-detected
-- PROFILE: tj p "facts about me" - builds the "me descriptor"
-- DASHBOARD: tj hey - personal status, context, todos, external data (weather, github, etc)
-- HIERARCHY: tj a for sub-notes (keep simple for now, extensibility planned)
-- NUMBERED REFS: tj <n> a <text>, tj <n> x - reference items from last query results
-- SYNC: manual tj sync, but background daemon does automatic sync on every command
+## Future Enhancements (v2.0+)
 
-## Data Management
+**Distributed Architecture:**
+- REST API server with proper auth.
+- Background sync daemon (tj sys install/start/stop/status).
+- Aggressive push: new entries immediately sync.
+- Lazy pull: periodic background updates, manual tj sync for immediate refresh.
+- Offline detection and graceful degradation.
 
-- everything timestamped automatically
-- UUIDs prevent conflicts across machines  
-- smart type detection: URLs→bookmarks, YYYYMMDD→calendar, default→memory
-- context inheritance: all entries get current context automatically
-- extensible schema: fixed columns for searchable fields, JSON for everything else
-- local-first: always works offline, sync when possible
-- the local DB has to be a true DB. Airplane mode will be very real. Sync the server DB locally, get on the plane.
-- we need a 'sync everything locally, I'm going offline' command.
-- Needless to say, nothing is more crucial for this app than data protection and backup. In fact, let's implement first backup rigfht nmow. Save in the DB the time of the last backup. every time a command is executed, check if the last backup was more than 1hr ago. if it was, invoke the backup tool. once we have a local agent, it will do the local backup. for now, have the client itself make the backup (print 'Backing up...'). Put the backups in ~/.tjai/backups with the name containing the date, as 20240322, not the time, it is OK for hourly backups to overwrite the previous. Don't purge same-day backups.
+**Advanced Features:**
+- Vector DB/RAG for AI augmentation.
+- Web UI for browser access.
+- Mobile clients (iOS/Android).
+- Geotagged place database.
+- External data integration (weather, github, etc).
+- Machine tracking (IP, last update time).
 
-## System Integration
+**Security:**
+- All communication encrypted (HTTPS).
+- API key authentication.
+- User-friendly auth (minimal friction).
 
-- sys command (not service): tj sys install/start/stop/status for daemon management
-- completely self-contained within tj command set - no external OS commands needed
-- alias setup: user creates 'alias tj=/path/to/tjai/tj.py' 
-- aggressive push strategy: new entries immediately trigger sync attempt
-- lazy pull: periodic background updates, manual tj sync for immediate refresh
+## Available Characters for Commands
+- `_` `^` `/` `+` `.`
