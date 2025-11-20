@@ -246,7 +246,9 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
         if entry_type == 'list':
             set_last_list(entry_id)
 
-        print(f"Created {entry_type}: {content[:50]}{'...' if len(content) > 50 else ''}")
+        # Display the created entry details
+        from tj.commands.modify import display_entry_details
+        display_entry_details(entry)
         
     except DatabaseError as e:
         print(f"Database error: {e}", file=sys.stderr)

@@ -18,17 +18,19 @@ tj config       Show config     tj l [t|w|N]             By time (N=days)
                                 tj l [c|t|@]             Metadata (c/t/@=named)
 CREATE
 tj <text>       Memory
-tj d <text>     Todo            MODIFY
-tj p <text>     Profile fact    tj . <text>     Sub-item of last
-tj ai <text>    AI guideline    tj + <item>     Add to list
-tj <url> <text> Bookmark        tj e            New in $EDITOR
-                                tj e [ai|d|p|b|j] Type in $EDITOR
-CONTEXT                         tj e <n>        Edit entry <n>
-tj =ctx         Switch/create   tj s <n|@name>  Show entry
-tj =ctx -t ...  With title      tj t <n> <tag>  Tag entry
-tj =ctx -t .. -d .. With desc   tj m <n> <ctx>  Move to context
-tj =0           Clear context   tj ^ <n>        Pin to top
-                                tj x <n|@name>  Delete
+tj m <text>     Memory (default)
+tj do <text>    Todo
+tj p <text>     Profile fact    MODIFY
+tj ai <text>    AI guideline    tj . <text>     Sub-item of last
+tj <url> <text> Bookmark        tj + <item>     Add to list
+                                tj e            New in $EDITOR
+CONTEXT                         tj e [ai|do|p|b|j] Type in $EDITOR
+tj =ctx         Switch/create   tj e <n>        Edit entry <n>
+tj =ctx -t ...  With title      tj s <n|@name>  Show entry
+tj =ctx -t .. -d .. With desc   tj t <n> <tag>  Tag entry
+tj =0           Clear context   tj mv <n> <ctx> Move to context
+                                tj ^ <n>        Pin to top
+                                tj d <n|@name>  Delete
 CALENDAR                        tj <n> @name    Assign name
 tj j tomorrow <text>            tj <n> p=N      Set priority
 tj j mon 10am   Team meeting    tj <n> s=val    Set status

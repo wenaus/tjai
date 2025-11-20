@@ -380,6 +380,53 @@ def handle_move(args) -> None:
         print(f"Move error: {e}", file=sys.stderr)
 
 
+def display_entry_details(entry, entry_identifier=None):
+    """Display full entry details.
+
+    Args:
+        entry: The Entry object to display
+        entry_identifier: Optional identifier string (e.g., "1" or "@name") for display
+    """
+    time_str = format_time_dashboard(entry.timestamp_created)
+
+    # Display identifier (name or number)
+    if entry_identifier:
+        display_id = f"@{entry.name}" if entry.name else entry_identifier
+        print(f"Entry {display_id}:")
+    else:
+        print(f"Created {entry.kind}:")
+
+    print(f"  Content: {entry.content}")
+    print(f"  Created: {time_str}")
+    print(f"  Type: {entry.kind}")
+    if entry.context:
+        print(f"  Context: {entry.context}")
+    if entry.name:
+        print(f"  Name: @{entry.name}")
+    if entry.priority is not None:
+        print(f"  Priority: {entry.priority}")
+    if entry.status:
+        print(f"  Status: {entry.status}")
+
+    # Show tags
+    repository = RepositoryFactory.get_repository()
+    tags = repository.get_tags(entry.id)
+    if tags:
+        print(f"  Tags: {', '.join(tags)}")
+
+    # Show links if present
+    if entry.data and 'links' in entry.data:
+        links = entry.data['links']
+        if links:
+            print("  Links:")
+            for link in links:
+                title = link.get('title', 'Link')
+                url = link.get('url', '')
+                # Color URL cyan
+                colored_url = f"\033[96m{url}\033[0m"
+                print(f"    {title}: {colored_url}")
+
+
 def handle_show(args) -> None:
     """Handle showing entry details."""
     from tj.state import display_context
@@ -392,40 +439,7 @@ def handle_show(args) -> None:
             print(f"Error: Entry {entry_identifier} not found.", file=sys.stderr)
             return
 
-        time_str = format_time_dashboard(entry.timestamp_created)
-
-        # Display identifier (name or number)
-        display_id = f"@{entry.name}" if entry.name else entry_identifier
-        print(f"Entry {display_id}:")
-        print(f"  Content: {entry.content}")
-        print(f"  Created: {time_str}")
-        print(f"  Type: {entry.kind}")
-        if entry.context:
-            print(f"  Context: {entry.context}")
-        if entry.name:
-            print(f"  Name: @{entry.name}")
-        if entry.priority is not None:
-            print(f"  Priority: {entry.priority}")
-        if entry.status:
-            print(f"  Status: {entry.status}")
-
-        # Show tags
-        repository = RepositoryFactory.get_repository()
-        tags = repository.get_tags(entry.id)
-        if tags:
-            print(f"  Tags: {', '.join(tags)}")
-
-        # Show links if present
-        if entry.data and 'links' in entry.data:
-            links = entry.data['links']
-            if links:
-                print("  Links:")
-                for link in links:
-                    title = link.get('title', 'Link')
-                    url = link.get('url', '')
-                    # Color URL cyan
-                    colored_url = f"\033[96m{url}\033[0m"
-                    print(f"    {title}: {colored_url}")
+        display_entry_details(entry, entry_identifier)
 
         # Set as last parent for sub-items (if not a sub-item itself)
         if not entry.parent_id:

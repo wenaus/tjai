@@ -58,7 +58,7 @@ tj    # Show status (creates ~/.tjai/tjai.db on first run)
 tj p I prefer dark mode in all applications     # Add profile fact
 tj =myproject                                   # Switch to project context
 tj https://example.com Useful resource          # Bookmark a URL
-tj d Review PRs                                 # Add a todo
+tj do Review PRs                                # Add a todo
 tj l                                            # List all entries
 ```
 
@@ -80,13 +80,14 @@ tj l                                            # List all entries
     *   `tj =0`: Clear active context
     *   `tj =0 <text>`: Create context-free entry
 *   **CREATE:**
+    *   `tj <text> ...`: Default; creates a new memory.
+    *   `tj m <text>`: Creates a memory entry.
+    *   `tj do <text>`: Creates a todo item (alias: todo).
     *   `tj p <fact>`: Adds a persistent fact to your profile.
     *   `tj ai <guideline>`: Adds AI behavioral guideline or instruction.
     *   `tj j <date/time> <content>`: Creates calendar entry (tomorrow, mon-sun, HH:MM, mmdd, YYYYMMDD)
     *   `tj <YYYYMMDD> ...`: Creates a new calendar entry.
     *   `tj <url> ...`: Creates a new bookmark.
-    *   `tj [d|do|todo] ...`: Creates a new todo item.
-    *   `tj <text> ...`: Default; creates a new memory.
     *   *(All creation commands auto-apply current context and can include `:tags`)*.
     *   **Named entries:** `tj @budget Q4 planning` creates named entry
     *   **Priority:** `tj task p=1` sets priority (1=highest)
@@ -103,12 +104,12 @@ tj l                                            # List all entries
     *   `tj e <n> <text>`: Replace entry `<n>` content (with confirmation).
     *   `tj s <n>` or `tj s @name`: Show entry details.
     *   `tj t <n> <tag>`: Add tag to entry.
-    *   `tj m <n> <context>`: Move entry to context.
+    *   `tj mv <n> <context>`: Move entry to context.
     *   `tj ^ <n>`: Pin entry to top (update timestamp).
     *   `tj <n> @name`: Assign name to entry.
     *   `tj <n> p=N`: Set priority on entry.
     *   `tj <n> s=status`: Set status on entry.
-    *   `tj x <n>` or `tj x @name`: Delete entry (with confirmation).
+    *   `tj d <n>` or `tj d @name`: Delete entry (with confirmation).
 *   **QUERY:** `tj q ...`
     *   `q [b|r|d|p]`: By type: **b**ookmark, **r**emembered, **d**o, **p**rofile.
     *   `q [t|w|m]`: By time: **t**oday, **w**eek, **m**onth.

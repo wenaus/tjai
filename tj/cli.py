@@ -132,7 +132,7 @@ def create_parser() -> argparse.ArgumentParser:
     p_config.set_defaults(func=handle_config_command)
 
     # Creation commands
-    p_todo = subparsers.add_parser('d', help="Add a todo item.", aliases=['do', 'todo'])
+    p_todo = subparsers.add_parser('do', help="Add a todo item.", aliases=['todo'])
     p_todo.add_argument('input', nargs='+', help="Todo content and optional tags")
     p_todo.set_defaults(func=lambda args: handle_creation_with_at(args, entry_type_override='todo'))
 
@@ -176,7 +176,11 @@ def create_parser() -> argparse.ArgumentParser:
     p_tag.add_argument('tag', nargs='?', help="Tag name (when adding to entry)")
     p_tag.set_defaults(func=handle_tag_command)
     
-    p_move = subparsers.add_parser('m', help="Move entry to context.")
+    p_memory = subparsers.add_parser('m', help="Add a memory entry.")
+    p_memory.add_argument('input', nargs='+', help="Entry content")
+    p_memory.set_defaults(func=handle_creation)
+
+    p_move = subparsers.add_parser('mv', help="Move entry to context.")
     p_move.add_argument('entry_num', help="Entry number")
     p_move.add_argument('context', nargs='?', help="Context name (empty to remove context)")
     p_move.set_defaults(func=handle_move)
@@ -189,7 +193,7 @@ def create_parser() -> argparse.ArgumentParser:
     p_pin.add_argument('entry_num', help="Entry number")
     p_pin.set_defaults(func=handle_pin)
 
-    p_delete = subparsers.add_parser('x', help="Delete an entry or tag.")
+    p_delete = subparsers.add_parser('d', help="Delete an entry or tag.")
     p_delete.add_argument('args', nargs='*', help="Arguments for delete operation")
     p_delete.set_defaults(func=handle_delete_new)
 
@@ -327,7 +331,7 @@ def handle_numbered_command(parser: argparse.ArgumentParser, num_identifier: int
         args = parser.parse_args(temp_argv[1:])
         if hasattr(args, 'func'):
             # Pass num_identifier to functions that support it
-            if action_command in ['a', 'x']:  # Commands that work with numbered entries
+            if action_command in ['a', 'd']:  # Commands that work with numbered entries
                 args.func(args, num_identifier=num_identifier)
             else:
                 args.func(args)
