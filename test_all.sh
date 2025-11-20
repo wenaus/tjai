@@ -145,7 +145,7 @@ tj ^ 5
 
 echo ""
 echo "=== DELETE ==="
-# tj x 99  # Would require confirmation, skip in automated test
+# tj d 99  # Would require confirmation, skip in automated test
 
 echo ""
 echo "=== FINAL STATUS ==="

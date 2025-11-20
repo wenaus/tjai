@@ -148,11 +148,6 @@ def create_parser() -> argparse.ArgumentParser:
     p_journal.add_argument('input', nargs='+', help="Date/time spec and content (e.g., 'tomorrow meeting' or '16:30 dentist')")
     p_journal.set_defaults(func=handle_journal)
 
-    # List all entries
-    p_all = subparsers.add_parser('a', help="List all entries with optional filter.")
-    p_all.add_argument('filter', nargs='?', help="Optional text filter")
-    p_all.set_defaults(func=handle_list_all)
-    
     # Modification commands
     p_subitem = subparsers.add_parser('.', help="Add sub-item to last parent.")
     p_subitem.add_argument('input', nargs='+', help="Sub-item content")
@@ -331,7 +326,7 @@ def handle_numbered_command(parser: argparse.ArgumentParser, num_identifier: int
         args = parser.parse_args(temp_argv[1:])
         if hasattr(args, 'func'):
             # Pass num_identifier to functions that support it
-            if action_command in ['a', 'd']:  # Commands that work with numbered entries
+            if action_command in ['d']:  # Commands that work with numbered entries (delete)
                 args.func(args, num_identifier=num_identifier)
             else:
                 args.func(args)

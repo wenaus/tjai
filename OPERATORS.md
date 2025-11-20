@@ -79,25 +79,19 @@ Move entry to top (updates timestamp to now)
 
 ## Delete Operations
 
-### tj x <number>
+### tj d <number>
 Delete an entry (requires confirmation)
-- `tj x 3`
+- `tj d 3`
 
-### tj x <number> t <tag>
+### tj d <number> t <tag>
 Remove a specific tag from an entry (requires confirmation)
-- `tj x 5 t urgent`
+- `tj d 5 t urgent`
 
-### tj x t <tagname>
+### tj d t <tagname>
 Remove all instances of a tag from the system (requires confirmation)
-- `tj x t obsolete`
+- `tj d t obsolete`
 
 ## Listing Operations
-
-### tj a [filter]
-List all entries with optional filter
-- `tj a` (all entries)
-- `tj a 3` (entries from last 3 days)
-- `tj a meeting` (entries containing "meeting")
 
 ### tj l c
 List contexts with descriptions and entry counts
