@@ -31,8 +31,8 @@ tj =0           Clear context   tj ^ <n>        Pin to top
                                 tj x <n|@name>  Delete
 CALENDAR                        tj <n> @name    Assign name
 tj j tomorrow <text>            tj <n> p=N      Set priority
-tj j mon 14:30 Team meeting     tj <n> s=val    Set status
-tj j 0615 10:00 Doctor appt
+tj j mon 10am   Team meeting    tj <n> s=val    Set status
+tj j 0615 14:30 Doctor appt
 tj c [t|w|m]    View calendar   DATA
 tj c t+1        Tomorrow        tj dump         Export as commands
 tj c w-1        Last week       tj backup       Manual backup
