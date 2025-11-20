@@ -3,7 +3,7 @@
 import sys
 from datetime import datetime, timedelta
 
-from tj.colors import colorize_content, colorize_context, colorize_kind, colorize_timestamp, colorize_creation_timestamp, colorize_entry_number
+from tj.colors import colorize_content, colorize_context, colorize_kind, colorize_timestamp, colorize_creation_timestamp, colorize_entry_number, BOLD, RESET
 from tj.repository_factory import RepositoryFactory
 from tj.state import get_state, save_state, display_context
 from tj.timezone_manager import format_time_dashboard
@@ -102,6 +102,8 @@ def _list_named_entries(repository):
     for i, entry in enumerate(named_entries, 1):
         time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_modified))
         content_preview = entry.content[:60] + "..." if len(entry.content) > 60 else entry.content
+        # Prepend bold name with @ symbol to content
+        content_preview = f"{BOLD}@{entry.name}:{RESET} {content_preview}"
         context_str = f" {colorize_context(entry.context)}" if entry.context else ""
         print(f"{colorize_entry_number(i)}  @{entry.name} {time_str}{context_str} {content_preview}")
 
@@ -274,6 +276,10 @@ def _list_entries_with_filters(repository, filters):
         # Format modification timestamp uniformly for all entries
         time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_modified))
         content_colored = colorize_content(entry.content)
+
+        # Prepend bold name with @ symbol if entry has one
+        if entry.name:
+            content_colored = f"{BOLD}@{entry.name}:{RESET} {content_colored}"
 
         # Show type prefix (use short codes)
         kind_display = {
