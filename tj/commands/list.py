@@ -262,7 +262,7 @@ def _list_entries_with_filters(repository, filters):
     from tj.colors import BRIGHT_YELLOW, RESET
     filter_desc = f" ({query_desc})" if query_desc else ""
     print(f"{BRIGHT_YELLOW}========== tj entries{filter_desc} =========={RESET}")
-    legend = "Entry types: [ai]=AI guidance [b]=bookmark [d]=todo [j]=journal [m]=memory [p]=profile"
+    legend = "Entry types: [ai]=AI guidance [b]=bookmark [do]=todo [j]=journal [m]=memory [p]=profile"
     print(legend)
 
     # Add metadata line
@@ -293,7 +293,7 @@ def _list_entries_with_filters(repository, filters):
 
         # Show type prefix (use short codes)
         kind_display = {
-            'todo': 'd',
+            'todo': 'do',
             'profile': 'p',
             'ai': 'ai',
             'calendar': 'j',

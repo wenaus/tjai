@@ -412,7 +412,7 @@ def display_entry_details(entry, entry_identifier=None):
 
     # Map entry kind to short display code
     kind_display = {
-        'todo': 'd',
+        'todo': 'do',
         'profile': 'p',
         'ai': 'ai',
         'calendar': 'j',

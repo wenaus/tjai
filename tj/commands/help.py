@@ -12,7 +12,7 @@ def handle_help(args) -> None:
 
 STATUS                          LIST/FILTER
 tj              Status          tj l                     All entries
-tj hey          Need to know    tj l [ai|b|d|j|m|p]      By type (default=m)
+tj hey          Need to know    tj l [ai|b|do|j|m|p]     By type (default=m)
 tj config       Show config     tj l [t|w|N]             By time (N=days)
                                 tj l =ctx :tag p=N s=val Composite
                                 tj l [c|t|@]             Metadata (c/t/@=named)
