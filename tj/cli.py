@@ -319,6 +319,53 @@ def handle_numbered_command(parser: argparse.ArgumentParser, num_identifier: int
             print("Error: Failed to set status.", file=sys.stderr)
         return
 
+    elif action_command.startswith(':'):
+        # Add tag
+        tag = action_command[1:]
+        if not tag:
+            print("Error: Tag name cannot be empty.", file=sys.stderr)
+            return
+
+        entry = get_entry_from_recent_list(num_identifier)
+        if not entry:
+            print(f"Error: Entry {num_identifier} not found in recent list.", file=sys.stderr)
+            return
+
+        repository = RepositoryFactory.get_repository()
+        try:
+            repository.add_tag(entry.id, tag)
+            print(f"Tag ':{tag}' added to entry {num_identifier}")
+        except Exception as e:
+            print(f"Error: Failed to add tag ':{tag}': {e}", file=sys.stderr)
+        return
+
+    elif action_command.startswith('='):
+        # Move to context
+        context = action_command[1:]
+        if context == '0':
+            context = None
+
+        entry = get_entry_from_recent_list(num_identifier)
+        if not entry:
+            print(f"Error: Entry {num_identifier} not found in recent list.", file=sys.stderr)
+            return
+
+        repository = RepositoryFactory.get_repository()
+        success = repository.update_entry(
+            entry.id,
+            context=context,
+            timestamp_modified=datetime.now(timezone.utc).timestamp(),
+            is_dirty=True
+        )
+        if success:
+            if context:
+                print(f"Entry {num_identifier} moved to context '={context}'")
+            else:
+                print(f"Entry {num_identifier} context cleared")
+        else:
+            print("Error: Failed to move entry.", file=sys.stderr)
+        return
+
     # Otherwise, handle as regular command
     known_commands = set(parser._subparsers._group_actions[0].choices.keys())
 

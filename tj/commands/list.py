@@ -274,92 +274,11 @@ def _list_entries_with_filters(repository, filters):
     print(f"Entry   Timestamp       Type Content     (TZ: {tz})")
     # Get truncate length from config
     from tj.config import get_content_truncate_length
+    from tj.commands.common import format_entry_for_display
     truncate_len = get_content_truncate_length()
 
     for i, entry in enumerate(active_entries, 1):
-        # Format modification timestamp uniformly for all entries
-        time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_modified))
-
-        # Truncate content if needed (by lines, before colorizing)
-        # First line always shown + truncate_len additional lines
-        content = entry.content
-        lines = content.split('\n')
-        if len(lines) > (truncate_len + 1):
-            content = '\n'.join(lines[:truncate_len + 1]) + " [...]"
-
-        content_colored = colorize_content(content)
-
-        # Prepend bold name with @ symbol if entry has one
-        if entry.name:
-            content_colored = f"{BOLD}@{entry.name}:{RESET} {content_colored}"
-
-        # Prepend priority and status if present
-        metadata_parts = []
-        if entry.priority is not None:
-            metadata_parts.append(f"p={entry.priority}")
-        if entry.status:
-            metadata_parts.append(f"s={entry.status}")
-        if metadata_parts:
-            metadata_str = " ".join(metadata_parts)
-            content_colored = f"{metadata_str}  {content_colored}"
-
-        # Show type prefix (use short codes)
-        kind_display = {
-            'todo': 'do',
-            'profile': 'p',
-            'ai': 'ai',
-            'calendar': 'j',
-            'bookmark': 'b',
-            'memory': 'm'
-        }
-        if entry.kind in kind_display:
-            type_prefix = f"{colorize_kind(kind_display[entry.kind])} "
-        else:
-            type_prefix = ""
-
-        # For calendar entries, show event date/time after type, before context
-        event_date_str = ""
-        if entry.kind == 'calendar' and entry.data and 'event_date' in entry.data:
-            from tj.timezone_manager import get_current_timezone
-            from zoneinfo import ZoneInfo
-
-            tz_name = get_current_timezone()
-            try:
-                tz = ZoneInfo(tz_name)
-                event_dt = datetime.fromtimestamp(entry.data['event_date'], tz=tz)
-            except Exception:
-                event_dt = datetime.fromtimestamp(entry.data['event_date'])
-
-            # If time is midnight (00:00), show just date with weekday
-            if event_dt.hour == 0 and event_dt.minute == 0:
-                event_date_str = f"{colorize_timestamp(event_dt.strftime('%a %m/%d'))} "
-            else:
-                # Show full date and time with weekday
-                event_date_str = f"{colorize_timestamp(event_dt.strftime('%a %m/%d/%H:%M'))} "
-
-            # Add "Today in Xh Ym" marker if event is today with a time
-            from tj.colors import TERRACOTTA, RESET
-            now = datetime.now(tz) if tz else datetime.now()
-            if event_dt.date() == now.date() and not (event_dt.hour == 0 and event_dt.minute == 0):
-                # Calculate time until event
-                time_diff = event_dt - now
-                total_seconds = int(time_diff.total_seconds())
-
-                if total_seconds > 0:  # Event is in the future
-                    hours = total_seconds // 3600
-                    minutes = (total_seconds % 3600) // 60
-
-                    if hours > 0:
-                        countdown_str = f"{hours}h {minutes}m"
-                    else:
-                        countdown_str = f"{minutes}m"
-
-                    event_date_str += f"{TERRACOTTA}{BOLD}Today in {countdown_str}{RESET} "
-
-        # Show context after event date
-        context_str = f"{colorize_context(entry.context)} " if entry.context else ""
-
-        print(f"{colorize_entry_number(i)}  {time_str} {type_prefix}{event_date_str}{context_str}{content_colored}")
+        print(format_entry_for_display(entry, i, truncate_len))
 
     # Store numbered entries in state for numbered operations
     state = get_state()

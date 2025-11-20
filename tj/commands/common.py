@@ -171,33 +171,114 @@ def get_entry_from_recent_list(entry_identifier) -> Optional[Entry]:
         return None
 
 
-def format_entry_for_display(entry, entry_number=None) -> str:
-    """Format an entry for display in list-like format.
+def format_entry_for_display(entry, entry_number=None, truncate_lines=None) -> str:
+    """Format an entry for display in list format with all metadata.
 
     Args:
         entry: The Entry object to format
         entry_number: Optional entry number to display (e.g., 1, 2, 3...)
+        truncate_lines: Optional number of lines to show (first line always shown)
 
     Returns:
         Formatted string for display
     """
-    from tj.timezone_manager import format_time_dashboard
-    from tj.colors import colorize_content, colorize_context, colorize_creation_timestamp, colorize_entry_number
+    from tj.timezone_manager import format_time_dashboard, get_current_timezone
+    from tj.colors import (colorize_content, colorize_context, colorize_creation_timestamp,
+                          colorize_entry_number, colorize_kind, colorize_timestamp,
+                          BOLD, RESET, TERRACOTTA)
+    from tj.repository_factory import RepositoryFactory
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
 
-    time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_created))
-    content_colored = colorize_content(entry.content)
-    context_str = f" {colorize_context(entry.context)}" if entry.context else ""
+    repository = RepositoryFactory.get_repository()
+
+    # Format timestamp
+    time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_modified))
+
+    # Truncate content if requested
+    content = entry.content
+    if truncate_lines and truncate_lines > 0:
+        lines = content.split('\n')
+        if len(lines) > (truncate_lines + 1):
+            content = '\n'.join(lines[:truncate_lines + 1]) + " [...]"
+
+    # Colorize content
+    content_colored = colorize_content(content)
+
+    # Prepend bold @name if entry has one
+    if entry.name:
+        content_colored = f"{BOLD}@{entry.name}:{RESET} {content_colored}"
+
+    # Prepend priority and status if present
+    metadata_parts = []
+    if entry.priority is not None:
+        metadata_parts.append(f"p={entry.priority}")
+    if entry.status:
+        metadata_parts.append(f"s={entry.status}")
+    if metadata_parts:
+        metadata_str = " ".join(metadata_parts)
+        content_colored = f"{metadata_str}  {content_colored}"
+
+    # Kind display
+    kind_display = {
+        'todo': 'do',
+        'profile': 'p',
+        'ai': 'ai',
+        'calendar': 'j',
+        'bookmark': 'b',
+        'memory': 'm'
+    }
+    if entry.kind in kind_display:
+        type_prefix = f"{colorize_kind(kind_display[entry.kind])} "
+    else:
+        type_prefix = ""
+
+    # For calendar entries, show event date/time with countdown
+    event_date_str = ""
+    if entry.kind == 'calendar' and entry.data and 'event_date' in entry.data:
+        tz_name = get_current_timezone()
+        try:
+            tz = ZoneInfo(tz_name)
+            event_dt = datetime.fromtimestamp(entry.data['event_date'], tz=tz)
+        except Exception:
+            event_dt = datetime.fromtimestamp(entry.data['event_date'])
+
+        # If time is midnight (00:00), show just date with weekday
+        if event_dt.hour == 0 and event_dt.minute == 0:
+            event_date_str = f"{colorize_timestamp(event_dt.strftime('%a %m/%d'))} "
+        else:
+            # Show full date and time with weekday
+            event_date_str = f"{colorize_timestamp(event_dt.strftime('%a %m/%d/%H:%M'))} "
+
+        # Add "Today in Xh Ym" marker if event is today with a time
+        now = datetime.now(tz) if tz else datetime.now()
+        if event_dt.date() == now.date() and not (event_dt.hour == 0 and event_dt.minute == 0):
+            time_diff = event_dt - now
+            total_seconds = int(time_diff.total_seconds())
+
+            if total_seconds > 0:  # Event is in the future
+                hours = total_seconds // 3600
+                minutes = (total_seconds % 3600) // 60
+
+                if hours > 0:
+                    countdown_str = f"{hours}h {minutes}m"
+                else:
+                    countdown_str = f"{minutes}m"
+
+                event_date_str += f"{TERRACOTTA}{BOLD}Today in {countdown_str}{RESET} "
+
+    # Context
+    context_str = f"{colorize_context(entry.context)} " if entry.context else ""
+
+    # Tags
+    tags = repository.get_tags(entry.id)
+    tags_str = f" {colorize_content(' '.join(':' + t for t in tags))}" if tags else ""
 
     # Entry number prefix (optional)
     number_str = f"{colorize_entry_number(entry_number)}  " if entry_number else ""
 
-    # Format based on entry kind
-    if entry.kind == 'todo':
-        return f"{number_str}{time_str} ToDo: {content_colored}{context_str}"
-    elif entry.kind in ['memory', 'bookmark']:
-        return f"{number_str}{time_str} {content_colored}{context_str}"
-    else:
-        return f"{number_str}{time_str} [{entry.kind}] {content_colored}{context_str}"
+    # Assemble the full line
+    return f"{number_str}{time_str} {type_prefix}{event_date_str}{context_str}{content_colored}{tags_str}"
 
 def not_yet_implemented(args, num_identifier: Optional[int] = None) -> None:
     display_context()
