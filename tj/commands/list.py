@@ -140,31 +140,32 @@ def _list_entries_with_filters(repository, filters):
     status = None
     time_cutoff = None
     text_filter = None
+    max_entries = None
     query_parts = []
 
     for filter_arg in filters:
-        # Check for numeric day limit
+        # Check for numeric entry limit
         if filter_arg.isdigit():
-            days_back = int(filter_arg)
-            now = datetime.now()
-            time_cutoff = (now - timedelta(days=days_back)).timestamp()
-            query_parts.append(f"last {days_back} days")
+            max_entries = int(filter_arg)
+            query_parts.append(f"limit {max_entries}")
             continue
         # Query by kind
-        if filter_arg in ['b', 'd', 'p', 'ai', 'r', 'j']:
+        if filter_arg in ['b', 'd', 'p', 'ai', 'm', 'j']:
             kind_map = {
                 'b': 'bookmark',
                 'd': 'todo',
                 'p': 'profile',
                 'ai': 'ai',
-                'r': 'memory',
+                'm': 'memory',
                 'j': 'calendar'
             }
             kind = kind_map[filter_arg]
-            query_parts.append(kind)
+            # Display friendly name (journal for calendar entries)
+            display_name = 'journal' if filter_arg == 'j' else kind
+            query_parts.append(display_name)
 
         # Query by time
-        elif filter_arg in ['t', 'w', 'm']:
+        elif filter_arg in ['t', 'w']:
             now = datetime.now()
             if filter_arg == 't':  # today
                 start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -174,10 +175,6 @@ def _list_entries_with_filters(repository, filters):
                 start_of_week = now - timedelta(days=7)
                 time_cutoff = start_of_week.timestamp()
                 query_parts.append("last 7 days")
-            elif filter_arg == 'm':  # month
-                start_of_month = now - timedelta(days=30)
-                time_cutoff = start_of_month.timestamp()
-                query_parts.append("last 30 days")
 
         # Query by context
         elif filter_arg.startswith('='):
@@ -250,26 +247,42 @@ def _list_entries_with_filters(repository, filters):
     # Sort by timestamp, oldest first (newest at bottom)
     active_entries.sort(key=lambda e: e.timestamp_modified, reverse=False)
 
+    # Apply max_entries limit (show most recent N)
+    if max_entries and len(active_entries) > max_entries:
+        active_entries = active_entries[-max_entries:]
+
     # Display results
     if not active_entries:
         print(f"No {query_desc} entries found")
         return
 
-    # Capitalize first letter of query_desc for display
-    display_desc = query_desc.capitalize() if query_desc else "All"
-    print(f"{display_desc} entries ({len(active_entries)}):")
+    # Print legend and headers
+    from tj.colors import BRIGHT_YELLOW, RESET
+    filter_desc = f" ({query_desc})" if query_desc else ""
+    print(f"{BRIGHT_YELLOW}========== tj entries{filter_desc} =========={RESET}")
+    legend = "Entry types: [ai]=AI guidance [b]=bookmark [d]=todo [j]=journal [m]=memory [p]=profile"
+    print(legend)
+
+    # Add metadata line
+    print("Metadata: :tag @name p=priority s=status")
+
+    # Add column headers with timezone info
+    from tj.timezone_manager import get_current_timezone
+    tz = get_current_timezone()
+    print(f"Entry   Timestamp       Type Context Content (TZ: {tz})")
     for i, entry in enumerate(active_entries, 1):
         # Format modification timestamp uniformly for all entries
         time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_modified))
         content_colored = colorize_content(entry.content)
 
-        # Show type prefix for non-memory entries (use short codes)
+        # Show type prefix (use short codes)
         kind_display = {
             'todo': 'd',
             'profile': 'p',
             'ai': 'ai',
             'calendar': 'j',
-            'bookmark': 'b'
+            'bookmark': 'b',
+            'memory': 'm'
         }
         if entry.kind in kind_display:
             type_prefix = f"{colorize_kind(kind_display[entry.kind])} "

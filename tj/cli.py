@@ -328,8 +328,15 @@ def handle_numbered_command(parser: argparse.ArgumentParser, num_identifier: int
 
 def show_status() -> None:
     """Show status dashboard when no arguments provided."""
-    from tj.state import display_context
-    display_context()
+    # Show listing with 20 most recent entries
+    from tj.commands.list import handle_list_command
+
+    class ListArgs:
+        filters = ['20']
+
+    handle_list_command(ListArgs())
+
+    # Add additional summary stats
     try:
         repository = RepositoryFactory.get_repository()
         state = get_state()
@@ -363,30 +370,14 @@ def show_status() -> None:
         bookmark_count = type_counts.get('bookmark', 0)
         todo_count = type_counts.get('todo', 0)
         
-        print(f"Entries: {len(active_entries)}    Tags: {len(unique_tag_names)}    Profiles: {profile_count}    Bookmarks: {bookmark_count}    Todos: {todo_count}    Contexts: {context_count}")
-        
+        print(f"\nSummary: {len(active_entries)} entries, {len(unique_tag_names)} tags, {context_count} contexts")
+
         # Latest entry timestamp
         if active_entries:
             latest_entry = max(active_entries, key=lambda e: e.timestamp_created)
             current_tz = get_current_timezone()
             latest_time = format_time_in_timezone(latest_entry.timestamp_created, current_tz)
             print(f"Latest: {latest_time}")
-        
-        # Recent entries (last 24 hours)
-        if today_entries:
-            print("Recent:")
-            from tj.timezone_manager import format_time_dashboard
-            from tj.colors import colorize_content, colorize_timestamp, colorize_entry_number
-            for i, entry in enumerate(today_entries, 1):
-                content_colored = colorize_content(entry.content)
-                time_str = colorize_timestamp(format_time_dashboard(entry.timestamp_created))
-
-                if entry.kind in ['memory', 'bookmark']:
-                    print(f"{colorize_entry_number(i)}  {time_str} {content_colored}")
-                elif entry.kind == 'todo':
-                    print(f"{colorize_entry_number(i)}  {time_str} ToDo: {content_colored}")
-                else:
-                    print(f"{colorize_entry_number(i)}  {time_str} [{entry.kind}] {content_colored}")
         
         # Backup information
         try:

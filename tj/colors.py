@@ -15,11 +15,18 @@ RESET = '\033[0m'
 def colorize_url(text: str) -> str:
     """Colorize URLs and markdown links."""
     import re
-    # First handle markdown links [title](url) - colorize title and url separately
+    # First handle markdown links [title](url) - use iTerm2 hyperlink with clickable title
+    # Format: \x1B]8;; (start) + URL + \x1B\\ (terminator) + title + \x1B]8;;\x1B\\ (end)
     md_link_pattern = r'\[([^\]]+)\]\((https?://[^\)]+)\)'
-    text = re.sub(md_link_pattern, f'{BRIGHT_CYAN_BLUE}[\\1]{RESET}({MEDIUM_BLUE}\\2{RESET})', text)
-    # Then handle bare URLs
-    url_pattern = r'https?://[^\s]+'
+    def make_hyperlink(match):
+        title = match.group(1)
+        url = match.group(2)
+        # Wrap hyperlink sequence in color: color + start link + URL + terminator + title + end link + reset
+        return BRIGHT_CYAN_BLUE + '\x1B]8;;' + url + '\x1B\\' + title + '\x1B]8;;\x1B\\' + RESET
+    text = re.sub(md_link_pattern, make_hyperlink, text)
+    # Then handle bare URLs (but not those already in hyperlink escape sequences)
+    # Use negative lookbehind to avoid matching URLs right after ]8;;
+    url_pattern = r'(?<!]8;;)https?://[^\s]+'
     text = re.sub(url_pattern, f'{MEDIUM_BLUE}\\g<0>{RESET}', text)
     return text
 
@@ -48,7 +55,7 @@ def colorize_creation_timestamp(timestamp: str) -> str:
 
 def colorize_entry_number(number: int) -> str:
     """Colorize entry number with bright yellow and === prefix."""
-    return f'{BRIGHT_YELLOW}==={number:2d}{RESET}'
+    return f'{BRIGHT_YELLOW}==={number:3d}{RESET}'
 
 def colorize_content(text: str) -> str:
     """Apply all content colorization."""

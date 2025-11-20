@@ -29,8 +29,8 @@ def handle_ai_command(args, num_identifier: Optional[int] = None) -> None:
 
     first_arg = args.input[0]
 
-    # Query by context
-    if first_arg.startswith('='):
+    # Query by context (only if there's no content after the context arg)
+    if first_arg.startswith('=') and len(args.input) == 1:
         context_name = first_arg[1:]
         if not context_name:
             print("Error: Empty context name.", file=sys.stderr)
@@ -38,8 +38,8 @@ def handle_ai_command(args, num_identifier: Optional[int] = None) -> None:
         query_ai_guidelines(context=context_name, tag=None)
         return
 
-    # Query by tag
-    if first_arg.startswith(':'):
+    # Query by tag (only if there's no content after the tag arg)
+    if first_arg.startswith(':') and len(args.input) == 1:
         tag_name = first_arg[1:]
         if not tag_name:
             print("Error: Empty tag name.", file=sys.stderr)

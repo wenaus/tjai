@@ -36,13 +36,28 @@ def save_state(state: Dict[str, Any]) -> None:
 
 def display_context() -> None:
     """Prints the current context at the start of every command response."""
-    from tj.colors import colorize_context
+    from datetime import datetime
+    from tj.colors import colorize_timestamp, colorize_context
+    from tj.timezone_manager import format_time_dashboard
+    from tj.repository_factory import RepositoryFactory
+
+    # Get current time in local timezone
+    now = datetime.now()
+    timestamp_str = format_time_dashboard(now.timestamp())
+
     state = get_state()
-    context = state.get("current_context")
-    if context:
-        print(f"{colorize_context(context)}")
+    context_name = state.get("current_context")
+    if context_name:
+        # Get context object to retrieve description
+        repository = RepositoryFactory.get_repository()
+        context_obj = repository.get_context(context_name)
+
+        context_display = f"{colorize_timestamp(timestamp_str)} Context is {colorize_context(context_name)}."
+        if context_obj and context_obj.description:
+            context_display += f" {context_obj.description}"
+        print(context_display)
     else:
-        print("[none]")
+        print(f"{colorize_timestamp(timestamp_str)} Context is clear")
 
 
 def set_last_parent(entry_id: str) -> None:
