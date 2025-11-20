@@ -75,9 +75,10 @@ def _parse_metadata_from_content(content: str, entry):
 
         if date_was_found:
             # Check if only time was specified (no date)
-            # If first word is time-only format, preserve original date
+            # If first word is time-only format (not date/time combo), preserve original date
             first_word = content_words[0] if content_words else ""
-            is_time_only = ':' in first_word or first_word.lower().endswith(('am', 'pm'))
+            # Time-only if it has : but no / (excludes MMDD/HH:MM, mm/dd/HH:MM formats)
+            is_time_only = ('/' not in first_word) and (':' in first_word or first_word.lower().endswith(('am', 'pm')))
 
             if is_time_only and original_event_ts:
                 # Get timezone
@@ -563,60 +564,26 @@ def handle_move(args) -> None:
 
 
 def display_entry_details(entry, entry_identifier=None):
-    """Display full entry details.
+    """Display entry in compact list format plus tags and links.
 
     Args:
         entry: The Entry object to display
         entry_identifier: Optional identifier string (e.g., "1" or "@name") for display
     """
-    from tj.colors import colorize_kind
+    from tj.commands.common import format_entry_for_display
 
-    time_str = format_time_dashboard(entry.timestamp_created)
-
-    # Map entry kind to short display code
-    kind_display = {
-        'todo': 'do',
-        'profile': 'p',
-        'ai': 'ai',
-        'calendar': 'j',
-        'bookmark': 'b',
-        'memory': 'm'
-    }
-    kind_short = kind_display.get(entry.kind, entry.kind[0])
-
-    # Build first line: Entry N [kind] priority=N  status=<status>  created <time>
-    first_line_parts = []
-
-    # Entry identifier
+    # Display entry in list format
+    # Convert string identifier to int if it's a number
+    entry_num = None
     if entry_identifier:
-        display_id = f"@{entry.name}" if entry.name else entry_identifier
-        first_line_parts.append(f"Entry {display_id} {colorize_kind(kind_short)}")
-    else:
-        first_line_parts.append(f"Entry {colorize_kind(kind_short)}")
+        try:
+            entry_num = int(entry_identifier)
+        except (ValueError, TypeError):
+            entry_num = None
 
-    # Add priority if present
-    if entry.priority is not None:
-        first_line_parts.append(f"priority={entry.priority}")
+    print(format_entry_for_display(entry, entry_num))
 
-    # Add status if present
-    if entry.status:
-        first_line_parts.append(f"status={entry.status}")
-
-    # Add created time
-    first_line_parts.append(f"created {time_str}")
-
-    print("  ".join(first_line_parts))
-
-    # Display content with colorization (links, tags, etc.)
-    from tj.colors import colorize_content
-    print(colorize_content(entry.content))
-
-    if entry.context:
-        print(f"  Context: {entry.context}")
-    if entry.name:
-        print(f"  Name: @{entry.name}")
-
-    # Show tags
+    # Show tags on next line if present
     repository = RepositoryFactory.get_repository()
     tags = repository.get_tags(entry.id)
     if tags:

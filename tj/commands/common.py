@@ -39,7 +39,7 @@ def extract_first_context_from_parts(parts: List[str]) -> Tuple[Optional[str], L
     return context_name, filtered_parts, found_context
 
 
-def extract_context_from_args(entry_arg: str, remaining_args: List[str]) -> Tuple[Optional[str], List[str]]:
+def extract_context_from_args(entry_arg: str, remaining_args: List[str], set_context: bool = True) -> Tuple[Optional[str], List[str]]:
     """Extract context marker from arguments if present.
 
     Handles patterns like: tj e =context underway
@@ -47,6 +47,7 @@ def extract_context_from_args(entry_arg: str, remaining_args: List[str]) -> Tupl
     Args:
         entry_arg: First argument (might be =context)
         remaining_args: Remaining arguments
+        set_context: If True, set the current context; if False, just extract without setting
 
     Returns:
         Tuple of (entry_identifier, remaining_args)
@@ -55,13 +56,14 @@ def extract_context_from_args(entry_arg: str, remaining_args: List[str]) -> Tupl
     if entry_arg and entry_arg.startswith('='):
         context_name = entry_arg[1:]
 
-        # Set context
-        state = get_state()
-        if context_name == '0':
-            state["current_context"] = None
-        else:
-            state["current_context"] = context_name
-        save_state(state)
+        # Set context only if requested
+        if set_context:
+            state = get_state()
+            if context_name == '0':
+                state["current_context"] = None
+            else:
+                state["current_context"] = context_name
+            save_state(state)
 
         # First remaining arg becomes entry identifier
         if remaining_args:
@@ -169,16 +171,33 @@ def get_entry_from_recent_list(entry_identifier) -> Optional[Entry]:
         return None
 
 
-def format_entry_for_display(entry) -> str:
-    """Format an entry for display with timestamp, content, and context."""
-    from tj.timezone_manager import format_time_dashboard
-    from tj.colors import colorize_content, colorize_context, colorize_timestamp
+def format_entry_for_display(entry, entry_number=None) -> str:
+    """Format an entry for display in list-like format.
 
-    time_str = colorize_timestamp(format_time_dashboard(entry.timestamp_created))
+    Args:
+        entry: The Entry object to format
+        entry_number: Optional entry number to display (e.g., 1, 2, 3...)
+
+    Returns:
+        Formatted string for display
+    """
+    from tj.timezone_manager import format_time_dashboard
+    from tj.colors import colorize_content, colorize_context, colorize_creation_timestamp, colorize_entry_number
+
+    time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_created))
     content_colored = colorize_content(entry.content)
     context_str = f" {colorize_context(entry.context)}" if entry.context else ""
 
-    return f"{time_str} {content_colored}{context_str}"
+    # Entry number prefix (optional)
+    number_str = f"{colorize_entry_number(entry_number)}  " if entry_number else ""
+
+    # Format based on entry kind
+    if entry.kind == 'todo':
+        return f"{number_str}{time_str} ToDo: {content_colored}{context_str}"
+    elif entry.kind in ['memory', 'bookmark']:
+        return f"{number_str}{time_str} {content_colored}{context_str}"
+    else:
+        return f"{number_str}{time_str} [{entry.kind}] {content_colored}{context_str}"
 
 def not_yet_implemented(args, num_identifier: Optional[int] = None) -> None:
     display_context()

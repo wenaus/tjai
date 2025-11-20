@@ -206,16 +206,39 @@ def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
 
         return dt.timestamp(), remaining
 
-    # Check for slash-formatted dates FIRST (mm/dd, mm/dd/HH:MM, yyyy/mm/dd, yyyy/mm/dd/HH:MM)
+    # Check for slash-formatted dates FIRST (mm/dd, mm/dd/HH:MM, MMDD/HH:MM, yyyy/mm/dd, yyyy/mm/dd/HH:MM)
     # Must come before time-only check since mm/dd/HH:MM contains ':'
     if '/' in first and not first.startswith('http'):
         parts = first.split('/')
         try:
             if len(parts) == 2:
-                # Could be mm/dd or yyyy/mm
+                # Could be mm/dd, yyyy/mm, or MMDD/HH:MM
                 if len(parts[0]) == 4:
-                    # yyyy/mm format (date without day - invalid)
-                    pass  # Fall through to next check
+                    # Could be yyyy/mm (date without day - invalid) or MMDD/HH:MM
+                    # Check if second part looks like time (has : or is am/pm)
+                    if ':' in parts[1] or parts[1].lower().endswith(('am', 'pm')):
+                        # MMDD/HH:MM format (e.g., 1205/9:30)
+                        month = int(parts[0][0:2])
+                        day = int(parts[0][2:4])
+                        year = now.year
+                        event_date = date(year, month, day)
+
+                        # Parse time from second part
+                        try:
+                            hour, minute = parse_time(parts[1])
+                        except ValueError as e:
+                            print(f"Warning: {e}, using midnight", file=sys.stderr)
+                            hour, minute = 0, 0
+
+                        if tz:
+                            dt = datetime.combine(event_date, time(hour, minute, tzinfo=tz))
+                        else:
+                            dt = datetime.combine(event_date, time(hour, minute))
+
+                        return dt.timestamp(), remaining
+                    else:
+                        # yyyy/mm format (date without day - invalid)
+                        pass  # Fall through to next check
                 else:
                     # mm/dd format
                     month = int(parts[0])

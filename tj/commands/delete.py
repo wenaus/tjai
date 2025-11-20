@@ -31,11 +31,12 @@ def handle_delete_new(args) -> None:
             handle_delete_context(context_name)
             return
 
-        # Extract context marker if present (e.g., tj d =context underway)
+        # Extract context marker if present (e.g., tj d =context 5)
+        # Do NOT set current context - just extract it for filtering
         if args.args and args.args[0].startswith('='):
-            first_arg, args.args = extract_context_from_args(args.args[0], args.args[1:])
+            first_arg, args.args = extract_context_from_args(args.args[0], args.args[1:], set_context=False)
             if first_arg is None:
-                # Just setting context, no delete operation
+                # Just context marker, no delete operation
                 return
             # Put first_arg back into args.args
             args.args = [first_arg] + list(args.args)

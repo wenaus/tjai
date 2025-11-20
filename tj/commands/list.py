@@ -415,17 +415,9 @@ def handle_list_all(args) -> None:
             filter_info = ""
         print(f"{len(sorted_entries)} entries{filter_info}:")
 
+        from tj.commands.common import format_entry_for_display
         for i, entry in enumerate(sorted_entries, 1):
-            content_colored = colorize_content(entry.content)
-            time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_created))
-
-            context_str = f" {colorize_context(entry.context)}" if entry.context else ""
-            if entry.kind == 'todo':
-                print(f"{colorize_entry_number(i)}  {time_str} ToDo: {content_colored}{context_str}")
-            elif entry.kind in ['memory', 'bookmark']:
-                print(f"{colorize_entry_number(i)}  {time_str} {content_colored}{context_str}")
-            else:
-                print(f"{colorize_entry_number(i)}  {time_str} [{entry.kind}] {content_colored}{context_str}")
+            print(format_entry_for_display(entry, i))
 
     except Exception as e:
         print(f"List all error: {e}", file=sys.stderr)
