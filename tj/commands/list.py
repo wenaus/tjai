@@ -266,12 +266,12 @@ def _list_entries_with_filters(repository, filters):
     print(legend)
 
     # Add metadata line
-    print("Metadata: :tag @name p=priority s=status")
+    print("Metadata: =context :tag @name p=priority s=status")
 
     # Add column headers with timezone info
     from tj.timezone_manager import get_current_timezone
     tz = get_current_timezone()
-    print(f"Entry   Timestamp       Type Context Content (TZ: {tz})")
+    print(f"Entry   Timestamp       Type Content     (TZ: {tz})")
     for i, entry in enumerate(active_entries, 1):
         # Format modification timestamp uniformly for all entries
         time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_modified))
@@ -280,6 +280,16 @@ def _list_entries_with_filters(repository, filters):
         # Prepend bold name with @ symbol if entry has one
         if entry.name:
             content_colored = f"{BOLD}@{entry.name}:{RESET} {content_colored}"
+
+        # Prepend priority and status if present
+        metadata_parts = []
+        if entry.priority is not None:
+            metadata_parts.append(f"p={entry.priority}")
+        if entry.status:
+            metadata_parts.append(f"s={entry.status}")
+        if metadata_parts:
+            metadata_str = " ".join(metadata_parts)
+            content_colored = f"{metadata_str}  {content_colored}"
 
         # Show type prefix (use short codes)
         kind_display = {

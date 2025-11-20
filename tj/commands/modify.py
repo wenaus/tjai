@@ -387,26 +387,51 @@ def display_entry_details(entry, entry_identifier=None):
         entry: The Entry object to display
         entry_identifier: Optional identifier string (e.g., "1" or "@name") for display
     """
+    from tj.colors import colorize_kind
+
     time_str = format_time_dashboard(entry.timestamp_created)
 
-    # Display identifier (name or number)
+    # Map entry kind to short display code
+    kind_display = {
+        'todo': 'd',
+        'profile': 'p',
+        'ai': 'ai',
+        'calendar': 'j',
+        'bookmark': 'b',
+        'memory': 'm'
+    }
+    kind_short = kind_display.get(entry.kind, entry.kind[0])
+
+    # Build first line: Entry N [kind] priority=N  status=<status>  created <time>
+    first_line_parts = []
+
+    # Entry identifier
     if entry_identifier:
         display_id = f"@{entry.name}" if entry.name else entry_identifier
-        print(f"Entry {display_id}:")
+        first_line_parts.append(f"Entry {display_id} {colorize_kind(kind_short)}")
     else:
-        print(f"Created {entry.kind}:")
+        first_line_parts.append(f"Entry {colorize_kind(kind_short)}")
 
-    print(f"  Content: {entry.content}")
-    print(f"  Created: {time_str}")
-    print(f"  Type: {entry.kind}")
+    # Add priority if present
+    if entry.priority is not None:
+        first_line_parts.append(f"priority={entry.priority}")
+
+    # Add status if present
+    if entry.status:
+        first_line_parts.append(f"status={entry.status}")
+
+    # Add created time
+    first_line_parts.append(f"created {time_str}")
+
+    print("  ".join(first_line_parts))
+
+    # Display content without label
+    print(entry.content)
+
     if entry.context:
         print(f"  Context: {entry.context}")
     if entry.name:
         print(f"  Name: @{entry.name}")
-    if entry.priority is not None:
-        print(f"  Priority: {entry.priority}")
-    if entry.status:
-        print(f"  Status: {entry.status}")
 
     # Show tags
     repository = RepositoryFactory.get_repository()
