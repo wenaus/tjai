@@ -206,8 +206,8 @@ def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
 
         return dt.timestamp(), remaining
 
-    # Check for time only (HH:MM)
-    if ':' in first:
+    # Check for time only (HH:MM or am/pm format)
+    if ':' in first or first.lower().endswith(('am', 'pm')):
         try:
             hour, minute = parse_time(first)
             today = now.date()
@@ -281,8 +281,13 @@ def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
             print(f"Error: Invalid date in YYYYMMDD format '{first}': {e}", file=sys.stderr)
             return now.timestamp(), args_list
 
-    # No date spec recognized, use now
-    return now.timestamp(), args_list
+    # No date spec recognized, default to all-day event today (midnight)
+    today = now.date()
+    if tz:
+        dt = datetime.combine(today, time(0, 0, tzinfo=tz))
+    else:
+        dt = datetime.combine(today, time(0, 0))
+    return dt.timestamp(), args_list
 
 
 def handle_journal(args) -> None:
