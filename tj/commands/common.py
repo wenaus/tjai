@@ -116,12 +116,13 @@ def get_entry_from_recent_list(entry_identifier) -> Optional[Entry]:
                         return matching_entries[0]
 
                     # Multiple matches - prompt user to choose
+                    from tj.colors import colorize_content
                     print(f"\nMultiple entries found with name '@{name}':")
                     for i, entry in enumerate(matching_entries, 1):
                         context_str = f"={entry.context}" if entry.context else "(no context)"
                         # Show first 50 chars of content
                         content_preview = entry.content[:50] + "..." if len(entry.content) > 50 else entry.content
-                        print(f"  {i}. {context_str}: {content_preview}")
+                        print(f"  {i}. {context_str}: {colorize_content(content_preview)}")
 
                     choice = input(f"\nSelect entry (1-{len(matching_entries)}) or 'c' to cancel: ").strip().lower()
 
@@ -231,13 +232,14 @@ def handle_delete(args, num_identifier: Optional[int] = None) -> None:
         
         # Show entry and ask for confirmation
         content_preview = entry_to_delete.content[:80] + "..." if len(entry_to_delete.content) > 80 else entry_to_delete.content
-        
+
         from tj.timezone_manager import get_current_timezone, format_time_in_timezone
+        from tj.colors import colorize_content
         current_tz = get_current_timezone()
         time_str = format_time_in_timezone(entry_to_delete.timestamp_created, current_tz)
-        
+
         print(f"Entry to delete:")
-        print(f"  {content_preview}")
+        print(f"  {colorize_content(content_preview)}")
         print(f"  {time_str}")
         if entry_to_delete.context:
             print(f"  Context: {entry_to_delete.context}")

@@ -485,7 +485,23 @@ class SQLiteRepository(EntryRepository):
             
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to update context: {e}")
-    
+
+    def delete_context(self, name: str) -> bool:
+        """Delete a context by name."""
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("DELETE FROM contexts WHERE name = ?", (name,))
+            success = cursor.rowcount > 0
+
+            conn.commit()
+            conn.close()
+            return success
+
+        except sqlite3.Error as e:
+            raise DatabaseError(f"Failed to delete context: {e}")
+
     def remove_tag(self, entry_id: str, tag_name: str) -> bool:
         """Remove a specific tag from an entry."""
         try:

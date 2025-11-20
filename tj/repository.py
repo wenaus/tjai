@@ -137,3 +137,8 @@ class EntryRepository(ABC):
     def update_context(self, name: str, **changes) -> bool:
         """Update a context with the given changes."""
         pass
+
+    @abstractmethod
+    def delete_context(self, name: str) -> bool:
+        """Delete a context by name."""
+        pass

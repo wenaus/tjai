@@ -580,8 +580,17 @@ def main() -> None:
 
         # If there are remaining args, they're for creation
         if not remaining_args:
+            # Just setting context - show context and list its entries
             from tj.state import display_context
+            from tj.commands.list import handle_list_command
+
             display_context()
+
+            # List entries in this context
+            if context_name and context_name != '0':
+                class ListArgs:
+                    filters = [f'={context_name}']
+                handle_list_command(ListArgs())
             return
 
     parser = create_parser()

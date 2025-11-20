@@ -22,6 +22,13 @@ def handle_delete_new(args) -> None:
             print("  tj d <n1-n2>            - Delete range of entries")
             print("  tj d <number> t <tag>   - Delete tag from entry")
             print("  tj d t <tagname>        - Delete all instances of tag")
+            print("  tj d =context           - Delete context (if empty)")
+            return
+
+        # Check for context deletion (tj d =contextname)
+        if len(args.args) == 1 and args.args[0].startswith('='):
+            context_name = args.args[0][1:]
+            handle_delete_context(context_name)
             return
 
         # Extract context marker if present (e.g., tj d =context underway)
@@ -161,8 +168,9 @@ def handle_delete_tag_from_entry(entry_num: int, tag: str) -> None:
             return
 
         # Show confirmation
+        from tj.colors import colorize_content
         print(f"Remove tag '{tag}' from entry {entry_num}:")
-        print(f"  {entry.content}")
+        print(f"  {colorize_content(entry.content)}")
 
         response = input(f"\nRemove tag '{tag}'? [y/N]: ").strip().lower()
         if response not in ['y', 'yes']:
@@ -209,3 +217,48 @@ def handle_delete_all_tag_instances(tagname: str) -> None:
 
     except Exception as e:
         print(f"Delete all tags error: {e}", file=sys.stderr)
+
+
+def handle_delete_context(context_name: str) -> None:
+    """Delete a context (only if it has no entries)."""
+    try:
+        repository = RepositoryFactory.get_repository()
+
+        # Check if context exists
+        context = repository.get_context(context_name)
+        if not context:
+            print(f"Error: Context '{context_name}' not found.", file=sys.stderr)
+            return
+
+        # Check for entries in this context
+        entries = repository.query_entries(context=context_name)
+        active_entries = [e for e in entries if not getattr(e, 'deleted_at', None)]
+
+        if active_entries:
+            from tj.colors import colorize_content
+            print(f"Error: Cannot delete context '{context_name}' - it has {len(active_entries)} entries.", file=sys.stderr)
+            print("\nEntries in this context:")
+            for entry in active_entries[:10]:  # Show first 10
+                time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_created))
+                content_preview = entry.content[:60] + "..." if len(entry.content) > 60 else entry.content
+                print(f"  {time_str} {colorize_content(content_preview)}")
+            if len(active_entries) > 10:
+                print(f"  ... and {len(active_entries) - 10} more")
+            return
+
+        # Confirm deletion
+        print(f"Delete context '{context_name}'? [y/N]: ", end='')
+        response = input().strip().lower()
+        if response not in ['y', 'yes']:
+            print("Context deletion cancelled.")
+            return
+
+        # Delete the context
+        success = repository.delete_context(context_name)
+        if success:
+            print(f"Context '{context_name}' deleted.")
+        else:
+            print("Error: Failed to delete context.", file=sys.stderr)
+
+    except Exception as e:
+        print(f"Delete context error: {e}", file=sys.stderr)

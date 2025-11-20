@@ -92,12 +92,14 @@ def query_ai_guidelines(context: Optional[str], tag: Optional[str]) -> None:
         print("AI Guidelines - Follow these instructions:")
         print()
 
+        from tj.colors import colorize_content
+
         # Always show universal guidelines
         if universal:
             print("Universal:")
             universal.sort(key=lambda e: e.timestamp_created)
             for i, entry in enumerate(universal, 1):
-                print(f"{i}. {entry.content}")
+                print(f"{i}. {colorize_content(entry.content)}")
             print()
 
         # Show specific guidelines if context/tag was requested
@@ -114,7 +116,7 @@ def query_ai_guidelines(context: Optional[str], tag: Optional[str]) -> None:
                     print(f"For tag ':{tag}':")
                 specific.sort(key=lambda e: e.timestamp_created)
                 for i, entry in enumerate(specific, 1):
-                    print(f"{i}. {entry.content}")
+                    print(f"{i}. {colorize_content(entry.content)}")
             else:
                 scope = f"context '{context}'" if context else f"tag ':{tag}'"
                 if not universal:

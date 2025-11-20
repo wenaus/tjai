@@ -226,6 +226,13 @@ def _edit_entry_in_editor(entry, entry_identifier="entry"):
         repository.remove_tag(entry.id, tag)
 
     print("Entry updated successfully.")
+
+    # Show the updated entry
+    updated_entry = repository.get_entry(entry.id)
+    if updated_entry:
+        print()
+        display_entry_details(updated_entry, entry_identifier)
+
     return True
 
 
@@ -600,8 +607,9 @@ def display_entry_details(entry, entry_identifier=None):
 
     print("  ".join(first_line_parts))
 
-    # Display content without label
-    print(entry.content)
+    # Display content with colorization (links, tags, etc.)
+    from tj.colors import colorize_content
+    print(colorize_content(entry.content))
 
     if entry.context:
         print(f"  Context: {entry.context}")
