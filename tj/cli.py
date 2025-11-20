@@ -605,16 +605,20 @@ def main() -> None:
             state["current_context"] = None
             save_state(state)
         elif context_name:
-            # Set context (auto-create if doesn't exist)
-            state["current_context"] = context_name
-            save_state(state)
-
+            # Check if context exists
             from tj.repository_factory import RepositoryFactory
             from tj.repository import Context
             from datetime import datetime, timezone
 
             repository = RepositoryFactory.get_repository()
             if not repository.get_context(context_name):
+                # Context doesn't exist - confirm creation
+                response = input(f"Context '{context_name}' does not exist. Create it? [y/N]: ").strip().lower()
+                if response not in ['y', 'yes']:
+                    print("Cancelled.")
+                    return
+
+                # Create new context
                 now = datetime.now(timezone.utc).timestamp()
                 new_context = Context(
                     name=context_name,
@@ -624,6 +628,11 @@ def main() -> None:
                     timestamp_modified=now
                 )
                 repository.create_context(new_context)
+                print(f"Context '{context_name}' created.")
+
+            # Set context
+            state["current_context"] = context_name
+            save_state(state)
 
         # If there are remaining args, they're for creation
         if not remaining_args:

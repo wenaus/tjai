@@ -22,44 +22,31 @@ def handle_context(args, num_identifier: Optional[int] = None) -> None:
 
         now = datetime.now(timezone.utc).timestamp()
 
-        if existing_context:
-            # Context exists - update if title or description provided
-            if title or description:
-                updates = {}
-                if title:
-                    updates['title'] = title
-                if description:
-                    updates['description'] = description
-                updates['timestamp_modified'] = now
+        if not existing_context:
+            # Context doesn't exist - error
+            print(f"Error: Context '{args.name}' does not exist. Create it first with: tj ={args.name}", file=sys.stderr)
+            return
 
-                repository.update_context(args.name, **updates)
+        # Context exists - update if title or description provided
+        if title or description:
+            updates = {}
+            if title:
+                updates['title'] = title
+            if description:
+                updates['description'] = description
+            updates['timestamp_modified'] = now
 
-                parts = []
-                if title:
-                    parts.append(f"title='{title}'")
-                if description:
-                    parts.append(f"description='{description}'")
-                print(f"Context '{args.name}' updated with {', '.join(parts)}.")
-            else:
-                # Just switching to existing context
-                print(f"Context set to: {args.name}")
-        else:
-            # Create new context
-            new_context = Context(
-                name=args.name,
-                title=title,
-                description=description,
-                timestamp_created=now,
-                timestamp_modified=now
-            )
-            repository.create_context(new_context)
+            repository.update_context(args.name, **updates)
 
-            parts = [f"'{args.name}'"]
+            parts = []
             if title:
                 parts.append(f"title='{title}'")
             if description:
                 parts.append(f"description='{description}'")
-            print(f"Context {' with '.join(parts)} created.")
+            print(f"Context '{args.name}' updated with {', '.join(parts)}.")
+        else:
+            # Just switching to existing context
+            print(f"Context set to: {args.name}")
 
         # Set as current context
         state["current_context"] = args.name

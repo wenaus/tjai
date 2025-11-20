@@ -32,19 +32,11 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
             save_state(state)
 
             if inline_context:
-                # Auto-create context if it doesn't exist
-                from tj.repository import Context
+                # Verify context exists
                 repository = RepositoryFactory.get_repository()
                 if not repository.get_context(inline_context):
-                    now = datetime.now(timezone.utc).timestamp()
-                    new_context = Context(
-                        name=inline_context,
-                        title=None,
-                        description=None,
-                        timestamp_created=now,
-                        timestamp_modified=now
-                    )
-                    repository.create_context(new_context)
+                    print(f"Error: Context '{inline_context}' does not exist. Create it first with: tj ={inline_context}", file=sys.stderr)
+                    return
 
         # Step 2: Join to get full content string
         content = " ".join(filtered_input).strip()
