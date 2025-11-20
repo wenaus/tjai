@@ -162,29 +162,25 @@ def _edit_entry_in_editor(entry, entry_identifier="entry"):
     if new_content is None:
         return False
 
-    # Parse for =context on first line
+    # Parse for =context on first line (only first =text is treated as context)
+    from tj.commands.common import extract_first_context_from_parts
+
     lines = new_content.split('\n', 1)
     first_line = lines[0]
     rest = lines[1] if len(lines) > 1 else None
 
     first_parts = first_line.split()
-    new_context = entry.context
-    content_parts = []
-    found_context_marker = False
+    new_context, content_parts, found_context_marker = extract_first_context_from_parts(first_parts)
 
-    for part in first_parts:
-        if part.startswith('='):
-            found_context_marker = True
-            ctx = part[1:]
-            if ctx == '0':
-                new_context = None
-            elif ctx:
-                new_context = ctx
-        else:
-            content_parts.append(part)
-
-    # If entry had context but user removed =context marker, clear it
-    if entry.context and not found_context_marker:
+    # If context was found in content, use it; otherwise keep entry's existing context
+    if found_context_marker:
+        # Explicit context in edited content (including =0 to clear)
+        pass  # new_context already set by extract function
+    elif entry.context:
+        # Entry had context but user removed =context marker, clear it
+        new_context = None
+    else:
+        # Entry had no context, keep it that way
         new_context = None
 
     # Reconstruct content without =context
@@ -316,7 +312,20 @@ def handle_edit(args) -> None:
 
             # If there's text, do command-line edit with confirmation
             if args.text:
-                new_text = " ".join(args.text)
+                from tj.commands.common import extract_first_context_from_parts
+
+                # Extract inline =context from text
+                new_context, filtered_text, found_context = extract_first_context_from_parts(args.text)
+                new_text = " ".join(filtered_text)
+
+                # Determine final context
+                if found_context:
+                    # Use the extracted context (could be None if =0)
+                    final_context = new_context
+                else:
+                    # No context specified, keep existing
+                    final_context = entry.context
+
                 print(f"Edit entry {name_ref}:")
                 print(f"  Old: {entry.content}")
                 print(f"  New: {new_text}")
@@ -332,6 +341,7 @@ def handle_edit(args) -> None:
                 # Build update fields
                 update_fields = {
                     'content': cleaned_content,
+                    'context': final_context,
                     'timestamp_modified': datetime.now(timezone.utc).timestamp(),
                     'is_dirty': True
                 }
@@ -369,12 +379,24 @@ def handle_edit(args) -> None:
         return
 
     # Case 3: Entry number + text → command-line edit with confirmation
-    new_text = " ".join(args.text)
+    from tj.commands.common import extract_first_context_from_parts
+
+    # Extract inline =context from text
+    new_context, filtered_text, found_context = extract_first_context_from_parts(args.text)
+    new_text = " ".join(filtered_text)
 
     entry = get_entry_from_recent_list(entry_num)
     if not entry:
         print(f"Error: Entry {entry_num} not found in recent list.", file=sys.stderr)
         return
+
+    # Determine final context
+    if found_context:
+        # Use the extracted context (could be None if =0)
+        final_context = new_context
+    else:
+        # No context specified, keep existing
+        final_context = entry.context
 
     # Show current content and confirm
     print(f"Edit entry {entry_num}:")
@@ -392,6 +414,7 @@ def handle_edit(args) -> None:
     # Build update fields
     update_fields = {
         'content': cleaned_content,
+        'context': final_context,
         'timestamp_modified': datetime.now(timezone.utc).timestamp(),
         'is_dirty': True
     }

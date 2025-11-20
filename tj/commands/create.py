@@ -20,40 +20,31 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
         return
 
     try:
-        # Step 1: Extract inline =context (must be per-arg)
-        inline_context = None
-        filtered_input = []
-        for part in args.input:
-            if part.startswith('='):
-                context_name = part[1:]
-                if context_name == '0':
-                    # Clear context inline
-                    inline_context = None
-                    state = get_state()
-                    state["current_context"] = None
-                    save_state(state)
-                elif context_name:
-                    # Set inline context
-                    inline_context = context_name
-                    state = get_state()
-                    state["current_context"] = inline_context
-                    save_state(state)
-                    # Auto-create context if it doesn't exist
-                    from tj.repository import Context
-                    repository = RepositoryFactory.get_repository()
-                    if not repository.get_context(inline_context):
-                        now = datetime.now(timezone.utc).timestamp()
-                        new_context = Context(
-                            name=inline_context,
-                            title=None,
-                            description=None,
-                            timestamp_created=now,
-                            timestamp_modified=now
-                        )
-                        repository.create_context(new_context)
-                # Don't add =context to the content
-            else:
-                filtered_input.append(part)
+        # Step 1: Extract inline =context (only first =text is treated as context)
+        from tj.commands.common import extract_first_context_from_parts
+
+        inline_context, filtered_input, context_found = extract_first_context_from_parts(args.input)
+
+        # Update state and auto-create context if needed
+        if context_found:
+            state = get_state()
+            state["current_context"] = inline_context
+            save_state(state)
+
+            if inline_context:
+                # Auto-create context if it doesn't exist
+                from tj.repository import Context
+                repository = RepositoryFactory.get_repository()
+                if not repository.get_context(inline_context):
+                    now = datetime.now(timezone.utc).timestamp()
+                    new_context = Context(
+                        name=inline_context,
+                        title=None,
+                        description=None,
+                        timestamp_created=now,
+                        timestamp_modified=now
+                    )
+                    repository.create_context(new_context)
 
         # Step 2: Join to get full content string
         content = " ".join(filtered_input).strip()

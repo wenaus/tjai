@@ -7,6 +7,38 @@ from tj.repository import Entry
 from tj.state import display_context, get_state, save_state
 
 
+def extract_first_context_from_parts(parts: List[str]) -> Tuple[Optional[str], List[str], bool]:
+    """Extract inline context from a list of parts (ONLY the first =text).
+
+    Args:
+        parts: List of string parts (e.g., ['=tjai', 'use', '==text', 'here'])
+
+    Returns:
+        Tuple of (context_name, filtered_parts, found_context):
+        - context_name: Extracted context name (None if =0 or no context found)
+        - filtered_parts: All parts except the first =context marker
+        - found_context: True if a =context marker was found
+    """
+    context_name = None
+    filtered_parts = []
+    found_context = False
+
+    for part in parts:
+        if part.startswith('=') and not found_context:
+            # Only process the first =context marker
+            found_context = True
+            ctx = part[1:]
+            if ctx == '0':
+                context_name = None
+            elif ctx:
+                context_name = ctx
+            # Don't add this part to filtered_parts
+        else:
+            filtered_parts.append(part)
+
+    return context_name, filtered_parts, found_context
+
+
 def extract_context_from_args(entry_arg: str, remaining_args: List[str]) -> Tuple[Optional[str], List[str]]:
     """Extract context marker from arguments if present.
 
