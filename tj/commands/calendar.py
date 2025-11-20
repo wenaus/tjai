@@ -233,33 +233,73 @@ def handle_calendar_view(args) -> None:
             print(colorize_timestamp(start_dt.strftime('%a %b %d, %Y')))
 
         # Print entries grouped by day
+        # Get truncate length from config
+        from tj.config import get_content_truncate_length
+        truncate_len = get_content_truncate_length()
+
+        last_week = None
         for date_key in sorted_dates:
             entries = entries_by_date[date_key]
             # Sort entries within day by time
             entries.sort(key=lambda x: x[0])
 
+            # Determine if this is today's section
+            event_date = entries[0][1].date()
+            if tz:
+                now_dt = datetime.now(tz)
+                today = now_dt.date()
+            else:
+                now_dt = datetime.now()
+                today = now_dt.date()
+            is_today = (event_date == today)
+
+            # Check for week boundary in multi-day views
+            if is_multi_day:
+                event_dt_for_week = entries[0][1]
+                current_week = event_dt_for_week.isocalendar()[1]
+                current_year = event_dt_for_week.year
+
+                # Print week header when crossing week boundary or at start
+                if last_week is None or (current_year, current_week) != last_week:
+                    week_start = event_dt_for_week - timedelta(days=event_dt_for_week.weekday())
+                    print(f"\n{colorize_timestamp(f'{week_start.strftime("%Y%m%d")} Week {current_week}')}")
+                    last_week = (current_year, current_week)
+
             # Print day header for multi-day views
             if is_multi_day:
                 day_name = entries[0][1].strftime('%a %b %d')
-                # Bold today's date and show current time
-                event_date = entries[0][1].date()
-                if tz:
-                    now_dt = datetime.now(tz)
-                    today = now_dt.date()
-                else:
-                    now_dt = datetime.now()
-                    today = now_dt.date()
-                if event_date == today:
-                    from tj.colors import BOLD, RESET
+                if is_today:
+                    from tj.colors import BOLD, RESET, TERRACOTTA
                     current_time = now_dt.strftime('%H:%M')
-                    print(f"  {BOLD}{colorize_timestamp(f'{day_name} {current_time}')}")
+                    print(f"  {BOLD}{colorize_timestamp(f'{day_name} {current_time}')} {TERRACOTTA}{BOLD}Today{RESET}")
                 else:
                     print(f"  {colorize_timestamp(day_name)}")
 
             # Print entries
             for event_ts, event_dt, entry in entries:
+                # Truncate content if needed (by lines, before colorizing)
+                # First line always shown + truncate_len additional lines
+                content = entry.content
+                lines = content.split('\n')
+                if len(lines) > (truncate_len + 1):
+                    content = '\n'.join(lines[:truncate_len + 1]) + " [...]"
+
                 # Colorize content (converts markdown links to clickable terminal links)
-                display_text = colorize_content(entry.content)
+                display_text = colorize_content(content)
+
+                # Calculate countdown for today's future events
+                countdown_str = ""
+                if is_today and (event_dt.hour != 0 or event_dt.minute != 0):
+                    time_diff = event_dt - now_dt
+                    total_seconds = int(time_diff.total_seconds())
+                    if total_seconds > 0:  # Event is in the future
+                        from tj.colors import TERRACOTTA, RESET, BOLD
+                        hours = total_seconds // 3600
+                        minutes = (total_seconds % 3600) // 60
+                        if hours > 0:
+                            countdown_str = f" {TERRACOTTA}{BOLD}in {hours}h {minutes}m{RESET}"
+                        else:
+                            countdown_str = f" {TERRACOTTA}{BOLD}in {minutes}m{RESET}"
 
                 # Handle multi-line content
                 lines = display_text.split('\n')
@@ -274,11 +314,21 @@ def handle_calendar_view(args) -> None:
                         first_indent = "  "
                         subsequent_indent = "    "
 
-                    # Print first line with time
-                    print(f"{first_indent}{time_str} {lines[0]}")
-                    # Print subsequent lines with extra indent
+                    # Build first line with optional bold for today and countdown
+                    if is_today:
+                        from tj.colors import BOLD, RESET
+                        first_line = f"{first_indent}{BOLD}{time_str}{countdown_str} {lines[0]}{RESET}"
+                    else:
+                        first_line = f"{first_indent}{time_str} {lines[0]}"
+
+                    print(first_line)
+                    # Print subsequent lines with extra indent and bold if today
                     for line in lines[1:]:
-                        print(f"{subsequent_indent}{line}")
+                        if is_today:
+                            from tj.colors import BOLD, RESET
+                            print(f"{subsequent_indent}{BOLD}{line}{RESET}")
+                        else:
+                            print(f"{subsequent_indent}{line}")
                 else:
                     # Midnight = all-day event, no time shown
                     if is_multi_day:
@@ -288,11 +338,16 @@ def handle_calendar_view(args) -> None:
                         first_indent = "  "
                         subsequent_indent = "    "
 
-                    # Print first line
-                    print(f"{first_indent}{lines[0]}")
-                    # Print subsequent lines with extra indent
-                    for line in lines[1:]:
-                        print(f"{subsequent_indent}{line}")
+                    # Print with bold if today
+                    if is_today:
+                        from tj.colors import BOLD, RESET
+                        print(f"{first_indent}{BOLD}{lines[0]}{RESET}")
+                        for line in lines[1:]:
+                            print(f"{subsequent_indent}{BOLD}{line}{RESET}")
+                    else:
+                        print(f"{first_indent}{lines[0]}")
+                        for line in lines[1:]:
+                            print(f"{subsequent_indent}{line}")
 
     except Exception as e:
         print(f"Calendar view error: {e}", file=sys.stderr)

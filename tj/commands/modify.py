@@ -54,18 +54,58 @@ def _parse_metadata_from_content(content: str, entry):
                 if tag:
                     new_tags.add(tag)
 
-    # For calendar entries, re-parse event date from content
+    # For calendar entries, re-parse event date from content if a date is present
     entry_data = entry.data
     if entry.kind == 'calendar':
         from tj.commands.journal import parse_date_spec
-        # Parse date from content
+        from tj.timezone_manager import get_current_timezone
+        from zoneinfo import ZoneInfo
+        from datetime import datetime, time as dt_time
+
+        # Get original event date
+        original_event_ts = entry.data.get('event_date') if entry.data else None
+
+        # Try to parse date from content
         content_words = content.strip().split()
         event_timestamp, remaining_words = parse_date_spec(content_words)
-        # Rebuild content without the date/time prefix
-        content = ' '.join(remaining_words) if remaining_words else content
-        # Update entry.data with new event_date - MUST COPY to trigger DB update
-        entry_data = dict(entry.data) if entry.data else {}
-        entry_data['event_date'] = event_timestamp
+
+        # Only update event_date if a date/time was actually found in the content
+        # If no date found, remaining_words will be same as content_words (nothing consumed)
+        date_was_found = (remaining_words != content_words)
+
+        if date_was_found:
+            # Check if only time was specified (no date)
+            # If first word is time-only format, preserve original date
+            first_word = content_words[0] if content_words else ""
+            is_time_only = ':' in first_word or first_word.lower().endswith(('am', 'pm'))
+
+            if is_time_only and original_event_ts:
+                # Get timezone
+                tz_name = get_current_timezone()
+                try:
+                    tz = ZoneInfo(tz_name)
+                    original_dt = datetime.fromtimestamp(original_event_ts, tz=tz)
+                    new_dt = datetime.fromtimestamp(event_timestamp, tz=tz)
+                except Exception:
+                    original_dt = datetime.fromtimestamp(original_event_ts)
+                    new_dt = datetime.fromtimestamp(event_timestamp)
+
+                # Combine original date with new time
+                try:
+                    if tz:
+                        combined_dt = datetime.combine(original_dt.date(), dt_time(new_dt.hour, new_dt.minute, tzinfo=tz))
+                    else:
+                        combined_dt = datetime.combine(original_dt.date(), dt_time(new_dt.hour, new_dt.minute))
+                    event_timestamp = combined_dt.timestamp()
+                except Exception:
+                    pass  # Fall back to parsed timestamp if combination fails
+
+            # Rebuild content without the date/time prefix
+            content = ' '.join(remaining_words) if remaining_words else content
+            # Update entry.data with new event_date - MUST COPY to trigger DB update
+            entry_data = dict(entry.data) if entry.data else {}
+            entry_data['event_date'] = event_timestamp
+        # else: preserve original event_date, keep content as-is
 
     update_fields = {
         'name': entry_name,
@@ -566,11 +606,42 @@ def display_entry_details(entry, entry_identifier=None):
 
 
 def handle_show(args) -> None:
-    """Handle showing entry details."""
+    """Handle showing entry or context details."""
     from tj.state import display_context
     from tj.commands.common import extract_context_from_args
     display_context()
     try:
+        # Check if showing context details (tj s =context)
+        if args.entry_num.startswith('='):
+            context_name = args.entry_num[1:]
+            if not context_name:
+                print("Error: Empty context name.", file=sys.stderr)
+                return
+
+            repository = RepositoryFactory.get_repository()
+            context = repository.get_context(context_name)
+
+            if not context:
+                print(f"Error: Context '{context_name}' not found.", file=sys.stderr)
+                return
+
+            # Display context details
+            print(f"Context: {context_name}")
+            if context.title:
+                print(f"Title: {context.title}")
+            if context.description:
+                print(f"Description: {context.description}")
+
+            # Show entry count
+            entries = repository.query_entries(context=context_name)
+            active_entries = [e for e in entries if not getattr(e, 'deleted_at', None)]
+            print(f"Entries: {len(active_entries)}")
+
+            # Show creation time
+            time_str = format_time_dashboard(context.timestamp_created)
+            print(f"Created: {time_str}")
+            return
+
         # Extract context marker if present (e.g., tj s =context underway)
         entry_identifier, _ = extract_context_from_args(args.entry_num, [])
 

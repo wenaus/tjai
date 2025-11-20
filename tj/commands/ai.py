@@ -16,15 +16,17 @@ def handle_ai_command(args, num_identifier: Optional[int] = None) -> None:
     - tj ai :<tag> <content> - create tagged AI guideline
 
     Query (for AI consumption):
-    - tj ai - list universal AI guidelines only
-    - tj ai =context - list universal + context-specific AI guidelines
+    - tj ai - list universal + current context AI guidelines (if in a context)
+    - tj ai =context - list universal + specified context AI guidelines
     - tj ai :tag - list universal + tag-specific AI guidelines
     """
-    from tj.state import display_context
+    from tj.state import display_context, get_state
     display_context()
     if not hasattr(args, 'input') or not args.input:
-        # No args: list universal AI guidelines only
-        query_ai_guidelines(context=None, tag=None)
+        # No args: list universal + current context AI guidelines
+        state = get_state()
+        current_context = state.get("current_context")
+        query_ai_guidelines(context=current_context, tag=None)
         return
 
     first_arg = args.input[0]
@@ -101,8 +103,15 @@ def query_ai_guidelines(context: Optional[str], tag: Optional[str]) -> None:
         # Show specific guidelines if context/tag was requested
         if context or tag:
             if specific:
-                scope = f"context '{context}'" if context else f"tag ':{tag}'"
-                print(f"For {scope}:")
+                if context:
+                    # Get context details to show description
+                    context_obj = repository.get_context(context)
+                    if context_obj and context_obj.description:
+                        print(f"For context '{context}': {context_obj.description}")
+                    else:
+                        print(f"For context '{context}':")
+                else:
+                    print(f"For tag ':{tag}':")
                 specific.sort(key=lambda e: e.timestamp_created)
                 for i, entry in enumerate(specific, 1):
                     print(f"{i}. {entry.content}")

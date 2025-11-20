@@ -27,14 +27,15 @@ tj <url> <text> Bookmark        tj + <item>     Add to list
 CONTEXT                         tj e [ai|do|p|b|j] Type in $EDITOR
 tj =ctx         Switch/create   tj e <n>        Edit entry <n>
 tj =ctx -t ...  With title      tj s <n|@name>  Show entry
-tj =ctx -t .. -d .. With desc   tj t <n> <tag>  Tag entry
-tj =0           Clear context   tj mv <n> <ctx> Move to context
+tj =ctx -t .. -d .. With desc   tj s =ctx       Show context
+tj =0           Clear context   tj t <n> <tag>  Tag entry
+                                tj mv <n> <ctx> Move to context
                                 tj ^ <n>        Pin to top
                                 tj d <n|@name>  Delete
 CALENDAR                        tj <n> @name    Assign name
 tj j tomorrow <text>            tj <n> p=N      Set priority
 tj j mon 10am   Team meeting    tj <n> s=val    Set status
-tj j 0615 14:30 Doctor appt
+tj j 0615 14:30 Doctor appt     tj cp <n> <datetime> Copy journal entry
 tj c [t|w|m]    View calendar   DATA
 tj c t+1        Tomorrow        tj dump         Export as commands
 tj c w-1        Last week       tj backup       Manual backup
@@ -47,6 +48,12 @@ s=status        Status value
 :tag            Tag
 //url [T](url)  Links
 -f file         File input
+
+AI GUIDELINES
+tj ai           Show universal + context guidelines
+tj ai =ctx      Show universal + specific context
+tj ai <text>    Create universal guideline
+tj ai =ctx <text> Create context-specific guideline
 
 Examples:
   tj =tjai @roadmap v2 planning p=1 s=active :design

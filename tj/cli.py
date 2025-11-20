@@ -22,6 +22,7 @@ from tj.commands.modify import (
     handle_edit, handle_tag_command,
     handle_move, handle_show, handle_pin
 )
+from tj.commands.copy import handle_copy
 from tj.commands.subitems import handle_add_subitem
 from tj.database import init_db, DatabaseError
 from tj.repository_factory import RepositoryFactory
@@ -180,8 +181,8 @@ def create_parser() -> argparse.ArgumentParser:
     p_move.add_argument('context', nargs='?', help="Context name (empty to remove context)")
     p_move.set_defaults(func=handle_move)
     
-    p_show = subparsers.add_parser('s', help="Show entry details.")
-    p_show.add_argument('entry_num', help="Entry number")
+    p_show = subparsers.add_parser('s', help="Show entry or context details.")
+    p_show.add_argument('entry_num', help="Entry number or =context")
     p_show.set_defaults(func=handle_show)
     
     p_pin = subparsers.add_parser('^', help="Move entry to top.")
@@ -191,6 +192,11 @@ def create_parser() -> argparse.ArgumentParser:
     p_delete = subparsers.add_parser('d', help="Delete an entry or tag.")
     p_delete.add_argument('args', nargs='*', help="Arguments for delete operation")
     p_delete.set_defaults(func=handle_delete_new)
+
+    # Copy
+    p_copy = subparsers.add_parser('cp', help="Copy an entry with new date/time.")
+    p_copy.add_argument('args', nargs='*', help="Entry number, new date/time")
+    p_copy.set_defaults(func=handle_copy)
 
     # Backup
     p_backup = subparsers.add_parser('backup', help="Create a manual backup.")
@@ -530,23 +536,14 @@ def handle_context_syntax(first_arg: str, remaining_args: list) -> None:
 
 def main() -> None:
     """Main function to parse arguments and dispatch commands."""
-    # Filter =context from sys.argv FIRST, before any command parsing
     from tj.state import get_state, save_state
 
-    filtered_argv = [sys.argv[0]]  # Keep script name
-    context_arg = None
-    remaining_args = []
+    # Check if first arg is =context (context switch) or if there's a command first
+    if len(sys.argv) > 1 and sys.argv[1].startswith('='):
+        # First arg is =context - this is a context switch
+        context_arg = sys.argv[1]
+        remaining_args = sys.argv[2:]
 
-    for arg in sys.argv[1:]:
-        if arg.startswith('='):
-            context_arg = arg
-            # Don't add to filtered_argv - extract it
-        else:
-            remaining_args.append(arg)
-            filtered_argv.append(arg)
-
-    # Handle context setting/clearing if present
-    if context_arg:
         context_name = context_arg[1:]
 
         # Check for metadata flags (-t, -d) - delegate to full handler
@@ -581,18 +578,16 @@ def main() -> None:
                 )
                 repository.create_context(new_context)
 
-    # Update sys.argv with filtered version (context removed)
-    sys.argv = filtered_argv
+        # If there are remaining args, they're for creation
+        if not remaining_args:
+            from tj.state import display_context
+            display_context()
+            return
 
     parser = create_parser()
 
     if len(sys.argv) == 1:
-        # Only context arg, no other args
-        if context_arg:
-            from tj.state import display_context
-            display_context()
-        else:
-            show_status()
+        show_status()
         return
 
     first_arg = sys.argv[1]

@@ -272,10 +272,22 @@ def _list_entries_with_filters(repository, filters):
     from tj.timezone_manager import get_current_timezone
     tz = get_current_timezone()
     print(f"Entry   Timestamp       Type Content     (TZ: {tz})")
+    # Get truncate length from config
+    from tj.config import get_content_truncate_length
+    truncate_len = get_content_truncate_length()
+
     for i, entry in enumerate(active_entries, 1):
         # Format modification timestamp uniformly for all entries
         time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_modified))
-        content_colored = colorize_content(entry.content)
+
+        # Truncate content if needed (by lines, before colorizing)
+        # First line always shown + truncate_len additional lines
+        content = entry.content
+        lines = content.split('\n')
+        if len(lines) > (truncate_len + 1):
+            content = '\n'.join(lines[:truncate_len + 1]) + " [...]"
+
+        content_colored = colorize_content(content)
 
         # Prepend bold name with @ symbol if entry has one
         if entry.name:
