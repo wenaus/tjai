@@ -11,17 +11,27 @@ from tj.timezone_manager import format_time_dashboard
 def handle_delete_new(args) -> None:
     """Handle delete operations with new patterns."""
     from tj.state import display_context
+    from tj.commands.common import extract_context_from_args
     display_context()
     try:
         if not args.args:
             print("Error: Please specify what to delete.", file=sys.stderr)
             print("Usage:")
-            print("  tj x <number>           - Delete entry")
-            print("  tj x <n1> <n2> <n3>...  - Delete multiple entries")
-            print("  tj x <n1-n2>            - Delete range of entries")
-            print("  tj x <number> t <tag>   - Delete tag from entry")
-            print("  tj x t <tagname>        - Delete all instances of tag")
+            print("  tj d <number>           - Delete entry")
+            print("  tj d <n1> <n2> <n3>...  - Delete multiple entries")
+            print("  tj d <n1-n2>            - Delete range of entries")
+            print("  tj d <number> t <tag>   - Delete tag from entry")
+            print("  tj d t <tagname>        - Delete all instances of tag")
             return
+
+        # Extract context marker if present (e.g., tj d =context underway)
+        if args.args and args.args[0].startswith('='):
+            first_arg, args.args = extract_context_from_args(args.args[0], args.args[1:])
+            if first_arg is None:
+                # Just setting context, no delete operation
+                return
+            # Put first_arg back into args.args
+            args.args = [first_arg] + list(args.args)
 
         # Check for tag operations first
         if len(args.args) == 2 and args.args[0] == 't':
@@ -40,6 +50,16 @@ def handle_delete_new(args) -> None:
             else:
                 print(f"Error: Invalid entry number '{args.args[0]}'.", file=sys.stderr)
                 return
+
+        # Handle single named entry deletion (e.g., tj d underway or tj d =context underway)
+        if len(args.args) == 1 and not args.args[0].isdigit() and '-' not in args.args[0]:
+            # It's a name, not a number - get_entry_from_recent_list handles context awareness
+            entry = get_entry_from_recent_list(args.args[0])
+            if not entry:
+                print(f"Error: Entry '{args.args[0]}' not found.", file=sys.stderr)
+                return
+            handle_delete_single_entry(entry)
+            return
 
         # Parse entry numbers - could be single, multiple, or range
         entry_nums = []
@@ -61,7 +81,7 @@ def handle_delete_new(args) -> None:
             elif arg.isdigit():
                 entry_nums.append(int(arg))
             else:
-                print(f"Error: Invalid entry number '{arg}'.", file=sys.stderr)
+                print(f"Error: Invalid entry identifier '{arg}'.", file=sys.stderr)
                 return
 
         if entry_nums:

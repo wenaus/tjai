@@ -1,17 +1,51 @@
 import sys
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Tuple, List
 
 from tj.config import get_recent_entries_hours
 from tj.repository import Entry
-from tj.state import display_context
+from tj.state import display_context, get_state, save_state
+
+
+def extract_context_from_args(entry_arg: str, remaining_args: List[str]) -> Tuple[Optional[str], List[str]]:
+    """Extract context marker from arguments if present.
+
+    Handles patterns like: tj e =context underway
+
+    Args:
+        entry_arg: First argument (might be =context)
+        remaining_args: Remaining arguments
+
+    Returns:
+        Tuple of (entry_identifier, remaining_args)
+        If context was found, entry_identifier is first remaining_arg
+    """
+    if entry_arg and entry_arg.startswith('='):
+        context_name = entry_arg[1:]
+
+        # Set context
+        state = get_state()
+        if context_name == '0':
+            state["current_context"] = None
+        else:
+            state["current_context"] = context_name
+        save_state(state)
+
+        # First remaining arg becomes entry identifier
+        if remaining_args:
+            return remaining_args[0], remaining_args[1:]
+        else:
+            # Just setting context, no entry specified
+            return None, []
+
+    return entry_arg, remaining_args
 
 
 def get_entry_from_recent_list(entry_identifier) -> Optional[Entry]:
     """Get entry from recent list by number or @name.
 
     Args:
-        entry_identifier: Either an integer (entry number) or string starting with @ (name)
+        entry_identifier: Either an integer (entry number) or string (name, with or without @)
 
     Returns the entry if found, None otherwise.
     """
@@ -21,14 +55,61 @@ def get_entry_from_recent_list(entry_identifier) -> Optional[Entry]:
 
         repository = RepositoryFactory.get_repository()
 
-        # Check if it's a @name reference
-        if isinstance(entry_identifier, str) and entry_identifier.startswith('@'):
-            name = entry_identifier[1:]  # Remove @
-            # Named entries are looked up globally, not restricted by context
-            return repository.get_entry_by_name(name, None)
+        # Check if it's a name reference (string that's not a number)
+        if isinstance(entry_identifier, str):
+            try:
+                # Try to parse as number first
+                entry_num = int(entry_identifier)
+            except ValueError:
+                # It's a name - remove @ if present, or use as-is
+                name = entry_identifier[1:] if entry_identifier.startswith('@') else entry_identifier
 
-        # Otherwise treat as entry number
-        entry_num = int(entry_identifier)
+                # Check if we have a current context set
+                state = get_state()
+                current_context = state.get("current_context")
+
+                if current_context is not None:
+                    # Context is set - search ONLY in that context
+                    entry = repository.get_entry_by_name(name, current_context)
+                    return entry  # Will be None if not found in this context (caller can create new)
+                else:
+                    # No context set - search globally and disambiguate if needed
+                    matching_entries = repository.get_entries_by_name(name)
+
+                    if not matching_entries:
+                        return None
+
+                    if len(matching_entries) == 1:
+                        # Only one match, return it directly
+                        return matching_entries[0]
+
+                    # Multiple matches - prompt user to choose
+                    print(f"\nMultiple entries found with name '@{name}':")
+                    for i, entry in enumerate(matching_entries, 1):
+                        context_str = f"={entry.context}" if entry.context else "(no context)"
+                        # Show first 50 chars of content
+                        content_preview = entry.content[:50] + "..." if len(entry.content) > 50 else entry.content
+                        print(f"  {i}. {context_str}: {content_preview}")
+
+                    choice = input(f"\nSelect entry (1-{len(matching_entries)}) or 'c' to cancel: ").strip().lower()
+
+                    if choice == 'c':
+                        print("Cancelled.")
+                        return None
+
+                    try:
+                        choice_num = int(choice)
+                        if 1 <= choice_num <= len(matching_entries):
+                            return matching_entries[choice_num - 1]
+                        else:
+                            print(f"Error: Invalid choice. Must be 1-{len(matching_entries)}.")
+                            return None
+                    except ValueError:
+                        print("Error: Invalid input.")
+                        return None
+        else:
+            # It's already a number
+            entry_num = int(entry_identifier)
 
         # First check if there's a recent query result list
         state = get_state()

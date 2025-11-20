@@ -73,6 +73,48 @@ class SQLiteRepository(EntryRepository):
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to get entry: {e}")
 
+    def get_entries_by_name(self, name: str) -> List[Entry]:
+        """Get all entries with a given name across all contexts.
+
+        Returns a list of entries (may be empty).
+        """
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT id, parent_id, content, kind, timestamp_created,
+                       timestamp_modified, context, is_dirty, name, priority, status, data
+                FROM entries
+                WHERE name = ? AND deleted_at IS NULL
+                ORDER BY timestamp_modified DESC
+            """, (name,))
+
+            rows = cursor.fetchall()
+            conn.close()
+
+            entries = []
+            for row in rows:
+                entries.append(Entry(
+                    id=row['id'],
+                    parent_id=row['parent_id'],
+                    content=row['content'],
+                    kind=row['kind'],
+                    timestamp_created=row['timestamp_created'],
+                    timestamp_modified=row['timestamp_modified'],
+                    context=row['context'],
+                    is_dirty=bool(row['is_dirty']),
+                    name=row['name'],
+                    priority=row['priority'],
+                    status=row['status'],
+                    data=json.loads(row['data']) if row['data'] else None
+                ))
+
+            return entries
+
+        except sqlite3.Error as e:
+            raise DatabaseError(f"Failed to get entries by name: {e}")
+
     def get_entry_by_name(self, name: str, context: Optional[str] = None) -> Optional[Entry]:
         """Get entry by name, optionally within a context.
 

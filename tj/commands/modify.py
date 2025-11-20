@@ -139,8 +139,13 @@ def handle_edit(args) -> None:
     """
     from tj.commands.editor import handle_editor_create, handle_editor_edit
     from tj.state import display_context
+    from tj.commands.common import extract_context_from_args
 
     display_context()
+
+    # Extract context marker if present (e.g., tj e =context underway)
+    if args.entry_num:
+        args.entry_num, args.text = extract_context_from_args(args.entry_num, args.text if args.text else [])
 
     # Case 1: No args → edit most recent entry
     if not args.entry_num:
@@ -176,50 +181,66 @@ def handle_edit(args) -> None:
         handle_editor_create(entry_type=entry_type, extra_args=args.text if args.text else [])
         return
 
-    # Check if entry_num is @name reference
-    if isinstance(args.entry_num, str) and args.entry_num.startswith('@'):
-        # Edit named entry
-        entry = get_entry_from_recent_list(args.entry_num)
-        if not entry:
-            print(f"Error: Entry {args.entry_num} not found.", file=sys.stderr)
-            return
-
-        # If there's text, do command-line edit with confirmation
-        if args.text:
-            new_text = " ".join(args.text)
-            print(f"Edit entry {args.entry_num}:")
-            print(f"  Old: {entry.content}")
-            print(f"  New: {new_text}")
-
-            response = input("\nConfirm edit? [y/N]: ").strip().lower()
-            if response not in ['y', 'yes']:
-                print("Edit cancelled.")
-                return
-
-            repository = RepositoryFactory.get_repository()
-            success = repository.update_entry(
-                entry.id,
-                content=new_text,
-                timestamp_modified=datetime.now(timezone.utc).timestamp(),
-                is_dirty=True
-            )
-
-            if success:
-                print("Entry updated successfully.")
-            else:
-                print("Error: Failed to update entry.", file=sys.stderr)
-            return
-
-        # No text - edit in editor using helper
-        _edit_entry_in_editor(entry, args.entry_num)
-        return
-
-    # Try to parse entry_num as integer
+    # Try to parse entry_num as integer first
     try:
         entry_num = int(args.entry_num)
     except (ValueError, TypeError):
-        print("Error: First argument must be an entry number, @name, or type (ai, d, p, b, j).", file=sys.stderr)
-        return
+        # Not a number, check if it's a name reference (with or without @)
+        if isinstance(args.entry_num, str):
+            # If it doesn't start with @, add it
+            name_ref = args.entry_num if args.entry_num.startswith('@') else f"@{args.entry_num}"
+
+            # Edit named entry (or create if not found in current context)
+            entry = get_entry_from_recent_list(name_ref)
+            if not entry:
+                # Entry not found - if we're in a context, create new entry with this name
+                from tj.state import get_state
+                state = get_state()
+                current_context = state.get("current_context")
+
+                if current_context is not None:
+                    # Create new entry with this name in current context
+                    print(f"Creating new entry {name_ref} in context ={current_context}")
+                    # Open editor to create new entry with @name metadata
+                    name_without_at = name_ref[1:] if name_ref.startswith('@') else name_ref
+                    handle_editor_create(entry_type='memory', extra_args=[f'@{name_without_at}'])
+                    return
+                else:
+                    print(f"Error: Entry {name_ref} not found.", file=sys.stderr)
+                    return
+
+            # If there's text, do command-line edit with confirmation
+            if args.text:
+                new_text = " ".join(args.text)
+                print(f"Edit entry {name_ref}:")
+                print(f"  Old: {entry.content}")
+                print(f"  New: {new_text}")
+
+                response = input("\nConfirm edit? [y/N]: ").strip().lower()
+                if response not in ['y', 'yes']:
+                    print("Edit cancelled.")
+                    return
+
+                repository = RepositoryFactory.get_repository()
+                success = repository.update_entry(
+                    entry.id,
+                    content=new_text,
+                    timestamp_modified=datetime.now(timezone.utc).timestamp(),
+                    is_dirty=True
+                )
+
+                if success:
+                    print("Entry updated successfully.")
+                else:
+                    print("Error: Failed to update entry.", file=sys.stderr)
+                return
+
+            # No text - edit in editor using helper
+            _edit_entry_in_editor(entry, name_ref)
+            return
+        else:
+            print("Error: First argument must be an entry number, name, or type (ai, do, p, b, j).", file=sys.stderr)
+            return
 
     # Case 2: Entry number but no text → edit in editor
     if not args.text:
@@ -265,18 +286,18 @@ def handle_tag_command(args) -> None:
     display_context()
     try:
         if args.tag:
-            # Two arguments: tj t <number> <tag> - add tag to entry
-            entry_num = int(args.entry_num)
+            # Two arguments: tj t <number|name> <tag> - add tag to entry
+            entry_identifier = args.entry_num  # Can be number or name
             tag = args.tag.strip()
 
-            entry = get_entry_from_recent_list(entry_num)
+            entry = get_entry_from_recent_list(entry_identifier)
             if not entry:
-                print(f"Error: Entry {entry_num} not found in recent list.", file=sys.stderr)
+                print(f"Error: Entry {entry_identifier} not found.", file=sys.stderr)
                 return
 
             repository = RepositoryFactory.get_repository()
             repository.add_tag(entry.id, tag)
-            print(f"Tag '{tag}' added to entry {entry_num}.")
+            print(f"Tag '{tag}' added to entry {entry_identifier}.")
 
         else:
             # One argument: tj t <tagname> - list entries with tag
@@ -342,10 +363,10 @@ def handle_move(args) -> None:
     from tj.state import display_context
     display_context()
     try:
-        entry_num = int(args.entry_num)
+        entry_identifier = args.entry_num  # Can be number or name
         context = args.context.strip() if args.context else None
 
-        # Strip leading = if present (support both "tj m 4 ctx" and "tj m 4 =ctx")
+        # Strip leading = if present (support both "tj mv 4 ctx" and "tj mv 4 =ctx")
         if context and context.startswith('='):
             context = context[1:]
 
@@ -353,9 +374,9 @@ def handle_move(args) -> None:
         if context == "0":
             context = None
 
-        entry = get_entry_from_recent_list(entry_num)
+        entry = get_entry_from_recent_list(entry_identifier)
         if not entry:
-            print(f"Error: Entry {entry_num} not found in recent list.", file=sys.stderr)
+            print(f"Error: Entry {entry_identifier} not found.", file=sys.stderr)
             return
 
         repository = RepositoryFactory.get_repository()
@@ -368,14 +389,12 @@ def handle_move(args) -> None:
 
         if success:
             if context:
-                print(f"Entry {entry_num} moved to context '{context}'.")
+                print(f"Entry {entry_identifier} moved to context '{context}'.")
             else:
-                print(f"Entry {entry_num} context cleared.")
+                print(f"Entry {entry_identifier} context cleared.")
         else:
             print("Error: Failed to move entry.", file=sys.stderr)
 
-    except (ValueError, TypeError):
-        print("Error: Invalid entry number.", file=sys.stderr)
     except Exception as e:
         print(f"Move error: {e}", file=sys.stderr)
 
@@ -456,9 +475,11 @@ def display_entry_details(entry, entry_identifier=None):
 def handle_show(args) -> None:
     """Handle showing entry details."""
     from tj.state import display_context
+    from tj.commands.common import extract_context_from_args
     display_context()
     try:
-        entry_identifier = args.entry_num  # Can be number or @name
+        # Extract context marker if present (e.g., tj s =context underway)
+        entry_identifier, _ = extract_context_from_args(args.entry_num, [])
 
         entry = get_entry_from_recent_list(entry_identifier)
         if not entry:
@@ -483,11 +504,11 @@ def handle_pin(args) -> None:
     from tj.state import display_context
     display_context()
     try:
-        entry_num = int(args.entry_num)
+        entry_identifier = args.entry_num  # Can be number or name
 
-        entry = get_entry_from_recent_list(entry_num)
+        entry = get_entry_from_recent_list(entry_identifier)
         if not entry:
-            print(f"Error: Entry {entry_num} not found in recent list.", file=sys.stderr)
+            print(f"Error: Entry {entry_identifier} not found.", file=sys.stderr)
             return
 
         # Update timestamp to now to move to top
@@ -501,11 +522,9 @@ def handle_pin(args) -> None:
         )
 
         if success:
-            print(f"Entry {entry_num} moved to top.")
+            print(f"Entry {entry_identifier} moved to top.")
         else:
             print("Error: Failed to move entry to top.", file=sys.stderr)
 
-    except (ValueError, TypeError):
-        print("Error: Invalid entry number.", file=sys.stderr)
     except Exception as e:
         print(f"Pin error: {e}", file=sys.stderr)

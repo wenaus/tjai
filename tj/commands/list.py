@@ -325,6 +325,25 @@ def _list_entries_with_filters(repository, filters):
                 # Show full date and time with weekday
                 event_date_str = f"{colorize_timestamp(event_dt.strftime('%a %m/%d/%H:%M'))} "
 
+            # Add "Today in Xh Ym" marker if event is today with a time
+            from tj.colors import TERRACOTTA, RESET
+            now = datetime.now(tz) if tz else datetime.now()
+            if event_dt.date() == now.date() and not (event_dt.hour == 0 and event_dt.minute == 0):
+                # Calculate time until event
+                time_diff = event_dt - now
+                total_seconds = int(time_diff.total_seconds())
+
+                if total_seconds > 0:  # Event is in the future
+                    hours = total_seconds // 3600
+                    minutes = (total_seconds % 3600) // 60
+
+                    if hours > 0:
+                        time_str = f"{hours}h {minutes}m"
+                    else:
+                        time_str = f"{minutes}m"
+
+                    event_date_str += f"{TERRACOTTA}{BOLD}Today in {time_str}{RESET} "
+
         # Show context after event date
         context_str = f"{colorize_context(entry.context)} " if entry.context else ""
 
