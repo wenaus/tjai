@@ -242,6 +242,15 @@ def handle_numbered_command(parser: argparse.ArgumentParser, num_identifier: int
             return
 
         repository = RepositoryFactory.get_repository()
+
+        # Check for duplicate name within the same context
+        existing_entry = repository.get_entry_by_name(name, entry.context)
+        if existing_entry and existing_entry.id != entry.id:
+            context_msg = f" in context '={entry.context}'" if entry.context else " (no context)"
+            print(f"Error: Name '@{name}' is already assigned to another entry{context_msg}.", file=sys.stderr)
+            print(f"Use 'tj s @{name}' to see the existing entry.", file=sys.stderr)
+            return
+
         success = repository.update_entry(
             entry.id,
             name=name,
