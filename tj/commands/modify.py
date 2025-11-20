@@ -443,13 +443,14 @@ def display_entry_details(entry, entry_identifier=None):
     if entry.data and 'links' in entry.data:
         links = entry.data['links']
         if links:
-            print("  Links:")
+            print()
+            print("Links:")
             for link in links:
                 title = link.get('title', 'Link')
                 url = link.get('url', '')
                 # Color URL cyan
                 colored_url = f"\033[96m{url}\033[0m"
-                print(f"    {title}: {colored_url}")
+                print(f"  {title}: {colored_url}")
 
 
 def handle_show(args) -> None:
