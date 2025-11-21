@@ -7,6 +7,25 @@ from tj.repository import Entry
 from tj.state import display_context, get_state, save_state
 
 
+# Entry type abbreviations for display and filenames
+ENTRY_TYPE_ABBREV = {
+    'journal': 'j',
+    'memory': 'm',
+    'profile': 'p',
+    'bookmark': 'b',
+    'todo': 'do',
+    'ai': 'ai',
+    'list': 'l'
+}
+
+# Bidirectional map: accepts both abbreviation and full name, returns full name
+# Built from ENTRY_TYPE_ABBREV
+ENTRY_TYPE_MAP = {}
+for _full_name, _abbrev in ENTRY_TYPE_ABBREV.items():
+    ENTRY_TYPE_MAP[_abbrev] = _full_name  # j -> journal
+    ENTRY_TYPE_MAP[_full_name] = _full_name  # journal -> journal
+
+
 def extract_first_context_from_parts(parts: List[str]) -> Tuple[Optional[str], List[str], bool]:
     """Extract inline context from a list of parts (ONLY the first =text).
 
@@ -220,22 +239,14 @@ def format_entry_for_display(entry, entry_number=None, truncate_lines=None) -> s
         content_colored = f"{metadata_str}  {content_colored}"
 
     # Kind display
-    kind_display = {
-        'todo': 'do',
-        'profile': 'p',
-        'ai': 'ai',
-        'calendar': 'j',
-        'bookmark': 'b',
-        'memory': 'm'
-    }
-    if entry.kind in kind_display:
-        type_prefix = f"{colorize_kind(kind_display[entry.kind])} "
+    if entry.kind in ENTRY_TYPE_ABBREV:
+        type_prefix = f"{colorize_kind(ENTRY_TYPE_ABBREV[entry.kind])} "
     else:
         type_prefix = ""
 
-    # For calendar entries, show event date/time with countdown
+    # For journal entries with event_date, show event date/time with countdown
     event_date_str = ""
-    if entry.kind == 'calendar' and entry.data and 'event_date' in entry.data:
+    if entry.kind == 'journal' and entry.data and 'event_date' in entry.data:
         tz_name = get_current_timezone()
         try:
             tz = ZoneInfo(tz_name)

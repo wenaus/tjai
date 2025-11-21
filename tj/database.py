@@ -56,7 +56,7 @@ def init_db() -> None:
             id TEXT PRIMARY KEY,
             parent_id TEXT,
             content TEXT NOT NULL,
-            kind TEXT NOT NULL, -- 'memory', 'bookmark', 'todo', 'calendar', 'profile', etc.
+            kind TEXT NOT NULL, -- 'memory', 'bookmark', 'todo', 'journal', 'profile', 'ai', 'list', etc.
             timestamp_created REAL NOT NULL,
             timestamp_modified REAL NOT NULL,
             context TEXT,

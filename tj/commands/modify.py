@@ -54,9 +54,9 @@ def _parse_metadata_from_content(content: str, entry):
                 if tag:
                     new_tags.add(tag)
 
-    # For calendar entries, re-parse event date from content if a date is present
+    # For journal entries with event_date, re-parse event date from content if a date is present
     entry_data = entry.data
-    if entry.kind == 'calendar':
+    if entry.kind == 'journal':
         from tj.commands.journal import parse_date_spec
         from tj.timezone_manager import get_current_timezone
         from zoneinfo import ZoneInfo
@@ -156,8 +156,21 @@ def _edit_entry_in_editor(entry, entry_identifier="entry"):
     else:
         initial_content = entry.content
 
-    # Open editor
-    new_content = open_editor(initial_content)
+    # Use @name if available, otherwise first 12-20 chars of content
+    filename_hint = entry.name if entry.name else entry.content[:20]
+
+    # Show what's being edited (print to original stdout to bypass buffer)
+    import sys
+    content_preview = entry.content.split('\n')[0][:60]
+    if len(entry.content) > 60 or '\n' in entry.content:
+        content_preview += "..."
+    if entry.name:
+        print(f"Editing @{entry.name}: {content_preview}", file=sys.__stdout__, flush=True)
+    else:
+        print(f"Editing: {content_preview}", file=sys.__stdout__, flush=True)
+
+    # Open editor with entry kind and filename hint
+    new_content = open_editor(initial_content, entry_type=entry.kind, filename_hint=filename_hint)
     if new_content is None:
         return False
 
@@ -267,21 +280,11 @@ def handle_edit(args) -> None:
         return
 
     # Check if entry_num is a kind type
-    kind_map = {
-        'ai': 'ai',
-        'd': 'todo',
-        'todo': 'todo',
-        'p': 'profile',
-        'profile': 'profile',
-        'b': 'bookmark',
-        'bookmark': 'bookmark',
-        'j': 'calendar',
-        'calendar': 'calendar'
-    }
+    from tj.commands.common import ENTRY_TYPE_MAP
 
-    if args.entry_num in kind_map:
+    if args.entry_num in ENTRY_TYPE_MAP:
         # Create entry of specified type in editor
-        entry_type = kind_map[args.entry_num]
+        entry_type = ENTRY_TYPE_MAP[args.entry_num]
         # Text becomes context/tags
         handle_editor_create(entry_type=entry_type, extra_args=args.text if args.text else [])
         return

@@ -452,8 +452,8 @@ def handle_journal(args) -> None:
 
         journal_args = JournalArgs()
 
-        # Call handle_creation with calendar type override
-        handle_creation(journal_args, entry_type_override='calendar')
+        # Call handle_creation with journal type override
+        handle_creation(journal_args, entry_type_override='journal')
 
     except Exception as e:
         print(f"Error creating journal entry: {e}", file=sys.stderr)

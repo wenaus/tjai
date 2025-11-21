@@ -42,8 +42,8 @@ def handle_copy(args) -> None:
         print(f"Error: Entry {entry_num} not found.", file=sys.stderr)
         return
 
-    if entry.kind != 'calendar':
-        print(f"Error: Entry {entry_num} is not a journal/calendar entry", file=sys.stderr)
+    if entry.kind != 'journal':
+        print(f"Error: Entry {entry_num} is not a journal entry", file=sys.stderr)
         return
 
     # Get original event date/time
@@ -106,7 +106,7 @@ def handle_copy(args) -> None:
     from tj.repository import Entry
     new_entry = Entry(
         id=new_id,
-        kind='calendar',
+        kind='journal',
         content=entry.content,
         context=entry.context,
         timestamp_created=now_ts,

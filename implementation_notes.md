@@ -12,7 +12,7 @@ I want a LLM to act as a companion and memory aid in all things, and I want a ga
 - maintain an easily extended profile of things I want AIs to know about me.
 - AI behavioral guidelines: instructions for how AI should interact, what to prioritize, guidelines to follow.
 - tracks the projects I work on, establishes project contexts.
-- functions as a personal dashboard, showing current context, todos, upcoming calendar items.
+- functions as a personal dashboard, showing current context, todos, upcoming journal entries.
 - gathers, assimilates and presents to AIs my likes and tastes.
 - **Future:** maps, geotagged personal place database.
 - **Future:** mobile friendly version.
@@ -95,7 +95,7 @@ it is easy to make bulleted hierarchical notes or simple lists.
 ### Data Model
 - **Timestamped everything**: Creation and modification timestamps on all entries.
 - **UUIDs**: Client-generated to prevent conflicts across devices.
-- **Kind field**: String (not enum) for extensibility - memory, todo, profile, ai, calendar, bookmark, list.
+- **Kind field**: String (not enum) for extensibility - memory, todo, profile, ai, journal, bookmark, list.
 - **Flexible schema**: Core columns (id, kind, content, context, timestamp_created, timestamp_modified, is_dirty) + JSON data field for extensibility.
 - **Tags**: Inline :tag syntax, tags preserved in content.
 - **Contexts**: Project/event-specific (tjai, hawaii2025), not broad categories (work, personal).
@@ -142,7 +142,7 @@ it is easy to make bulleted hierarchical notes or simple lists.
 - `tj do <text>` - Todo
 - `tj p <text>` - Profile fact
 - `tj ai <text>` - AI guideline
-- `tj j <datetime> <text>` - Calendar/journal entry
+- `tj j <datetime> <text>` - Journal entry
 - `tj <url> <text>` - Bookmark (auto-detected)
 
 **Query/List:**

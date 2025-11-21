@@ -13,6 +13,7 @@ This project is built on an offline-first, distributed architecture. The `tj` cl
 *   **Contextual:** A global "context" can be set to automatically group all subsequent entries under a project or topic.
 *   **Timestamped:** Every piece of information is automatically timestamped.
 *   **Interactive:** Query results are numbered, allowing for easy modification of entries.
+*   **Types vs Presentation Formats:** Entry types (kinds) like `journal`, `memory`, `todo` define what data is stored. Presentation formats like `calendar` (`tj c`) and `list` (`tj l`) define how entries are displayed. For example, journal entries can be viewed in calendar format (future-focused, concise, highlighting upcoming meetings) or potentially in diary format (past-focused, showing full long entries). This separation allows the same data to be presented in multiple ways optimized for different use cases.
 
 ## Installation & Quick Start
 
@@ -85,8 +86,8 @@ tj l                                            # List all entries
     *   `tj do <text>`: Creates a todo item (alias: todo).
     *   `tj p <fact>`: Adds a persistent fact to your profile.
     *   `tj ai <guideline>`: Adds AI behavioral guideline or instruction.
-    *   `tj j <date/time> <content>`: Creates calendar entry (tomorrow, mon-sun, HH:MM, mmdd, YYYYMMDD)
-    *   `tj <YYYYMMDD> ...`: Creates a new calendar entry.
+    *   `tj j <date/time> <content>`: Creates journal entry (tomorrow, mon-sun, HH:MM, mmdd, YYYYMMDD)
+    *   `tj <YYYYMMDD> ...`: Creates a new journal entry.
     *   `tj <url> ...`: Creates a new bookmark.
     *   *(All creation commands auto-apply current context and can include `:tags`)*.
     *   **Named entries:** `tj @budget Q4 planning` creates named entry

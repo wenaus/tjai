@@ -173,8 +173,8 @@ def handle_calendar_view(args) -> None:
         except Exception:
             tz = None
 
-        # Query calendar entries
-        all_calendar = repository.query_entries(kind='calendar')
+        # Query journal entries (for calendar presentation)
+        all_calendar = repository.query_entries(kind='journal')
 
         # Filter by event_date within timeframe and group by date
         entries_by_date = {}
@@ -259,6 +259,22 @@ def handle_calendar_view(args) -> None:
                             break
                 break  # Only check today
 
+        # Build flat list of all entry IDs in display order for numbered operations
+        all_entry_ids = []
+        for date_key in sorted_dates:
+            entries = entries_by_date[date_key]
+            entries.sort(key=lambda x: x[0])
+            for event_ts, event_dt, entry in entries:
+                all_entry_ids.append(entry.id)
+
+        # Save to state for numbered operations
+        from tj.state import get_state, save_state
+        state = get_state()
+        state["last_query_results"] = all_entry_ids
+        save_state(state)
+
+        # Display entries with numbering
+        entry_number = 1
         last_week = None
         for date_key in sorted_dates:
             entries = entries_by_date[date_key]
@@ -331,6 +347,11 @@ def handle_calendar_view(args) -> None:
                 # Show time if not midnight
                 if event_dt.hour != 0 or event_dt.minute != 0:
                     time_str = colorize_timestamp(event_dt.strftime('%H:%M'))
+
+                    # Add grey entry number after indent, 1 space before time
+                    from tj.colors import SOFT_GREY, RESET as COLOR_RESET
+                    number_str = f"{SOFT_GREY}{entry_number:2d}{COLOR_RESET}"
+
                     if is_multi_day:
                         first_indent = "    "
                         subsequent_indent = "      "
@@ -341,11 +362,12 @@ def handle_calendar_view(args) -> None:
                     # Build first line with optional bold for today and countdown
                     if is_today:
                         from tj.colors import BOLD, RESET
-                        first_line = f"{first_indent}{BOLD}{time_str}{countdown_str} {lines[0]}{arrow_suffix}{RESET}"
+                        first_line = f"{first_indent}{number_str} {BOLD}{time_str}{countdown_str} {lines[0]}{arrow_suffix}{RESET}"
                     else:
-                        first_line = f"{first_indent}{time_str} {lines[0]}"
+                        first_line = f"{first_indent}{number_str} {time_str} {lines[0]}"
 
                     print(first_line)
+                    entry_number += 1
                     # Print subsequent lines with extra indent and bold if today
                     for line in lines[1:]:
                         if is_today:
@@ -355,6 +377,10 @@ def handle_calendar_view(args) -> None:
                             print(f"{subsequent_indent}{line}")
                 else:
                     # Midnight = all-day event, no time shown
+                    # Add grey entry number after indent, 1 space before content
+                    from tj.colors import SOFT_GREY, RESET as COLOR_RESET
+                    number_str = f"{SOFT_GREY}{entry_number:2d}{COLOR_RESET}"
+
                     if is_multi_day:
                         first_indent = "    "
                         subsequent_indent = "      "
@@ -365,13 +391,14 @@ def handle_calendar_view(args) -> None:
                     # Print with bold if today
                     if is_today:
                         from tj.colors import BOLD, RESET
-                        print(f"{first_indent}{BOLD}{lines[0]}{RESET}")
+                        print(f"{first_indent}{number_str} {BOLD}{lines[0]}{RESET}")
                         for line in lines[1:]:
                             print(f"{subsequent_indent}{BOLD}{line}{RESET}")
                     else:
-                        print(f"{first_indent}{lines[0]}")
+                        print(f"{first_indent}{number_str} {lines[0]}")
                         for line in lines[1:]:
                             print(f"{subsequent_indent}{line}")
+                    entry_number += 1
 
     except Exception as e:
         print(f"Calendar view error: {e}", file=sys.stderr)

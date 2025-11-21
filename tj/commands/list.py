@@ -152,18 +152,9 @@ def _list_entries_with_filters(repository, filters):
             continue
         # Query by kind
         if filter_arg in ['b', 'd', 'p', 'ai', 'm', 'j']:
-            kind_map = {
-                'b': 'bookmark',
-                'd': 'todo',
-                'p': 'profile',
-                'ai': 'ai',
-                'm': 'memory',
-                'j': 'calendar'
-            }
-            kind = kind_map[filter_arg]
-            # Display friendly name (journal for calendar entries)
-            display_name = 'journal' if filter_arg == 'j' else kind
-            query_parts.append(display_name)
+            from tj.commands.common import ENTRY_TYPE_MAP
+            kind = ENTRY_TYPE_MAP[filter_arg]
+            query_parts.append(kind)
 
         # Query by time
         elif filter_arg in ['t', 'w']:
@@ -234,8 +225,9 @@ def _list_entries_with_filters(repository, filters):
 
     # Build query description
     if query_parts:
+        from tj.commands.common import ENTRY_TYPE_ABBREV
         # Check if it's just a kind filter for cleaner display
-        if len(query_parts) == 1 and query_parts[0] in ['bookmark', 'todo', 'profile', 'ai', 'memory', 'calendar']:
+        if len(query_parts) == 1 and query_parts[0] in ENTRY_TYPE_ABBREV.keys():
             query_desc = f"{query_parts[0]}"
         else:
             query_desc = " ".join(query_parts)

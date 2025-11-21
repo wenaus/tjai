@@ -15,17 +15,34 @@ def get_editor_command() -> str:
     return 'vi'
 
 
-def open_editor(initial_content: str = "") -> Optional[str]:
+def open_editor(initial_content: str = "", entry_type: Optional[str] = None, filename_hint: Optional[str] = None) -> Optional[str]:
     """Open editor with content, return modified content or None if cancelled.
 
     Args:
         initial_content: Initial text to populate the editor with
+        entry_type: Optional entry kind (journal, memory, todo, etc.) for filename
+        filename_hint: Optional hint for filename (e.g., entry @name or content snippet)
 
     Returns:
         Modified content as string, or None if cancelled/unchanged/empty
     """
-    # Create temp file with .md suffix for syntax highlighting
-    fd, temp_path = tempfile.mkstemp(suffix='.md', text=True)
+    # Build descriptive prefix for temp file
+    prefix = 'tj_'
+    if entry_type and filename_hint:
+        from tj.commands.common import ENTRY_TYPE_ABBREV
+
+        # Get type abbreviation
+        type_abbrev = ENTRY_TYPE_ABBREV.get(entry_type, entry_type)
+
+        # Sanitize hint: lowercase, remove special chars, truncate to 20 chars
+        sanitized = filename_hint.lower()
+        sanitized = ''.join(c if c.isalnum() or c in ' _-' else '_' for c in sanitized)
+        sanitized = sanitized.replace(' ', '_')
+        sanitized = sanitized.strip('_')[:20].strip('_')
+        prefix = f'tj_{type_abbrev}-{sanitized}_'
+
+    # Create temp file with descriptive prefix and .md suffix for syntax highlighting
+    fd, temp_path = tempfile.mkstemp(prefix=prefix, suffix='.md', text=True)
 
     try:
         # Write initial content and close file descriptor
@@ -95,7 +112,7 @@ def handle_editor_create(entry_type: Optional[str] = None, extra_args: Optional[
         entry_type: Optional entry type (ai, todo, profile, bookmark, calendar)
         extra_args: Optional extra arguments like =context
     """
-    content = open_editor()
+    content = open_editor(entry_type=entry_type, filename_hint='new_entry')
 
     if content is None:
         return

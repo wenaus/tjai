@@ -123,9 +123,9 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
         # Check for event_date_override from journal command
         if hasattr(args, 'event_date_override') and args.event_date_override is not None:
             event_date = args.event_date_override
-            # If entry_type not already set, default to calendar
+            # If entry_type not already set, default to journal
             if not entry_type:
-                entry_type = 'calendar'
+                entry_type = 'journal'
 
         # Smart type detection and URL extraction
         extracted_url = None
@@ -146,7 +146,7 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
                         date_str = content_parts[0]
                         event_dt = datetime.strptime(date_str, "%Y%m%d")
                         event_date = event_dt.timestamp()
-                        entry_type = 'calendar'
+                        entry_type = 'journal'
                         # Keep the original content with date, but store parsed date separately
                     except ValueError:
                         entry_type = 'memory'
