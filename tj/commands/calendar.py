@@ -237,6 +237,30 @@ def handle_calendar_view(args) -> None:
         from tj.config import get_content_truncate_length
         truncate_len = get_content_truncate_length()
 
+        # Find next upcoming event for countdown (today only)
+        next_upcoming_ts = None
+        if tz:
+            now_dt = datetime.now(tz)
+            today = now_dt.date()
+        else:
+            now_dt = datetime.now()
+            today = now_dt.date()
+
+        for date_key in sorted_dates:
+            entries = entries_by_date[date_key]
+            # Sort entries by time first
+            entries.sort(key=lambda x: x[0])
+            event_date = entries[0][1].date() if entries else None
+            if event_date == today:
+                # Find earliest future event today
+                for event_ts, event_dt, entry in entries:
+                    if event_dt.hour != 0 or event_dt.minute != 0:  # Not all-day
+                        time_diff = event_dt - now_dt
+                        if time_diff.total_seconds() > 0:  # In future
+                            next_upcoming_ts = event_ts
+                            break
+                break  # Only check today
+
         last_week = None
         for date_key in sorted_dates:
             entries = entries_by_date[date_key]
@@ -288,19 +312,20 @@ def handle_calendar_view(args) -> None:
                 # Colorize content (converts markdown links to clickable terminal links)
                 display_text = colorize_content(content)
 
-                # Calculate countdown for today's future events
+                # Calculate countdown only for next upcoming event
                 countdown_str = ""
-                if is_today and (event_dt.hour != 0 or event_dt.minute != 0):
+                arrow_suffix = ""
+                if event_ts == next_upcoming_ts:
                     time_diff = event_dt - now_dt
                     total_seconds = int(time_diff.total_seconds())
-                    if total_seconds > 0:  # Event is in the future
-                        from tj.colors import TERRACOTTA, RESET, BOLD
-                        hours = total_seconds // 3600
-                        minutes = (total_seconds % 3600) // 60
-                        if hours > 0:
-                            countdown_str = f" {TERRACOTTA}{BOLD}in {hours}h {minutes}m{RESET}"
-                        else:
-                            countdown_str = f" {TERRACOTTA}{BOLD}in {minutes}m{RESET}"
+                    from tj.colors import RED, RESET, BOLD
+                    hours = total_seconds // 3600
+                    minutes = (total_seconds % 3600) // 60
+                    if hours == 0:  # Less than 1 hour - show arrows at end
+                        countdown_str = f" {RED}{BOLD}in {minutes}m{RESET}"
+                        arrow_suffix = f"     {RED}{BOLD}<======== in {minutes}m{RESET}"
+                    else:
+                        countdown_str = f" {RED}{BOLD}in {hours}h {minutes}m{RESET}"
 
                 # Handle multi-line content
                 lines = display_text.split('\n')
@@ -318,7 +343,7 @@ def handle_calendar_view(args) -> None:
                     # Build first line with optional bold for today and countdown
                     if is_today:
                         from tj.colors import BOLD, RESET
-                        first_line = f"{first_indent}{BOLD}{time_str}{countdown_str} {lines[0]}{RESET}"
+                        first_line = f"{first_indent}{BOLD}{time_str}{countdown_str} {lines[0]}{arrow_suffix}{RESET}"
                     else:
                         first_line = f"{first_indent}{time_str} {lines[0]}"
 

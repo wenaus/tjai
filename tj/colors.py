@@ -9,6 +9,7 @@ TERRACOTTA = '\033[38;5;216m'  # Terracotta for event timestamps (calendar)
 SOFT_GREY = '\033[38;5;245m'  # Soft grey for creation timestamps
 LIGHT_GOLD = '\033[38;5;221m'  # Light gold for kind brackets
 BRIGHT_YELLOW = '\033[38;5;226m'  # Bright yellow for entry numbers
+RED = '\033[38;5;203m'  # Red for next upcoming event countdown
 BOLD = '\033[1m'  # Bold text
 RESET = '\033[0m'
 
