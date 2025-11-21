@@ -262,7 +262,8 @@ def handle_calendar_view(args) -> None:
                 # Print week header when crossing week boundary or at start
                 if last_week is None or (current_year, current_week) != last_week:
                     week_start = event_dt_for_week - timedelta(days=event_dt_for_week.weekday())
-                    print(f"\n{colorize_timestamp(f'{week_start.strftime("%Y%m%d")} Week {current_week}')}")
+                    week_header = f'{week_start.strftime("%Y%m%d")} Week {current_week}'
+                    print(f"\n{colorize_timestamp(week_header)}")
                     last_week = (current_year, current_week)
 
             # Print day header for multi-day views
