@@ -22,7 +22,6 @@ def handle_list_command(args) -> None:
     - tj l p=1 s=active - composite filters
     - tj l t/w/m - time filters
     """
-    display_context()
     try:
         repository = RepositoryFactory.get_repository()
         filters = args.filters if hasattr(args, 'filters') and args.filters else []

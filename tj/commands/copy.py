@@ -21,9 +21,6 @@ def handle_copy(args) -> None:
     Supports same date/time formats as tj j command.
     Entry type inferred from entry (currently only journal/calendar entries).
     """
-    from tj.state import display_context
-    display_context()
-
     if not hasattr(args, 'args') or not args.args:
         print("Error: Usage: tj cp <entry_num> <datetime>", file=sys.stderr)
         return

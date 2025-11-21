@@ -10,9 +10,7 @@ from tj.timezone_manager import format_time_dashboard
 
 def handle_delete_new(args) -> None:
     """Handle delete operations with new patterns."""
-    from tj.state import display_context
     from tj.commands.common import extract_context_from_args
-    display_context()
     try:
         if not args.args:
             print("Error: Please specify what to delete.", file=sys.stderr)

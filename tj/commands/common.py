@@ -281,15 +281,12 @@ def format_entry_for_display(entry, entry_number=None, truncate_lines=None) -> s
     return f"{number_str}{time_str} {type_prefix}{event_date_str}{context_str}{content_colored}{tags_str}"
 
 def not_yet_implemented(args, num_identifier: Optional[int] = None) -> None:
-    display_context()
     if num_identifier:
         print(f"Command for item {num_identifier} is not yet implemented.", file=sys.stderr)
     else:
         print("This command is not yet implemented.", file=sys.stderr)
 
 def handle_delete(args, num_identifier: Optional[int] = None) -> None:
-    display_context()
-    
     identifier = num_identifier if num_identifier else getattr(args, 'identifier', None)
     
     if not identifier:

@@ -91,8 +91,6 @@ def format_entry_command(entry: Entry, tags: List[str], db_path: str = None) -> 
 
 def handle_dump(args) -> None:
     """Handle the dump command - output database as executable tj commands."""
-    from tj.state import display_context
-    display_context()
     try:
         repository = RepositoryFactory.get_repository()
 

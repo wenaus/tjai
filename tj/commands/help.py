@@ -5,9 +5,6 @@ import sys
 
 def handle_help(args) -> None:
     """Display concise command reference."""
-    from tj.state import display_context
-    display_context()
-
     help_text = """tj - A memory-augmenting knowledge DB and me descriptor
 
 STATUS                          LIST/FILTER

@@ -13,8 +13,6 @@ from tj.commands.lists import detect_list_creation
 
 def handle_creation(args, entry_type_override: Optional[str] = None, num_identifier: Optional[int] = None) -> None:
     """Handles the creation of a new entry."""
-    display_context()
-
     if not hasattr(args, 'input') or not args.input:
         print("Error: No content provided for entry.", file=sys.stderr)
         return

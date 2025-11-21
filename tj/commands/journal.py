@@ -420,9 +420,6 @@ def handle_journal(args) -> None:
     a calendar entry with the specified event_date.
     """
     from tj.commands.create import handle_creation
-    from tj.state import display_context
-
-    display_context()
 
     if not hasattr(args, 'input') or not args.input:
         print("Error: No content provided for journal entry.", file=sys.stderr)

@@ -147,8 +147,6 @@ def parse_timeframe(timeframe: Optional[str]) -> Tuple[str, float, float]:
 
 def handle_calendar_view(args) -> None:
     """View calendar entries for specified timeframe."""
-    from tj.state import display_context
-    display_context()
     try:
         repository = RepositoryFactory.get_repository()
 

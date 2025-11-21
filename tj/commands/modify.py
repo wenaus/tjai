@@ -120,8 +120,6 @@ def _parse_metadata_from_content(content: str, entry):
 
 def handle_add_subnote(args) -> None:
     """Handle adding a sub-note to an entry."""
-    from tj.state import display_context
-    display_context()
     try:
         entry_num = int(args.entry_num)
         text = " ".join(args.text)
@@ -249,8 +247,6 @@ def handle_edit(args) -> None:
     from tj.commands.editor import handle_editor_create
     from tj.state import display_context
     from tj.commands.common import extract_context_from_args
-
-    display_context()
 
     # Extract context marker if present (e.g., tj e =context underway)
     if args.entry_num:
@@ -446,8 +442,6 @@ def handle_edit(args) -> None:
 
 def handle_tag_command(args) -> None:
     """Handle tag command - either add tag to entry or list entries with tag."""
-    from tj.state import display_context
-    display_context()
     try:
         if args.tag:
             # Two arguments: tj t <number|name> <tag> - add tag to entry
@@ -501,8 +495,6 @@ def handle_tag_command(args) -> None:
 
 def handle_add_tag(args) -> None:
     """Handle adding a tag to an entry."""
-    from tj.state import display_context
-    display_context()
     try:
         entry_num = int(args.entry_num)
         tag = args.tag.strip()
@@ -524,8 +516,6 @@ def handle_add_tag(args) -> None:
 
 def handle_move(args) -> None:
     """Handle moving an entry to a context."""
-    from tj.state import display_context
-    display_context()
     try:
         entry_identifier = args.entry_num  # Can be number or name
         context = args.context.strip() if args.context else None
@@ -605,9 +595,7 @@ def display_entry_details(entry, entry_identifier=None):
 
 def handle_show(args) -> None:
     """Handle showing entry or context details."""
-    from tj.state import display_context
     from tj.commands.common import extract_context_from_args
-    display_context()
     try:
         # Check if showing context details (tj s =context)
         if args.entry_num.startswith('='):
@@ -663,8 +651,6 @@ def handle_show(args) -> None:
 
 def handle_pin(args) -> None:
     """Handle moving an entry to top (update timestamp)."""
-    from tj.state import display_context
-    display_context()
     try:
         entry_identifier = args.entry_num  # Can be number or name
 

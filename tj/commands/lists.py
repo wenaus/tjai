@@ -23,8 +23,6 @@ def handle_add_list_item(args) -> None:
     List items are stored as strings in the parent entry's
     data["items"] JSON array. They have no individual IDs or timestamps.
     """
-    from tj.state import display_context
-    display_context()
     if not hasattr(args, 'input') or not args.input:
         print("Error: No content provided for list item.", file=sys.stderr)
         return
