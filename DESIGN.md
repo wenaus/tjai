@@ -129,3 +129,26 @@ LLM → Local MCP (tjai-agent) → Local SQLite (fast queries)
 - Server can host comprehensive "me descriptor" data
 - Local cache remains small and fast
 - Add new data sources without changing LLM integration
+
+## Concrete Use Case: Concurrent Multi-Machine Workflow
+
+**Real-world scenario:**
+- Desktop: Managing calendar, meetings, life admin via tj CLI
+- Dev server (SSH): Django/REST/ActiveMQ development with Claude Code in VSCode
+- Both active simultaneously, switching context frequently
+
+**Example flow:**
+1. Desktop: `tj =projectX decision: use FastAPI for new service`
+2. Dev server (seconds later): Claude Code asks "what framework did we decide on?"
+3. Agent sync: Desktop agent → server PostgreSQL → dev server agent
+4. Claude Code reads answer via local MCP server
+
+**Why agent architecture is required:**
+- Dropbox sync conflicts on SQLite within 2 days of real use (proven)
+- Claude Code on dev server needs local MCP (can't read remote desktop SQLite)
+- Context changes on desktop must reach dev server within seconds (not manual sync)
+- Both machines need fresh data for AI to provide accurate responses
+- Scales to N machines (laptop, home server, etc.) without N² sync complexity
+
+**Key insight:**
+The agent serves dual purpose: keeps local SQLite fresh (sync) AND provides MCP interface for AI on that machine. Single daemon, two critical functions. Deploy on every machine that needs tjai access.
