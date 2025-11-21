@@ -60,8 +60,10 @@ def handle_context(args, num_identifier: Optional[int] = None) -> None:
             print("Current context: none")
             return
         
-        # Ask for confirmation before clearing (defaults to N)
-        response = input(f"Clear current context '{current_context}' [y/N]: ").strip().lower()
+        # Ask for confirmation before clearing (defaults to N, bypass buffer for interactive prompt)
+        import sys
+        print(f"Clear current context '{current_context}' [y/N]: ", end='', file=sys.__stdout__, flush=True)
+        response = input().strip().lower()
         if response in ['y', 'yes']:
             state["current_context"] = None
             print("Context cleared.")

@@ -113,19 +113,21 @@ def handle_delete_entries(entry_nums: list) -> None:
                 return
             entries_to_delete.append((num, entry))
 
-        # Show what will be deleted
+        # Show what will be deleted (bypass buffer for interactive prompt)
         if len(entries_to_delete) == 1:
             num, entry = entries_to_delete[0]
             time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_created))
             context_str = f" {colorize_context(entry.context)}" if entry.context else ""
-            response = input(f"Delete: {time_str} {entry.content}{context_str} [y/N]: ").strip().lower()
+            print(f"Delete: {time_str} {entry.content}{context_str} [y/N]: ", end='', file=sys.__stdout__, flush=True)
+            response = input().strip().lower()
         else:
-            print(f"Delete {len(entries_to_delete)} entries:")
+            print(f"Delete {len(entries_to_delete)} entries:", file=sys.__stdout__, flush=True)
             for num, entry in entries_to_delete:
                 time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_created))
                 content_preview = entry.content[:60] + "..." if len(entry.content) > 60 else entry.content
-                print(f"  {num}: {time_str} {content_preview}")
-            response = input(f"\nDelete these {len(entries_to_delete)} entries? [y/N]: ").strip().lower()
+                print(f"  {num}: {time_str} {content_preview}", file=sys.__stdout__, flush=True)
+            print(f"\nDelete these {len(entries_to_delete)} entries? [y/N]: ", end='', file=sys.__stdout__, flush=True)
+            response = input().strip().lower()
 
         if response not in ['y', 'yes']:
             print("Delete cancelled.")
@@ -166,12 +168,13 @@ def handle_delete_tag_from_entry(entry_num: int, tag: str) -> None:
             print(f"Error: Entry {entry_num} does not have tag '{tag}'.", file=sys.stderr)
             return
 
-        # Show confirmation
+        # Show confirmation (bypass buffer for interactive prompt)
         from tj.colors import colorize_content
-        print(f"Remove tag '{tag}' from entry {entry_num}:")
-        print(f"  {colorize_content(entry.content)}")
+        print(f"Remove tag '{tag}' from entry {entry_num}:", file=sys.__stdout__, flush=True)
+        print(f"  {colorize_content(entry.content)}", file=sys.__stdout__, flush=True)
 
-        response = input(f"\nRemove tag '{tag}'? [y/N]: ").strip().lower()
+        print(f"\nRemove tag '{tag}'? [y/N]: ", end='', file=sys.__stdout__, flush=True)
+        response = input().strip().lower()
         if response not in ['y', 'yes']:
             print("Tag removal cancelled.")
             return
@@ -200,9 +203,10 @@ def handle_delete_all_tag_instances(tagname: str) -> None:
             print(f"No entries found with tag '{tagname}'.")
             return
 
-        # Show confirmation
-        print(f"Delete tag '{tagname}' from {tag_count} entries?")
-        response = input("This will remove the tag from all entries. Continue? [y/N]: ").strip().lower()
+        # Show confirmation (bypass buffer for interactive prompt)
+        print(f"Delete tag '{tagname}' from {tag_count} entries?", file=sys.__stdout__, flush=True)
+        print("This will remove the tag from all entries. Continue? [y/N]: ", end='', file=sys.__stdout__, flush=True)
+        response = input().strip().lower()
         if response not in ['y', 'yes']:
             print("Tag deletion cancelled.")
             return
@@ -245,8 +249,8 @@ def handle_delete_context(context_name: str) -> None:
                 print(f"  ... and {len(active_entries) - 10} more")
             return
 
-        # Confirm deletion
-        print(f"Delete context '{context_name}'? [y/N]: ", end='')
+        # Confirm deletion (bypass buffer for interactive prompt)
+        print(f"Delete context '{context_name}'? [y/N]: ", end='', file=sys.__stdout__, flush=True)
         response = input().strip().lower()
         if response not in ['y', 'yes']:
             print("Context deletion cancelled.")

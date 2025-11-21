@@ -136,16 +136,18 @@ def get_entry_from_recent_list(entry_identifier) -> Optional[Entry]:
                         # Only one match, return it directly
                         return matching_entries[0]
 
-                    # Multiple matches - prompt user to choose
+                    # Multiple matches - prompt user to choose (bypass buffer for interactive prompt)
                     from tj.colors import colorize_content
-                    print(f"\nMultiple entries found with name '@{name}':")
+                    import sys
+                    print(f"\nMultiple entries found with name '@{name}':", file=sys.__stdout__, flush=True)
                     for i, entry in enumerate(matching_entries, 1):
                         context_str = f"={entry.context}" if entry.context else "(no context)"
                         # Show first 50 chars of content
                         content_preview = entry.content[:50] + "..." if len(entry.content) > 50 else entry.content
-                        print(f"  {i}. {context_str}: {colorize_content(content_preview)}")
+                        print(f"  {i}. {context_str}: {colorize_content(content_preview)}", file=sys.__stdout__, flush=True)
 
-                    choice = input(f"\nSelect entry (1-{len(matching_entries)}) or 'c' to cancel: ").strip().lower()
+                    print(f"\nSelect entry (1-{len(matching_entries)}) or 'c' to cancel: ", end='', file=sys.__stdout__, flush=True)
+                    choice = input().strip().lower()
 
                     if choice == 'c':
                         print("Cancelled.")
@@ -346,15 +348,18 @@ def handle_delete(args, num_identifier: Optional[int] = None) -> None:
         current_tz = get_current_timezone()
         time_str = format_time_in_timezone(entry_to_delete.timestamp_created, current_tz)
 
-        print(f"Entry to delete:")
-        print(f"  {colorize_content(content_preview)}")
-        print(f"  {time_str}")
+        # Show entry details (bypass buffer for interactive prompt)
+        import sys
+        print(f"Entry to delete:", file=sys.__stdout__, flush=True)
+        print(f"  {colorize_content(content_preview)}", file=sys.__stdout__, flush=True)
+        print(f"  {time_str}", file=sys.__stdout__, flush=True)
         if entry_to_delete.context:
-            print(f"  Context: {entry_to_delete.context}")
-        print(f"  Type: {entry_to_delete.kind}")
-        
+            print(f"  Context: {entry_to_delete.context}", file=sys.__stdout__, flush=True)
+        print(f"  Type: {entry_to_delete.kind}", file=sys.__stdout__, flush=True)
+
         # Ask for confirmation
-        response = input("\nDelete this entry? [y/N]: ").strip().lower()
+        print("\nDelete this entry? [y/N]: ", end='', file=sys.__stdout__, flush=True)
+        response = input().strip().lower()
         if response not in ['y', 'yes']:
             print("Delete cancelled.")
             return

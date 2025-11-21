@@ -107,9 +107,13 @@ tj l                                            # List all entries
     *   `tj t <n> <tag>`: Add tag to entry.
     *   `tj mv <n> <context>`: Move entry to context.
     *   `tj ^ <n>`: Pin entry to top (update timestamp).
-    *   `tj <n> @name`: Assign name to entry.
-    *   `tj <n> p=N`: Set priority on entry.
-    *   `tj <n> s=status`: Set status on entry.
+    *   **Numbered shortcuts:** Quick metadata modifications on entry `<n>`:
+        *   `tj <n> @name`: Assign name to entry.
+        *   `tj <n> =context`: Set context on entry.
+        *   `tj <n> =0`: Clear context on entry.
+        *   `tj <n> :tag`: Add tag to entry.
+        *   `tj <n> p=N`: Set priority on entry.
+        *   `tj <n> s=status`: Set status on entry.
     *   `tj d <n>` or `tj d @name`: Delete entry (with confirmation).
 *   **QUERY:** `tj q ...`
     *   `q [b|r|d|p]`: By type: **b**ookmark, **r**emembered, **d**o, **p**rofile.

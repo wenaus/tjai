@@ -9,42 +9,42 @@ def handle_help(args) -> None:
 
 STATUS                          LIST/FILTER
 tj              Status          tj l                     All entries
-tj hey          Need to know    tj l [ai|b|do|j|m|p]     By type (default=m)
+tj hey          Need to know    tj l [ai|b|do|j|m|p]     By type
 tj config       Show config     tj l [t|w|N]             By time (N=days)
                                 tj l =ctx :tag p=N s=val Composite
                                 tj l [c|t|@]             Metadata (c/t/@=named)
-CREATE
-tj <text>       Memory
-tj m <text>     Memory (default)
-tj do <text>    Todo
-tj p <text>     Profile fact    MODIFY
-tj ai <text>    AI guideline    tj . <text>     Sub-item of last
-tj <url> <text> Bookmark        tj + <item>     Add to list
-                                tj e            New in $EDITOR
-CONTEXT                         tj e [ai|do|p|b|j] Type in $EDITOR
-tj =ctx         Switch/create   tj e <n>        Edit entry <n>
-tj =ctx -t ...  With title      tj s <n|@name>  Show entry
-tj =ctx -t .. -d .. With desc   tj s =ctx       Show context
-tj =0           Clear context   tj t <n> <tag>  Tag entry
-                                tj mv <n> <ctx> Move to context
-                                tj ^ <n>        Pin to top
-                                tj d <n|@name>  Delete
-CALENDAR                        tj <n> @name    Assign name
-tj j tomorrow <text>            tj <n> p=N      Set priority
-tj j mon 10am   Team meeting    tj <n> s=val    Set status
-tj j 0615 14:30 Doctor appt     tj cp <n> <datetime> Copy journal entry
-tj c [t|w|m]    View calendar   DATA
-tj c t+1        Tomorrow        tj dump         Export as commands
-tj c w-1        Last week       tj backup       Manual backup
-tj c 4          Next 4 weeks    tj sync         Force sync
 
-METADATA (inline)               SETUP
-@name           Named entry     tj() { ~/github/tjrepo/tjai/tj.py "$*"; }
-p=N             Priority        Add to ~/.bashrc
-s=status        Status value
+CREATE                          MODIFY
+tj <text>       Memory          tj . <text>     Sub-item of last
+tj m <text>     Memory          tj + <item>     Add to list
+tj do <text>    Todo            tj e            New in $EDITOR
+tj p <text>     Profile fact    tj e [ai|do|p|b|j] Type in $EDITOR
+tj ai <text>    AI guideline    tj e <n>        Edit entry <n>
+tj <url> <text> Bookmark        tj e <n> =ctx   Set context only
+                                tj s <n|@name>  Show entry
+CONTEXT                         tj s =ctx       Show context
+tj =ctx         Switch/create   tj t <n> <tag>  Tag entry
+tj =ctx -t ...  With title      tj mv <n> <ctx> Move to context
+tj =ctx -t .. -d .. With desc   tj ^ <n>        Pin to top
+tj =0           Clear context   tj d <n|@name>  Delete
+
+CALENDAR                        NUMBERED SHORTCUTS
+tj j tomorrow <text>            tj <n> @name    Assign name
+tj j mon 10am   Team meeting    tj <n> =ctx     Set context
+tj j 0615 14:30 Doctor appt     tj <n> =0       Clear context
+tj c [t|w|m]    View calendar   tj <n> :tag     Add tag
+tj c t+1        Tomorrow         tj <n> p=N      Set priority
+tj c w-1        Last week        tj <n> s=val    Set status
+tj c 4          Next 4 weeks     tj cp <n> <datetime> Copy journal entry
+
+METADATA (inline)               DATA
+@name           Named entry     tj dump         Export as commands
+p=N             Priority        tj backup       Manual backup
+s=status        Status value    tj sync         Force sync
 :tag            Tag
-//url [T](url)  Links
--f file         File input
+//url [T](url)  Links           SETUP
+-f file         File input      tj() { ~/github/tjrepo/tjai/tj.py "$*"; }
+                                Add to ~/.bashrc
 
 AI GUIDELINES
 tj ai           Show universal + context guidelines

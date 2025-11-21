@@ -333,11 +333,17 @@ def handle_edit(args) -> None:
                     # No context specified, keep existing
                     final_context = entry.context
 
-                print(f"Edit entry {name_ref}:")
-                print(f"  Old: {entry.content}")
-                print(f"  New: {new_text}")
+                # If only context was provided (no content), keep existing content
+                if found_context and not new_text:
+                    new_text = entry.content
 
-                response = input("\nConfirm edit? [y/N]: ").strip().lower()
+                # Show changes (bypass buffer for interactive prompt)
+                print(f"Edit entry {name_ref}:", file=sys.__stdout__, flush=True)
+                print(f"  Old: {entry.content}", file=sys.__stdout__, flush=True)
+                print(f"  New: {new_text}", file=sys.__stdout__, flush=True)
+
+                print("\nConfirm edit? [y/N]: ", end='', file=sys.__stdout__, flush=True)
+                response = input().strip().lower()
                 if response not in ['y', 'yes']:
                     print("Edit cancelled.")
                     return
@@ -405,12 +411,17 @@ def handle_edit(args) -> None:
         # No context specified, keep existing
         final_context = entry.context
 
-    # Show current content and confirm
-    print(f"Edit entry {entry_num}:")
-    print(f"  Old: {entry.content}")
-    print(f"  New: {new_text}")
+    # If only context was provided (no content), keep existing content
+    if found_context and not new_text:
+        new_text = entry.content
 
-    response = input("\nConfirm edit? [y/N]: ").strip().lower()
+    # Show current content and confirm (bypass buffer for interactive prompt)
+    print(f"Edit entry {entry_num}:", file=sys.__stdout__, flush=True)
+    print(f"  Old: {entry.content}", file=sys.__stdout__, flush=True)
+    print(f"  New: {new_text}", file=sys.__stdout__, flush=True)
+
+    print("\nConfirm edit? [y/N]: ", end='', file=sys.__stdout__, flush=True)
+    response = input().strip().lower()
     if response not in ['y', 'yes']:
         print("Edit cancelled.")
         return
