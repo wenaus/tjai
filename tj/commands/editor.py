@@ -112,6 +112,15 @@ def handle_editor_create(entry_type: Optional[str] = None, extra_args: Optional[
         entry_type: Optional entry type (ai, todo, profile, bookmark, calendar)
         extra_args: Optional extra arguments like =context
     """
+    # Show what we're creating (bypass buffer to show immediately)
+    import sys
+    if extra_args:
+        metadata_str = " ".join(extra_args)
+        print(f"Creating new entry: {metadata_str}", file=sys.__stdout__, flush=True)
+    else:
+        entry_type_display = entry_type if entry_type else "memory"
+        print(f"Creating new {entry_type_display} entry...", file=sys.__stdout__, flush=True)
+
     content = open_editor(entry_type=entry_type, filename_hint='new_entry')
 
     if content is None:
