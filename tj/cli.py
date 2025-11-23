@@ -6,7 +6,7 @@ from datetime import datetime
 # Global variable for file content from -f flag
 file_content = None
 
-from tj.backup import auto_backup, list_backups, create_backup
+from tj.backup import auto_backup, list_backups
 from tj.commands.ai import handle_ai_command
 from tj.commands.calendar import handle_calendar_view
 from tj.commands.common import not_yet_implemented, handle_delete
@@ -198,9 +198,11 @@ def create_parser() -> argparse.ArgumentParser:
     p_copy.add_argument('args', nargs='*', help="Entry number, new date/time")
     p_copy.set_defaults(func=handle_copy)
 
-    # Backup
-    p_backup = subparsers.add_parser('backup', help="Create a manual backup.")
-    p_backup.set_defaults(func=lambda args: handle_backup_command())
+    # Admin
+    p_admin = subparsers.add_parser('admin', help="Admin commands for database maintenance.")
+    p_admin.add_argument('subcommand', nargs='?', help="Admin subcommand (backup, purge)")
+    from tj.commands.admin import handle_admin
+    p_admin.set_defaults(func=handle_admin)
 
     # Dump
     p_dump = subparsers.add_parser('dump', help="Output database as executable tj commands.")
@@ -216,16 +218,6 @@ def create_parser() -> argparse.ArgumentParser:
 
     return parser
 
-def handle_backup_command() -> None:
-    """Handle the backup command."""
-    try:
-        success = create_backup()
-        if success:
-            print("Backup created successfully.")
-        else:
-            print("Backup failed.", file=sys.stderr)
-    except Exception as e:
-        print(f"Backup error: {e}", file=sys.stderr)
 
 def handle_numbered_command(parser: argparse.ArgumentParser, num_identifier: int, action_command: str, remaining_args: List[str]) -> None:
     """Handle commands prefixed with a number (e.g., '5 x' or '3 a text')."""
@@ -431,7 +423,8 @@ def show_status() -> None:
         bookmark_count = type_counts.get('bookmark', 0)
         todo_count = type_counts.get('todo', 0)
         
-        print(f"\nSummary: {len(active_entries)} entries, {len(unique_tag_names)} tags, {context_count} contexts")
+        deleted_count = len(all_entries) - len(active_entries)
+        print(f"\nSummary: {len(active_entries)} active, {len(all_entries)} total, {deleted_count} deleted | {len(unique_tag_names)} tags, {context_count} contexts")
 
         # Latest entry timestamp
         if active_entries:

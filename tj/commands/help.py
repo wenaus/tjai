@@ -39,7 +39,7 @@ tj c 4          Next 4 weeks     tj cp <n> <datetime> Copy journal entry
 
 METADATA (inline)               DATA
 @name           Named entry     tj dump         Export as commands
-p=N             Priority        tj backup       Manual backup
+p=N             Priority        tj admin        Admin commands
 s=status        Status value    tj sync         Force sync
 :tag            Tag
 //url [T](url)  Links           SETUP
