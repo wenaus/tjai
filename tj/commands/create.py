@@ -23,18 +23,12 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
 
         inline_context, filtered_input, context_found = extract_first_context_from_parts(args.input)
 
-        # Update state and auto-create context if needed
-        if context_found:
-            state = get_state()
-            state["current_context"] = inline_context
-            save_state(state)
-
-            if inline_context:
-                # Verify context exists
-                repository = RepositoryFactory.get_repository()
-                if not repository.get_context(inline_context):
-                    print(f"Error: Context '{inline_context}' does not exist. Create it first with: tj ={inline_context}", file=sys.stderr)
-                    return
+        # Verify context exists if specified
+        if inline_context:
+            repository = RepositoryFactory.get_repository()
+            if not repository.get_context(inline_context):
+                print(f"Error: Context '{inline_context}' does not exist. Create it first with: tj ={inline_context}", file=sys.stderr)
+                return
 
         # Step 2: Join to get full content string
         content = " ".join(filtered_input).strip()

@@ -110,7 +110,7 @@ it is easy to make bulleted hierarchical notes or simple lists.
   - recent_entries_hours: Recent list window (default 24)
   - backup_retention_days: Backup retention period (default 14)
   - calendar_default_days: Default calendar view range (default 30)
-  - content_truncate_length: Max lines in list/calendar views (default 100)
+  - content_truncate_length: Max lines in list/calendar views
 - State file: ~/.tjai/state.json (current context, last parent ID)
 
 ### Backup Strategy

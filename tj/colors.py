@@ -10,6 +10,7 @@ SOFT_GREY = '\033[38;5;245m'  # Soft grey for creation timestamps
 LIGHT_GOLD = '\033[38;5;221m'  # Light gold for kind brackets
 BRIGHT_YELLOW = '\033[38;5;226m'  # Bright yellow for entry numbers
 RED = '\033[38;5;203m'  # Red for next upcoming event countdown
+LIGHT_BROWN = '\033[38;5;180m'  # Light brown for code quotes
 BOLD = '\033[1m'  # Bold text
 RESET = '\033[0m'
 
@@ -38,6 +39,13 @@ def colorize_tags(text: str) -> str:
     tag_pattern = r':[a-zA-Z][a-zA-Z0-9_-]*'
     return re.sub(tag_pattern, f'{LIGHT_MINT_GREEN}\\g<0>{RESET}', text)
 
+def colorize_code(text: str) -> str:
+    """Colorize `code` in backticks with light brown."""
+    import re
+    # Find text between backticks and colorize it
+    code_pattern = r'`([^`]+)`'
+    return re.sub(code_pattern, f'{LIGHT_BROWN}`\\1`{RESET}', text)
+
 def colorize_context(context: str) -> str:
     """Colorize context with very light mauve."""
     return f'{LIGHT_MAUVE}={context}{RESET}'
@@ -61,5 +69,6 @@ def colorize_entry_number(number: int) -> str:
 def colorize_content(text: str) -> str:
     """Apply all content colorization."""
     text = colorize_url(text)
+    text = colorize_code(text)
     text = colorize_tags(text)
     return text

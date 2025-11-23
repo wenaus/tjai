@@ -23,12 +23,32 @@ def handle_context(args, num_identifier: Optional[int] = None) -> None:
         now = datetime.now(timezone.utc).timestamp()
 
         if not existing_context:
-            # Context doesn't exist - error
-            print(f"Error: Context '{args.name}' does not exist. Create it first with: tj ={args.name}", file=sys.stderr)
-            return
+            # Context doesn't exist - confirm creation
+            print(f"Context '{args.name}' does not exist. Create it? [y/N]: ", end='', file=sys.__stdout__, flush=True)
+            response = input().strip().lower()
+            if response not in ['y', 'yes']:
+                print("Cancelled.")
+                return
+
+            # Create new context
+            new_context = Context(
+                name=args.name,
+                title=title,
+                description=description,
+                timestamp_created=now,
+                timestamp_modified=now
+            )
+            repository.create_context(new_context)
+
+            parts = [f"'{args.name}'"]
+            if title:
+                parts.append(f"title='{title}'")
+            if description:
+                parts.append(f"description='{description}'")
+            print(f"Context {' with '.join(parts)} created.")
 
         # Context exists - update if title or description provided
-        if title or description:
+        elif title or description:
             updates = {}
             if title:
                 updates['title'] = title

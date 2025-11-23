@@ -15,7 +15,7 @@ DEFAULT_CONFIG = {
     "recent_entries_hours": 24,
     "backup_retention_days": 14,
     "calendar_default_days": 30,
-    "content_truncate_length": 100
+    "content_truncate_length": 5
 }
 
 

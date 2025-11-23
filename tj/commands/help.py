@@ -10,7 +10,7 @@ def handle_help(args) -> None:
 STATUS                          LIST/FILTER
 tj              Status          tj l                     All entries
 tj hey          Need to know    tj l [ai|b|do|j|m|p]     By type
-tj config       Show config     tj l [t|w|N]             By time (N=days)
+tj config       Show config     tj l [Nd|N|-N]           By time/count
                                 tj l =ctx :tag p=N s=val Composite
                                 tj l [c|t|@]             Metadata (c/t/@=named)
 
@@ -57,6 +57,8 @@ Examples:
   tj =projectX Meeting notes //https://doc.url :important
   tj j fri 15:00 Sprint review
   tj l p=1 s=active :urgent
+  tj l 10     Last 10 entries | tj l -10   First 10 entries
+  tj l 7d     Last 7 days     | tj l 1d    Today (last 24hrs)
 """
 
     print(help_text, file=sys.stdout)

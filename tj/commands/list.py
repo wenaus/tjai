@@ -16,11 +16,15 @@ def handle_list_command(args) -> None:
     - tj l - all entries
     - tj l c - list contexts (metadata)
     - tj l t - list tags (metadata)
+    - tj l @ - list named entries (metadata)
     - tj l d - list todos
     - tj l =context - entries in context
     - tj l :tag - entries with tag
     - tj l p=1 s=active - composite filters
-    - tj l t/w/m - time filters
+    - tj l 10 - last 10 entries
+    - tj l -10 - first 10 entries
+    - tj l 7d - last 7 days
+    - tj l 1d - today (last 24 hours)
     """
     try:
         repository = RepositoryFactory.get_repository()
@@ -145,28 +149,28 @@ def _list_entries_with_filters(repository, filters):
     query_parts = []
 
     for filter_arg in filters:
-        # Check for numeric entry limit
-        if filter_arg.isdigit():
+        # Check for days filter (e.g., 10d = last 10 days)
+        if filter_arg.endswith('d') and filter_arg[:-1].isdigit():
+            days = int(filter_arg[:-1])
+            now = datetime.now()
+            days_ago = now - timedelta(days=days)
+            time_cutoff = days_ago.timestamp()
+            query_parts.append(f"last {days} day{'s' if days != 1 else ''}")
+            continue
+
+        # Check for numeric entry limit (positive or negative)
+        if filter_arg.lstrip('-').isdigit():
             max_entries = int(filter_arg)
-            query_parts.append(f"limit {max_entries}")
+            if max_entries < 0:
+                query_parts.append(f"first {abs(max_entries)}")
+            else:
+                query_parts.append(f"limit {max_entries}")
             continue
         # Query by kind
         if filter_arg in ['b', 'd', 'p', 'ai', 'm', 'j']:
             from tj.commands.common import ENTRY_TYPE_MAP
             kind = ENTRY_TYPE_MAP[filter_arg]
             query_parts.append(kind)
-
-        # Query by time
-        elif filter_arg in ['t', 'w']:
-            now = datetime.now()
-            if filter_arg == 't':  # today
-                start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
-                time_cutoff = start_of_day.timestamp()
-                query_parts.append("today")
-            elif filter_arg == 'w':  # week
-                start_of_week = now - timedelta(days=7)
-                time_cutoff = start_of_week.timestamp()
-                query_parts.append("last 7 days")
 
         # Query by context
         elif filter_arg.startswith('='):
@@ -240,9 +244,14 @@ def _list_entries_with_filters(repository, filters):
     # Sort by timestamp, oldest first (newest at bottom)
     active_entries.sort(key=lambda e: e.timestamp_modified, reverse=False)
 
-    # Apply max_entries limit (show most recent N)
-    if max_entries and len(active_entries) > max_entries:
-        active_entries = active_entries[-max_entries:]
+    # Apply max_entries limit
+    if max_entries and len(active_entries) > abs(max_entries):
+        if max_entries < 0:
+            # Negative: show first N (oldest)
+            active_entries = active_entries[:abs(max_entries)]
+        else:
+            # Positive: show last N (most recent)
+            active_entries = active_entries[-max_entries:]
 
     # Display results
     if not active_entries:

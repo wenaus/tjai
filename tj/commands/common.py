@@ -206,7 +206,7 @@ def format_entry_for_display(entry, entry_number=None, truncate_lines=None) -> s
     from tj.timezone_manager import format_time_dashboard, get_current_timezone
     from tj.colors import (colorize_content, colorize_context, colorize_creation_timestamp,
                           colorize_entry_number, colorize_kind, colorize_timestamp,
-                          BOLD, RESET, TERRACOTTA)
+                          BOLD, RESET, TERRACOTTA, LIGHT_GOLD)
     from tj.repository_factory import RepositoryFactory
     from datetime import datetime
     from zoneinfo import ZoneInfo
@@ -220,8 +220,9 @@ def format_entry_for_display(entry, entry_number=None, truncate_lines=None) -> s
     content = entry.content
     if truncate_lines and truncate_lines > 0:
         lines = content.split('\n')
-        if len(lines) > (truncate_lines + 1):
-            content = '\n'.join(lines[:truncate_lines + 1]) + " [...]"
+        if len(lines) > truncate_lines:
+            # Show only first line + line count in LIGHT_GOLD (same as type indicator)
+            content = lines[0] + f"     {LIGHT_GOLD}[{len(lines)} lines]{RESET}"
 
     # Colorize content
     content_colored = colorize_content(content)
@@ -283,9 +284,13 @@ def format_entry_for_display(entry, entry_number=None, truncate_lines=None) -> s
     # Context
     context_str = f"{colorize_context(entry.context)} " if entry.context else ""
 
-    # Tags
+    # Tags - only append if not already in content
     tags = repository.get_tags(entry.id)
-    tags_str = f" {colorize_content(' '.join(':' + t for t in tags))}" if tags else ""
+    missing_tags = []
+    for tag in tags:
+        if f':{tag}' not in content:  # Check original content, not colorized
+            missing_tags.append(tag)
+    tags_str = f" {colorize_content(' '.join(':' + t for t in missing_tags))}" if missing_tags else ""
 
     # Entry number prefix (optional)
     number_str = f"{colorize_entry_number(entry_number)}  " if entry_number else ""

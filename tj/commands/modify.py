@@ -261,9 +261,9 @@ def handle_edit(args) -> None:
     from tj.state import display_context
     from tj.commands.common import extract_context_from_args
 
-    # Extract context marker if present (e.g., tj e =context underway)
+    # Extract context marker if present (e.g., tj e =context underway) - do NOT set current context
     if args.entry_num:
-        args.entry_num, args.text = extract_context_from_args(args.entry_num, args.text if args.text else [])
+        args.entry_num, args.text = extract_context_from_args(args.entry_num, args.text if args.text else [], set_context=False)
 
     # Case 1: No args → edit most recent entry
     if not args.entry_num:
@@ -642,8 +642,8 @@ def handle_show(args) -> None:
             print(f"Created: {time_str}")
             return
 
-        # Extract context marker if present (e.g., tj s =context underway)
-        entry_identifier, _ = extract_context_from_args(args.entry_num, [])
+        # Extract context marker if present (e.g., tj s =context underway) - do NOT set current context
+        entry_identifier, _ = extract_context_from_args(args.entry_num, [], set_context=False)
 
         entry = get_entry_from_recent_list(entry_identifier)
         if not entry:
