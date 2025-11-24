@@ -194,6 +194,18 @@ def handle_calendar_view(args) -> None:
                         entries_by_date[date_key] = []
                     entries_by_date[date_key].append((event_ts, event_dt, entry))
 
+        # Ensure today is always shown if it's in the timeframe
+        if tz:
+            now_dt = datetime.now(tz)
+        else:
+            now_dt = datetime.now()
+        today_dt = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_ts = today_dt.timestamp()
+        today_key = today_dt.strftime('%Y%m%d')
+
+        if start_ts <= today_ts < end_ts and today_key not in entries_by_date:
+            entries_by_date[today_key] = []
+
         if not entries_by_date:
             print(f"No calendar entries for {desc}")
             return
@@ -282,8 +294,19 @@ def handle_calendar_view(args) -> None:
             # Sort entries within day by time
             entries.sort(key=lambda x: x[0])
 
+            # Get date from entry or from date_key if no entries
+            if entries:
+                event_date = entries[0][1].date()
+                event_dt_for_display = entries[0][1]
+            else:
+                # Parse date_key to get date
+                parsed_dt = datetime.strptime(date_key, '%Y%m%d')
+                if tz:
+                    parsed_dt = parsed_dt.replace(tzinfo=tz)
+                event_date = parsed_dt.date()
+                event_dt_for_display = parsed_dt
+
             # Determine if this is today's section
-            event_date = entries[0][1].date()
             if tz:
                 now_dt = datetime.now(tz)
                 today = now_dt.date()
@@ -294,20 +317,19 @@ def handle_calendar_view(args) -> None:
 
             # Check for week boundary in multi-day views
             if is_multi_day:
-                event_dt_for_week = entries[0][1]
-                current_week = event_dt_for_week.isocalendar()[1]
-                current_year = event_dt_for_week.year
+                current_week = event_dt_for_display.isocalendar()[1]
+                current_year = event_dt_for_display.year
 
                 # Print week header when crossing week boundary or at start
                 if last_week is None or (current_year, current_week) != last_week:
-                    week_start = event_dt_for_week - timedelta(days=event_dt_for_week.weekday())
+                    week_start = event_dt_for_display - timedelta(days=event_dt_for_display.weekday())
                     week_header = f'{week_start.strftime("%Y%m%d")} Week {current_week}'
                     print(f"\n{colorize_timestamp(week_header)}")
                     last_week = (current_year, current_week)
 
             # Print day header for multi-day views
             if is_multi_day:
-                day_name = entries[0][1].strftime('%a %b %d')
+                day_name = event_dt_for_display.strftime('%a %b %d')
                 if is_today:
                     from tj.colors import BOLD, RESET, TERRACOTTA
                     current_time = now_dt.strftime('%H:%M')
