@@ -1,20 +1,39 @@
 """Admin commands for tj database maintenance."""
 
 import sys
+from datetime import datetime, timezone
+
+from tj.commands.common import log_operation
 
 
 def handle_backup() -> None:
     """Create a manual backup."""
-    from tj.backup import create_backup
+    from tj.backup import create_backup, get_backup_dir
+    import os
 
     try:
         success = create_backup()
         if success:
             print("Backup created successfully.")
+
+            # Get backup file size
+            backup_dir = get_backup_dir()
+            datetime_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H")
+            backup_filename = f"tjai_backup_{datetime_str}.db"
+            backup_path = backup_dir / backup_filename
+
+            if backup_path.exists():
+                size_bytes = os.path.getsize(backup_path)
+                size_kb = round(size_bytes / 1024, 1)
+                log_operation('backup', 'success', {'size_kb': size_kb})
+            else:
+                log_operation('backup', 'success')
         else:
             print("Backup failed.", file=sys.stderr)
+            log_operation('backup', 'error')
     except Exception as e:
         print(f"Backup error: {e}", file=sys.stderr)
+        log_operation('backup', 'error', {'error': str(e)})
 
 
 def handle_admin(args) -> None:
@@ -80,9 +99,11 @@ def handle_lines(args) -> None:
 
     # Update config
     config = get_config()
+    old_value = config.get('content_truncate_length')  # Actual value, no default
     config['content_truncate_length'] = line_count
     save_config(config)
     print(f"Content truncation set to {line_count} lines.")
+    log_operation('lines', 'success', {'old_value': old_value, 'new_value': line_count})
 
 
 def handle_safe() -> None:
@@ -97,6 +118,7 @@ def handle_safe() -> None:
     state["safe_mode"] = True
     save_state(state)
     print("Safe mode enabled.")
+    log_operation('safe', 'success')
 
 
 def handle_normal() -> None:
@@ -111,6 +133,7 @@ def handle_normal() -> None:
     state["safe_mode"] = False
     save_state(state)
     print("Safe mode disabled.")
+    log_operation('normal', 'success')
 
 
 def handle_purge() -> None:
@@ -148,6 +171,7 @@ def handle_purge() -> None:
         response = input().strip().lower()
         if response not in ['y', 'yes']:
             print("Purge cancelled.")
+            log_operation('purge', 'cancelled', {'entries_found': len(deleted_entries)})
             return
 
         # Get database size before
@@ -182,5 +206,12 @@ def handle_purge() -> None:
         print(f"Purged {entries_deleted} entries, {tags_deleted} orphaned tags")
         print(f"Reclaimed {size_reclaimed_kb:.1f} KB")
 
+        log_operation('purge', 'success', {
+            'entries_deleted': entries_deleted,
+            'tags_deleted': tags_deleted,
+            'space_reclaimed_kb': round(size_reclaimed_kb, 1)
+        })
+
     except Exception as e:
         print(f"Purge error: {e}", file=sys.stderr)
+        log_operation('purge', 'error', {'error': str(e)})

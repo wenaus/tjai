@@ -113,7 +113,12 @@ def create_parser() -> argparse.ArgumentParser:
     # List commands
     p_list = subparsers.add_parser('l', help="List metadata and entries.")
     p_list.add_argument('filters', nargs='*', help="Filters: c/t (metadata), d/p/b/j/ai (type), =ctx, :tag, p=N, s=val, t/w/m (time)")
-    p_list.set_defaults(func=handle_list_command)
+    p_list.set_defaults(func=handle_list_command, no_truncate=False)
+
+    # List all (no truncation)
+    p_all = subparsers.add_parser('a', help="List entries with full content (no truncation).")
+    p_all.add_argument('filters', nargs='*', help="Filters: same as 'l' command")
+    p_all.set_defaults(func=handle_list_command, no_truncate=True)
 
     # Calendar view
     p_calendar = subparsers.add_parser('c', help="View calendar entries.")

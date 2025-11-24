@@ -1,10 +1,110 @@
 import sys
-from datetime import datetime
+import json
+import socket
+import uuid
+from datetime import datetime, timezone
 from typing import Optional, Tuple, List
 
 from tj.config import get_recent_entries_hours
 from tj.repository import Entry
 from tj.state import display_context, get_state, save_state
+
+
+def log_operation(operation: str, result: str, details: dict = None) -> None:
+    """Log an admin/system operation to the database.
+
+    Args:
+        operation: Operation name (e.g., 'backup', 'purge', 'safe', 'normal', 'lines')
+        result: Result status ('success', 'error', 'cancelled')
+        details: Optional dict with operation-specific details
+    """
+    try:
+        from tj.repository_factory import RepositoryFactory
+        from tj.colors import RED, BOLD, RESET
+
+        repository = RepositoryFactory.get_repository()
+
+        # Build log entry content as JSON
+        log_data = {
+            'operation': operation,
+            'hostname': socket.gethostname(),
+            'result': result,
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        }
+
+        if details:
+            log_data['details'] = details
+
+        # Build human-readable summary
+        if result == 'success':
+            result_text = result
+        else:
+            result_text = f"{RED}{BOLD}failed{RESET}"
+
+        summary = f"{operation}: {result_text}"
+
+        if details:
+            if operation == 'backup' and 'size_kb' in details:
+                summary += f" ({details['size_kb']} KB)"
+            elif operation == 'purge' and 'entries_deleted' in details:
+                summary += f" ({details['entries_deleted']} entries, {details['tags_deleted']} tags, {details['space_reclaimed_kb']} KB)"
+            elif operation == 'lines' and 'old_value' in details and 'new_value' in details:
+                summary += f" ({details['old_value']} → {details['new_value']})"
+            elif operation == 'purge' and 'entries_found' in details:
+                summary += f" ({details['entries_found']} entries found)"
+
+        content = summary + "\n" + json.dumps(log_data, indent=2)
+
+        entry_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).timestamp()
+
+        entry = Entry(
+            id=entry_id,
+            content=content,
+            kind='log',
+            timestamp_created=now,
+            timestamp_modified=now,
+            data={'truncate_lines': 0}  # Only show summary line in list view
+        )
+
+        repository.create_entry(entry)
+
+    except Exception as e:
+        print(f"Warning: Failed to log operation: {e}", file=sys.stderr)
+
+
+def should_log_backup(success: bool) -> bool:
+    """Check if auto backup should be logged (first of day or failure).
+
+    Args:
+        success: Whether backup succeeded
+
+    Returns:
+        True if should log, False otherwise
+    """
+    if not success:
+        return True  # Always log failures
+
+    try:
+        from tj.repository_factory import RepositoryFactory
+
+        repository = RepositoryFactory.get_repository()
+
+        # Get today's start (midnight UTC)
+        now = datetime.now(timezone.utc)
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+
+        # Check if any backup log from today
+        log_entries = repository.query_entries(kind='log')
+        for entry in log_entries:
+            if entry.timestamp_created >= today_start:
+                if entry.content.split('\n', 1)[0].startswith('backup:'):
+                    return False  # Already logged today
+
+        return True  # First backup of day
+
+    except Exception:
+        return False  # Don't log on error
 
 
 # Entry type abbreviations for display and filenames
@@ -15,7 +115,8 @@ ENTRY_TYPE_ABBREV = {
     'bookmark': 'b',
     'todo': 'do',
     'ai': 'ai',
-    'list': 'l'
+    'list': 'l',
+    'log': 'log'
 }
 
 # Bidirectional map: accepts both abbreviation and full name, returns full name
@@ -241,7 +342,7 @@ def format_entry_for_display(entry, entry_number=None, truncate_lines=None) -> s
 
     # Truncate content if requested
     content = entry.content
-    if truncate_lines and truncate_lines > 0:
+    if truncate_lines is not None:  # None means no truncation
         lines = content.split('\n')
 
         # Count visual lines (accounting for line wrapping at ~100 chars)
@@ -253,7 +354,9 @@ def format_entry_for_display(entry, entry_number=None, truncate_lines=None) -> s
                 # Estimate visual lines: divide by 100 and round up
                 visual_line_count += (len(line) + 99) // 100
 
-        if visual_line_count > truncate_lines:
+        # truncate_lines=0 means show only first line
+        # truncate_lines>0 means show that many lines if content exceeds it
+        if truncate_lines == 0 or visual_line_count > truncate_lines:
             # Show only first line + visual line count in LIGHT_GOLD
             content = lines[0] + f"     {LIGHT_GOLD}[{visual_line_count} lines]{RESET}"
 

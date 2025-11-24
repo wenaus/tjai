@@ -43,7 +43,8 @@ def handle_list_command(args) -> None:
                 return
 
         # Otherwise, list entries with filters
-        _list_entries_with_filters(repository, filters)
+        no_truncate = getattr(args, 'no_truncate', False)
+        _list_entries_with_filters(repository, filters, no_truncate)
 
     except Exception as e:
         print(f"List error: {e}", file=sys.stderr)
@@ -136,7 +137,7 @@ def _list_tags(repository):
         print(f"{colorize_entry_number(i)}  {tag_name} - {count}")
 
 
-def _list_entries_with_filters(repository, filters):
+def _list_entries_with_filters(repository, filters, no_truncate=False):
     """List entries with composite filters."""
     # Build query parameters
     kind = None
@@ -169,7 +170,7 @@ def _list_entries_with_filters(repository, filters):
                 query_parts.append(f"limit {max_entries}")
             continue
         # Query by kind
-        if filter_arg in ['b', 'd', 'p', 'ai', 'm', 'j']:
+        if filter_arg in ['b', 'd', 'p', 'ai', 'm', 'j', 'log']:
             from tj.commands.common import ENTRY_TYPE_MAP
             kind = ENTRY_TYPE_MAP[filter_arg]
             query_parts.append(kind)
@@ -296,7 +297,16 @@ def _list_entries_with_filters(repository, filters):
     skip_truncate = (kind == 'ai_guideline')
 
     for i, entry in enumerate(active_entries, 1):
-        entry_truncate = None if skip_truncate else truncate_len
+        # Check no_truncate flag (from 'tj a' command)
+        if no_truncate:
+            entry_truncate = None
+        # Check for per-entry truncate setting, otherwise use global
+        elif entry.data and 'truncate_lines' in entry.data:
+            entry_truncate = entry.data['truncate_lines']
+        elif skip_truncate:
+            entry_truncate = None
+        else:
+            entry_truncate = truncate_len
         print(format_entry_for_display(entry, i, entry_truncate))
 
     # Store numbered entries in state for numbered operations

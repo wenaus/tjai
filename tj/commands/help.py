@@ -9,9 +9,10 @@ def handle_help(args) -> None:
 
 STATUS                          LIST/FILTER
 tj              Status          tj l                     All entries
-tj hey          Need to know    tj l [ai|b|do|j|m|p]     By type
-tj config       Show config     tj l [Nd|N|-N]           By time/count
-tj <N>          List N entries  tj l =ctx :tag p=N s=val Composite
+tj hey          Need to know    tj a                     All (no truncation)
+tj config       Show config     tj l [ai|b|do|j|m|p|log] By type
+tj <N>          List N entries  tj l [Nd|N|-N]           By time/count
+                                tj l =ctx :tag p=N s=val Composite
                                 tj l [c|t|@]             Metadata (c/t/@=named)
 
 CREATE                          MODIFY

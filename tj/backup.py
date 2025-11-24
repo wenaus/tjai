@@ -202,7 +202,29 @@ def auto_backup() -> None:
     try:
         if needs_backup():
             success = create_backup()
-            if not success:
+
+            # Log if first backup of day or if failed
+            from tj.commands.common import should_log_backup, log_operation
+            if should_log_backup(success):
+                if success:
+                    # Get backup file size
+                    import os
+                    from datetime import timezone as tz
+                    backup_dir = get_backup_dir()
+                    datetime_str = datetime.now(tz.utc).strftime("%Y%m%d_%H")
+                    backup_filename = f"tjai_backup_{datetime_str}.db"
+                    backup_path = backup_dir / backup_filename
+
+                    if backup_path.exists():
+                        size_bytes = os.path.getsize(backup_path)
+                        size_kb = round(size_bytes / 1024, 1)
+                        log_operation('backup', 'success', {'size_kb': size_kb, 'auto': True})
+                    else:
+                        log_operation('backup', 'success', {'auto': True})
+                else:
+                    log_operation('backup', 'error', {'auto': True})
+                    print("Warning: Backup failed")
+            elif not success:
                 print("Warning: Backup failed")
     except Exception as e:
         # Don't let backup failures break the main command
