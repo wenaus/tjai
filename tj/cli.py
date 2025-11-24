@@ -161,6 +161,7 @@ def create_parser() -> argparse.ArgumentParser:
     p_edit = subparsers.add_parser('e', help="Edit or create entry in editor.")
     p_edit.add_argument('entry_num', nargs='?', help="Entry number (optional, omit to create new entry)")
     p_edit.add_argument('text', nargs='*', help="New entry content (optional, omit to use editor)")
+    p_edit.add_argument('-k', '--keep-time', action='store_true', help="Keep original modification time")
     p_edit.set_defaults(func=handle_edit)
 
     # Alias for editor creation
@@ -200,7 +201,8 @@ def create_parser() -> argparse.ArgumentParser:
 
     # Admin
     p_admin = subparsers.add_parser('admin', help="Admin commands for database maintenance.")
-    p_admin.add_argument('subcommand', nargs='?', help="Admin subcommand (backup, purge)")
+    p_admin.add_argument('subcommand', nargs='?', help="Admin subcommand (backup, purge, safe, normal, lines)")
+    p_admin.add_argument('args', nargs='*', help="Additional arguments for admin subcommand")
     from tj.commands.admin import handle_admin
     p_admin.set_defaults(func=handle_admin)
 
@@ -394,8 +396,9 @@ def show_status() -> None:
         repository = RepositoryFactory.get_repository()
         state = get_state()
 
-        # Get basic stats
-        all_entries = repository.query_entries()
+        # Get basic stats (apply safe mode filtering)
+        from tj.commands.common import get_safe_exclude_tags
+        all_entries = repository.query_entries(exclude_tags=get_safe_exclude_tags())
         active_entries = [e for e in all_entries if not getattr(e, 'deleted_at', None)]
 
         # Count by type
@@ -613,14 +616,16 @@ def main() -> None:
                 from datetime import datetime, timezone
 
                 repository = RepositoryFactory.get_repository()
+                context_just_created = False
                 if not repository.get_context(context_name):
-                    # Context doesn't exist - confirm creation
-                    response = input(f"Context '{context_name}' does not exist. Create it? [y/N]: ").strip().lower()
+                    # Context doesn't exist - confirm creation (bypass buffer)
+                    print(f"Context '{context_name}' does not exist. Create it? [y/N]: ", end='', file=sys.__stdout__, flush=True)
+                    response = input().strip().lower()
                     if response not in ['y', 'yes']:
                         print("Cancelled.")
                         return
 
-                    # Create new context
+                    # Create new context (but don't set as current)
                     now = datetime.now(timezone.utc).timestamp()
                     new_context = Context(
                         name=context_name,
@@ -631,18 +636,19 @@ def main() -> None:
                     )
                     repository.create_context(new_context)
                     print(f"Context '{context_name}' created.")
-
-                # Set context
-                state["current_context"] = context_name
-                save_state(state)
+                    context_just_created = True
+                else:
+                    # Context exists - set as current
+                    state["current_context"] = context_name
+                    save_state(state)
 
             # If there are remaining args, they're for creation
             if not remaining_args:
-                # Just setting context - list its entries
+                # Just setting context - list its entries (unless just created)
                 from tj.commands.list import handle_list_command
 
-                # List entries in this context
-                if context_name and context_name != '0':
+                # List entries in this context (skip if context was just created)
+                if context_name and context_name != '0' and not context_just_created:
                     class ListArgs:
                         filters = [f'={context_name}']
                     handle_list_command(ListArgs())
@@ -660,7 +666,12 @@ def main() -> None:
         # Avoid treating dates (YYYYMMDD) as numbered commands
         if first_arg.isdigit() and len(first_arg) <= 3:
             if len(sys.argv) < 3:
-                print("Error: Numbered command requires a subsequent action (e.g., 'a' or 'x').", file=sys.stderr)
+                # No action specified - default to list (tj 5 → tj l 5)
+                from tj.commands.list import handle_list_command
+                class Args:
+                    def __init__(self):
+                        self.filters = [first_arg]
+                handle_list_command(Args())
                 return
 
             num_identifier = int(first_arg)

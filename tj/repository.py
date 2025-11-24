@@ -84,8 +84,13 @@ class EntryRepository(ABC):
                      tag: Optional[str] = None,
                      priority: Optional[int] = None,
                      status: Optional[str] = None,
-                     limit: Optional[int] = None) -> List[Entry]:
-        """Query entries with optional filters."""
+                     limit: Optional[int] = None,
+                     exclude_tags: Optional[List[str]] = None) -> List[Entry]:
+        """Query entries with optional filters.
+
+        Args:
+            exclude_tags: List of tag names to exclude (entries with any of these tags will be filtered out)
+        """
         pass
     
     @abstractmethod

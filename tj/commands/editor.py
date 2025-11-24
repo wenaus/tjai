@@ -66,7 +66,16 @@ def open_editor(initial_content: str = "", entry_type: Optional[str] = None, fil
 
         # Launch editor (blocks until user closes)
         try:
+            # Disable focus reporting to suppress escape sequences (use __stdout__ to bypass buffer)
+            import sys
+            sys.__stdout__.write('\033[?1004l')
+            sys.__stdout__.flush()
+
             result = subprocess.call(editor_cmd)
+
+            # Re-enable focus reporting
+            sys.__stdout__.write('\033[?1004h')
+            sys.__stdout__.flush()
         except FileNotFoundError:
             print(f"Error: Editor '{editor}' not found")
             return None
@@ -110,8 +119,16 @@ def handle_editor_create(entry_type: Optional[str] = None, extra_args: Optional[
 
     Args:
         entry_type: Optional entry type (ai, todo, profile, bookmark, calendar)
-        extra_args: Optional extra arguments like =context
+        extra_args: Optional extra arguments like @name =context :tag
     """
+    # Extract name from extra_args for filename hint
+    filename_hint = 'new_entry'
+    if extra_args:
+        for arg in extra_args:
+            if arg.startswith('@'):
+                filename_hint = arg[1:]  # Use name without @
+                break
+
     # Show what we're creating (bypass buffer to show immediately)
     import sys
     if extra_args:
@@ -121,7 +138,7 @@ def handle_editor_create(entry_type: Optional[str] = None, extra_args: Optional[
         entry_type_display = entry_type if entry_type else "memory"
         print(f"Creating new {entry_type_display} entry...", file=sys.__stdout__, flush=True)
 
-    content = open_editor(entry_type=entry_type, filename_hint='new_entry')
+    content = open_editor(entry_type=entry_type, filename_hint=filename_hint)
 
     if content is None:
         return
@@ -158,6 +175,9 @@ def handle_editor_create(entry_type: Optional[str] = None, extra_args: Optional[
     else:
         print("Error: Entry content cannot be empty.")
         return
+
+    # Strip leading/trailing whitespace from full content
+    full_content = full_content.strip()
 
     # Build input list: metadata first, then content as single item (preserves newlines)
     input_list = metadata + [full_content]

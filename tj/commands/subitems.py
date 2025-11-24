@@ -63,7 +63,7 @@ def handle_add_subitem(args) -> None:
             kind="memory",
             timestamp_created=now,
             timestamp_modified=now,
-            context=state.get("current_context"),
+            context=parent.context,  # Inherit parent's context
             is_dirty=True
         )
 

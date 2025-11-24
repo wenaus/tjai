@@ -26,6 +26,29 @@ for _full_name, _abbrev in ENTRY_TYPE_ABBREV.items():
     ENTRY_TYPE_MAP[_full_name] = _full_name  # journal -> journal
 
 
+def get_safe_exclude_tags(additional_excludes: Optional[List[str]] = None) -> Optional[List[str]]:
+    """Get exclude_tags list with 'private' added if safe mode is active.
+
+    Args:
+        additional_excludes: Optional list of additional tags to exclude
+
+    Returns:
+        List of tags to exclude, or None if no exclusions needed
+    """
+    state = get_state()
+    exclude_tags = []
+
+    # Add 'private' if safe mode is active
+    if state.get("safe_mode"):
+        exclude_tags.append("private")
+
+    # Add any additional excludes
+    if additional_excludes:
+        exclude_tags.extend(additional_excludes)
+
+    return exclude_tags if exclude_tags else None
+
+
 def extract_first_context_from_parts(parts: List[str]) -> Tuple[Optional[str], List[str], bool]:
     """Extract inline context from a list of parts (ONLY the first =text).
 
@@ -58,7 +81,7 @@ def extract_first_context_from_parts(parts: List[str]) -> Tuple[Optional[str], L
     return context_name, filtered_parts, found_context
 
 
-def extract_context_from_args(entry_arg: str, remaining_args: List[str], set_context: bool = True) -> Tuple[Optional[str], List[str]]:
+def extract_context_from_args(entry_arg: str, remaining_args: List[str], set_context: bool = False) -> Tuple[Optional[str], List[str]]:
     """Extract context marker from arguments if present.
 
     Handles patterns like: tj e =context underway
@@ -220,16 +243,26 @@ def format_entry_for_display(entry, entry_number=None, truncate_lines=None) -> s
     content = entry.content
     if truncate_lines and truncate_lines > 0:
         lines = content.split('\n')
-        if len(lines) > truncate_lines:
-            # Show only first line + line count in LIGHT_GOLD (same as type indicator)
-            content = lines[0] + f"     {LIGHT_GOLD}[{len(lines)} lines]{RESET}"
+
+        # Count visual lines (accounting for line wrapping at ~100 chars)
+        visual_line_count = 0
+        for line in lines:
+            if len(line) == 0:
+                visual_line_count += 1
+            else:
+                # Estimate visual lines: divide by 100 and round up
+                visual_line_count += (len(line) + 99) // 100
+
+        if visual_line_count > truncate_lines:
+            # Show only first line + visual line count in LIGHT_GOLD
+            content = lines[0] + f"     {LIGHT_GOLD}[{visual_line_count} lines]{RESET}"
 
     # Colorize content
     content_colored = colorize_content(content)
 
     # Prepend bold @name if entry has one
     if entry.name:
-        content_colored = f"{BOLD}@{entry.name}:{RESET} {content_colored}"
+        content_colored = f"{BOLD}@{entry.name}{RESET}  {content_colored}"
 
     # Prepend priority and status if present
     metadata_parts = []

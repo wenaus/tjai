@@ -194,11 +194,20 @@ class SQLiteRepository(EntryRepository):
             
             if not set_clauses:
                 return False
-                
-            # Always update timestamp and mark dirty
-            set_clauses.append("timestamp_modified = ?")
-            set_clauses.append("is_dirty = ?")
-            values.extend([datetime.now().timestamp(), 1])
+
+            # Update timestamp (use provided value or default to now)
+            if 'timestamp_modified' not in changes:
+                set_clauses.append("timestamp_modified = ?")
+                values.append(datetime.now().timestamp())
+            else:
+                set_clauses.append("timestamp_modified = ?")
+                values.append(changes['timestamp_modified'])
+
+            # Mark dirty (use provided value or default to True)
+            if 'is_dirty' not in changes:
+                set_clauses.append("is_dirty = ?")
+                values.append(1)
+
             values.append(entry_id)
             
             query = f"UPDATE entries SET {', '.join(set_clauses)} WHERE id = ?"
@@ -239,7 +248,8 @@ class SQLiteRepository(EntryRepository):
                      tag: Optional[str] = None,
                      priority: Optional[int] = None,
                      status: Optional[str] = None,
-                     limit: Optional[int] = None) -> List[Entry]:
+                     limit: Optional[int] = None,
+                     exclude_tags: Optional[List[str]] = None) -> List[Entry]:
         """Query entries with optional filters."""
         try:
             conn = get_db_connection()
@@ -260,6 +270,11 @@ class SQLiteRepository(EntryRepository):
             if tag:
                 conditions.append("id IN (SELECT entry_id FROM tags WHERE tag_name = ?)")
                 params.append(tag)
+
+            if exclude_tags:
+                for exclude_tag in exclude_tags:
+                    conditions.append("id NOT IN (SELECT entry_id FROM tags WHERE tag_name = ?)")
+                    params.append(exclude_tag)
 
             if priority is not None:
                 conditions.append("priority = ?")

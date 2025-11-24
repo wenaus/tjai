@@ -138,12 +138,13 @@ def handle_add_subnote(args) -> None:
         print(f"Add sub-note error: {e}", file=sys.stderr)
 
 
-def _edit_entry_in_editor(entry, entry_identifier="entry"):
+def _edit_entry_in_editor(entry, entry_identifier="entry", keep_time=False):
     """Helper function to edit an entry in the editor.
 
     Args:
         entry: The Entry object to edit
         entry_identifier: String identifier for messages (e.g., "@name" or "entry")
+        keep_time: If True, preserve original modification time
 
     Returns:
         bool: True if edit was successful, False otherwise
@@ -215,7 +216,7 @@ def _edit_entry_in_editor(entry, entry_identifier="entry"):
     update_fields = {
         'content': cleaned_content,
         'context': new_context,
-        'timestamp_modified': datetime.now(timezone.utc).timestamp(),
+        'timestamp_modified': entry.timestamp_modified if keep_time else datetime.now(timezone.utc).timestamp(),
         'is_dirty': True
     }
     update_fields.update(metadata_fields)
@@ -265,18 +266,9 @@ def handle_edit(args) -> None:
     if args.entry_num:
         args.entry_num, args.text = extract_context_from_args(args.entry_num, args.text if args.text else [], set_context=False)
 
-    # Case 1: No args → edit most recent entry
+    # Case 1: No args → create new entry
     if not args.entry_num:
-        repository = RepositoryFactory.get_repository()
-        all_entries = repository.query_entries()
-        active_entries = [e for e in all_entries if not getattr(e, 'deleted_at', None)]
-        if not active_entries:
-            print("No entries to edit.", file=sys.stderr)
-            return
-        # Sort by modification time, get most recent
-        active_entries.sort(key=lambda e: e.timestamp_modified, reverse=True)
-        entry = active_entries[0]
-        _edit_entry_in_editor(entry, "most recent entry")
+        handle_editor_create(entry_type='memory', extra_args=args.text if args.text else [])
         return
 
     # Check if entry_num is a kind type
@@ -292,30 +284,46 @@ def handle_edit(args) -> None:
     # Try to parse entry_num as integer first
     try:
         entry_num = int(args.entry_num)
+
+        # Special case: 0 means edit most recent entry
+        if entry_num == 0:
+            repository = RepositoryFactory.get_repository()
+            all_entries = repository.query_entries()
+            active_entries = [e for e in all_entries if not getattr(e, 'deleted_at', None)]
+            if not active_entries:
+                print("No entries to edit.", file=sys.stderr)
+                return
+            # Sort by modification time, get most recent
+            active_entries.sort(key=lambda e: e.timestamp_modified, reverse=True)
+            entry = active_entries[0]
+            keep_time = getattr(args, 'keep_time', False)
+            _edit_entry_in_editor(entry, "most recent entry", keep_time=keep_time)
+            return
+
     except (ValueError, TypeError):
         # Not a number, check if it's a name reference (with or without @)
         if isinstance(args.entry_num, str):
-            # If it doesn't start with @, add it
+            # Normalize to @name format for lookup
             name_ref = args.entry_num if args.entry_num.startswith('@') else f"@{args.entry_num}"
 
-            # Edit named entry (or create if not found in current context)
+            # Look up the named entry
             entry = get_entry_from_recent_list(name_ref)
             if not entry:
-                # Entry not found - if we're in a context, create new entry with this name
-                from tj.state import get_state
-                state = get_state()
-                current_context = state.get("current_context")
+                # Entry not found - confirm before creating
+                name_without_at = name_ref[1:] if name_ref.startswith('@') else name_ref
+                print(f"Entry @{name_without_at} does not exist. Create it? [y/N]: ", end='', file=sys.__stdout__, flush=True)
+                response = input().strip().lower()
+                if response not in ['y', 'yes']:
+                    print("Cancelled.")
+                    return
 
-                if current_context is not None:
-                    # Create new entry with this name in current context
-                    print(f"Creating new entry {name_ref} in context ={current_context}")
-                    # Open editor to create new entry with @name metadata
-                    name_without_at = name_ref[1:] if name_ref.startswith('@') else name_ref
-                    handle_editor_create(entry_type='memory', extra_args=[f'@{name_without_at}'])
-                    return
-                else:
-                    print(f"Error: Entry {name_ref} not found.", file=sys.stderr)
-                    return
+                # Build extra_args: @name plus any additional args like :tags
+                extra_args = [f'@{name_without_at}']
+                if args.text:
+                    extra_args.extend(args.text)
+                # Open editor to create new entry
+                handle_editor_create(entry_type='memory', extra_args=extra_args)
+                return
 
             # If there's text, do command-line edit with confirmation
             if args.text:
@@ -376,7 +384,8 @@ def handle_edit(args) -> None:
                 return
 
             # No text - edit in editor using helper
-            _edit_entry_in_editor(entry, name_ref)
+            keep_time = getattr(args, 'keep_time', False)
+            _edit_entry_in_editor(entry, name_ref, keep_time=keep_time)
             return
         else:
             print("Error: First argument must be an entry number, name, or type (ai, do, p, b, j).", file=sys.stderr)
@@ -388,7 +397,8 @@ def handle_edit(args) -> None:
         if not entry:
             print(f"Error: Entry {entry_num} not found in recent list.", file=sys.stderr)
             return
-        _edit_entry_in_editor(entry, str(entry_num))
+        keep_time = getattr(args, 'keep_time', False)
+        _edit_entry_in_editor(entry, str(entry_num), keep_time=keep_time)
         return
 
     # Case 3: Entry number + text → command-line edit with confirmation

@@ -173,8 +173,9 @@ def handle_calendar_view(args) -> None:
         except Exception:
             tz = None
 
-        # Query journal entries (for calendar presentation)
-        all_calendar = repository.query_entries(kind='journal')
+        # Query journal entries (for calendar presentation, apply safe mode filtering)
+        from tj.commands.common import get_safe_exclude_tags
+        all_calendar = repository.query_entries(kind='journal', exclude_tags=get_safe_exclude_tags())
 
         # Filter by event_date within timeframe and group by date
         entries_by_date = {}

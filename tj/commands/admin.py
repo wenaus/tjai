@@ -19,14 +19,22 @@ def handle_backup() -> None:
 
 def handle_admin(args) -> None:
     """Handle admin commands."""
-    from tj.state import display_context
+    from tj.state import display_context, get_state
 
     # Check if subcommand provided
     if not hasattr(args, 'subcommand') or not args.subcommand:
+        # Show safe mode status if active
+        state = get_state()
+        if state.get("safe_mode"):
+            print("⚠ Safe mode active")
+
         # List available admin commands
         print("Admin commands:")
         print("  tj admin backup   Create a manual backup")
         print("  tj admin purge    Permanently delete soft-deleted entries")
+        print("  tj admin safe     Enable safe mode")
+        print("  tj admin normal   Disable safe mode")
+        print("  tj admin lines N  Set content truncation to N lines")
         return
 
     subcommand = args.subcommand
@@ -35,11 +43,74 @@ def handle_admin(args) -> None:
         handle_backup()
     elif subcommand == 'purge':
         handle_purge()
+    elif subcommand == 'safe':
+        handle_safe()
+    elif subcommand == 'normal':
+        handle_normal()
+    elif subcommand == 'lines':
+        handle_lines(args)
     else:
         # Unknown admin command
         print(f"Error: 'admin' is reserved for admin commands.", file=sys.stderr)
         print(f"Unknown admin command: '{subcommand}'", file=sys.stderr)
         print("Use 'tj admin' to see available admin commands.", file=sys.stderr)
+
+
+def handle_lines(args) -> None:
+    """Set content truncation line count."""
+    from tj.config import get_config, save_config
+
+    # Check if N provided
+    if not hasattr(args, 'args') or not args.args:
+        # Show current value
+        config = get_config()
+        current = config.get('content_truncate_length', 5)
+        print(f"Content truncation: {current} lines")
+        return
+
+    # Parse N
+    try:
+        line_count = int(args.args[0])
+        if line_count < 0:
+            print("Error: Line count must be non-negative.", file=sys.stderr)
+            return
+    except ValueError:
+        print(f"Error: Invalid line count '{args.args[0]}'", file=sys.stderr)
+        return
+
+    # Update config
+    config = get_config()
+    config['content_truncate_length'] = line_count
+    save_config(config)
+    print(f"Content truncation set to {line_count} lines.")
+
+
+def handle_safe() -> None:
+    """Enable safe mode."""
+    from tj.state import get_state, save_state
+
+    state = get_state()
+    if state.get("safe_mode"):
+        print("Safe mode already active.")
+        return
+
+    state["safe_mode"] = True
+    save_state(state)
+    print("Safe mode enabled.")
+
+
+def handle_normal() -> None:
+    """Disable safe mode."""
+    from tj.state import get_state, save_state
+
+    state = get_state()
+    if not state.get("safe_mode"):
+        print("Safe mode not active.")
+        return
+
+    state["safe_mode"] = False
+    save_state(state)
+    print("Safe mode disabled.")
 
 
 def handle_purge() -> None:

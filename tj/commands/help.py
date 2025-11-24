@@ -11,7 +11,7 @@ STATUS                          LIST/FILTER
 tj              Status          tj l                     All entries
 tj hey          Need to know    tj l [ai|b|do|j|m|p]     By type
 tj config       Show config     tj l [Nd|N|-N]           By time/count
-                                tj l =ctx :tag p=N s=val Composite
+tj <N>          List N entries  tj l =ctx :tag p=N s=val Composite
                                 tj l [c|t|@]             Metadata (c/t/@=named)
 
 CREATE                          MODIFY
@@ -20,7 +20,8 @@ tj m <text>     Memory          tj + <item>     Add to list
 tj do <text>    Todo            tj e            New in $EDITOR
 tj p <text>     Profile fact    tj e [ai|do|p|b|j] Type in $EDITOR
 tj ai <text>    AI guideline    tj e <n>        Edit entry <n>
-tj <url> <text> Bookmark        tj e <n> =ctx   Set context only
+tj <url> <text> Bookmark        tj e <n> -k     Edit, keep mod time
+                                tj e <n> =ctx   Set context only
                                 tj s <n|@name>  Show entry
 CONTEXT                         tj s =ctx       Show context
 tj =ctx         Switch/create   tj t <n> <tag>  Tag entry

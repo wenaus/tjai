@@ -91,7 +91,8 @@ def _list_contexts(repository):
 
 def _list_named_entries(repository):
     """List all named entries."""
-    all_entries = repository.query_entries()
+    from tj.commands.common import get_safe_exclude_tags
+    all_entries = repository.query_entries(exclude_tags=get_safe_exclude_tags())
     named_entries = [e for e in all_entries if e.name and not getattr(e, 'deleted_at', None)]
 
     if not named_entries:
@@ -106,7 +107,7 @@ def _list_named_entries(repository):
         time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_modified))
         content_preview = entry.content[:60] + "..." if len(entry.content) > 60 else entry.content
         # Prepend bold name with @ symbol to content
-        content_preview = f"{BOLD}@{entry.name}:{RESET} {content_preview}"
+        content_preview = f"{BOLD}@{entry.name}{RESET}  {content_preview}"
         context_str = f" {colorize_context(entry.context)}" if entry.context else ""
         print(f"{colorize_entry_number(i)}  @{entry.name} {time_str}{context_str} {content_preview}")
 
@@ -141,6 +142,7 @@ def _list_entries_with_filters(repository, filters):
     kind = None
     context = None
     tag = None
+    exclude_tags = []
     priority = None
     status = None
     time_cutoff = None
@@ -180,7 +182,16 @@ def _list_entries_with_filters(repository, filters):
                 return
             query_parts.append(f"{filter_arg}")
 
-        # Query by tag
+        # Query by tag (exclude)
+        elif filter_arg.startswith('-:'):
+            exclude_tag = filter_arg[2:]
+            if not exclude_tag:
+                print("Error: Empty exclude tag name.", file=sys.stderr)
+                return
+            exclude_tags.append(exclude_tag)
+            query_parts.append(f"{filter_arg}")
+
+        # Query by tag (include)
         elif filter_arg.startswith(':'):
             tag = filter_arg[1:]
             if not tag:
@@ -210,13 +221,17 @@ def _list_entries_with_filters(repository, filters):
             text_filter = filter_arg.lower()
             query_parts.append(f"text:{filter_arg}")
 
-    # Execute query
+    # Execute query (add safe mode exclude if active)
+    from tj.commands.common import get_safe_exclude_tags
+    safe_exclude_tags = get_safe_exclude_tags(exclude_tags if exclude_tags else None)
+
     entries = repository.query_entries(
         kind=kind,
         context=context,
         tag=tag,
         priority=priority,
-        status=status
+        status=status,
+        exclude_tags=safe_exclude_tags
     )
 
     # Apply time filter (post-query)
@@ -277,8 +292,12 @@ def _list_entries_with_filters(repository, filters):
     from tj.commands.common import format_entry_for_display
     truncate_len = get_content_truncate_length()
 
+    # AI guidelines should never be truncated (meant to be read in full)
+    skip_truncate = (kind == 'ai_guideline')
+
     for i, entry in enumerate(active_entries, 1):
-        print(format_entry_for_display(entry, i, truncate_len))
+        entry_truncate = None if skip_truncate else truncate_len
+        print(format_entry_for_display(entry, i, entry_truncate))
 
     # Store numbered entries in state for numbered operations
     state = get_state()
