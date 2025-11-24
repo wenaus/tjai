@@ -41,17 +41,18 @@ def log_operation(operation: str, result: str, details: dict = None) -> None:
         else:
             result_text = f"{RED}{BOLD}failed{RESET}"
 
-        summary = f"{operation}: {result_text}"
-
-        if details:
-            if operation == 'backup' and 'size_kb' in details:
-                summary += f" ({details['size_kb']} KB)"
-            elif operation == 'purge' and 'entries_deleted' in details:
-                summary += f" ({details['entries_deleted']} entries, {details['tags_deleted']} tags, {details['space_reclaimed_kb']} KB)"
-            elif operation == 'lines' and 'old_value' in details and 'new_value' in details:
-                summary += f" ({details['old_value']} → {details['new_value']})"
-            elif operation == 'purge' and 'entries_found' in details:
-                summary += f" ({details['entries_found']} entries found)"
+        # Build summary with operation-specific formatting
+        if operation == 'lines' and details and 'old_value' in details and 'new_value' in details:
+            summary = f"Changed truncation lines from {details['old_value']} to {details['new_value']}"
+        else:
+            summary = f"{operation}: {result_text}"
+            if details:
+                if operation == 'backup' and 'size_kb' in details:
+                    summary += f" ({details['size_kb']} KB)"
+                elif operation == 'purge' and 'entries_deleted' in details:
+                    summary += f" ({details['entries_deleted']} entries, {details['tags_deleted']} tags, {details['space_reclaimed_kb']} KB)"
+                elif operation == 'purge' and 'entries_found' in details:
+                    summary += f" ({details['entries_found']} entries found)"
 
         content = summary + "\n" + json.dumps(log_data, indent=2)
 
@@ -357,8 +358,19 @@ def format_entry_for_display(entry, entry_number=None, truncate_lines=None) -> s
         # truncate_lines=0 means show only first line
         # truncate_lines>0 means show that many lines if content exceeds it
         if truncate_lines == 0 or visual_line_count > truncate_lines:
-            # Show only first line + visual line count in LIGHT_GOLD
-            content = lines[0] + f"     {LIGHT_GOLD}[{visual_line_count} lines]{RESET}"
+            first_line = lines[0]
+            # Calculate max chars for truncate_lines worth of display
+            # 0 means show just one line (~100 chars), >0 means that many lines
+            max_chars = 100 if truncate_lines == 0 else (truncate_lines * 100)
+
+            # Truncate first line if it exceeds max_chars
+            if len(first_line) > max_chars:
+                content = first_line[:max_chars] + " [...]"
+            else:
+                content = first_line
+
+            # Add line count indicator
+            content += f"     {LIGHT_GOLD}[{visual_line_count} lines]{RESET}"
 
     # Colorize content
     content_colored = colorize_content(content)

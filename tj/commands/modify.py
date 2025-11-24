@@ -630,12 +630,22 @@ def display_entry_details(entry, entry_identifier=None):
     if tags:
         print(f"  Tags: {', '.join(tags)}")
 
-    # Show truncation override and links section
+    # Count visual lines in content
+    lines = entry.content.split('\n')
+    visual_line_count = 0
+    for line in lines:
+        if len(line) == 0:
+            visual_line_count += 1
+        else:
+            # Estimate visual lines: divide by 100 and round up
+            visual_line_count += (len(line) + 99) // 100
+
+    # Show line count, truncation override, and links section
     has_truncation = entry.data and 'truncate_lines' in entry.data
     has_links = entry.data and 'links' in entry.data and entry.data['links']
 
-    if has_truncation or has_links:
-        print()
+    print()
+    print(f"Lines: {visual_line_count}")
 
     if has_truncation:
         truncate_val = entry.data['truncate_lines']
