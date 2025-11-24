@@ -11,6 +11,12 @@ LIGHT_GOLD = '\033[38;5;221m'  # Light gold for kind brackets
 BRIGHT_YELLOW = '\033[38;5;226m'  # Bright yellow for entry numbers
 RED = '\033[38;5;203m'  # Red for next upcoming event countdown
 LIGHT_BROWN = '\033[38;5;180m'  # Light brown for code quotes
+# Priority colors (bright green to faded green)
+PRIORITY_1 = '\033[38;5;82m'   # Bright lime
+PRIORITY_2 = '\033[38;5;118m'  # Bright green
+PRIORITY_3 = '\033[38;5;76m'   # Green
+PRIORITY_4 = '\033[38;5;70m'   # Muted green
+PRIORITY_5 = '\033[38;5;64m'   # Faded green
 BOLD = '\033[1m'  # Bold text
 RESET = '\033[0m'
 
@@ -65,6 +71,18 @@ def colorize_creation_timestamp(timestamp: str) -> str:
 def colorize_entry_number(number: int) -> str:
     """Colorize entry number with bright yellow and === prefix."""
     return f'{BRIGHT_YELLOW}==={number:3d}{RESET}'
+
+def colorize_priority(priority: int) -> str:
+    """Colorize priority with green gradient (bright to faded)."""
+    colors = {
+        1: PRIORITY_1,
+        2: PRIORITY_2,
+        3: PRIORITY_3,
+        4: PRIORITY_4,
+        5: PRIORITY_5
+    }
+    color = colors.get(priority, RESET)
+    return f'{color}p={priority}{RESET}'
 
 def colorize_content(text: str) -> str:
     """Apply all content colorization."""

@@ -517,6 +517,33 @@ def handle_tag_command(args) -> None:
         print(f"Tag command error: {e}", file=sys.stderr)
 
 
+def handle_untag_command(args) -> None:
+    """Handle untag command - remove tag from entry."""
+    try:
+        entry_identifier = args.entry_num
+        tag = args.tag.strip()
+
+        entry = get_entry_from_recent_list(entry_identifier)
+        if not entry:
+            print(f"Error: Entry {entry_identifier} not found.", file=sys.stderr)
+            return
+
+        repository = RepositoryFactory.get_repository()
+        existing_tags = repository.get_tags(entry.id)
+
+        if tag not in existing_tags:
+            print(f"Error: Entry {entry_identifier} does not have tag '{tag}'.", file=sys.stderr)
+            return
+
+        repository.remove_tag(entry.id, tag)
+        print(f"Tag '{tag}' removed from entry {entry_identifier}.")
+
+    except (ValueError, TypeError):
+        print("Error: Invalid entry number.", file=sys.stderr)
+    except Exception as e:
+        print(f"Untag command error: {e}", file=sys.stderr)
+
+
 def handle_add_tag(args) -> None:
     """Handle adding a tag to an entry."""
     try:
@@ -603,18 +630,26 @@ def display_entry_details(entry, entry_identifier=None):
     if tags:
         print(f"  Tags: {', '.join(tags)}")
 
-    # Show links if present
-    if entry.data and 'links' in entry.data:
+    # Show truncation override and links section
+    has_truncation = entry.data and 'truncate_lines' in entry.data
+    has_links = entry.data and 'links' in entry.data and entry.data['links']
+
+    if has_truncation or has_links:
+        print()
+
+    if has_truncation:
+        truncate_val = entry.data['truncate_lines']
+        print(f"Truncation: {truncate_val} lines")
+
+    if has_links:
         links = entry.data['links']
-        if links:
-            print()
-            print("Links:")
-            for link in links:
-                title = link.get('title', 'Link')
-                url = link.get('url', '')
-                # Color URL cyan
-                colored_url = f"\033[96m{url}\033[0m"
-                print(f"  {title}: {colored_url}")
+        print("Links:")
+        for link in links:
+            title = link.get('title', 'Link')
+            url = link.get('url', '')
+            # Color URL cyan
+            colored_url = f"\033[96m{url}\033[0m"
+            print(f"  {title}: {colored_url}")
 
 
 def handle_show(args) -> None:

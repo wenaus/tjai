@@ -329,7 +329,7 @@ def format_entry_for_display(entry, entry_number=None, truncate_lines=None) -> s
     """
     from tj.timezone_manager import format_time_dashboard, get_current_timezone
     from tj.colors import (colorize_content, colorize_context, colorize_creation_timestamp,
-                          colorize_entry_number, colorize_kind, colorize_timestamp,
+                          colorize_entry_number, colorize_kind, colorize_priority, colorize_timestamp,
                           BOLD, RESET, TERRACOTTA, LIGHT_GOLD)
     from tj.repository_factory import RepositoryFactory
     from datetime import datetime
@@ -370,7 +370,7 @@ def format_entry_for_display(entry, entry_number=None, truncate_lines=None) -> s
     # Prepend priority and status if present
     metadata_parts = []
     if entry.priority is not None:
-        metadata_parts.append(f"p={entry.priority}")
+        metadata_parts.append(colorize_priority(entry.priority))
     if entry.status:
         metadata_parts.append(f"s={entry.status}")
     if metadata_parts:

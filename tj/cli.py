@@ -19,7 +19,7 @@ from tj.commands.journal import handle_journal
 from tj.commands.list import handle_list_command, handle_list_all
 from tj.commands.lists import handle_add_list_item
 from tj.commands.modify import (
-    handle_edit, handle_tag_command,
+    handle_edit, handle_tag_command, handle_untag_command,
     handle_move, handle_show, handle_pin
 )
 from tj.commands.copy import handle_copy
@@ -177,7 +177,12 @@ def create_parser() -> argparse.ArgumentParser:
     p_tag.add_argument('entry_num', help="Entry number or tag name to search")
     p_tag.add_argument('tag', nargs='?', help="Tag name (when adding to entry)")
     p_tag.set_defaults(func=handle_tag_command)
-    
+
+    p_untag = subparsers.add_parser('t-', help="Remove tag from entry.")
+    p_untag.add_argument('entry_num', help="Entry number")
+    p_untag.add_argument('tag', help="Tag name to remove")
+    p_untag.set_defaults(func=handle_untag_command)
+
     p_memory = subparsers.add_parser('m', help="Add a memory entry.")
     p_memory.add_argument('input', nargs='+', help="Entry content")
     p_memory.set_defaults(func=handle_creation)
@@ -268,7 +273,7 @@ def handle_numbered_command(parser: argparse.ArgumentParser, num_identifier: int
         return
 
     elif action_command.startswith('p='):
-        # Set priority
+        # Set priority (p=0 removes priority)
         try:
             priority = int(action_command[2:])
         except ValueError:
@@ -281,14 +286,19 @@ def handle_numbered_command(parser: argparse.ArgumentParser, num_identifier: int
             return
 
         repository = RepositoryFactory.get_repository()
+        # p=0 means remove priority (set to None)
+        priority_value = None if priority == 0 else priority
         success = repository.update_entry(
             entry.id,
-            priority=priority,
+            priority=priority_value,
             timestamp_modified=datetime.now(timezone.utc).timestamp(),
             is_dirty=True
         )
         if success:
-            print(f"Entry {num_identifier} priority set to {priority}")
+            if priority == 0:
+                print(f"Entry {num_identifier} priority removed")
+            else:
+                print(f"Entry {num_identifier} priority set to {priority}")
         else:
             print("Error: Failed to set priority.", file=sys.stderr)
         return
@@ -316,6 +326,66 @@ def handle_numbered_command(parser: argparse.ArgumentParser, num_identifier: int
             print(f"Entry {num_identifier} status set to '{status}'")
         else:
             print("Error: Failed to set status.", file=sys.stderr)
+        return
+
+    elif action_command.startswith('k='):
+        # Change entry kind
+        from tj.commands.common import ENTRY_TYPE_MAP, ENTRY_TYPE_ABBREV
+        kind_abbrev = action_command[2:]
+
+        if kind_abbrev not in ENTRY_TYPE_MAP:
+            valid_kinds = ', '.join(ENTRY_TYPE_MAP.keys())
+            print(f"Error: Invalid kind '{kind_abbrev}'. Valid kinds: {valid_kinds}", file=sys.stderr)
+            return
+
+        entry = get_entry_from_recent_list(num_identifier)
+        if not entry:
+            print(f"Error: Entry {num_identifier} not found in recent list.", file=sys.stderr)
+            return
+
+        new_kind = ENTRY_TYPE_MAP[kind_abbrev]
+        repository = RepositoryFactory.get_repository()
+        success = repository.update_entry(
+            entry.id,
+            kind=new_kind,
+            timestamp_modified=datetime.now(timezone.utc).timestamp(),
+            is_dirty=True
+        )
+        if success:
+            print(f"Entry {num_identifier} kind changed to {kind_abbrev}")
+        else:
+            print("Error: Failed to change kind.", file=sys.stderr)
+        return
+
+    elif action_command.startswith('l='):
+        # Set per-entry truncation (l=0 removes override)
+        lines_str = action_command[2:]
+        entry = get_entry_from_recent_list(num_identifier)
+        if not entry:
+            print(f"Error: Entry {num_identifier} not found in recent list.", file=sys.stderr)
+            return
+
+        entry_data = entry.data.copy() if entry.data else {}
+        if lines_str == '0':
+            entry_data.pop('truncate_lines', None)  # Remove override
+            msg = "removed (using global)"
+        else:
+            try:
+                entry_data['truncate_lines'] = int(lines_str)
+                msg = f"{lines_str} lines"
+            except ValueError:
+                print(f"Error: Invalid lines value. Use l=N or l=0 to remove", file=sys.stderr)
+                return
+
+        repository = RepositoryFactory.get_repository()
+        success = repository.update_entry(
+            entry.id,
+            data=entry_data,
+            timestamp_modified=datetime.now(timezone.utc).timestamp(),
+            is_dirty=True
+        )
+        if success:
+            print(f"Entry {num_identifier} truncation {msg}")
         return
 
     elif action_command.startswith(':'):
