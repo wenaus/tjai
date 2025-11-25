@@ -496,9 +496,11 @@ def handle_yearly_summary(args) -> None:
             month_count = events_by_month.get(month_key, 0)
             month_name = current_dt.strftime('%B %Y')
 
-            # Month header with count
-            count_str = f"- {month_count}"
-            print(f"{colorize_timestamp(month_name)} {count_str}")
+            # Month header with count (omit count if zero)
+            if month_count > 0:
+                print(f"{colorize_timestamp(month_name)} - {month_count}")
+            else:
+                print(f"{colorize_timestamp(month_name)}")
 
             # Show all events using same display as tj c
             if month_count > 0:
