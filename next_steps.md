@@ -114,3 +114,24 @@ But given that you already have the architecture designed and you're running Dja
 **Why now:** The CLI is feature-complete and polished. The sync blocker prevents your actual workflow. The architecture is already designed. The codebase is in perfect shape for this next phase.
 
 **Don't do:** More CLI features. The app is complete enough. The blocker is distribution, not functionality.
+
+## Concepts Under Consideration
+
+### Obsidian Integration
+
+[Obsidian](https://obsidian.md/) stores data as plain markdown files in a local directory ("vault"). No proprietary format. Could complement tj's simple text+db entries with rich markdown documents.
+
+**Concept:**
+- Two entry types: native tj entries (text in SQLite) and Obsidian entries (pointers to `.md` files)
+- `tj l` scans both DB and Obsidian vault, merges by mod time
+- Obsidian entries display with `[ob]` marker showing filename and mod date
+- `tj s <n>` on Obsidian entry shows file content
+- `tj e <n>` on Obsidian entry opens file in Obsidian
+- `tj ob <title>` creates new `.md` in vault and opens it
+- Context/tags extracted from Obsidian frontmatter (YAML)
+
+**Implementation approach:**
+- Pure filesystem scan (no DB entries for Obsidian files) - simpler, no sync issues
+- Configure `obsidian_vault_path` in config.json
+
+**Value:** Rich documents (tables, images, complex formatting) in Obsidian. Quick captures in tj. One unified view.
