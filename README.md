@@ -115,6 +115,15 @@ tj l                                            # List all entries
         *   `tj <n> p=N`: Set priority on entry.
         *   `tj <n> s=status`: Set status on entry.
     *   `tj d <n>` or `tj d @name`: Delete entry (with confirmation).
+*   **CALENDAR:**
+    *   `tj c`: View calendar (default 30 days)
+    *   `tj c t`: Today only
+    *   `tj c w`: This week
+    *   `tj c m`: This month
+    *   `tj c 60`: Next 60 days
+    *   `tj c t+1`: Tomorrow
+    *   `tj c w-1`: Last week
+    *   `tj y`: Year summary with month headers and event counts
 *   **QUERY:** `tj q ...`
     *   `q [b|r|d|p]`: By type: **b**ookmark, **r**emembered, **d**o, **p**rofile.
     *   `q [t|w|m]`: By time: **t**oday, **w**eek, **m**onth.

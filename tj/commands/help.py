@@ -39,7 +39,7 @@ tj c [t|w|m]    View calendar   tj <n> :tag     Add tag
 tj c t+1        Tomorrow        tj <n> p=N      Set priority
 tj c w-1        Last week       tj <n> p=0      Remove priority
 tj c 4          Next 4 weeks    tj <n> s=val    Set status
-                                tj <n> k=type   Change kind (ai,b,do,j,m,p)
+tj y            year view       tj <n> k=type   Change kind (ai,b,do,j,m,p)
                                 tj <n> l=N      Set truncation lines
                                 tj <n> l=0      Remove truncation
                                 tj cp <n> <datetime> Copy journal entry
