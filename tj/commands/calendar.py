@@ -425,3 +425,103 @@ def handle_calendar_view(args) -> None:
 
     except Exception as e:
         print(f"Calendar view error: {e}", file=sys.stderr)
+
+
+def handle_yearly_summary(args) -> None:
+    """Display a 1-year summary with month and week headers showing event counts."""
+    try:
+        repository = RepositoryFactory.get_repository()
+
+        # Get timezone
+        tz_name = get_current_timezone()
+        try:
+            tz = ZoneInfo(tz_name)
+            now = datetime.now(tz)
+        except Exception:
+            tz = None
+            now = datetime.now()
+
+        # Calculate 1-year range from today
+        start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_dt = start_dt + timedelta(days=365)
+        start_ts = start_dt.timestamp()
+        end_ts = end_dt.timestamp()
+
+        # Query all journal entries
+        from tj.commands.common import get_safe_exclude_tags
+        all_calendar = repository.query_entries(kind='journal', exclude_tags=get_safe_exclude_tags())
+
+        # Group events by year-month and year-week
+        events_by_month = {}  # 'YYYY-MM' -> count
+        events_by_week = {}   # 'YYYY-WW' -> count
+
+        for entry in all_calendar:
+            if entry.data and 'event_date' in entry.data:
+                event_ts = entry.data['event_date']
+                if start_ts <= event_ts < end_ts:
+                    if tz:
+                        event_dt = datetime.fromtimestamp(event_ts, tz=tz)
+                    else:
+                        event_dt = datetime.fromtimestamp(event_ts)
+
+                    month_key = event_dt.strftime('%Y-%m')
+                    year, week_num, _ = event_dt.isocalendar()
+                    week_key = f"{year}-{week_num:02d}"
+
+                    events_by_month[month_key] = events_by_month.get(month_key, 0) + 1
+                    events_by_week[week_key] = events_by_week.get(week_key, 0) + 1
+
+        # Print header
+        print(colorize_timestamp(f"Year summary: {start_dt.strftime('%Y-%m-%d')} to {end_dt.strftime('%Y-%m-%d')}"))
+
+        # Collect events by month for showing details when < 5
+        events_by_month_list = {}  # 'YYYY-MM' -> list of (event_ts, entry)
+        for entry in all_calendar:
+            if entry.data and 'event_date' in entry.data:
+                event_ts = entry.data['event_date']
+                if start_ts <= event_ts < end_ts:
+                    if tz:
+                        event_dt = datetime.fromtimestamp(event_ts, tz=tz)
+                    else:
+                        event_dt = datetime.fromtimestamp(event_ts)
+                    month_key = event_dt.strftime('%Y-%m')
+                    if month_key not in events_by_month_list:
+                        events_by_month_list[month_key] = []
+                    events_by_month_list[month_key].append((event_ts, entry))
+
+        # Iterate through each month in the year
+        current_dt = start_dt
+        while current_dt < end_dt:
+            month_key = current_dt.strftime('%Y-%m')
+            month_count = events_by_month.get(month_key, 0)
+            month_name = current_dt.strftime('%B %Y')
+
+            # Month header with count
+            count_str = f"- {month_count}"
+            print(f"{colorize_timestamp(month_name)} {count_str}")
+
+            # Show all events using same display as tj c
+            if month_count > 0:
+                month_events = sorted(events_by_month_list.get(month_key, []), key=lambda x: x[0])
+                for event_ts, entry in month_events:
+                    if tz:
+                        event_dt = datetime.fromtimestamp(event_ts, tz=tz)
+                    else:
+                        event_dt = datetime.fromtimestamp(event_ts)
+                    weekday_str = event_dt.strftime('%a')
+                    date_str = event_dt.strftime('%m/%d')
+                    time_str = ""
+                    if event_dt.hour != 0 or event_dt.minute != 0:
+                        time_str = event_dt.strftime('%H:%M') + " "
+                    content = entry.content.split('\n')[0]
+                    display_text = colorize_content(content)
+                    print(f"  {weekday_str} {date_str} {time_str}{display_text}")
+
+            # Move to next month
+            if current_dt.month == 12:
+                current_dt = current_dt.replace(year=current_dt.year + 1, month=1, day=1)
+            else:
+                current_dt = current_dt.replace(month=current_dt.month + 1, day=1)
+
+    except Exception as e:
+        print(f"Yearly summary error: {e}", file=sys.stderr)

@@ -125,7 +125,12 @@ def create_parser() -> argparse.ArgumentParser:
     p_calendar.add_argument('timeframe', nargs='?', help="t/w/m with optional offset (e.g., 't+1', 'w 4', 'w -2')")
     p_calendar.add_argument('offset', nargs='?', help="Optional numeric offset for timeframe")
     p_calendar.set_defaults(func=lambda args: handle_calendar_view(args))
-    
+
+    # Yearly summary view
+    from tj.commands.calendar import handle_yearly_summary
+    p_year = subparsers.add_parser('y', help="Yearly calendar summary with month/week event counts.")
+    p_year.set_defaults(func=lambda args: handle_yearly_summary(args))
+
     # Timezone management
     p_tz = subparsers.add_parser('tz', help="Set or show timezone.")
     p_tz.add_argument('zone', nargs='?', help="Timezone: eastern, central, pacific, euro, or +/-N")
