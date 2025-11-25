@@ -666,6 +666,22 @@ def handle_show(args) -> None:
     """Handle showing entry or context details."""
     from tj.commands.common import extract_context_from_args
     try:
+        # If no argument, show the most recently modified entry (last in tj l)
+        if not args.entry_num:
+            repository = RepositoryFactory.get_repository()
+            entries = repository.query_entries()
+            if not entries:
+                print("No entries found.", file=sys.stderr)
+                return
+            # Sort by timestamp_modified ascending (same as tj l), take last
+            entries.sort(key=lambda e: e.timestamp_modified, reverse=False)
+            entry = entries[-1]
+            display_entry_details(entry, "latest")
+            if not entry.parent_id:
+                from tj.state import set_last_parent
+                set_last_parent(entry.id)
+            return
+
         # Check if showing context details (tj s =context)
         if args.entry_num.startswith('='):
             context_name = args.entry_num[1:]

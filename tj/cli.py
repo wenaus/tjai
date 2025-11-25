@@ -193,7 +193,7 @@ def create_parser() -> argparse.ArgumentParser:
     p_move.set_defaults(func=handle_move)
     
     p_show = subparsers.add_parser('s', help="Show entry or context details.")
-    p_show.add_argument('entry_num', help="Entry number or =context")
+    p_show.add_argument('entry_num', nargs='?', help="Entry number or =context (default: latest)")
     p_show.set_defaults(func=handle_show)
     
     p_pin = subparsers.add_parser('^', help="Move entry to top.")
