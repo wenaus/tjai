@@ -8,16 +8,17 @@ from typing import Optional, Dict
 from tj.database import get_db_connection, DatabaseError
 
 
-# Timezone mappings
+# Timezone mappings - use IANA standard names (America/*) not legacy US/* aliases
+# US/* may not be available on all systems (e.g., WSL2)
 TIMEZONE_ALIASES = {
-    'eastern': 'US/Eastern',
-    'central': 'US/Central', 
-    'mountain': 'US/Mountain',
-    'pacific': 'US/Pacific',
+    'eastern': 'America/New_York',
+    'central': 'America/Chicago',
+    'mountain': 'America/Denver',
+    'pacific': 'America/Los_Angeles',
     'euro': 'Europe/London'
 }
 
-DEFAULT_TIMEZONE = 'US/Eastern'
+DEFAULT_TIMEZONE = 'America/New_York'
 
 
 def get_current_timezone() -> str:
