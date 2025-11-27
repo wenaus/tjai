@@ -161,8 +161,12 @@ def cleanup_old_backups() -> None:
         print(f"Warning: Backup cleanup failed: {e}")
 
 
-def create_backup() -> bool:
-    """Create a backup of the database."""
+def create_backup() -> tuple[bool, Optional[str]]:
+    """Create a backup of the database.
+
+    Returns:
+        Tuple of (success: bool, error_message: Optional[str])
+    """
     try:
         # Get configured backup directory
         backup_dir = get_backup_dir()
@@ -172,9 +176,9 @@ def create_backup() -> bool:
         datetime_str = datetime.now(tz.utc).strftime("%Y%m%d_%H")
         backup_filename = f"tjai_backup_{datetime_str}.db"
         backup_path = backup_dir / backup_filename
-        
+
         print("Backing up...")
-        
+
         # Copy the database file
         db_path = get_configured_db_path()
         if db_path.exists():
@@ -183,25 +187,27 @@ def create_backup() -> bool:
             # Update last backup time
             now = datetime.now(tz.utc).timestamp()
             set_last_backup_time(now)
-            
+
             # Clean up old backups after successful backup
             cleanup_old_backups()
-            
-            return True
+
+            return True, None
         else:
-            print("Warning: No database file to backup")
-            return False
-            
+            error_msg = "No database file to backup"
+            print(f"Warning: {error_msg}")
+            return False, error_msg
+
     except Exception as e:
-        print(f"Backup failed: {e}")
-        return False
+        error_msg = f"{type(e).__name__}: {str(e)}"
+        print(f"Backup failed: {error_msg}")
+        return False, error_msg
 
 
 def auto_backup() -> None:
     """Automatically backup if needed (called on every command)."""
     try:
         if needs_backup():
-            success = create_backup()
+            success, error_msg = create_backup()
 
             # Log if first backup of day or if failed
             from tj.commands.common import should_log_backup, log_operation
@@ -222,13 +228,14 @@ def auto_backup() -> None:
                     else:
                         log_operation('backup', 'success', {'auto': True})
                 else:
-                    log_operation('backup', 'error', {'auto': True})
+                    log_operation('backup', 'error', {'auto': True, 'error': error_msg})
                     print("Warning: Backup failed")
             elif not success:
                 print("Warning: Backup failed")
     except Exception as e:
         # Don't let backup failures break the main command
-        print(f"Warning: Backup check failed: {e}")
+        error_msg = f"{type(e).__name__}: {str(e)}"
+        print(f"Warning: Backup check failed: {error_msg}")
 
 
 def list_backups() -> list:

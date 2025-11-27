@@ -12,7 +12,7 @@ def handle_backup() -> None:
     import os
 
     try:
-        success = create_backup()
+        success, error_msg = create_backup()
         if success:
             print("Backup created successfully.")
 
@@ -30,10 +30,11 @@ def handle_backup() -> None:
                 log_operation('backup', 'success')
         else:
             print("Backup failed.", file=sys.stderr)
-            log_operation('backup', 'error')
+            log_operation('backup', 'error', {'error': error_msg})
     except Exception as e:
-        print(f"Backup error: {e}", file=sys.stderr)
-        log_operation('backup', 'error', {'error': str(e)})
+        error_msg = f"{type(e).__name__}: {str(e)}"
+        print(f"Backup error: {error_msg}", file=sys.stderr)
+        log_operation('backup', 'error', {'error': error_msg})
 
 
 def handle_admin(args) -> None:
