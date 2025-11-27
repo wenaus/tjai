@@ -475,84 +475,143 @@ def handle_context_syntax(first_arg: str, remaining_args: list) -> None:
         handle_creation_with_at(create_args)
 
 
+def _handle_context_switch() -> bool:
+    """Handle =context as first argument. Returns True if handled."""
+    if len(sys.argv) <= 1 or not sys.argv[1].startswith('='):
+        return False
+
+    from tj.state import get_state, save_state
+    from tj.commands.list import handle_list_command
+
+    context_arg = sys.argv[1]
+    remaining_args = sys.argv[2:]
+    context_name = context_arg[1:]
+
+    # Check for metadata flags (-t, -d) - delegate to full handler
+    if '-t' in remaining_args or '-d' in remaining_args:
+        handle_context_syntax(context_arg, remaining_args)
+        return True
+
+    state = get_state()
+    context_just_created = False
+
+    if context_name == '0':
+        state["current_context"] = None
+        save_state(state)
+    elif context_name:
+        from tj.repository import Context
+        from datetime import datetime, timezone
+
+        repository = RepositoryFactory.get_repository()
+        if not repository.get_context(context_name):
+            # Context doesn't exist - confirm creation (bypass buffer)
+            print(f"Context '{context_name}' does not exist. Create it? [y/N]: ", end='', file=sys.__stdout__, flush=True)
+            response = input().strip().lower()
+            if response not in ['y', 'yes']:
+                print("Cancelled.")
+                return True
+
+            now = datetime.now(timezone.utc).timestamp()
+            new_context = Context(
+                name=context_name,
+                title=None,
+                description=None,
+                timestamp_created=now,
+                timestamp_modified=now
+            )
+            repository.create_context(new_context)
+            print(f"Context '{context_name}' created.")
+            context_just_created = True
+        else:
+            state["current_context"] = context_name
+            save_state(state)
+
+    # If no remaining args, list context entries (unless just created)
+    if not remaining_args:
+        if context_name and context_name != '0' and not context_just_created:
+            class ListArgs:
+                filters = [f'={context_name}']
+            handle_list_command(ListArgs())
+        return True
+
+    return False
+
+
+def _handle_numbered_command(parser) -> bool:
+    """Handle numbered commands like '5 x'. Returns True if handled."""
+    if len(sys.argv) <= 1:
+        return False
+
+    first_arg = sys.argv[1]
+
+    # Check if first argument is a small number (avoid dates like YYYYMMDD)
+    if not (first_arg.isdigit() and len(first_arg) <= 3):
+        return False
+
+    from tj.commands.list import handle_list_command
+
+    if len(sys.argv) < 3:
+        # No action specified - default to list (tj 5 → tj l 5)
+        class Args:
+            def __init__(self):
+                self.filters = [first_arg]
+        handle_list_command(Args())
+        return True
+
+    num_identifier = int(first_arg)
+    action_command = sys.argv[2]
+    remaining_args = sys.argv[3:]
+
+    handle_numbered_command(parser, num_identifier, action_command, remaining_args)
+    return True
+
+
+def _handle_known_command(parser) -> bool:
+    """Handle known subcommands. Returns True if handled."""
+    if len(sys.argv) <= 1:
+        return False
+
+    first_arg = sys.argv[1]
+    known_commands = set(parser._subparsers._group_actions[0].choices.keys())
+
+    if first_arg not in known_commands:
+        return False
+
+    try:
+        args = parser.parse_args()
+        if hasattr(args, 'func'):
+            args.func(args)
+    except SystemExit:
+        pass
+    return True
+
+
+def _handle_default_creation() -> None:
+    """Handle default content creation when no command matches."""
+    timestamp_override, filtered_input = parse_at_timestamp(sys.argv[1:])
+
+    class Args:
+        def __init__(self):
+            self.input = filtered_input
+            self.timestamp_override = timestamp_override
+
+    handle_creation(Args())
+
+
 def main() -> None:
     """Main function to parse arguments and dispatch commands."""
-    from tj.state import get_state, save_state, display_context
-    import sys
+    from tj.state import display_context
     from io import StringIO
 
     time_main_start = time.time()
-
-    # Buffer to capture command output
     output_buffer = StringIO()
     original_stdout = sys.stdout
 
     try:
-        # Redirect stdout to buffer during command execution
         sys.stdout = output_buffer
-        # Check if first arg is =context (context switch) or if there's a command first
-        if len(sys.argv) > 1 and sys.argv[1].startswith('='):
-            # First arg is =context - this is a context switch
-            context_arg = sys.argv[1]
-            remaining_args = sys.argv[2:]
 
-            context_name = context_arg[1:]
-
-            # Check for metadata flags (-t, -d) - delegate to full handler
-            if '-t' in remaining_args or '-d' in remaining_args:
-                handle_context_syntax(context_arg, remaining_args)
-                return
-
-            state = get_state()
-
-            if context_name == '0':
-                # Clear context
-                state["current_context"] = None
-                save_state(state)
-            elif context_name:
-                # Check if context exists
-                from tj.repository_factory import RepositoryFactory
-                from tj.repository import Context
-                from datetime import datetime, timezone
-
-                repository = RepositoryFactory.get_repository()
-                context_just_created = False
-                if not repository.get_context(context_name):
-                    # Context doesn't exist - confirm creation (bypass buffer)
-                    print(f"Context '{context_name}' does not exist. Create it? [y/N]: ", end='', file=sys.__stdout__, flush=True)
-                    response = input().strip().lower()
-                    if response not in ['y', 'yes']:
-                        print("Cancelled.")
-                        return
-
-                    # Create new context (but don't set as current)
-                    now = datetime.now(timezone.utc).timestamp()
-                    new_context = Context(
-                        name=context_name,
-                        title=None,
-                        description=None,
-                        timestamp_created=now,
-                        timestamp_modified=now
-                    )
-                    repository.create_context(new_context)
-                    print(f"Context '{context_name}' created.")
-                    context_just_created = True
-                else:
-                    # Context exists - set as current
-                    state["current_context"] = context_name
-                    save_state(state)
-
-            # If there are remaining args, they're for creation
-            if not remaining_args:
-                # Just setting context - list its entries (unless just created)
-                from tj.commands.list import handle_list_command
-
-                # List entries in this context (skip if context was just created)
-                if context_name and context_name != '0' and not context_just_created:
-                    class ListArgs:
-                        filters = [f'={context_name}']
-                    handle_list_command(ListArgs())
-                return
+        if _handle_context_switch():
+            return
 
         parser = create_parser()
 
@@ -560,62 +619,22 @@ def main() -> None:
             show_status()
             return
 
-        first_arg = sys.argv[1]
-
-        # Check if first argument is a small number (for numbered commands like '5 x')
-        # Avoid treating dates (YYYYMMDD) as numbered commands
-        if first_arg.isdigit() and len(first_arg) <= 3:
-            if len(sys.argv) < 3:
-                # No action specified - default to list (tj 5 → tj l 5)
-                from tj.commands.list import handle_list_command
-                class Args:
-                    def __init__(self):
-                        self.filters = [first_arg]
-                handle_list_command(Args())
-                return
-
-            num_identifier = int(first_arg)
-            action_command = sys.argv[2]
-            remaining_args = sys.argv[3:]
-
-            handle_numbered_command(parser, num_identifier, action_command, remaining_args)
+        if _handle_numbered_command(parser):
             return
 
-        # Check if it's a known command
-        known_commands = set(parser._subparsers._group_actions[0].choices.keys())
-        if first_arg in known_commands:
-            try:
-                args = parser.parse_args()
-                if hasattr(args, 'func'):
-                    args.func(args)
-            except SystemExit:
-                # argparse already handled the error
-                pass
+        if _handle_known_command(parser):
             return
 
-        # Default: treat as content creation
-        # Extract at= timestamp if present
-        timestamp_override, filtered_input = parse_at_timestamp(sys.argv[1:])
+        _handle_default_creation()
 
-        class Args:
-            def __init__(self):
-                self.input = filtered_input
-                self.timestamp_override = timestamp_override
-
-        args = Args()
-        handle_creation(args)
     finally:
-        # Restore stdout
         sys.stdout = original_stdout
-
         debug_time("main_command", time_main_start)
 
-        # Display context first (shows current context after any command changes)
         time_display = time.time()
         display_context()
         debug_time("display_context", time_display)
 
-        # Then print buffered command output
         time_output = time.time()
         buffered_output = output_buffer.getvalue()
         if buffered_output:
