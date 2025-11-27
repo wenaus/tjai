@@ -3,7 +3,7 @@
 import os
 import shutil
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, List, Dict
 from collections import defaultdict
@@ -73,13 +73,11 @@ def set_last_backup_time(timestamp: float) -> None:
 
 def needs_backup() -> bool:
     """Check if a backup is needed based on the interval."""
-    from datetime import timezone as tz
-
     last_backup = get_last_backup_time()
     if last_backup is None:
         return True
 
-    now = datetime.now(tz.utc).timestamp()
+    now = datetime.now(timezone.utc).timestamp()
     hours_since_backup = (now - last_backup) / 3600
     backup_interval = get_backup_interval_hours()
 
@@ -95,13 +93,11 @@ def cleanup_old_backups() -> None:
     - After 14 days: Keep only one backup per week (configurable via backup_retention_days)
     """
     try:
-        from datetime import timezone as tz
-
         backups = list_backups()
         if len(backups) <= 1:
             return  # Nothing to clean up
 
-        now = datetime.now(tz.utc)
+        now = datetime.now(timezone.utc)
         today = now.date()
 
         # Get retention days from config
@@ -172,8 +168,7 @@ def create_backup() -> tuple[bool, Optional[str]]:
         backup_dir = get_backup_dir()
 
         # Generate backup filename with date and hour in UTC (YYYYMMDD_HH format)
-        from datetime import timezone as tz
-        datetime_str = datetime.now(tz.utc).strftime("%Y%m%d_%H")
+        datetime_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H")
         backup_filename = f"tjai_backup_{datetime_str}.db"
         backup_path = backup_dir / backup_filename
 
@@ -185,7 +180,7 @@ def create_backup() -> tuple[bool, Optional[str]]:
             shutil.copy2(db_path, backup_path)
 
             # Update last backup time
-            now = datetime.now(tz.utc).timestamp()
+            now = datetime.now(timezone.utc).timestamp()
             set_last_backup_time(now)
 
             # Clean up old backups after successful backup
@@ -215,9 +210,8 @@ def auto_backup() -> None:
                 if success:
                     # Get backup file size
                     import os
-                    from datetime import timezone as tz
                     backup_dir = get_backup_dir()
-                    datetime_str = datetime.now(tz.utc).strftime("%Y%m%d_%H")
+                    datetime_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H")
                     backup_filename = f"tjai_backup_{datetime_str}.db"
                     backup_path = backup_dir / backup_filename
 
@@ -240,8 +234,6 @@ def auto_backup() -> None:
 
 def list_backups() -> list:
     """List available backup files."""
-    from datetime import timezone as tz
-
     backup_dir = get_backup_dir()
     if not backup_dir.exists():
         return []
@@ -253,7 +245,7 @@ def list_backups() -> list:
             'filename': backup_file.name,
             'path': backup_file,
             'size': stat.st_size,
-            'modified': datetime.fromtimestamp(stat.st_mtime, tz=tz.utc)
+            'modified': datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
         })
 
     # Sort by modification time, newest first
@@ -265,18 +257,16 @@ def restore_backup(backup_filename: str) -> bool:
     """Restore from a specific backup file."""
     backup_dir = get_backup_dir()
     backup_path = backup_dir / backup_filename
-    
+
     if not backup_path.exists():
         print(f"Backup file not found: {backup_filename}")
         return False
-    
-    try:
-        from datetime import timezone as tz
 
+    try:
         # Create a backup of current database before restoring
         db_path = get_configured_db_path()
         backup_dir = get_backup_dir()
-        current_backup = backup_dir / f"pre_restore_{datetime.now(tz.utc).strftime('%Y%m%d_%H%M%S')}.db"
+        current_backup = backup_dir / f"pre_restore_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.db"
         if db_path.exists():
             shutil.copy2(db_path, current_backup)
             print(f"Current database backed up to: {current_backup.name}")
