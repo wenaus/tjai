@@ -5,9 +5,14 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional, Tuple, List
 
+from tj.colors import (colorize_content, colorize_context, colorize_creation_timestamp,
+                       colorize_entry_number, colorize_kind, colorize_priority, colorize_timestamp,
+                       BOLD, RESET, RED, TERRACOTTA, LIGHT_GOLD)
 from tj.config import get_recent_entries_hours
 from tj.repository import Entry
+from tj.repository_factory import RepositoryFactory
 from tj.state import display_context, get_state, save_state
+from tj.timezone_manager import format_time_dashboard, get_timezone_object, get_current_timezone, format_time_in_timezone
 
 
 def log_operation(operation: str, result: str, details: dict = None) -> None:
@@ -19,9 +24,6 @@ def log_operation(operation: str, result: str, details: dict = None) -> None:
         details: Optional dict with operation-specific details
     """
     try:
-        from tj.repository_factory import RepositoryFactory
-        from tj.colors import RED, BOLD, RESET
-
         repository = RepositoryFactory.get_repository()
 
         # Build log entry content as JSON
@@ -87,8 +89,6 @@ def should_log_backup(success: bool) -> bool:
         return True  # Always log failures
 
     try:
-        from tj.repository_factory import RepositoryFactory
-
         repository = RepositoryFactory.get_repository()
 
         # Get today's start (midnight UTC)
@@ -228,9 +228,6 @@ def get_entry_from_recent_list(entry_identifier) -> Optional[Entry]:
     Returns the entry if found, None otherwise.
     """
     try:
-        from tj.repository_factory import RepositoryFactory
-        from tj.state import get_state
-
         repository = RepositoryFactory.get_repository()
 
         # Check if it's a name reference (string that's not a number)
@@ -262,8 +259,6 @@ def get_entry_from_recent_list(entry_identifier) -> Optional[Entry]:
                         return matching_entries[0]
 
                     # Multiple matches - prompt user to choose (bypass buffer for interactive prompt)
-                    from tj.colors import colorize_content
-                    import sys
                     print(f"\nMultiple entries found with name '@{name}':", file=sys.__stdout__, flush=True)
                     for i, entry in enumerate(matching_entries, 1):
                         context_str = f"={entry.context}" if entry.context else "(no context)"
@@ -329,13 +324,6 @@ def format_entry_for_display(entry, entry_number=None, truncate_lines=None, tags
     Returns:
         Formatted string for display
     """
-    from tj.timezone_manager import format_time_dashboard, get_timezone_object
-    from tj.colors import (colorize_content, colorize_context, colorize_creation_timestamp,
-                          colorize_entry_number, colorize_kind, colorize_priority, colorize_timestamp,
-                          BOLD, RESET, TERRACOTTA, LIGHT_GOLD)
-    from tj.repository_factory import RepositoryFactory
-    from datetime import datetime
-
     repository = RepositoryFactory.get_repository()
 
     # Format timestamp
@@ -460,13 +448,9 @@ def handle_delete(args, num_identifier: Optional[int] = None) -> None:
         return
 
     try:
-        from tj.repository_factory import RepositoryFactory
-        from tj.state import get_state
-        import uuid
-        
         repository = RepositoryFactory.get_repository()
         entry_to_delete = None
-        
+
         # If identifier looks like a UUID, try to get it directly
         if isinstance(identifier, str) and len(identifier) == 36:
             try:
@@ -474,11 +458,10 @@ def handle_delete(args, num_identifier: Optional[int] = None) -> None:
                 entry_to_delete = repository.get_entry(identifier)
             except ValueError:
                 pass
-        
+
         # If not found or not a UUID, treat as entry number from recent list
         if not entry_to_delete and isinstance(identifier, (int, str)) and str(identifier).isdigit():
             # Get recent entries (same logic as status display)
-            from datetime import datetime
             all_entries = repository.query_entries()
             active_entries = [e for e in all_entries if not getattr(e, 'deleted_at', None)]
             twenty_four_hours_ago = datetime.now().timestamp() - (24 * 60 * 60)
@@ -496,13 +479,10 @@ def handle_delete(args, num_identifier: Optional[int] = None) -> None:
         # Show entry and ask for confirmation
         content_preview = entry_to_delete.content[:80] + "..." if len(entry_to_delete.content) > 80 else entry_to_delete.content
 
-        from tj.timezone_manager import get_current_timezone, format_time_in_timezone
-        from tj.colors import colorize_content
         current_tz = get_current_timezone()
         time_str = format_time_in_timezone(entry_to_delete.timestamp_created, current_tz)
 
         # Show entry details (bypass buffer for interactive prompt)
-        import sys
         print(f"Entry to delete:", file=sys.__stdout__, flush=True)
         print(f"  {colorize_content(content_preview)}", file=sys.__stdout__, flush=True)
         print(f"  {time_str}", file=sys.__stdout__, flush=True)

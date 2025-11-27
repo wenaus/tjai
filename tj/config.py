@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from tj.database import APP_DIR
 
@@ -18,9 +18,16 @@ DEFAULT_CONFIG = {
     "content_truncate_length": 5
 }
 
+# Cached config (loaded once per session)
+_cached_config: Optional[Dict[str, Any]] = None
+
 
 def get_config() -> Dict[str, Any]:
-    """Load configuration from config file."""
+    """Load configuration from config file (cached)."""
+    global _cached_config
+    if _cached_config is not None:
+        return _cached_config
+
     try:
         if CONFIG_FILE.exists():
             with open(CONFIG_FILE, 'r') as f:
@@ -29,22 +36,27 @@ def get_config() -> Dict[str, Any]:
                 for key, value in DEFAULT_CONFIG.items():
                     if key not in config:
                         config[key] = value
-                return config
+                _cached_config = config
+                return _cached_config
         else:
             # Create config file with defaults
             save_config(DEFAULT_CONFIG)
-            return DEFAULT_CONFIG.copy()
+            _cached_config = DEFAULT_CONFIG.copy()
+            return _cached_config
     except Exception:
         # Fallback to defaults if config is corrupted
-        return DEFAULT_CONFIG.copy()
+        _cached_config = DEFAULT_CONFIG.copy()
+        return _cached_config
 
 
 def save_config(config: Dict[str, Any]) -> None:
     """Save configuration to config file."""
+    global _cached_config
     try:
         APP_DIR.mkdir(parents=True, exist_ok=True)
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=2)
+        _cached_config = config.copy()  # Update cache
     except Exception as e:
         print(f"Warning: Could not save config: {e}")
 
