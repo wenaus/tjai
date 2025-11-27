@@ -22,6 +22,7 @@ DEFAULT_TIMEZONE = 'America/New_York'
 
 # Cache timezone to avoid repeated DB lookups
 _cached_timezone: Optional[str] = None
+_cached_tz_object: Optional[ZoneInfo] = None
 
 
 def get_current_timezone() -> str:
@@ -47,9 +48,26 @@ def get_current_timezone() -> str:
         return DEFAULT_TIMEZONE
 
 
+def get_timezone_object() -> Optional[ZoneInfo]:
+    """Get the current timezone as a ZoneInfo object (cached).
+
+    Returns ZoneInfo object or None if timezone is invalid.
+    """
+    global _cached_tz_object
+    if _cached_tz_object is not None:
+        return _cached_tz_object
+
+    tz_name = get_current_timezone()
+    try:
+        _cached_tz_object = ZoneInfo(tz_name)
+    except Exception:
+        _cached_tz_object = None
+    return _cached_tz_object
+
+
 def set_timezone(timezone: str) -> None:
     """Save the timezone setting."""
-    global _cached_timezone
+    global _cached_timezone, _cached_tz_object
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -61,6 +79,7 @@ def set_timezone(timezone: str) -> None:
 
         conn.commit()
         _cached_timezone = timezone  # Update cache
+        _cached_tz_object = None  # Clear ZoneInfo cache to recompute
 
     except sqlite3.Error as e:
         raise DatabaseError(f"Failed to save timezone: {e}")

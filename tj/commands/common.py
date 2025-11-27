@@ -329,13 +329,12 @@ def format_entry_for_display(entry, entry_number=None, truncate_lines=None, tags
     Returns:
         Formatted string for display
     """
-    from tj.timezone_manager import format_time_dashboard, get_current_timezone
+    from tj.timezone_manager import format_time_dashboard, get_timezone_object
     from tj.colors import (colorize_content, colorize_context, colorize_creation_timestamp,
                           colorize_entry_number, colorize_kind, colorize_priority, colorize_timestamp,
                           BOLD, RESET, TERRACOTTA, LIGHT_GOLD)
     from tj.repository_factory import RepositoryFactory
     from datetime import datetime
-    from zoneinfo import ZoneInfo
 
     repository = RepositoryFactory.get_repository()
 
@@ -399,11 +398,10 @@ def format_entry_for_display(entry, entry_number=None, truncate_lines=None, tags
     # For journal entries with event_date, show event date/time with countdown
     event_date_str = ""
     if entry.kind == 'journal' and entry.data and 'event_date' in entry.data:
-        tz_name = get_current_timezone()
-        try:
-            tz = ZoneInfo(tz_name)
+        tz = get_timezone_object()
+        if tz:
             event_dt = datetime.fromtimestamp(entry.data['event_date'], tz=tz)
-        except Exception:
+        else:
             event_dt = datetime.fromtimestamp(entry.data['event_date'])
 
         # If time is midnight (00:00), show just date with weekday

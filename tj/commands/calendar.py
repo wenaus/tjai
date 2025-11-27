@@ -8,8 +8,7 @@ from typing import Optional, Tuple
 from tj.colors import colorize_timestamp, colorize_content
 from tj.repository_factory import RepositoryFactory
 from tj.commands.common import format_entry_for_display
-from tj.timezone_manager import get_current_timezone
-from zoneinfo import ZoneInfo
+from tj.timezone_manager import get_current_timezone, get_timezone_object
 
 
 def parse_timeframe(timeframe: Optional[str]) -> Tuple[str, float, float]:
@@ -25,12 +24,8 @@ def parse_timeframe(timeframe: Optional[str]) -> Tuple[str, float, float]:
     - 'w+N', 'w-N' -> N weeks forward/back
     - 'm+N', 'm-N' -> N months forward/back
     """
-    tz_name = get_current_timezone()
-    try:
-        tz = ZoneInfo(tz_name)
-        now = datetime.now(tz)
-    except Exception:
-        now = datetime.now()
+    tz = get_timezone_object()
+    now = datetime.now(tz) if tz else datetime.now()
 
     # Default (no arg) shows configured number of days (default 30)
     if not timeframe:
@@ -167,11 +162,7 @@ def handle_calendar_view(args) -> None:
         desc, start_ts, end_ts = parse_timeframe(timeframe)
 
         # Get timezone for display
-        tz_name = get_current_timezone()
-        try:
-            tz = ZoneInfo(tz_name)
-        except Exception:
-            tz = None
+        tz = get_timezone_object()
 
         # Query journal entries (for calendar presentation, apply safe mode filtering)
         from tj.commands.common import get_safe_exclude_tags
@@ -433,13 +424,8 @@ def handle_yearly_summary(args) -> None:
         repository = RepositoryFactory.get_repository()
 
         # Get timezone
-        tz_name = get_current_timezone()
-        try:
-            tz = ZoneInfo(tz_name)
-            now = datetime.now(tz)
-        except Exception:
-            tz = None
-            now = datetime.now()
+        tz = get_timezone_object()
+        now = datetime.now(tz) if tz else datetime.now()
 
         # Calculate 1-year range from today
         start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
