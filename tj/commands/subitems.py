@@ -4,6 +4,7 @@ import sys
 import uuid
 from datetime import datetime, timezone
 
+from tj.config import get_preview_length
 from tj.repository import Entry
 from tj.repository_factory import RepositoryFactory
 from tj.state import get_state, save_state
@@ -78,7 +79,8 @@ def handle_add_subitem(args) -> None:
         # last_parent_id stays the same
         save_state(state)
 
-        print(f"Sub-item added: {content[:50]}{'...' if len(content) > 50 else ''}")
+        preview_len = get_preview_length()
+        print(f"Sub-item added: {content[:preview_len]}{'...' if len(content) > preview_len else ''}")
 
     except Exception as e:
         print(f"Error creating sub-item: {e}", file=sys.stderr)

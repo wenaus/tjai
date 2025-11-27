@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from tj.colors import colorize_content, colorize_context, colorize_timestamp, colorize_entry_number
 from tj.commands.common import get_entry_from_recent_list
+from tj.config import get_preview_length, get_line_wrap_width
 from tj.repository_factory import RepositoryFactory
 from tj.timezone_manager import format_time_dashboard
 
@@ -130,7 +131,8 @@ def handle_add_subnote(args) -> None:
             return
 
         # TODO: Implement sub-note creation in repository
-        print(f"Sub-note added to entry {entry_num}: {text[:50]}...")
+        preview_len = get_preview_length()
+        print(f"Sub-note added to entry {entry_num}: {text[:preview_len]}...")
 
     except (ValueError, TypeError):
         print("Error: Invalid entry number.", file=sys.stderr)
@@ -632,13 +634,14 @@ def display_entry_details(entry, entry_identifier=None):
 
     # Count visual lines in content
     lines = entry.content.split('\n')
+    wrap_width = get_line_wrap_width()
     visual_line_count = 0
     for line in lines:
         if len(line) == 0:
             visual_line_count += 1
         else:
-            # Estimate visual lines: divide by 100 and round up
-            visual_line_count += (len(line) + 99) // 100
+            # Estimate visual lines: divide by wrap_width and round up
+            visual_line_count += (len(line) + wrap_width - 1) // wrap_width
 
     # Show line count, truncation override, and links section
     has_truncation = entry.data and 'truncate_lines' in entry.data

@@ -15,7 +15,10 @@ DEFAULT_CONFIG = {
     "recent_entries_hours": 24,
     "backup_retention_days": 14,
     "calendar_default_days": 30,
-    "content_truncate_length": 5
+    "content_truncate_length": 5,
+    "status_list_limit": 20,
+    "line_wrap_width": 100,
+    "preview_length": 50
 }
 
 # Cached config (loaded once per session)
@@ -143,6 +146,24 @@ def get_content_truncate_length() -> int:
     """Get the content truncation length for list and calendar views."""
     config = get_config()
     return config.get("content_truncate_length", DEFAULT_CONFIG["content_truncate_length"])
+
+
+def get_status_list_limit() -> int:
+    """Get the default limit for status list queries."""
+    config = get_config()
+    return config.get("status_list_limit", DEFAULT_CONFIG["status_list_limit"])
+
+
+def get_line_wrap_width() -> int:
+    """Get the line wrap width for text formatting."""
+    config = get_config()
+    return config.get("line_wrap_width", DEFAULT_CONFIG["line_wrap_width"])
+
+
+def get_preview_length() -> int:
+    """Get the preview length for truncated content display."""
+    config = get_config()
+    return config.get("preview_length", DEFAULT_CONFIG["preview_length"])
 
 
 def handle_config_command(args) -> None:

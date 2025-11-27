@@ -33,7 +33,7 @@ from tj.commands.subitems import handle_add_subitem
 from tj.repository_factory import RepositoryFactory
 from tj.state import get_state
 from tj.timezone_manager import handle_timezone_command, get_current_timezone, format_time_in_timezone
-from tj.config import handle_config_command
+from tj.config import handle_config_command, get_status_list_limit
 
 debug_time("imports", _import_start)
 
@@ -276,11 +276,11 @@ def handle_numbered_command(parser: argparse.ArgumentParser, num_identifier: int
 def show_status() -> None:
     """Show status dashboard when no arguments provided."""
     _t = time.time()
-    # Show listing with 20 most recent entries
+    # Show listing with configured limit of most recent entries
     from tj.commands.list import handle_list_command
 
     class ListArgs:
-        filters = ['20']
+        filters = [str(get_status_list_limit())]
 
     handle_list_command(ListArgs())
     debug_time("list_entries", _t)

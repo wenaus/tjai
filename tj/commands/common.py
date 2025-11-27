@@ -8,7 +8,7 @@ from typing import Optional, Tuple, List
 from tj.colors import (colorize_content, colorize_context, colorize_creation_timestamp,
                        colorize_entry_number, colorize_kind, colorize_priority, colorize_timestamp,
                        BOLD, RESET, RED, TERRACOTTA, LIGHT_GOLD)
-from tj.config import get_recent_entries_hours
+from tj.config import get_recent_entries_hours, get_preview_length, get_line_wrap_width
 from tj.repository import Entry
 from tj.repository_factory import RepositoryFactory
 from tj.state import display_context, get_state, save_state
@@ -262,8 +262,9 @@ def get_entry_from_recent_list(entry_identifier) -> Optional[Entry]:
                     print(f"\nMultiple entries found with name '@{name}':", file=sys.__stdout__, flush=True)
                     for i, entry in enumerate(matching_entries, 1):
                         context_str = f"={entry.context}" if entry.context else "(no context)"
-                        # Show first 50 chars of content
-                        content_preview = entry.content[:50] + "..." if len(entry.content) > 50 else entry.content
+                        # Show first preview_length chars of content
+                        preview_len = get_preview_length()
+                        content_preview = entry.content[:preview_len] + "..." if len(entry.content) > preview_len else entry.content
                         print(f"  {i}. {context_str}: {colorize_content(content_preview)}", file=sys.__stdout__, flush=True)
 
                     print(f"\nSelect entry (1-{len(matching_entries)}) or 'c' to cancel: ", end='', file=sys.__stdout__, flush=True)
@@ -334,22 +335,23 @@ def format_entry_for_display(entry, entry_number=None, truncate_lines=None, tags
     if truncate_lines is not None:  # None means no truncation
         lines = content.split('\n')
 
-        # Count visual lines (accounting for line wrapping at ~100 chars)
+        # Count visual lines (accounting for line wrapping)
+        wrap_width = get_line_wrap_width()
         visual_line_count = 0
         for line in lines:
             if len(line) == 0:
                 visual_line_count += 1
             else:
-                # Estimate visual lines: divide by 100 and round up
-                visual_line_count += (len(line) + 99) // 100
+                # Estimate visual lines: divide by wrap_width and round up
+                visual_line_count += (len(line) + wrap_width - 1) // wrap_width
 
         # truncate_lines=0 means show only first line
         # truncate_lines>0 means show that many lines if content exceeds it
         if truncate_lines == 0 or visual_line_count > truncate_lines:
             first_line = lines[0]
             # Calculate max chars for truncate_lines worth of display
-            # 0 means show just one line (~100 chars), >0 means that many lines
-            max_chars = 100 if truncate_lines == 0 else (truncate_lines * 100)
+            # 0 means show just one line, >0 means that many lines
+            max_chars = wrap_width if truncate_lines == 0 else (truncate_lines * wrap_width)
 
             # Truncate first line if it exceeds max_chars
             if len(first_line) > max_chars:
