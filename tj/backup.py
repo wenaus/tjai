@@ -177,7 +177,9 @@ def create_backup() -> tuple[bool, Optional[str]]:
         # Copy the database file
         db_path = get_configured_db_path()
         if db_path.exists():
-            shutil.copy2(db_path, backup_path)
+            # Use copyfile() not copy/copy2 - they try to preserve permissions/attributes
+            # which fails on WSL2 writing to NTFS/Windows filesystems
+            shutil.copyfile(db_path, backup_path)
 
             # Update last backup time
             now = datetime.now(timezone.utc).timestamp()
@@ -268,11 +270,11 @@ def restore_backup(backup_filename: str) -> bool:
         backup_dir = get_backup_dir()
         current_backup = backup_dir / f"pre_restore_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.db"
         if db_path.exists():
-            shutil.copy2(db_path, current_backup)
+            shutil.copyfile(db_path, current_backup)
             print(f"Current database backed up to: {current_backup.name}")
-        
+
         # Restore the backup
-        shutil.copy2(backup_path, db_path)
+        shutil.copyfile(backup_path, db_path)
         print(f"Database restored from: {backup_filename}")
         return True
         
