@@ -1,9 +1,11 @@
 """List command handlers for tj."""
 
 import sys
+import time
 from datetime import datetime, timedelta
 
 from tj.colors import colorize_content, colorize_context, colorize_kind, colorize_timestamp, colorize_creation_timestamp, colorize_entry_number, BOLD, RESET
+from tj.options import debug_time
 from tj.repository_factory import RepositoryFactory
 from tj.state import get_state, save_state, display_context
 from tj.timezone_manager import format_time_dashboard
@@ -67,11 +69,12 @@ def _list_contexts(repository):
         print("No contexts found.")
         return
 
+    # Get entry counts in one query (instead of per-context)
+    entry_counts = repository.get_entry_counts_by_context()
+
     print(f"Contexts ({len(context_entities)}):")
     for i, context in enumerate(sorted(context_entities, key=lambda c: c.name), 1):
-        # Count entries in this context
-        entries = repository.query_entries(context=context.name)
-        active_entries = [e for e in entries if not getattr(e, 'deleted_at', None)]
+        count = entry_counts.get(context.name, 0)
 
         # Colorize current context (colorize_context adds = prefix, just use the color)
         if context.name == current_context:
@@ -86,7 +89,7 @@ def _list_contexts(repository):
             display_parts.append(context.title)
         if context.description:
             display_parts.append(context.description)
-        display_parts.append(f"{len(active_entries)} entries")
+        display_parts.append(f"{count} entries")
         print(" - ".join(display_parts))
 
 
@@ -139,6 +142,8 @@ def _list_tags(repository):
 
 def _list_entries_with_filters(repository, filters, no_truncate=False):
     """List entries with composite filters."""
+    time_filter_start = time.time()
+
     # Build query parameters
     kind = None
     context = None
@@ -226,6 +231,9 @@ def _list_entries_with_filters(repository, filters, no_truncate=False):
     from tj.commands.common import get_safe_exclude_tags
     safe_exclude_tags = get_safe_exclude_tags(exclude_tags if exclude_tags else None)
 
+    debug_time("list_parse_filters", time_filter_start)
+    time_query_start = time.time()
+
     entries = repository.query_entries(
         kind=kind,
         context=context,
@@ -234,6 +242,7 @@ def _list_entries_with_filters(repository, filters, no_truncate=False):
         status=status,
         exclude_tags=safe_exclude_tags
     )
+    debug_time("list_query_entries", time_query_start)
 
     # Apply time filter (post-query)
     if time_cutoff:
@@ -296,6 +305,15 @@ def _list_entries_with_filters(repository, filters, no_truncate=False):
     # AI guidelines should never be truncated (meant to be read in full)
     skip_truncate = (kind == 'ai_guideline')
 
+    # Build tags lookup dict once (instead of querying per entry)
+    all_tags = repository.get_all_tags()
+    tags_by_entry = {}
+    for tag in all_tags:
+        if tag.entry_id not in tags_by_entry:
+            tags_by_entry[tag.entry_id] = []
+        tags_by_entry[tag.entry_id].append(tag.tag_name)
+
+    time_format_start = time.time()
     for i, entry in enumerate(active_entries, 1):
         # Check no_truncate flag (from 'tj a' command)
         if no_truncate:
@@ -307,7 +325,9 @@ def _list_entries_with_filters(repository, filters, no_truncate=False):
             entry_truncate = None
         else:
             entry_truncate = truncate_len
-        print(format_entry_for_display(entry, i, entry_truncate))
+        entry_tags = tags_by_entry.get(entry.id, [])
+        print(format_entry_for_display(entry, i, entry_truncate, entry_tags))
+    debug_time("list_format_entries", time_format_start)
 
     # Store numbered entries in state for numbered operations
     state = get_state()

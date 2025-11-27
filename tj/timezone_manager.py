@@ -20,43 +20,48 @@ TIMEZONE_ALIASES = {
 
 DEFAULT_TIMEZONE = 'America/New_York'
 
+# Cache timezone to avoid repeated DB lookups
+_cached_timezone: Optional[str] = None
+
 
 def get_current_timezone() -> str:
-    """Get the current timezone setting."""
+    """Get the current timezone setting (cached for performance)."""
+    global _cached_timezone
+    if _cached_timezone is not None:
+        return _cached_timezone
+
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("""
-            SELECT value FROM sync_metadata 
+            SELECT value FROM sync_metadata
             WHERE key = 'timezone'
         """)
-        
+
         row = cursor.fetchone()
-        conn.close()
-        
-        if row:
-            return row['value']
-        return DEFAULT_TIMEZONE
-        
+        _cached_timezone = row['value'] if row else DEFAULT_TIMEZONE
+        return _cached_timezone
+
     except sqlite3.Error:
         return DEFAULT_TIMEZONE
 
 
 def set_timezone(timezone: str) -> None:
     """Save the timezone setting."""
+    global _cached_timezone
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("""
             INSERT OR REPLACE INTO sync_metadata (key, value, timestamp_updated)
             VALUES ('timezone', ?, ?)
         """, (timezone, datetime.now().timestamp()))
-        
+
         conn.commit()
-        conn.close()
-        
+        _cached_timezone = timezone  # Update cache
+
     except sqlite3.Error as e:
         raise DatabaseError(f"Failed to save timezone: {e}")
 

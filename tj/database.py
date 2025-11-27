@@ -1,46 +1,87 @@
+import atexit
 import os
 import sqlite3
-import sys
+import time
 from pathlib import Path
 from typing import Optional
+
+# Import consolidated options (must be first for correct parsing)
+from tj.options import DEBUG, DB_PATH, debug_time, debug_mark
 
 # --- Constants and Configuration ---
 APP_DIR = Path(os.environ.get("TJAI_APP_DIR", Path.home() / ".tjai"))
 
-# Check for --db option in sys.argv
-_DB_OVERRIDE = None
-for arg in sys.argv:
-    if arg.startswith('--db='):
-        _DB_OVERRIDE = Path(arg.split('=', 1)[1])
-        break
+# Cached values to avoid repeated lookups
+_cached_db_path: Optional[Path] = None
+_cached_connection: Optional[sqlite3.Connection] = None
+_dirs_initialized = False
 
-def get_configured_db_path():
-    """Get the configured database path."""
-    # Check for --db= override
-    if _DB_OVERRIDE:
-        return _DB_OVERRIDE
 
-    try:
-        from tj.config import get_db_path
-        return get_db_path()
-    except ImportError:
-        # Fallback if config module isn't available
-        return APP_DIR / "tjai.db"
+def get_configured_db_path() -> Path:
+    """Get the configured database path (cached)."""
+    global _cached_db_path
+    if _cached_db_path is not None:
+        return _cached_db_path
+
+    start = time.time()
+    # Check for --db= override from options
+    if DB_PATH:
+        _cached_db_path = DB_PATH
+    else:
+        try:
+            from tj.config import get_db_path
+            _cached_db_path = get_db_path()
+        except ImportError:
+            _cached_db_path = APP_DIR / "tjai.db"
+    debug_time("get_configured_db_path", start)
+    return _cached_db_path
+
+
+def _ensure_dirs() -> None:
+    """Ensure required directories exist (once per session)."""
+    global _dirs_initialized
+    if _dirs_initialized:
+        return
+
+    start = time.time()
+    db_path = get_configured_db_path()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    _dirs_initialized = True
+    debug_time("ensure_dirs", start)
+
 
 class DatabaseError(Exception):
     """Custom exception for database operations."""
     pass
 
+
+def _close_cached_connection() -> None:
+    """Close cached connection at exit."""
+    global _cached_connection
+    if _cached_connection is not None:
+        _cached_connection.close()
+        _cached_connection = None
+
+
+atexit.register(_close_cached_connection)
+
+
 # --- Database Setup ---
 def get_db_connection() -> sqlite3.Connection:
-    """Establishes a connection to the SQLite database."""
+    """Get the cached database connection (single connection per session)."""
+    global _cached_connection
+
+    if _cached_connection is not None:
+        return _cached_connection
+
+    start = time.time()
     try:
-        # Get current configured path
+        _ensure_dirs()
         db_path = get_configured_db_path()
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+        _cached_connection = sqlite3.connect(db_path)
+        _cached_connection.row_factory = sqlite3.Row
+        debug_time("sqlite3.connect", start)
+        return _cached_connection
     except (sqlite3.Error, OSError) as e:
         raise DatabaseError(f"Failed to connect to database: {e}")
 
@@ -136,6 +177,5 @@ def init_db() -> None:
         """)
 
         conn.commit()
-        conn.close()
     except sqlite3.Error as e:
         raise DatabaseError(f"Failed to initialize database: {e}")

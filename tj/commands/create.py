@@ -34,12 +34,12 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
         content = " ".join(filtered_input).strip()
 
         # Step 2.1: Append file content if provided via -f flag
-        import tj.cli
-        if hasattr(tj.cli, 'file_content') and tj.cli.file_content:
+        from tj.options import FILE_CONTENT
+        if FILE_CONTENT:
             if content:
-                content = content + "\n" + tj.cli.file_content
+                content = content + "\n" + FILE_CONTENT
             else:
-                content = tj.cli.file_content
+                content = FILE_CONTENT
 
         if not content:
             print("Error: Entry content cannot be empty.", file=sys.stderr)

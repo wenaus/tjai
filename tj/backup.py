@@ -38,13 +38,11 @@ def get_last_backup_time() -> Optional[float]:
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT value FROM sync_metadata 
+            SELECT value FROM sync_metadata
             WHERE key = 'last_backup_time'
         """)
-        
+
         row = cursor.fetchone()
-        conn.close()
-        
         if row:
             return float(row['value'])
         return None
@@ -63,10 +61,9 @@ def set_last_backup_time(timestamp: float) -> None:
             INSERT OR REPLACE INTO sync_metadata (key, value, timestamp_updated)
             VALUES ('last_backup_time', ?, ?)
         """, (str(timestamp), timestamp))
-        
+
         conn.commit()
-        conn.close()
-        
+
     except sqlite3.Error as e:
         raise DatabaseError(f"Failed to update backup timestamp: {e}")
 

@@ -1,10 +1,16 @@
 import argparse
 import sys
+import time
 from typing import List, Optional, Tuple
 from datetime import datetime
 
-# Global variable for file content from -f flag
-file_content = None
+# Import consolidated options first (handles all CLI option parsing)
+from tj.options import DEBUG, DB_PATH, FILE_CONTENT, get_command_args, get_original_argv
+from tj.options import debug_time, debug_mark
+
+_import_start = time.time()
+
+from tj.database import init_db, DatabaseError
 
 from tj.backup import auto_backup, list_backups
 from tj.commands.ai import handle_ai_command
@@ -24,11 +30,12 @@ from tj.commands.modify import (
 )
 from tj.commands.copy import handle_copy
 from tj.commands.subitems import handle_add_subitem
-from tj.database import init_db, DatabaseError
 from tj.repository_factory import RepositoryFactory
 from tj.state import get_state
 from tj.timezone_manager import handle_timezone_command, get_current_timezone, format_time_in_timezone
 from tj.config import handle_config_command
+
+debug_time("imports", _import_start)
 
 
 def parse_at_timestamp(args_list: List[str]) -> Tuple[Optional[float], List[str]]:
@@ -463,6 +470,7 @@ def handle_numbered_command(parser: argparse.ArgumentParser, num_identifier: int
 
 def show_status() -> None:
     """Show status dashboard when no arguments provided."""
+    _t = time.time()
     # Show listing with 20 most recent entries
     from tj.commands.list import handle_list_command
 
@@ -470,8 +478,10 @@ def show_status() -> None:
         filters = ['20']
 
     handle_list_command(ListArgs())
+    debug_time("list_entries", _t)
 
     # Add additional summary stats
+    _t = time.time()
     try:
         repository = RepositoryFactory.get_repository()
         state = get_state()
@@ -508,6 +518,7 @@ def show_status() -> None:
         
         deleted_count = len(all_entries) - len(active_entries)
         print(f"\nSummary: {len(active_entries)} active, {len(all_entries)} total, {deleted_count} deleted | {len(unique_tag_names)} tags, {context_count} contexts")
+        debug_time("summary_stats", _t)
 
         # Latest entry timestamp
         if active_entries:
@@ -515,8 +526,9 @@ def show_status() -> None:
             current_tz = get_current_timezone()
             latest_time = format_time_in_timezone(latest_entry.timestamp_created, current_tz)
             print(f"Latest: {latest_time}")
-        
+
         # Backup information
+        _t = time.time()
         try:
             backups = list_backups()
             from tj.backup import get_backup_dir
@@ -538,7 +550,8 @@ def show_status() -> None:
         except Exception:
             # Don't let backup info failure break the status display
             pass
-        
+        debug_time("list_backups", _t)
+
         print("\nTry: tj \"your memory here\", tj h for help")
         
     except Exception as e:
@@ -662,6 +675,8 @@ def main() -> None:
     from tj.state import get_state, save_state, display_context
     import sys
     from io import StringIO
+
+    time_main_start = time.time()
 
     # Buffer to capture command output
     output_buffer = StringIO()
@@ -788,79 +803,40 @@ def main() -> None:
         # Restore stdout
         sys.stdout = original_stdout
 
+        debug_time("main_command", time_main_start)
+
         # Display context first (shows current context after any command changes)
+        time_display = time.time()
         display_context()
+        debug_time("display_context", time_display)
 
         # Then print buffered command output
+        time_output = time.time()
         buffered_output = output_buffer.getvalue()
         if buffered_output:
             print(buffered_output, end='')
+        debug_time("print_output", time_output)
 
 def entrypoint() -> None:
     """Main entry point with error handling."""
     try:
-        # Save original command for audit/backup purposes (before any modifications)
-        original_command = sys.argv.copy()
+        debug_mark("entrypoint_start")
 
-        # Tokenize single string arg FIRST (from alias/function wrapper)
-        # When using: alias tj='tj.py "$*"' or function tj() { tj.py "$*"; }
-        # Result: sys.argv = ['tj.py', '--db=test.db', 'entire command as single string']
-        # We need to tokenize before processing flags
-        if len(sys.argv) >= 2:
-            # Check if last arg looks like a compound command (has spaces and isn't a flag)
-            last_arg = sys.argv[-1]
-            if last_arg == '':
-                # Empty string from "$*" with no args - remove it
-                sys.argv = sys.argv[:-1]
-            elif ' ' in last_arg and not last_arg.startswith('--'):
-                import shlex
-                tokens = shlex.split(last_arg)
-                sys.argv = sys.argv[:-1] + tokens
+        # Options already parsed by tj.options module at import time
+        # Set up sys.argv for command parsing (options stripped)
+        sys.argv = [sys.argv[0]] + get_command_args()
 
-        # Process global flags and file input
-        flags_to_remove = []
-        file_path = None
-
-        i = 1
-        while i < len(sys.argv):
-            arg = sys.argv[i]
-            if arg.startswith('--db='):
-                flags_to_remove.append(arg)
-            elif arg in ['-f', '--file']:
-                # Next arg is file path
-                if i + 1 < len(sys.argv):
-                    file_path = sys.argv[i + 1]
-                    flags_to_remove.append(arg)
-                    flags_to_remove.append(sys.argv[i + 1])
-                    i += 1  # Skip next arg
-                else:
-                    print("Error: -f/--file requires a file path", file=sys.stderr)
-                    sys.exit(1)
-            i += 1
-
+        _t = time.time()
         init_db()
-
-        # Remove processed flags for command parsing (database.py already cached them)
-        for flag in flags_to_remove:
-            sys.argv.remove(flag)
-
-        # Handle file input - store globally for commands to access
-        global file_content
-        if file_path:
-            try:
-                from pathlib import Path
-                file_content = Path(file_path).read_text().strip()
-            except FileNotFoundError:
-                print(f"Error: File not found: {file_path}", file=sys.stderr)
-                sys.exit(1)
-            except Exception as e:
-                print(f"Error reading file: {e}", file=sys.stderr)
-                sys.exit(1)
+        debug_time("init_db", _t)
 
         # Auto-backup on every command execution (skip if using non-default db)
-        if not any(arg.startswith('--db=') for arg in original_command):
+        _t = time.time()
+        if not DB_PATH:
             auto_backup()
+        debug_time("auto_backup", _t)
 
+        debug_mark("before_main")
         main()
     except DatabaseError as e:
         print(f"Database error: {e}", file=sys.stderr)

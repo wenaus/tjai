@@ -317,13 +317,14 @@ def get_entry_from_recent_list(entry_identifier) -> Optional[Entry]:
         return None
 
 
-def format_entry_for_display(entry, entry_number=None, truncate_lines=None) -> str:
+def format_entry_for_display(entry, entry_number=None, truncate_lines=None, tags=None) -> str:
     """Format an entry for display in list format with all metadata.
 
     Args:
         entry: The Entry object to format
         entry_number: Optional entry number to display (e.g., 1, 2, 3...)
         truncate_lines: Optional number of lines to show (first line always shown)
+        tags: Optional list of tag names (if None, will query DB - avoid in loops)
 
     Returns:
         Formatted string for display
@@ -433,7 +434,8 @@ def format_entry_for_display(entry, entry_number=None, truncate_lines=None) -> s
     context_str = f"{colorize_context(entry.context)} " if entry.context else ""
 
     # Tags - only append if not already in content
-    tags = repository.get_tags(entry.id)
+    if tags is None:
+        tags = repository.get_tags(entry.id)
     missing_tags = []
     for tag in tags:
         if f':{tag}' not in content:  # Check original content, not colorized

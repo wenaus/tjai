@@ -197,7 +197,6 @@ def handle_purge() -> None:
 
         # Vacuum to reclaim space
         cursor.execute("VACUUM")
-        conn.close()
 
         # Get database size after
         size_after = os.path.getsize(db_path)

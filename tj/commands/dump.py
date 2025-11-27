@@ -131,8 +131,6 @@ def handle_dump(args) -> None:
         """)
 
         rows = cursor.fetchall()
-        conn.close()
-
         if rows:
             print("# Entries in insertion order")
             import json

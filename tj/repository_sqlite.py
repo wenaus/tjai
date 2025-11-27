@@ -11,7 +11,24 @@ from tj.repository import EntryRepository, Entry, Tag
 
 class SQLiteRepository(EntryRepository):
     """SQLite implementation of the entry repository."""
-    
+
+    def _row_to_entry(self, row) -> Entry:
+        """Convert a database row to an Entry object."""
+        return Entry(
+            id=row['id'],
+            parent_id=row['parent_id'],
+            content=row['content'],
+            kind=row['kind'],
+            timestamp_created=row['timestamp_created'],
+            timestamp_modified=row['timestamp_modified'],
+            context=row['context'],
+            is_dirty=bool(row['is_dirty']),
+            name=row['name'],
+            priority=row['priority'],
+            status=row['status'],
+            data=json.loads(row['data']) if row['data'] else None
+        )
+
     def create_entry(self, entry: Entry) -> str:
         """Create a new entry and return its ID."""
         try:
@@ -31,7 +48,6 @@ class SQLiteRepository(EntryRepository):
             ))
 
             conn.commit()
-            conn.close()
             return entry.id
 
         except sqlite3.Error as e:
@@ -50,26 +66,11 @@ class SQLiteRepository(EntryRepository):
             """, (entry_id,))
 
             row = cursor.fetchone()
-            conn.close()
-
             if not row:
                 return None
 
-            return Entry(
-                id=row['id'],
-                parent_id=row['parent_id'],
-                content=row['content'],
-                kind=row['kind'],
-                timestamp_created=row['timestamp_created'],
-                timestamp_modified=row['timestamp_modified'],
-                context=row['context'],
-                is_dirty=bool(row['is_dirty']),
-                name=row['name'],
-                priority=row['priority'],
-                status=row['status'],
-                data=json.loads(row['data']) if row['data'] else None
-            )
-            
+            return self._row_to_entry(row)
+
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to get entry: {e}")
 
@@ -91,26 +92,7 @@ class SQLiteRepository(EntryRepository):
             """, (name,))
 
             rows = cursor.fetchall()
-            conn.close()
-
-            entries = []
-            for row in rows:
-                entries.append(Entry(
-                    id=row['id'],
-                    parent_id=row['parent_id'],
-                    content=row['content'],
-                    kind=row['kind'],
-                    timestamp_created=row['timestamp_created'],
-                    timestamp_modified=row['timestamp_modified'],
-                    context=row['context'],
-                    is_dirty=bool(row['is_dirty']),
-                    name=row['name'],
-                    priority=row['priority'],
-                    status=row['status'],
-                    data=json.loads(row['data']) if row['data'] else None
-                ))
-
-            return entries
+            return [self._row_to_entry(row) for row in rows]
 
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to get entries by name: {e}")
@@ -142,25 +124,10 @@ class SQLiteRepository(EntryRepository):
                 """, (name, context))
 
             row = cursor.fetchone()
-            conn.close()
-
             if not row:
                 return None
 
-            return Entry(
-                id=row['id'],
-                parent_id=row['parent_id'],
-                content=row['content'],
-                kind=row['kind'],
-                timestamp_created=row['timestamp_created'],
-                timestamp_modified=row['timestamp_modified'],
-                context=row['context'],
-                is_dirty=bool(row['is_dirty']),
-                name=row['name'],
-                priority=row['priority'],
-                status=row['status'],
-                data=json.loads(row['data']) if row['data'] else None
-            )
+            return self._row_to_entry(row)
 
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to get entry by name: {e}")
@@ -212,12 +179,10 @@ class SQLiteRepository(EntryRepository):
             
             query = f"UPDATE entries SET {', '.join(set_clauses)} WHERE id = ?"
             cursor.execute(query, values)
-            
             success = cursor.rowcount > 0
             conn.commit()
-            conn.close()
             return success
-            
+
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to update entry: {e}")
     
@@ -236,9 +201,8 @@ class SQLiteRepository(EntryRepository):
             
             success = cursor.rowcount > 0
             conn.commit()
-            conn.close()
             return success
-            
+
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to delete entry: {e}")
     
@@ -299,25 +263,8 @@ class SQLiteRepository(EntryRepository):
 
             cursor.execute(query, params)
             rows = cursor.fetchall()
-            conn.close()
+            return [self._row_to_entry(row) for row in rows]
 
-            return [
-                Entry(
-                    id=row['id'],
-                    parent_id=row['parent_id'],
-                    content=row['content'],
-                    kind=row['kind'],
-                    timestamp_created=row['timestamp_created'],
-                    timestamp_modified=row['timestamp_modified'],
-                    context=row['context'],
-                    is_dirty=bool(row['is_dirty']),
-                    name=row['name'],
-                    priority=row['priority'],
-                    status=row['status'],
-                    data=json.loads(row['data']) if row['data'] else None
-                ) for row in rows
-            ]
-            
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to query entries: {e}")
     
@@ -332,8 +279,7 @@ class SQLiteRepository(EntryRepository):
             """, (tag_name, entry_id))
             
             conn.commit()
-            conn.close()
-            
+
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to add tag: {e}")
     
@@ -346,12 +292,10 @@ class SQLiteRepository(EntryRepository):
             cursor.execute("""
                 SELECT tag_name FROM tags WHERE entry_id = ?
             """, (entry_id,))
-            
+
             rows = cursor.fetchall()
-            conn.close()
-            
             return [row['tag_name'] for row in rows]
-            
+
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to get tags: {e}")
     
@@ -365,12 +309,10 @@ class SQLiteRepository(EntryRepository):
                 SELECT DISTINCT tag_name, entry_id FROM tags
                 ORDER BY tag_name
             """)
-            
+
             rows = cursor.fetchall()
-            conn.close()
-            
             return [Tag(tag_name=row['tag_name'], entry_id=row['entry_id']) for row in rows]
-            
+
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to get all tags: {e}")
     
@@ -381,19 +323,35 @@ class SQLiteRepository(EntryRepository):
             cursor = conn.cursor()
             
             cursor.execute("""
-                SELECT DISTINCT context FROM entries 
+                SELECT DISTINCT context FROM entries
                 WHERE context IS NOT NULL AND deleted_at IS NULL
                 ORDER BY context
             """)
-            
+
             rows = cursor.fetchall()
-            conn.close()
-            
             return [row['context'] for row in rows]
-            
+
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to get contexts: {e}")
-    
+
+    def get_entry_counts_by_context(self) -> Dict[str, int]:
+        """Get count of active entries per context in one query."""
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT context, COUNT(*) as count FROM entries
+                WHERE deleted_at IS NULL AND context IS NOT NULL
+                GROUP BY context
+            """)
+
+            rows = cursor.fetchall()
+            return {row['context']: row['count'] for row in rows}
+
+        except sqlite3.Error as e:
+            raise DatabaseError(f"Failed to get entry counts by context: {e}")
+
     def create_context(self, context: 'Context') -> bool:
         """Create a new context entity."""
         # Validate context name - reject names containing '='
@@ -411,7 +369,6 @@ class SQLiteRepository(EntryRepository):
             """, (context.name, context.title, context.description, context.timestamp_created, context.timestamp_modified))
 
             conn.commit()
-            conn.close()
             return True
 
         except sqlite3.Error as e:
@@ -429,8 +386,6 @@ class SQLiteRepository(EntryRepository):
             """, (name,))
 
             row = cursor.fetchone()
-            conn.close()
-
             if row:
                 from tj.repository import Context
                 return Context(
@@ -457,8 +412,6 @@ class SQLiteRepository(EntryRepository):
             """)
 
             rows = cursor.fetchall()
-            conn.close()
-
             from tj.repository import Context
             return [Context(
                 name=row['name'],
@@ -495,9 +448,8 @@ class SQLiteRepository(EntryRepository):
             cursor.execute(query, params)
             success = cursor.rowcount > 0
             conn.commit()
-            conn.close()
             return success
-            
+
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to update context: {e}")
 
@@ -509,9 +461,7 @@ class SQLiteRepository(EntryRepository):
 
             cursor.execute("DELETE FROM contexts WHERE name = ?", (name,))
             success = cursor.rowcount > 0
-
             conn.commit()
-            conn.close()
             return success
 
         except sqlite3.Error as e:
@@ -526,12 +476,11 @@ class SQLiteRepository(EntryRepository):
             cursor.execute("""
                 DELETE FROM tags WHERE entry_id = ? AND tag_name = ?
             """, (entry_id, tag_name))
-            
+
             success = cursor.rowcount > 0
             conn.commit()
-            conn.close()
             return success
-            
+
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to remove tag: {e}")
     
@@ -544,11 +493,10 @@ class SQLiteRepository(EntryRepository):
             cursor.execute("""
                 DELETE FROM tags WHERE tag_name = ?
             """, (tag_name,))
-            
+
             count_removed = cursor.rowcount
             conn.commit()
-            conn.close()
             return count_removed
-            
+
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to remove all tag instances: {e}")
