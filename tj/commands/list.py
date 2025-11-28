@@ -142,12 +142,19 @@ def _list_tags(repository):
 
 
 def _list_entries_with_filters(repository, filters, no_truncate=False):
-    """List entries with composite filters."""
+    """List entries with composite filters.
+
+    Context behavior:
+    - No =context filter: uses active context (if set)
+    - =0 filter: context-neutral (shows all entries regardless of context)
+    - =<name> filter: shows entries in that specific context
+    """
     time_filter_start = time.time()
 
     # Build query parameters
     kind = None
     context = None
+    context_neutral = False  # True if =0 was specified (show all)
     tag = None
     exclude_tags = []
     priority = None
@@ -156,6 +163,9 @@ def _list_entries_with_filters(repository, filters, no_truncate=False):
     text_filter = None
     max_entries = None
     query_parts = []
+
+    # Check if any explicit context filter is provided
+    has_context_filter = any(f.startswith('=') for f in filters)
 
     for filter_arg in filters:
         # Check for days filter (e.g., 10d = last 10 days)
@@ -183,11 +193,16 @@ def _list_entries_with_filters(repository, filters, no_truncate=False):
 
         # Query by context
         elif filter_arg.startswith('='):
-            context = filter_arg[1:]
-            if not context:
+            context_value = filter_arg[1:]
+            if not context_value:
                 print("Error: Empty context name.", file=sys.stderr)
                 return
-            query_parts.append(f"{filter_arg}")
+            if context_value == '0':
+                # =0 means context-neutral (show all entries)
+                context_neutral = True
+            else:
+                context = context_value
+                query_parts.append(f"{filter_arg}")
 
         # Query by tag (exclude)
         elif filter_arg.startswith('-:'):
@@ -227,6 +242,14 @@ def _list_entries_with_filters(repository, filters, no_truncate=False):
             # Treat as text filter
             text_filter = filter_arg.lower()
             query_parts.append(f"text:{filter_arg}")
+
+    # Apply active context if no explicit context filter was provided
+    if not has_context_filter and not context_neutral:
+        state = get_state()
+        active_context = state.get("current_context")
+        if active_context:
+            context = active_context
+            query_parts.append(f"={active_context}")
 
     # Execute query (add safe mode exclude if active)
     from tj.commands.common import get_safe_exclude_tags

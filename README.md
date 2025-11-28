@@ -50,7 +50,7 @@ source ~/.bashrc
 
 ```bash
 tj h  # Show help
-tj    # Show status (creates ~/.tjai/tjai.db on first run)
+tj    # Show status (database location configured in ~/.tjai/config.json)
 ```
 
 ### 4. Start using tj
@@ -154,7 +154,7 @@ tj config show
 
 The configuration file is created automatically on first run and includes:
 
-*   `db_path`: Database file location (default: `~/tjai/tjai.db`)
+*   `db_path`: Database file location (default: `~/Dropbox/Current/tjai.db`)
 *   `backup_path`: Backup directory location
 *   `backup_interval_hours`: How often to auto-backup (default: 1 hour)
 *   `recent_entries_hours`: How many hours to include in "recent" queries (default: 24)

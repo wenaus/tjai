@@ -4,19 +4,11 @@ This document describes all the operators implemented in the TJ (Personal AI Mem
 
 ## Editor Integration
 
-### tj -e / tj --edit
-Open editor for entry creation
-- `tj -e` (empty editor)
-- `tj --edit this is initial content` (editor with initial content)
-- `tj d -e` (todo with editor)
-- `tj p --edit profile content` (profile with editor)
-
-### Bulk Editing
-Launch $EDITOR for bulk entry modification (like git commit workflow)
-- Export current numbered entries to temp file
-- Launch $EDITOR and wait for completion  
-- Parse changes and update entries
-- Handle multi-line content naturally
+### tj e
+Open editor for entry creation or editing
+- `tj e` - Create new entry in $EDITOR
+- `tj e <n>` - Edit entry number n in $EDITOR
+- `tj e @name` - Edit named entry in $EDITOR
 
 ## Calendar/Journal System
 
@@ -48,9 +40,9 @@ Format supports nested structure:
 
 ## Core Entry Operations
 
-### tj . <number> <text>
-Add a sub-note to an entry
-- `tj . 5 follow up on this tomorrow`
+### tj . <text>
+Add a sub-item to the last parent entry
+- `tj . follow up on this tomorrow`
 
 ### tj e <number> <text>
 Edit an entry (requires confirmation)
@@ -64,10 +56,10 @@ Add tag to entry
 List all entries with a specific tag
 - `tj t urgent`
 
-### tj m <number> [context]
-Move entry to context (empty context removes from context)
-- `tj m 4 work`
-- `tj m 4` (removes from context)
+### tj mv <number> <context>
+Move entry to context
+- `tj mv 4 work` or `tj mv 4 =work`
+- `tj mv 4 =0` (removes from context)
 
 ### tj s <number>
 Show detailed entry information
@@ -143,8 +135,8 @@ All displayed entries have numbers for easy operation. Every view supports numbe
 - Tags displayed in light green (\033[92m)
 - Optimized for dark mode terminals
 
-### No Content Truncation
-Full content displayed across all views for wide terminals.
+### Content Truncation
+Content truncated based on `content_truncate_length` config setting. Use `tj admin lines N` to change.
 
 ### Confirmation Pattern
 - **Requires confirmation**: Delete operations, edit operations

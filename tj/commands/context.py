@@ -1,6 +1,5 @@
 import sys
 from typing import Optional
-from tj.commands.common import confirm_action
 from tj.state import get_state, save_state, display_context
 
 
@@ -72,18 +71,4 @@ def handle_context(args, num_identifier: Optional[int] = None) -> None:
         state["current_context"] = args.name
         save_state(state)
         
-    else:
-        # Show current context and ask for confirmation to clear
-        current_context = state.get("current_context")
-        
-        if not current_context:
-            print("Current context: none")
-            return
-        
-        # Ask for confirmation before clearing
-        if confirm_action(f"Clear current context '{current_context}'"):
-            state["current_context"] = None
-            print("Context cleared.")
-            save_state(state)
-        else:
-            print("Context clear cancelled.")
+    # else branch removed - tj = handled in cli.py

@@ -405,7 +405,10 @@ def handle_context_syntax(first_arg: str, remaining_args: list) -> None:
     context_name = first_arg[1:]  # Remove the = prefix
 
     if not context_name:
-        print("Error: Empty context name. Use =<context> or =0 to clear.", file=sys.stderr)
+        # tj = with no name - show current context
+        state = get_state()
+        current = state.get("current_context")
+        print(f"Current context: {current}" if current else "Current context: none")
         return
 
     if not remaining_args:
