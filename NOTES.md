@@ -95,7 +95,7 @@ Design decisions should be captured persistently in codebase files immediately w
 
 ### Related Files
 - `implementation_notes.md`: User's comprehensive design and architectural decisions
-- This `NOTES.md`: Session-specific design discussions and decisions
+- This `NOTES.md`: AI-user design discussions and decisions
 - Both should be kept synchronized and referenced during development
 
 ## AI as Entry Type
@@ -116,7 +116,6 @@ tj l ai                    # List all AI guidance entries
 ## Loose Ends to Address
 
 ### Architecture Concepts
-- **Terminal sessions** - mentioned twice as important for broader architecture implications
 - **AIs as direct users** - programmatic access patterns beyond just `ai` entry type
 - **Lists vs Sub-notes distinction**:
   - Sub-notes: Creates new entries one level down (hierarchy limit: 1 level)
@@ -128,13 +127,6 @@ tj l ai                    # List all AI guidance entries
     - `tj + milk` 
     - `tj + bread`
 
-### Lost Design Discussion
-- **Lists implementation** - extensive discussion occurred but was not documented
-- Need to reconstruct: how lists work within entry JSON, syntax, management
-
 ### Available Notation
 - Reserved characters from research: `_ ^ / + .` (available for future features)
 - `=` used for contexts, others remain available
-
-## Terminal Sessions Reminder
-User mentioned terminal sessions - needs follow-up discussion on broader architecture implications.

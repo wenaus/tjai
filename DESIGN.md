@@ -152,3 +152,7 @@ LLM → Local MCP (tjai-agent) → Local SQLite (fast queries)
 
 **Key insight:**
 The agent serves dual purpose: keeps local SQLite fresh (sync) AND provides MCP interface for AI on that machine. Single daemon, two critical functions. Deploy on every machine that needs tjai access.
+
+## Local State
+
+Numbered entry mappings (`tj 3 d` → which entry?) stored in `~/.tjai/state.json`, local to each machine. Not synced. Each machine's query context is independent—no cross-machine confusion about entry numbers. Multiple terminals on same machine share state (acceptable trade-off).
