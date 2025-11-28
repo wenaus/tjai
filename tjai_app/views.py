@@ -199,3 +199,61 @@ def sync_pull(request):
         "sub_notes": sub_notes,
         "sysconfig": sysconfig,
     })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_command(request):
+    """
+    Execute a command on the server.
+
+    Request body:
+    {
+        "command": "set_sysconfig",
+        "key": "sync_interval_seconds",
+        "value": "30"
+    }
+
+    Supported commands:
+        set_sysconfig: Set a sysconfig key/value pair
+        get_sysconfig: Get all sysconfig values
+
+    Response:
+    {
+        "status": "ok",
+        "result": {...}
+    }
+    """
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    command = data.get("command")
+    if not command:
+        return JsonResponse({"error": "command required"}, status=400)
+
+    if command == "set_sysconfig":
+        key = data.get("key")
+        value = data.get("value")
+        if not key or value is None:
+            return JsonResponse({"error": "key and value required"}, status=400)
+
+        SysConfig.objects.update_or_create(
+            key=key,
+            defaults={
+                "value": str(value),
+                "timestamp_modified": time.time(),
+            }
+        )
+        return JsonResponse({"status": "ok", "result": {key: value}})
+
+    elif command == "get_sysconfig":
+        sysconfig = {
+            cfg["key"]: cfg["value"]
+            for cfg in SysConfig.objects.values("key", "value")
+        }
+        return JsonResponse({"status": "ok", "result": sysconfig})
+
+    else:
+        return JsonResponse({"error": f"Unknown command: {command}"}, status=400)

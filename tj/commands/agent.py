@@ -124,6 +124,38 @@ def handle_agent(args) -> None:
             daemon.restart_daemon()
         print("Full sync triggered.")
 
+    elif agent_cmd == 'interval':
+        # tj admin agent interval [seconds]
+        from tj.server import send_command
+
+        if len(args.args) > 1:
+            new_interval = args.args[1]
+            try:
+                int(new_interval)  # Validate it's a number
+            except ValueError:
+                print(f"Invalid interval: {new_interval}", file=sys.stderr)
+                return
+
+            try:
+                result = send_command("set_sysconfig", key="sync_interval_seconds", value=new_interval)
+                if result.get("status") == "ok":
+                    print(f"Sync interval set to {new_interval}s")
+                else:
+                    print(f"Failed: {result.get('error', 'Unknown error')}", file=sys.stderr)
+            except Exception as e:
+                print(f"Failed to set interval: {e}", file=sys.stderr)
+        else:
+            # Show current interval from status file
+            if STATUS_FILE.exists():
+                try:
+                    status = json.loads(STATUS_FILE.read_text())
+                    interval = status.get("sync_interval", "unknown")
+                    print(f"Sync interval: {interval}s")
+                except (json.JSONDecodeError, OSError):
+                    print("Sync interval: unknown")
+            else:
+                print("Sync interval: unknown (agent not running)")
+
     else:
         print(f"Unknown agent command: {agent_cmd}", file=sys.stderr)
-        print("Usage: tj admin agent [start|stop|restart|install|log|sync|location]")
+        print("Usage: tj admin agent [start|stop|restart|install|log|sync|location|interval]")
