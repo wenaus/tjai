@@ -66,7 +66,7 @@ def sync_push(request):
                 "title": ctx.get("title"),
                 "description": ctx.get("description"),
                 "timestamp_created": ctx["timestamp_created"],
-                "timestamp_modified": ctx["timestamp_modified"],
+                "timestamp_modified": now,  # Use server time for consistent ordering
             }
         )
         counts["contexts"] += 1
@@ -80,7 +80,7 @@ def sync_push(request):
                 "content": entry["content"],
                 "kind": entry["kind"],
                 "timestamp_created": entry["timestamp_created"],
-                "timestamp_modified": entry["timestamp_modified"],
+                "timestamp_modified": now,  # Use server time for consistent ordering
                 "context_id": entry.get("context"),
                 "is_dirty": 0,  # Server copy is clean
                 "deleted_at": entry.get("deleted_at"),
