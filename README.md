@@ -158,6 +158,8 @@ The configuration file is created automatically on first run and includes:
 *   `backup_path`: Backup directory location
 *   `backup_interval_hours`: How often to auto-backup (default: 1 hour)
 *   `recent_entries_hours`: How many hours to include in "recent" queries (default: 24)
+*   `location_name`: Machine identifier shown in agent status (e.g., "StudioMax", "ec2dev")
+*   `sync_interval_seconds`: How often agent syncs with server (default: 5)
 
 ### Backup and Restore
 
