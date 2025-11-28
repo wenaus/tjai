@@ -151,3 +151,27 @@ tjai/
 | `/api/sync/push` | POST | Push dirty entries |
 | `/api/sync/pull` | GET | Pull updates + sysconfig |
 | `/api/command` | POST | Execute commands (set_sysconfig, get_sysconfig) |
+
+## Server Deployment (ec2dev)
+
+Django runs on ec2dev via Apache mod_wsgi.
+
+**Key paths:**
+- Git repo: `/home/admin/github/tjrepo/tjai`
+- Deployment: `/var/www/tjai` (not a git repo, Apache serves from here)
+- Apache config: `/etc/apache2/sites-enabled/etaverse.conf`
+- Apache logs: `/var/log/apache2/etaverse_ssl_error.log`
+
+**Deploy after code changes:**
+```bash
+sudo cp /home/admin/github/tjrepo/tjai/tjai_app/views.py /var/www/tjai/tjai_app/
+sudo systemctl reload apache2
+curl -s https://etaverse.com/tjai/api/health  # verify
+```
+
+**Full deploy (all files):**
+```bash
+sudo rsync -av --exclude='.git' --exclude='__pycache__' --exclude='*.pyc' \
+    /home/admin/github/tjrepo/tjai/ /var/www/tjai/
+sudo systemctl reload apache2
+```
