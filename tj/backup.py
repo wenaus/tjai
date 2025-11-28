@@ -8,13 +8,13 @@ from pathlib import Path
 from typing import Optional, List, Dict
 from collections import defaultdict
 
-from tj.config import get_backup_path, get_backup_interval_hours as config_get_backup_interval, get_backup_retention_days
+from tj.config import get_backup_dir as config_get_backup_dir, get_backup_interval_hours as config_get_backup_interval, get_backup_retention_days, get_location_name
 from tj.database import get_db_connection, APP_DIR, get_configured_db_path, DatabaseError
 
 
 def get_backup_dir():
     """Get the configured backup directory."""
-    return get_backup_path()
+    return config_get_backup_dir()
 
 
 def get_backup_interval_hours():
@@ -150,10 +150,11 @@ def create_backup() -> tuple[bool, Optional[str]]:
     try:
         # Get configured backup directory
         backup_dir = get_backup_dir()
+        location_name = get_location_name()
 
-        # Generate backup filename with date and hour in UTC (YYYYMMDD_HH format)
+        # Generate backup filename: tjai_{location}_{datetime}.db
         datetime_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H")
-        backup_filename = f"tjai_backup_{datetime_str}.db"
+        backup_filename = f"tjai_{location_name}_{datetime_str}.db"
         backup_path = backup_dir / backup_filename
 
         print("Backing up...")
@@ -197,8 +198,9 @@ def auto_backup() -> None:
                     # Get backup file size
                     import os
                     backup_dir = get_backup_dir()
+                    location_name = get_location_name()
                     datetime_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H")
-                    backup_filename = f"tjai_backup_{datetime_str}.db"
+                    backup_filename = f"tjai_{location_name}_{datetime_str}.db"
                     backup_path = backup_dir / backup_filename
 
                     if backup_path.exists():
@@ -219,13 +221,16 @@ def auto_backup() -> None:
 
 
 def list_backups() -> list:
-    """List available backup files."""
+    """List available backup files for this location."""
     backup_dir = get_backup_dir()
     if not backup_dir.exists():
         return []
 
+    location_name = get_location_name()
+    pattern = f"tjai_{location_name}_*.db"
+
     backups = []
-    for backup_file in backup_dir.glob("tjai_backup_*.db"):
+    for backup_file in backup_dir.glob(pattern):
         stat = backup_file.stat()
         backups.append({
             'filename': backup_file.name,

@@ -9,6 +9,7 @@ from tj.commands.common import log_operation, confirm_action, truncate_content
 def handle_backup() -> None:
     """Create a manual backup."""
     from tj.backup import create_backup, get_backup_dir
+    from tj.config import get_location_name
     import os
 
     try:
@@ -18,8 +19,9 @@ def handle_backup() -> None:
 
             # Get backup file size
             backup_dir = get_backup_dir()
+            location_name = get_location_name()
             datetime_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H")
-            backup_filename = f"tjai_backup_{datetime_str}.db"
+            backup_filename = f"tjai_{location_name}_{datetime_str}.db"
             backup_path = backup_dir / backup_filename
 
             if backup_path.exists():
@@ -50,11 +52,17 @@ def handle_admin(args) -> None:
 
         # List available admin commands
         print("Admin commands:")
-        print("  tj admin backup   Create a manual backup")
-        print("  tj admin purge    Permanently delete soft-deleted entries")
-        print("  tj admin safe     Enable safe mode")
-        print("  tj admin normal   Disable safe mode")
-        print("  tj admin lines N  Set content truncation to N lines")
+        print("  tj admin backup         Create a manual backup")
+        print("  tj admin purge          Permanently delete soft-deleted entries")
+        print("  tj admin safe           Enable safe mode")
+        print("  tj admin normal         Disable safe mode")
+        print("  tj admin lines N        Set content truncation to N lines")
+        print("  tj admin agent          Show agent status")
+        print("  tj admin agent start    Start sync agent")
+        print("  tj admin agent stop     Stop sync agent")
+        print("  tj admin agent restart  Restart sync agent")
+        print("  tj admin agent log      Show agent log")
+        print("  tj admin agent install  Install agent service manually")
         return
 
     subcommand = args.subcommand
@@ -69,6 +77,9 @@ def handle_admin(args) -> None:
         handle_normal()
     elif subcommand == 'lines':
         handle_lines(args)
+    elif subcommand == 'agent':
+        from tj.commands.agent import handle_agent
+        handle_agent(args)
     else:
         # Unknown admin command
         print(f"Error: 'admin' is reserved for admin commands.", file=sys.stderr)

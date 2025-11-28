@@ -332,8 +332,16 @@ def _list_entries_with_filters(repository, filters, no_truncate=False):
     # Get all tags once (not per entry)
     tags_by_entry = repository.get_tags_by_entry()
 
+    # Load known contexts for orphan detection during display loop
+    known_contexts = {c.name for c in repository.get_all_contexts()}
+    missing_contexts = set()
+
     time_format_start = time.time()
     for i, entry in enumerate(active_entries, 1):
+        # Track missing contexts during display (no extra scan)
+        if entry.context and entry.context not in known_contexts:
+            missing_contexts.add(entry.context)
+
         # Check no_truncate flag (from 'tj a' command)
         if no_truncate:
             entry_truncate = None
@@ -347,6 +355,21 @@ def _list_entries_with_filters(repository, filters, no_truncate=False):
         entry_tags = tags_by_entry.get(entry.id, [])
         print(format_entry_for_display(entry, i, entry_truncate, entry_tags))
     debug_time("list_format_entries", time_format_start)
+
+    # Auto-create any orphaned contexts found during display
+    if missing_contexts:
+        from tj.repository import Context
+        from tj.colors import RED, BOLD, RESET
+        now = datetime.now().timestamp()
+        for ctx_name in missing_contexts:
+            repository.create_context(Context(
+                name=ctx_name,
+                title=None,
+                description=None,
+                timestamp_created=now,
+                timestamp_modified=now
+            ))
+        print(f"{RED}{BOLD}Created missing contexts: {', '.join(sorted(missing_contexts))}{RESET}")
 
     # Store numbered entries in state for numbered operations
     state = get_state()
