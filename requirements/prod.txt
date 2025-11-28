@@ -1,0 +1,2 @@
+-r base.txt
+# mod-wsgi installed via apt: libapache2-mod-wsgi-py3
