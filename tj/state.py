@@ -34,6 +34,13 @@ def save_state(state: Dict[str, Any]) -> None:
     with open(STATE_PATH, 'w') as f:
         json.dump(state, f, indent=2)
 
+
+def update_state(**kwargs) -> None:
+    """Update state with key-value pairs and save."""
+    state = get_state()
+    state.update(kwargs)
+    save_state(state)
+
 def display_context() -> None:
     """Prints the current context at the start of every command response."""
     from datetime import datetime
@@ -61,20 +68,10 @@ def display_context() -> None:
 
 
 def set_last_parent(entry_id: str) -> None:
-    """Set the last parent ID for sub-item creation.
-
-    Called after creating top-level entries and when showing entry details.
-    """
-    state = get_state()
-    state["last_parent_id"] = entry_id
-    save_state(state)
+    """Set the last parent ID for sub-item creation."""
+    update_state(last_parent_id=entry_id)
 
 
 def set_last_list(entry_id: str) -> None:
-    """Set the last list ID for list item addition.
-
-    Called after creating list entries.
-    """
-    state = get_state()
-    state["last_list_id"] = entry_id
-    save_state(state)
+    """Set the last list ID for list item addition."""
+    update_state(last_list_id=entry_id)

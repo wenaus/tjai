@@ -109,30 +109,26 @@ def handle_lines(args) -> None:
 
 def handle_safe() -> None:
     """Enable safe mode."""
-    from tj.state import get_state, save_state
+    from tj.state import get_state, update_state
 
-    state = get_state()
-    if state.get("safe_mode"):
+    if get_state().get("safe_mode"):
         print("Safe mode already active.")
         return
 
-    state["safe_mode"] = True
-    save_state(state)
+    update_state(safe_mode=True)
     print("Safe mode enabled.")
     log_operation('safe', 'success')
 
 
 def handle_normal() -> None:
     """Disable safe mode."""
-    from tj.state import get_state, save_state
+    from tj.state import get_state, update_state
 
-    state = get_state()
-    if not state.get("safe_mode"):
+    if not get_state().get("safe_mode"):
         print("Safe mode not active.")
         return
 
-    state["safe_mode"] = False
-    save_state(state)
+    update_state(safe_mode=False)
     print("Safe mode disabled.")
     log_operation('normal', 'success')
 

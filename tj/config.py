@@ -118,52 +118,41 @@ def show_config() -> None:
             print(f"  {key}: {value}")
 
 
+def _get(key: str):
+    """Get config value with fallback to default."""
+    return get_config().get(key, DEFAULT_CONFIG[key])
+
+
 def get_backup_interval_hours() -> int:
-    """Get the backup interval in hours."""
-    config = get_config()
-    return config.get("backup_interval_hours", DEFAULT_CONFIG["backup_interval_hours"])
+    return _get("backup_interval_hours")
 
 
 def get_recent_entries_hours() -> int:
-    """Get the recent entries window in hours."""
-    config = get_config()
-    return config.get("recent_entries_hours", DEFAULT_CONFIG["recent_entries_hours"])
+    return _get("recent_entries_hours")
 
 
 def get_backup_retention_days() -> int:
-    """Get the backup retention period in days."""
-    config = get_config()
-    return config.get("backup_retention_days", DEFAULT_CONFIG["backup_retention_days"])
+    return _get("backup_retention_days")
 
 
 def get_calendar_default_days() -> int:
-    """Get the default number of days to show in calendar view."""
-    config = get_config()
-    return config.get("calendar_default_days", DEFAULT_CONFIG["calendar_default_days"])
+    return _get("calendar_default_days")
 
 
 def get_content_truncate_length() -> int:
-    """Get the content truncation length for list and calendar views."""
-    config = get_config()
-    return config.get("content_truncate_length", DEFAULT_CONFIG["content_truncate_length"])
+    return _get("content_truncate_length")
 
 
 def get_status_list_limit() -> int:
-    """Get the default limit for status list queries."""
-    config = get_config()
-    return config.get("status_list_limit", DEFAULT_CONFIG["status_list_limit"])
+    return _get("status_list_limit")
 
 
 def get_line_wrap_width() -> int:
-    """Get the line wrap width for text formatting."""
-    config = get_config()
-    return config.get("line_wrap_width", DEFAULT_CONFIG["line_wrap_width"])
+    return _get("line_wrap_width")
 
 
 def get_preview_length() -> int:
-    """Get the preview length for truncated content display."""
-    config = get_config()
-    return config.get("preview_length", DEFAULT_CONFIG["preview_length"])
+    return _get("preview_length")
 
 
 def handle_config_command(args) -> None:
