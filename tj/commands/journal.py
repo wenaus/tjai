@@ -198,8 +198,29 @@ def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
         parts = first.split('/')
         try:
             if len(parts) == 2:
-                # Could be mm/dd, yyyy/mm, or MMDD/HH:MM
-                if len(parts[0]) == 4:
+                # Could be mm/dd, yyyy/mm, MMDD/HH:MM, or YYYYMMDD/HH:MM
+                if len(parts[0]) == 8 and parts[0].isdigit():
+                    # YYYYMMDD/HH:MM format (e.g., 20251220/23:20)
+                    year = int(parts[0][0:4])
+                    month = int(parts[0][4:6])
+                    day = int(parts[0][6:8])
+                    event_date = date(year, month, day)
+
+                    # Parse time from second part
+                    try:
+                        hour, minute = parse_time(parts[1])
+                    except ValueError as e:
+                        print(f"Warning: {e}, using midnight", file=sys.stderr)
+                        hour, minute = 0, 0
+
+                    if tz:
+                        dt = datetime.combine(event_date, time(hour, minute, tzinfo=tz))
+                    else:
+                        dt = datetime.combine(event_date, time(hour, minute))
+
+                    return dt.timestamp(), remaining
+
+                elif len(parts[0]) == 4:
                     # Could be yyyy/mm (date without day - invalid) or MMDD/HH:MM
                     # Check if second part looks like time (has : or is am/pm)
                     if ':' in parts[1] or parts[1].lower().endswith(('am', 'pm')):
