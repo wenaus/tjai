@@ -96,6 +96,18 @@ def handle_agent(args) -> None:
         else:
             print("No agent log found")
 
+    elif agent_cmd == 'sync':
+        # Manual full sync - reset sync time and run sync cycle
+        from tj_agent.sync import set_last_sync_time, sync_cycle
+        print("Resetting sync time for full sync...")
+        set_last_sync_time(0)
+        print("Running full sync...")
+        try:
+            sync_cycle()
+            print("Full sync complete.")
+        except Exception as e:
+            print(f"Sync failed: {e}", file=sys.stderr)
+
     else:
         print(f"Unknown agent command: {agent_cmd}", file=sys.stderr)
-        print("Usage: tj admin agent [start|stop|restart|install|log]")
+        print("Usage: tj admin agent [start|stop|restart|install|log|sync|location]")

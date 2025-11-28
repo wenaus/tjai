@@ -107,8 +107,24 @@ def get_db_path() -> Path:
             # which fails on WSL2 writing to NTFS/Windows filesystems
             shutil.copyfile(generic_db, location_db)
             print(f"Copied {generic_db} to {location_db}")
+            # Reset sync time so new location pulls all server entries
+            _reset_sync_time(location_db)
 
     return location_db
+
+
+def _reset_sync_time(db_path: Path) -> None:
+    """Reset last_sync_time to 0 so next sync pulls everything."""
+    import sqlite3
+    try:
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM sync_metadata WHERE key = 'last_sync_time'")
+        conn.commit()
+        conn.close()
+        print("Reset sync time for full sync on first run.")
+    except Exception as e:
+        print(f"Warning: Could not reset sync time: {e}")
 
 
 def get_backup_dir() -> Path:
