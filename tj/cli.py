@@ -38,6 +38,32 @@ from tj.config import handle_config_command, get_status_list_limit
 debug_time("imports", _import_start)
 
 
+def _ensure_agent_running() -> None:
+    """Start agent if not recently active. Checks cached status to avoid latency."""
+    import json
+    from pathlib import Path
+
+    # Check agent status file for recent activity
+    status_file = Path.home() / ".tjai" / "agent_status.json"
+    if status_file.exists():
+        try:
+            status = json.loads(status_file.read_text())
+            last_pull = status.get("last_pull")
+            if last_pull and (time.time() - last_pull) < 30:
+                # Agent was active within 30s, no action needed
+                return
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Agent not recently active, try to start it
+    try:
+        from tj_agent.daemon import ensure_running
+        ensure_running()
+    except Exception:
+        # Don't let agent failures break tj commands
+        pass
+
+
 def parse_at_timestamp(args_list: List[str]) -> Tuple[Optional[float], List[str]]:
     """Extract and parse at=YYYYMMDD/HH:MM from arguments.
 
@@ -666,6 +692,11 @@ def entrypoint() -> None:
         if not DB_PATH:
             auto_backup()
         debug_time("auto_backup", _t)
+
+        # Ensure agent is running (only if not recently active)
+        _t = time.time()
+        _ensure_agent_running()
+        debug_time("ensure_agent", _t)
 
         debug_mark("before_main")
         main()
