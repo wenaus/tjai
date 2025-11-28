@@ -103,7 +103,9 @@ def get_db_path() -> Path:
     if not location_db.exists():
         generic_db = base_dir / "tjai.db"
         if generic_db.exists():
-            shutil.copy2(generic_db, location_db)
+            # Use copyfile (not copy2) - copy2 tries to preserve metadata
+            # which fails on WSL2 writing to NTFS/Windows filesystems
+            shutil.copyfile(generic_db, location_db)
             print(f"Copied {generic_db} to {location_db}")
 
     return location_db
