@@ -3,7 +3,7 @@
 import sys
 
 from tj.colors import colorize_context, colorize_creation_timestamp
-from tj.commands.common import get_entry_from_recent_list
+from tj.commands.common import get_entry_from_recent_list, confirm_action, truncate_content
 from tj.repository_factory import RepositoryFactory
 from tj.timezone_manager import format_time_dashboard
 
@@ -113,25 +113,23 @@ def handle_delete_entries(entry_nums: list) -> None:
                 return
             entries_to_delete.append((num, entry))
 
-        # Show what will be deleted (bypass buffer for interactive prompt)
+        # Show what will be deleted and confirm
         if len(entries_to_delete) == 1:
             num, entry = entries_to_delete[0]
             time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_created))
             context_str = f" {colorize_context(entry.context)}" if entry.context else ""
-            print(f"Delete: {time_str} {entry.content}{context_str} [y/N]: ", end='', file=sys.__stdout__, flush=True)
-            response = input().strip().lower()
+            if not confirm_action(f"Delete: {time_str} {entry.content}{context_str}"):
+                print("Delete cancelled.")
+                return
         else:
             print(f"Delete {len(entries_to_delete)} entries:", file=sys.__stdout__, flush=True)
             for num, entry in entries_to_delete:
                 time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_created))
-                content_preview = entry.content[:60] + "..." if len(entry.content) > 60 else entry.content
+                content_preview = truncate_content(entry.content)
                 print(f"  {num}: {time_str} {content_preview}", file=sys.__stdout__, flush=True)
-            print(f"\nDelete these {len(entries_to_delete)} entries? [y/N]: ", end='', file=sys.__stdout__, flush=True)
-            response = input().strip().lower()
-
-        if response not in ['y', 'yes']:
-            print("Delete cancelled.")
-            return
+            if not confirm_action(f"\nDelete these {len(entries_to_delete)} entries?"):
+                print("Delete cancelled.")
+                return
 
         # Perform deletions
         deleted_count = 0
@@ -168,14 +166,12 @@ def handle_delete_tag_from_entry(entry_num: int, tag: str) -> None:
             print(f"Error: Entry {entry_num} does not have tag '{tag}'.", file=sys.stderr)
             return
 
-        # Show confirmation (bypass buffer for interactive prompt)
+        # Show confirmation
         from tj.colors import colorize_content
         print(f"Remove tag '{tag}' from entry {entry_num}:", file=sys.__stdout__, flush=True)
         print(f"  {colorize_content(entry.content)}", file=sys.__stdout__, flush=True)
 
-        print(f"\nRemove tag '{tag}'? [y/N]: ", end='', file=sys.__stdout__, flush=True)
-        response = input().strip().lower()
-        if response not in ['y', 'yes']:
+        if not confirm_action(f"\nRemove tag '{tag}'?"):
             print("Tag removal cancelled.")
             return
 
@@ -203,11 +199,9 @@ def handle_delete_all_tag_instances(tagname: str) -> None:
             print(f"No entries found with tag '{tagname}'.")
             return
 
-        # Show confirmation (bypass buffer for interactive prompt)
+        # Show confirmation
         print(f"Delete tag '{tagname}' from {tag_count} entries?", file=sys.__stdout__, flush=True)
-        print("This will remove the tag from all entries. Continue? [y/N]: ", end='', file=sys.__stdout__, flush=True)
-        response = input().strip().lower()
-        if response not in ['y', 'yes']:
+        if not confirm_action("This will remove the tag from all entries. Continue?"):
             print("Tag deletion cancelled.")
             return
 
@@ -243,16 +237,14 @@ def handle_delete_context(context_name: str) -> None:
             print("\nEntries in this context:")
             for entry in active_entries[:10]:  # Show first 10
                 time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_created))
-                content_preview = entry.content[:60] + "..." if len(entry.content) > 60 else entry.content
+                content_preview = truncate_content(entry.content)
                 print(f"  {time_str} {colorize_content(content_preview)}")
             if len(active_entries) > 10:
                 print(f"  ... and {len(active_entries) - 10} more")
             return
 
-        # Confirm deletion (bypass buffer for interactive prompt)
-        print(f"Delete context '{context_name}'? [y/N]: ", end='', file=sys.__stdout__, flush=True)
-        response = input().strip().lower()
-        if response not in ['y', 'yes']:
+        # Confirm deletion
+        if not confirm_action(f"Delete context '{context_name}'?"):
             print("Context deletion cancelled.")
             return
 

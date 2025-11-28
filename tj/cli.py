@@ -15,7 +15,7 @@ from tj.database import init_db, DatabaseError
 from tj.backup import auto_backup, list_backups
 from tj.commands.ai import handle_ai_command
 from tj.commands.calendar import handle_calendar_view
-from tj.commands.common import not_yet_implemented, handle_delete
+from tj.commands.common import not_yet_implemented, handle_delete, confirm_action
 from tj.commands.context import handle_context
 from tj.commands.create import handle_creation
 from tj.commands.delete import handle_delete_new
@@ -504,10 +504,8 @@ def _handle_context_switch() -> bool:
 
         repository = RepositoryFactory.get_repository()
         if not repository.get_context(context_name):
-            # Context doesn't exist - confirm creation (bypass buffer)
-            print(f"Context '{context_name}' does not exist. Create it? [y/N]: ", end='', file=sys.__stdout__, flush=True)
-            response = input().strip().lower()
-            if response not in ['y', 'yes']:
+            # Context doesn't exist - confirm creation
+            if not confirm_action(f"Context '{context_name}' does not exist. Create it?"):
                 print("Cancelled.")
                 return True
 

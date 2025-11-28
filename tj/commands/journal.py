@@ -5,21 +5,7 @@ from datetime import datetime, date, time, timedelta
 from zoneinfo import ZoneInfo
 from typing import Tuple, List, Optional
 
-from tj.timezone_manager import get_current_timezone
-
-
-def get_timezone_object():
-    """Get timezone object for current user timezone.
-
-    Returns ZoneInfo timezone object, or None on error (uses local time).
-    """
-    tz_name = get_current_timezone()
-
-    try:
-        return ZoneInfo(tz_name)
-    except Exception:
-        # Invalid timezone name, fallback to local
-        return None
+from tj.timezone_manager import get_current_timezone, get_timezone_object
 
 
 def parse_time(time_str: str) -> Tuple[int, int]:

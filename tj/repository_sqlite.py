@@ -193,7 +193,6 @@ class SQLiteRepository(EntryRepository):
             cursor = conn.cursor()
             
             # Soft delete by setting deleted_at timestamp
-            from datetime import datetime
             cursor.execute("""
                 UPDATE entries SET deleted_at = ?, is_dirty = 1 
                 WHERE id = ? AND deleted_at IS NULL
@@ -315,7 +314,17 @@ class SQLiteRepository(EntryRepository):
 
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to get all tags: {e}")
-    
+
+    def get_tags_by_entry(self) -> Dict[str, List[str]]:
+        """Get all tags grouped by entry_id. Returns {entry_id: [tag_names]}."""
+        all_tags = self.get_all_tags()
+        result = {}
+        for tag in all_tags:
+            if tag.entry_id not in result:
+                result[tag.entry_id] = []
+            result[tag.entry_id].append(tag.tag_name)
+        return result
+
     def get_contexts(self) -> List[str]:
         """Get all contexts that have been used."""
         try:

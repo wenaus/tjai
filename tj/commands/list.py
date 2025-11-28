@@ -5,6 +5,7 @@ import time
 from datetime import datetime, timedelta
 
 from tj.colors import colorize_content, colorize_context, colorize_kind, colorize_timestamp, colorize_creation_timestamp, colorize_entry_number, BOLD, RESET
+from tj.commands.common import truncate_content
 from tj.options import debug_time
 from tj.repository_factory import RepositoryFactory
 from tj.state import get_state, save_state, display_context
@@ -109,7 +110,7 @@ def _list_named_entries(repository):
     print(f"Named entries ({len(named_entries)}):")
     for i, entry in enumerate(named_entries, 1):
         time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_modified))
-        content_preview = entry.content[:60] + "..." if len(entry.content) > 60 else entry.content
+        content_preview = truncate_content(entry.content)
         # Prepend bold name with @ symbol to content
         content_preview = f"{BOLD}@{entry.name}{RESET}  {content_preview}"
         context_str = f" {colorize_context(entry.context)}" if entry.context else ""
@@ -305,13 +306,8 @@ def _list_entries_with_filters(repository, filters, no_truncate=False):
     # AI guidelines should never be truncated (meant to be read in full)
     skip_truncate = (kind == 'ai_guideline')
 
-    # Build tags lookup dict once (instead of querying per entry)
-    all_tags = repository.get_all_tags()
-    tags_by_entry = {}
-    for tag in all_tags:
-        if tag.entry_id not in tags_by_entry:
-            tags_by_entry[tag.entry_id] = []
-        tags_by_entry[tag.entry_id].append(tag.tag_name)
+    # Get all tags once (not per entry)
+    tags_by_entry = repository.get_tags_by_entry()
 
     time_format_start = time.time()
     for i, entry in enumerate(active_entries, 1):

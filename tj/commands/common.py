@@ -15,6 +15,39 @@ from tj.state import display_context, get_state, save_state
 from tj.timezone_manager import format_time_dashboard, get_timezone_object, get_current_timezone, format_time_in_timezone
 
 
+def confirm_action(message: str) -> bool:
+    """Prompt user for confirmation (default no).
+
+    Bypasses stdout buffer to ensure prompt displays immediately.
+
+    Args:
+        message: The prompt message (will have ' [y/N]: ' appended)
+
+    Returns:
+        True if user confirms, False otherwise
+    """
+    print(f"{message} [y/N]: ", end='', file=sys.__stdout__, flush=True)
+    response = input().strip().lower()
+    return response in ['y', 'yes']
+
+
+def truncate_content(content: str, max_length: int = None) -> str:
+    """Truncate content for display preview.
+
+    Args:
+        content: The content to truncate
+        max_length: Maximum length (defaults to config preview_length)
+
+    Returns:
+        Truncated string with '...' if truncated
+    """
+    if max_length is None:
+        max_length = get_preview_length()
+    if len(content) > max_length:
+        return content[:max_length] + "..."
+    return content
+
+
 def log_operation(operation: str, result: str, details: dict = None) -> None:
     """Log an admin/system operation to the database.
 
@@ -479,7 +512,7 @@ def handle_delete(args, num_identifier: Optional[int] = None) -> None:
             return
         
         # Show entry and ask for confirmation
-        content_preview = entry_to_delete.content[:80] + "..." if len(entry_to_delete.content) > 80 else entry_to_delete.content
+        content_preview = truncate_content(entry_to_delete.content)
 
         current_tz = get_current_timezone()
         time_str = format_time_in_timezone(entry_to_delete.timestamp_created, current_tz)
@@ -493,9 +526,7 @@ def handle_delete(args, num_identifier: Optional[int] = None) -> None:
         print(f"  Type: {entry_to_delete.kind}", file=sys.__stdout__, flush=True)
 
         # Ask for confirmation
-        print("\nDelete this entry? [y/N]: ", end='', file=sys.__stdout__, flush=True)
-        response = input().strip().lower()
-        if response not in ['y', 'yes']:
+        if not confirm_action("\nDelete this entry?"):
             print("Delete cancelled.")
             return
         

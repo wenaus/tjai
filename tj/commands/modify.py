@@ -4,7 +4,7 @@ import sys
 from datetime import datetime, timezone
 
 from tj.colors import colorize_content, colorize_context, colorize_timestamp, colorize_entry_number
-from tj.commands.common import get_entry_from_recent_list
+from tj.commands.common import get_entry_from_recent_list, confirm_action
 from tj.config import get_preview_length, get_line_wrap_width
 from tj.repository_factory import RepositoryFactory
 from tj.timezone_manager import format_time_dashboard
@@ -313,9 +313,7 @@ def handle_edit(args) -> None:
             if not entry:
                 # Entry not found - confirm before creating
                 name_without_at = name_ref[1:] if name_ref.startswith('@') else name_ref
-                print(f"Entry @{name_without_at} does not exist. Create it? [y/N]: ", end='', file=sys.__stdout__, flush=True)
-                response = input().strip().lower()
-                if response not in ['y', 'yes']:
+                if not confirm_action(f"Entry @{name_without_at} does not exist. Create it?"):
                     print("Cancelled.")
                     return
 
@@ -347,14 +345,12 @@ def handle_edit(args) -> None:
                 if found_context and not new_text:
                     new_text = entry.content
 
-                # Show changes (bypass buffer for interactive prompt)
+                # Show changes and confirm
                 print(f"Edit entry {name_ref}:", file=sys.__stdout__, flush=True)
                 print(f"  Old: {entry.content}", file=sys.__stdout__, flush=True)
                 print(f"  New: {new_text}", file=sys.__stdout__, flush=True)
 
-                print("\nConfirm edit? [y/N]: ", end='', file=sys.__stdout__, flush=True)
-                response = input().strip().lower()
-                if response not in ['y', 'yes']:
+                if not confirm_action("\nConfirm edit?"):
                     print("Edit cancelled.")
                     return
 
@@ -427,14 +423,12 @@ def handle_edit(args) -> None:
     if found_context and not new_text:
         new_text = entry.content
 
-    # Show current content and confirm (bypass buffer for interactive prompt)
+    # Show current content and confirm
     print(f"Edit entry {entry_num}:", file=sys.__stdout__, flush=True)
     print(f"  Old: {entry.content}", file=sys.__stdout__, flush=True)
     print(f"  New: {new_text}", file=sys.__stdout__, flush=True)
 
-    print("\nConfirm edit? [y/N]: ", end='', file=sys.__stdout__, flush=True)
-    response = input().strip().lower()
-    if response not in ['y', 'yes']:
+    if not confirm_action("\nConfirm edit?"):
         print("Edit cancelled.")
         return
 

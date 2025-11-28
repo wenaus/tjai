@@ -1,6 +1,8 @@
 import sys
 from typing import Optional
+from tj.commands.common import confirm_action
 from tj.state import get_state, save_state, display_context
+
 
 def handle_context(args, num_identifier: Optional[int] = None) -> None:
     """Handles setting or clearing the context."""
@@ -24,9 +26,7 @@ def handle_context(args, num_identifier: Optional[int] = None) -> None:
 
         if not existing_context:
             # Context doesn't exist - confirm creation
-            print(f"Context '{args.name}' does not exist. Create it? [y/N]: ", end='', file=sys.__stdout__, flush=True)
-            response = input().strip().lower()
-            if response not in ['y', 'yes']:
+            if not confirm_action(f"Context '{args.name}' does not exist. Create it?"):
                 print("Cancelled.")
                 return
 
@@ -80,11 +80,8 @@ def handle_context(args, num_identifier: Optional[int] = None) -> None:
             print("Current context: none")
             return
         
-        # Ask for confirmation before clearing (defaults to N, bypass buffer for interactive prompt)
-        import sys
-        print(f"Clear current context '{current_context}' [y/N]: ", end='', file=sys.__stdout__, flush=True)
-        response = input().strip().lower()
-        if response in ['y', 'yes']:
+        # Ask for confirmation before clearing
+        if confirm_action(f"Clear current context '{current_context}'"):
             state["current_context"] = None
             print("Context cleared.")
             save_state(state)

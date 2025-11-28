@@ -70,12 +70,15 @@ def query_ai_guidelines(context: Optional[str], tag: Optional[str]) -> None:
         all_ai_entries = repository.query_entries(kind='ai')
         active_ai = [e for e in all_ai_entries if not getattr(e, 'deleted_at', None)]
 
+        # Get all tags once (not per entry)
+        tags_by_entry = repository.get_tags_by_entry()
+
         # Separate universal from specific
         universal = []
         specific = []
 
         for entry in active_ai:
-            entry_tags = repository.get_tags(entry.id)
+            entry_tags = tags_by_entry.get(entry.id, [])
 
             # Check if universal (no context, no tags)
             is_universal = not entry.context and not entry_tags

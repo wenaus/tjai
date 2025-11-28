@@ -3,7 +3,7 @@
 import sys
 from datetime import datetime, timezone
 
-from tj.commands.common import log_operation
+from tj.commands.common import log_operation, confirm_action, truncate_content
 
 
 def handle_backup() -> None:
@@ -160,7 +160,7 @@ def handle_purge() -> None:
         print("\nSample (first 5):")
         for i, entry in enumerate(deleted_entries[:5], 1):
             time_str = format_time_dashboard(entry.deleted_at)
-            content_preview = entry.content[:60] + "..." if len(entry.content) > 60 else entry.content
+            content_preview = truncate_content(entry.content)
             context_str = f" ={entry.context}" if entry.context else ""
             print(f"  {i}. [{entry.kind}]{context_str} {colorize_content(content_preview)} (deleted {time_str})")
 
@@ -168,9 +168,7 @@ def handle_purge() -> None:
             print(f"  ... and {len(deleted_entries) - 5} more")
 
         # Confirm
-        print(f"\nPermanently delete {len(deleted_entries)} soft-deleted entries? [y/N]: ", end='', file=sys.__stdout__, flush=True)
-        response = input().strip().lower()
-        if response not in ['y', 'yes']:
+        if not confirm_action(f"\nPermanently delete {len(deleted_entries)} soft-deleted entries?"):
             print("Purge cancelled.")
             log_operation('purge', 'cancelled', {'entries_found': len(deleted_entries)})
             return

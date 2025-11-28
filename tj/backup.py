@@ -8,27 +8,18 @@ from pathlib import Path
 from typing import Optional, List, Dict
 from collections import defaultdict
 
+from tj.config import get_backup_path, get_backup_interval_hours as config_get_backup_interval, get_backup_retention_days
 from tj.database import get_db_connection, APP_DIR, get_configured_db_path, DatabaseError
 
 
 def get_backup_dir():
     """Get the configured backup directory."""
-    try:
-        from tj.config import get_backup_path
-        return get_backup_path()
-    except ImportError:
-        # Fallback if config module isn't available
-        return APP_DIR / "backups"
+    return get_backup_path()
 
 
 def get_backup_interval_hours():
     """Get the configured backup interval in hours."""
-    try:
-        from tj.config import get_backup_interval_hours as config_get_interval
-        return config_get_interval()
-    except ImportError:
-        # Fallback if config module isn't available
-        return 1
+    return config_get_backup_interval()
 
 
 def get_last_backup_time() -> Optional[float]:
@@ -98,11 +89,7 @@ def cleanup_old_backups() -> None:
         today = now.date()
 
         # Get retention days from config
-        try:
-            from tj.config import get_backup_retention_days
-            retention_days = get_backup_retention_days()
-        except ImportError:
-            retention_days = 7  # Fallback
+        retention_days = get_backup_retention_days()
 
         retention_cutoff = now - timedelta(days=retention_days)
         
