@@ -8,7 +8,7 @@ You may ONLY delete the database if:
 1. The user explicitly asks you to delete the database, AND
 2. The user confirms they want the database deleted
 
-For all testing, use `--db=/tmp/test.db` or similar test databases.
+For testing that involves DB mods use `--db=/tmp/test.db`.
 
 **NEVER suggest or propose deleting the production database.**
 
