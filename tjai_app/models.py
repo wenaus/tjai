@@ -100,3 +100,14 @@ class Machine(models.Model):
 
     class Meta:
         db_table = 'machines'
+
+
+class SysConfig(models.Model):
+    """System-wide configuration parameters (server-authoritative)."""
+    key = models.CharField(max_length=255, primary_key=True)
+    value = models.TextField()
+    description = models.TextField(null=True, blank=True)
+    timestamp_modified = models.FloatField()
+
+    class Meta:
+        db_table = 'sysconfig'

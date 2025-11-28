@@ -69,13 +69,15 @@ def _get_agent_status_brief() -> str:
         return f" {BRIGHT_YELLOW}{location_name} agent not synced.{RESET}"
 
     ago = int(time.time() - last_pull)
+    interval = status.get("sync_interval", "?")
+
     if ago < 60:
-        return f" {LIGHT_MINT_GREEN}{location_name} agent synced {ago}s ago.{RESET}"
+        return f" {LIGHT_MINT_GREEN}{location_name} agent synced {ago}s ago ({interval}s).{RESET}"
     elif ago < 3600:
-        return f" {LIGHT_MINT_GREEN}{location_name} agent synced {ago // 60}m ago.{RESET}"
+        return f" {LIGHT_MINT_GREEN}{location_name} agent synced {ago // 60}m ago ({interval}s).{RESET}"
     else:
         # Stale - warn
-        return f" {BRIGHT_YELLOW}{location_name} agent synced {ago // 3600}h ago.{RESET}"
+        return f" {BRIGHT_YELLOW}{location_name} agent synced {ago // 3600}h ago ({interval}s).{RESET}"
 
 
 def display_context() -> None:

@@ -5,7 +5,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from .models import Context, Entry, Tag, SubNote, SyncMetadata, Machine
+from .models import Context, Entry, Tag, SubNote, SyncMetadata, Machine, SysConfig
 
 
 def api_health(request):
@@ -184,6 +184,12 @@ def sync_pull(request):
         )
     )
 
+    # Get all sysconfig (always returned, small table)
+    sysconfig = {
+        cfg["key"]: cfg["value"]
+        for cfg in SysConfig.objects.values("key", "value")
+    }
+
     return JsonResponse({
         "status": "ok",
         "server_time": now,
@@ -191,4 +197,5 @@ def sync_pull(request):
         "contexts": contexts,
         "tags": tags,
         "sub_notes": sub_notes,
+        "sysconfig": sysconfig,
     })

@@ -58,7 +58,8 @@ def set_last_sync_time(timestamp: float) -> None:
 
 
 def write_status(last_push: float = None, last_pull: float = None,
-                 last_error: str = None, entries_pending: int = None) -> None:
+                 last_error: str = None, entries_pending: int = None,
+                 sync_interval: int = None) -> None:
     """Write agent status for tj CLI to read."""
     status = {}
     if STATUS_FILE.exists():
@@ -77,6 +78,8 @@ def write_status(last_push: float = None, last_pull: float = None,
         status["last_error"] = None  # Clear error on success
     if entries_pending is not None:
         status["entries_pending"] = entries_pending
+    if sync_interval is not None:
+        status["sync_interval"] = sync_interval
 
     STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
     STATUS_FILE.write_text(json.dumps(status))
@@ -255,14 +258,17 @@ def pull_updates() -> int:
         logger.info(f"Pulled {count} entries")
     write_status(last_pull=time.time())
 
-    return count
+    # Return sysconfig for caller to use
+    sysconfig = response.get("sysconfig", {})
+    return count, sysconfig
 
 
-def sync_cycle() -> None:
-    """Run one sync cycle: push then pull."""
+def sync_cycle() -> dict:
+    """Run one sync cycle: push then pull. Returns sysconfig dict."""
     try:
         push_dirty_entries()
-        pull_updates()
+        _count, sysconfig = pull_updates()
+        return sysconfig
     except Exception as e:
         logger.error(f"Sync error: {e}")
         write_status(last_error=str(e))

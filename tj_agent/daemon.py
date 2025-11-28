@@ -226,15 +226,22 @@ def run_forever() -> None:
     # Lazy import: requires 'requests' which is only in venv on macOS
     from tj_agent.sync import sync_cycle, write_status
 
-    config = get_config()
-    interval = config.get("sync_interval_seconds", 5)
+    # Default interval, will be updated from server sysconfig
+    interval = 30
 
-    logger.info(f"tj_agent starting, sync interval: {interval}s")
+    logger.info(f"tj_agent starting, initial sync interval: {interval}s")
     write_status(last_error=None)
 
     while True:
         try:
-            sync_cycle()
+            sysconfig = sync_cycle()
+            # Update interval from server config
+            if sysconfig and "sync_interval_seconds" in sysconfig:
+                new_interval = int(sysconfig["sync_interval_seconds"])
+                if new_interval != interval:
+                    logger.info(f"Sync interval changed: {interval}s -> {new_interval}s")
+                    interval = new_interval
+                write_status(sync_interval=interval)
         except Exception as e:
             logger.exception(f"Sync cycle failed: {e}")
             # Continue running, will retry next cycle
