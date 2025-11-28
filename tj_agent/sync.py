@@ -202,6 +202,16 @@ def pull_updates() -> int:
                 continue
 
         # Upsert server version
+        # Handle data field - may be dict or already JSON string from server
+        data_val = entry.get("data")
+        if data_val is not None:
+            if isinstance(data_val, str):
+                data_str = data_val  # Already JSON string
+            else:
+                data_str = json.dumps(data_val)  # Dict, encode it
+        else:
+            data_str = None
+
         cursor.execute(
             """
             INSERT OR REPLACE INTO entries
@@ -212,8 +222,7 @@ def pull_updates() -> int:
             (entry["id"], entry.get("parent_id"), entry["content"], entry["kind"],
              entry["timestamp_created"], entry["timestamp_modified"],
              entry.get("context"), entry.get("deleted_at"), entry.get("name"),
-             entry.get("priority"), entry.get("status"),
-             json.dumps(entry.get("data")) if entry.get("data") else None)
+             entry.get("priority"), entry.get("status"), data_str)
         )
         count += 1
 

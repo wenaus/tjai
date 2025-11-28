@@ -101,14 +101,28 @@ def handle_agent(args) -> None:
             print("No agent log found")
 
     elif agent_cmd == 'sync':
-        # Manual sync - restart daemon to trigger immediate sync
+        # Manual full sync - reset sync time and restart daemon
+        from tj.database import get_db_connection
+        import time as time_module
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO sync_metadata (key, value, timestamp_updated)
+            VALUES ('last_sync_time', '0', ?)
+            """,
+            (time_module.time(),)
+        )
+        conn.commit()
+        print("Sync time reset to 0 for full sync.")
+
         if not daemon.is_running():
-            print("Agent not running. Starting...")
+            print("Starting agent...")
             daemon.ensure_running()
         else:
-            print("Restarting agent to trigger sync...")
+            print("Restarting agent...")
             daemon.restart_daemon()
-        print("Sync triggered.")
+        print("Full sync triggered.")
 
     else:
         print(f"Unknown agent command: {agent_cmd}", file=sys.stderr)
