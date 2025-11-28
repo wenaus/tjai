@@ -3,12 +3,16 @@
 import json
 import sys
 import time
+from pathlib import Path
+
+from tj.database import APP_DIR
+
+STATUS_FILE = APP_DIR / "agent_status.json"
 
 
 def handle_agent(args) -> None:
     """Handle agent subcommands."""
     from tj_agent import daemon
-    from tj_agent.sync import STATUS_FILE
     from tj.config import get_config, save_config
 
     # Get agent subcommand if any
@@ -97,16 +101,14 @@ def handle_agent(args) -> None:
             print("No agent log found")
 
     elif agent_cmd == 'sync':
-        # Manual full sync - reset sync time and run sync cycle
-        from tj_agent.sync import set_last_sync_time, sync_cycle
-        print("Resetting sync time for full sync...")
-        set_last_sync_time(0)
-        print("Running full sync...")
-        try:
-            sync_cycle()
-            print("Full sync complete.")
-        except Exception as e:
-            print(f"Sync failed: {e}", file=sys.stderr)
+        # Manual sync - restart daemon to trigger immediate sync
+        if not daemon.is_running():
+            print("Agent not running. Starting...")
+            daemon.ensure_running()
+        else:
+            print("Restarting agent to trigger sync...")
+            daemon.restart_daemon()
+        print("Sync triggered.")
 
     else:
         print(f"Unknown agent command: {agent_cmd}", file=sys.stderr)
