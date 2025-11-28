@@ -52,12 +52,12 @@ def _get_agent_status_brief() -> str:
 
     status_file = APP_DIR / "agent_status.json"
     if not status_file.exists():
-        return f" {BRIGHT_YELLOW}{location_name} agent has no status.{RESET}"
+        return f" {BRIGHT_YELLOW}{location_name} agent starting.{RESET}"
 
     try:
         status = json.loads(status_file.read_text())
     except (json.JSONDecodeError, OSError):
-        return f" {BRIGHT_YELLOW}{location_name} agent status unknown.{RESET}"
+        return f" {BRIGHT_YELLOW}{location_name} agent starting.{RESET}"
 
     # Check for errors first
     if status.get("last_error"):
