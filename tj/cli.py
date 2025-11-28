@@ -276,11 +276,11 @@ def handle_numbered_command(parser: argparse.ArgumentParser, num_identifier: int
 def show_status() -> None:
     """Show status dashboard when no arguments provided."""
     _t = time.time()
-    # Show listing with configured limit of most recent entries
+    # Show listing with configured limit of most recent entries (context-neutral)
     from tj.commands.list import handle_list_command
 
     class ListArgs:
-        filters = [str(get_status_list_limit())]
+        filters = [str(get_status_list_limit()), '=0']
 
     handle_list_command(ListArgs())
     debug_time("list_entries", _t)
@@ -356,6 +356,12 @@ def show_status() -> None:
             # Don't let backup info failure break the status display
             pass
         debug_time("list_backups", _t)
+
+        # Config info
+        from tj.config import get_config_lines
+        print("\nConfig:")
+        for line in get_config_lines():
+            print(line)
 
         print("\nTry: tj \"your memory here\", tj h for help")
         

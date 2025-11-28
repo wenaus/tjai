@@ -49,23 +49,27 @@ def open_editor(initial_content: str = "", entry_type: Optional[str] = None, fil
         with os.fdopen(fd, 'w') as f:
             f.write(initial_content)
 
-        # Get editor command
+        # Get editor command (may contain args, e.g., "emacs -nw")
         editor = get_editor_command()
+        editor_parts = editor.split()
 
         # Build command with wait flag for known editors
-        editor_cmd = [editor, temp_path]
+        editor_cmd = editor_parts + [temp_path]
 
         # Add --wait flag for editors that need it
-        editor_name = os.path.basename(editor).lower()
+        editor_name = os.path.basename(editor_parts[0]).lower()
         if editor_name in ['bbedit', 'mate', 'subl', 'code']:
             # BBEdit, TextMate, Sublime, VS Code need --wait
-            editor_cmd = [editor, '--wait', temp_path]
+            editor_cmd = editor_parts + ['--wait', temp_path]
         elif editor_name == 'nano':
             # nano blocks by default
-            editor_cmd = [editor, temp_path]
+            editor_cmd = editor_parts + [temp_path]
 
         # Launch editor (blocks until user closes)
         try:
+            from tj.options import debug_mark
+            debug_mark("editor_launch")
+
             # Disable focus reporting to suppress escape sequences (use __stdout__ to bypass buffer)
             import sys
             sys.__stdout__.write('\033[?1004l')

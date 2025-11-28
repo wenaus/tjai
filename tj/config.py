@@ -106,16 +106,31 @@ def set_db_path(new_path: str) -> None:
     print(f"Database path set to: {new_path}")
 
 
-def show_config() -> None:
-    """Display current configuration."""
+def get_config_lines() -> list[str]:
+    """Return configuration as formatted lines for display."""
+    from tj.commands.editor import get_editor_command
+
     config = get_config()
-    print("Current configuration:")
+    lines = []
     for key, value in config.items():
         if key == "db_path":
             expanded = Path(value).expanduser()
-            print(f"  {key}: {value} -> {expanded}")
+            lines.append(f"  {key}: {value} -> {expanded}")
         else:
-            print(f"  {key}: {value}")
+            lines.append(f"  {key}: {value}")
+
+    # Add editor (not stored in config, resolved dynamically)
+    editor = get_editor_command()
+    lines.append(f"  editor: {editor}")
+
+    return lines
+
+
+def show_config() -> None:
+    """Display current configuration."""
+    print("Current configuration:")
+    for line in get_config_lines():
+        print(line)
 
 
 def _get(key: str):
