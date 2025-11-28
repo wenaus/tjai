@@ -59,9 +59,8 @@ def _ensure_agent_running() -> None:
     try:
         from tj_agent.daemon import ensure_running
         ensure_running()
-    except Exception:
-        # Don't let agent failures break tj commands
-        pass
+    except Exception as e:
+        print(f"Agent startup failed: {e}", file=sys.stderr)
 
 
 def parse_at_timestamp(args_list: List[str]) -> Tuple[Optional[float], List[str]]:
@@ -674,10 +673,37 @@ def main() -> None:
             print(buffered_output, end='')
         debug_time("print_output", time_output)
 
+def _check_macos_venv() -> None:
+    """On macOS, check if venv with requests exists. Print clear error if not."""
+    import platform
+    if platform.system() != "Darwin":
+        return
+
+    from pathlib import Path
+    venv_python = Path.home() / ".tjai" / "venv" / "bin" / "python3"
+    if not venv_python.exists():
+        print("ERROR: macOS requires ~/.tjai/venv with 'requests' installed.", file=sys.stderr)
+        print("Run: python3 -m venv ~/.tjai/venv && ~/.tjai/venv/bin/pip install requests", file=sys.stderr)
+        sys.exit(1)
+
+    # Check requests is importable from venv
+    import subprocess
+    result = subprocess.run(
+        [str(venv_python), "-c", "import requests"],
+        capture_output=True
+    )
+    if result.returncode != 0:
+        print("ERROR: 'requests' not installed in ~/.tjai/venv", file=sys.stderr)
+        print("Run: ~/.tjai/venv/bin/pip install requests", file=sys.stderr)
+        sys.exit(1)
+
+
 def entrypoint() -> None:
     """Main entry point with error handling."""
     try:
         debug_mark("entrypoint_start")
+
+        _check_macos_venv()
 
         # Options already parsed by tj.options module at import time
         # Set up sys.argv for command parsing (options stripped)

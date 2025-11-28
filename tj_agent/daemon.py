@@ -10,7 +10,7 @@ from pathlib import Path
 
 from tj.config import get_config
 from tj.database import APP_DIR
-from tj_agent.sync import sync_cycle, write_status
+# Note: tj_agent.sync import is lazy in run_forever() for macOS venv compatibility
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +103,14 @@ def _install_launchd() -> bool:
     """Install launchd LaunchAgent."""
     LAUNCHD_PLIST_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-    python_path = sys.executable
+    # macOS: use venv Python due to Homebrew PEP 668 restrictions
+    venv_python = APP_DIR / "venv" / "bin" / "python3"
+    if venv_python.exists():
+        python_path = str(venv_python)
+    else:
+        python_path = sys.executable
+        logger.warning(f"venv not found at {venv_python}, using {python_path}")
+
     agent_module = Path(__file__).parent
     log_path = APP_DIR / "agent.log"
 
@@ -216,6 +223,9 @@ def run_forever() -> None:
     Run the sync loop forever.
     This is the daemon's main entry point.
     """
+    # Lazy import: requires 'requests' which is only in venv on macOS
+    from tj_agent.sync import sync_cycle, write_status
+
     config = get_config()
     interval = config.get("sync_interval_seconds", 5)
 
