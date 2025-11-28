@@ -65,8 +65,14 @@ tj l                                            # List all entries
 
 ## Command Structure
 
-*   **SYSTEM:** `tj sys [install|uninstall|start|stop|status]`
-*   Manages the background sync service.
+*   **AGENT:** `tj admin agent [command]`
+    *   `tj admin agent`: Show agent status (running, last sync time, interval)
+    *   `tj admin agent start|stop|restart`: Control the sync daemon
+    *   `tj admin agent install`: Install the daemon service
+    *   `tj admin agent log`: Show recent agent log entries
+    *   `tj admin agent sync`: Force full sync (reset and pull all)
+    *   `tj admin agent location [name]`: Get/set machine location name
+    *   `tj admin agent interval [seconds]`: Get/set sync interval (server-wide)
 *   **DASHBOARD:** `tj hey`
     *   Shows a personal dashboard of context, todos, and other evolving information.
 *   **LIST:** `tj l [c|t|p|b|d|ai]`
@@ -142,7 +148,7 @@ tj l                                            # List all entries
 
 ### Database Location
 
-The database location is **configurable** and can be stored anywhere you choose. By default, it's stored in `~/.tjai/tjai.db`, but you can configure it to use Dropbox, iCloud, or any other location.
+The database location is **configurable** and can be stored anywhere you choose. Default is `~/Dropbox/Current/tjai_{location}.db` where `{location}` is your machine name (e.g., `tjai_MacbookPro.db`). Each machine has its own database file to prevent Dropbox conflicts; sync happens via the server.
 
 **Check current database location:**
 
@@ -154,12 +160,13 @@ tj config show
 
 The configuration file is created automatically on first run and includes:
 
-*   `db_path`: Database file location (default: `~/Dropbox/Current/tjai.db`)
-*   `backup_path`: Backup directory location
+*   `db_dir`: Database directory (default: `~/Dropbox/Current`)
+*   `backup_dir`: Backup directory location
 *   `backup_interval_hours`: How often to auto-backup (default: 1 hour)
 *   `recent_entries_hours`: How many hours to include in "recent" queries (default: 24)
-*   `location_name`: Machine identifier shown in agent status (e.g., "StudioMax", "ec2dev")
-*   `sync_interval_seconds`: How often agent syncs with server (default: 5)
+*   `location_name`: Machine identifier for location-specific DB naming (e.g., "StudioMax", "ec2dev")
+
+Note: `sync_interval_seconds` is controlled server-side via `tj admin agent interval`.
 
 ### Backup and Restore
 

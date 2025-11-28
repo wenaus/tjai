@@ -46,12 +46,16 @@ tj y            year view       tj <n> k=type   Change kind (ai,b,do,j,m,p)
 
 METADATA (inline)               DATA
 @name           Named entry     tj dump         Export as commands
-p=N             Priority        tj admin        Admin commands
-s=status        Status value    tj sync         Force sync
-:tag            Tag
-//url [T](url)  Links           SETUP
--f file         File input      tj() { ~/github/tjrepo/tjai/tj.py "$*"; }
-                                Add to ~/.bashrc
+p=N             Priority        tj backup       Manual backup
+s=status        Status value
+:tag            Tag             AGENT (sync daemon)
+//url [T](url)  Links           tj admin agent           Status
+-f file         File input      tj admin agent start     Start daemon
+                                tj admin agent stop      Stop daemon
+SETUP                           tj admin agent restart   Restart
+tj() { .../tj.py "$*"; }        tj admin agent sync      Full sync
+Add to ~/.bashrc                tj admin agent location  Get/set name
+                                tj admin agent interval  Get/set interval
 
 AI GUIDELINES
 tj ai           Show universal + context guidelines
