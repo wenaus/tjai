@@ -114,6 +114,16 @@ def _install_launchd() -> bool:
     agent_module = Path(__file__).parent
     log_path = APP_DIR / "agent.log"
 
+    # Create wrapper script - /bin/sh has Full Disk Access on macOS
+    wrapper_script = APP_DIR / "run_agent.sh"
+    wrapper_content = f"""#!/bin/sh
+export PYTHONPATH="{agent_module.parent}"
+cd "{agent_module.parent}"
+exec "{python_path}" -m tj_agent run
+"""
+    wrapper_script.write_text(wrapper_content)
+    wrapper_script.chmod(0o755)
+
     plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -122,18 +132,11 @@ def _install_launchd() -> bool:
     <string>com.tjai.agent</string>
     <key>ProgramArguments</key>
     <array>
-        <string>{python_path}</string>
-        <string>-m</string>
-        <string>tj_agent</string>
-        <string>run</string>
+        <string>/bin/sh</string>
+        <string>{wrapper_script}</string>
     </array>
     <key>WorkingDirectory</key>
     <string>{agent_module.parent}</string>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PYTHONPATH</key>
-        <string>{agent_module.parent}</string>
-    </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
