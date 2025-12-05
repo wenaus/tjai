@@ -637,26 +637,26 @@ def display_entry_details(entry, entry_identifier=None):
             # Estimate visual lines: divide by wrap_width and round up
             visual_line_count += (len(line) + wrap_width - 1) // wrap_width
 
-    # Show line count, truncation override, and links section
+    # Show line count, truncation override, and links section on one line
     has_truncation = entry.data and 'truncate_lines' in entry.data
     has_links = entry.data and 'links' in entry.data and entry.data['links']
 
     print()
-    print(f"Lines: {visual_line_count}")
-
+    info_parts = [f"Lines: {visual_line_count}"]
     if has_truncation:
-        truncate_val = entry.data['truncate_lines']
-        print(f"Truncation: {truncate_val} lines")
+        info_parts.append(f"Truncation: {entry.data['truncate_lines']}")
+    if has_links:
+        info_parts.append("Links:")
+    print("  ".join(info_parts))
 
     if has_links:
-        links = entry.data['links']
-        print("Links:")
-        for link in links:
+        from tj.colors import colorize_url
+        for link in entry.data['links']:
             title = link.get('title', 'Link')
             url = link.get('url', '')
-            # Color URL cyan
-            colored_url = f"\033[96m{url}\033[0m"
-            print(f"  {title}: {colored_url}")
+            # Use standard colorize_url with markdown link format
+            markdown_link = f"[{title}]({url})"
+            print(f"  {colorize_url(markdown_link)}")
 
 
 def handle_show(args) -> None:
