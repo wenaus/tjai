@@ -248,19 +248,25 @@ def handle_calendar_view(args) -> None:
             now_dt = datetime.now()
             today = now_dt.date()
 
+        # Also track event currently in progress (started within last 30 min)
+        in_progress_ts = None
+
         for date_key in sorted_dates:
             entries = entries_by_date[date_key]
             # Sort entries by time first
             entries.sort(key=lambda x: x[0])
             event_date = entries[0][1].date() if entries else None
             if event_date == today:
-                # Find earliest future event today
+                # Find earliest future event today, or event in progress
                 for event_ts, event_dt, entry in entries:
                     if event_dt.hour != 0 or event_dt.minute != 0:  # Not all-day
                         time_diff = event_dt - now_dt
-                        if time_diff.total_seconds() > 0:  # In future
+                        seconds = time_diff.total_seconds()
+                        if seconds > 0:  # In future
                             next_upcoming_ts = event_ts
                             break
+                        elif seconds >= -1800:  # Started within last 30 min
+                            in_progress_ts = event_ts
                 break  # Only check today
 
         # Build flat list of all entry IDs in display order for numbered operations
@@ -340,10 +346,14 @@ def handle_calendar_view(args) -> None:
                 # Colorize content (converts markdown links to clickable terminal links)
                 display_text = colorize_content(content)
 
-                # Calculate countdown only for next upcoming event
+                # Calculate countdown for next upcoming event, or NOW for in-progress
                 countdown_str = ""
                 arrow_suffix = ""
-                if event_ts == next_upcoming_ts:
+                if event_ts == in_progress_ts:
+                    from tj.colors import RED, RESET, BOLD
+                    countdown_str = f" {RED}{BOLD}NOW{RESET}"
+                    arrow_suffix = f"     {RED}{BOLD}<======== NOW{RESET}"
+                elif event_ts == next_upcoming_ts:
                     time_diff = event_dt - now_dt
                     total_seconds = int(time_diff.total_seconds())
                     from tj.colors import RED, RESET, BOLD
