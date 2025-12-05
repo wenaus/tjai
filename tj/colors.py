@@ -30,7 +30,7 @@ def colorize_url(text: str) -> str:
         title = match.group(1)
         url = match.group(2)
         # Wrap hyperlink sequence in color: color + start link + URL + terminator + title + end link + reset
-        return BRIGHT_CYAN_BLUE + '\x1B]8;;' + url + '\x1B\\' + title + '\x1B]8;;\x1B\\' + RESET
+        return BRIGHT_CYAN_BLUE + '\x1B]8;;' + url + '\x1B\\' + title + '\x1B]8;;\x1B\\' + RESET + '\u00a0\u00a0'
     text = re.sub(md_link_pattern, make_hyperlink, text)
     # Then handle bare URLs (but not those already in hyperlink escape sequences)
     # Use negative lookbehind to avoid matching URLs right after ]8;;
