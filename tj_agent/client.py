@@ -1,7 +1,8 @@
-"""HTTP client for tjai sync API."""
+"""HTTP client for tjai sync API using urllib (no external dependencies)."""
 
 import json
-import requests
+import urllib.request
+import urllib.error
 from typing import Any
 
 from tj.config import get_config
@@ -29,14 +30,23 @@ def push(machine_id: str, hostname: str, entries: list, contexts: list,
         "tags": tags,
         "sub_notes": sub_notes,
     }
-    response = requests.post(
+
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
         url,
-        json=payload,
+        data=data,
         headers={"Content-Type": "application/json"},
-        timeout=30,
+        method="POST"
     )
-    response.raise_for_status()
-    return response.json()
+
+    try:
+        with urllib.request.urlopen(req, timeout=30) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8")
+        raise Exception(f"Server error {e.code}: {error_body}")
+    except urllib.error.URLError as e:
+        raise Exception(f"Connection error: {e.reason}")
 
 
 def pull(machine_id: str, since: float) -> dict[str, Any]:
@@ -45,11 +55,15 @@ def pull(machine_id: str, since: float) -> dict[str, Any]:
 
     Returns server response dict with entries, contexts, tags, sub_notes, server_time.
     """
-    url = f"{get_sync_server()}/api/sync/pull"
-    params = {
-        "machine_id": machine_id,
-        "since": since,
-    }
-    response = requests.get(url, params=params, timeout=30)
-    response.raise_for_status()
-    return response.json()
+    url = f"{get_sync_server()}/api/sync/pull?machine_id={machine_id}&since={since}"
+
+    req = urllib.request.Request(url, method="GET")
+
+    try:
+        with urllib.request.urlopen(req, timeout=30) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8")
+        raise Exception(f"Server error {e.code}: {error_body}")
+    except urllib.error.URLError as e:
+        raise Exception(f"Connection error: {e.reason}")

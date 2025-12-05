@@ -29,13 +29,13 @@ chmod +x tj.py
 Add this bash function to `~/.bashrc`:
 
 ```bash
-tj() { /path/to/tjai/tj.py "$*"; }
+tj() { python3 /path/to/tjai/tj.py "$@"; }
 ```
 
 Replace `/path/to/tjai` with your actual path. Example:
 
 ```bash
-tj() { ~/github/tjrepo/tjai/tj.py "$*"; }
+tj() { python3 ~/github/tjrepo/tjai/tj.py "$@"; }
 ```
 
 Reload your shell:
@@ -148,7 +148,7 @@ tj l                                            # List all entries
 
 ### Database Location
 
-The database location is **configurable** and can be stored anywhere you choose. Default is `~/Dropbox/Current/tjai_{location}.db` where `{location}` is your machine name (e.g., `tjai_MacbookPro.db`). Each machine has its own database file to prevent Dropbox conflicts; sync happens via the server.
+The database location is **configurable** and can be stored anywhere you choose. Default is `~/Dropbox/Current/tjai_{location}.db` where `{location}` is your machine name (e.g., `tjai_MacbookPro.db`). Each machine has its own database file; sync happens via the REST API server, not Dropbox. For non-Dropbox setups, set `db_dir` in `~/.tjai/config.json` (e.g., `~/work/tjai`).
 
 **Check current database location:**
 
@@ -160,7 +160,7 @@ tj config show
 
 The configuration file is created automatically on first run and includes:
 
-*   `db_dir`: Database directory (default: `~/Dropbox/Current`)
+*   `db_dir`: Database directory (default: `~/Dropbox/Current`, or any local path like `~/work/tjai`)
 *   `backup_dir`: Backup directory location
 *   `backup_interval_hours`: How often to auto-backup (default: 1 hour)
 *   `recent_entries_hours`: How many hours to include in "recent" queries (default: 24)
@@ -202,7 +202,7 @@ To set up your development environment and run tests:
     For convenience, add this function to `~/.bashrc`:
 
     ```bash
-    tj() { ~/github/tjrepo/tjai/tj.py "$*"; }
+    tj() { python3 ~/github/tjrepo/tjai/tj.py "$@"; }
     ```
 
     Then `source ~/.bashrc`.

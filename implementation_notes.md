@@ -104,8 +104,8 @@ it is easy to make bulleted hierarchical notes or simple lists.
 
 ### Configuration
 - Config file: ~/.tjai/config.json
-  - db_path: Database location (default ~/Dropbox/Current/tjai.db)
-  - backup_path: Backup directory (default ~/Dropbox/Current/tjai_backups)
+  - db_dir: Database directory (default ~/Dropbox/Current, or any local path)
+  - backup_dir: Backup directory (default ~/Dropbox/Current/tjai_backups)
   - backup_interval_hours: Auto-backup frequency (default 1)
   - recent_entries_hours: Recent list window (default 24)
   - backup_retention_days: Backup retention period (default 14)

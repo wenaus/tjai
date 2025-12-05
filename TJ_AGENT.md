@@ -111,7 +111,6 @@ Single user + fast sync = conflicts are rare.
 
 ### macOS (launchd)
 - Plist: `~/Library/LaunchAgents/com.tjai.agent.plist`
-- Requires venv with `requests` package
 
 ### Auto-start
 
@@ -127,10 +126,10 @@ No user intervention required.
 ├── machine_id            # Stable UUID for this machine
 └── agent.log             # Log file (macOS)
 
-~/Dropbox/Current/
+{db_dir}/                 # Configured in ~/.tjai/config.json (default: ~/Dropbox/Current)
 ├── tjai_MacbookPro.db    # Location-specific database
 ├── tjai_ec2dev.db
-└── tjai_backups/         # Backups: tjai_{location}_{datetime}.db
+└── tjai_backups/         # Backups: tjai_{location}_{datetime}.db (or separate backup_dir)
 
 tjai/
 ├── tj_agent/
@@ -138,7 +137,7 @@ tjai/
 │   ├── __main__.py       # Entry point: python -m tj_agent run
 │   ├── daemon.py         # Daemon lifecycle
 │   ├── sync.py           # Push/pull logic
-│   └── client.py         # HTTP client (uses requests)
+│   └── client.py         # HTTP client (uses urllib, no deps)
 └── tj/
     └── server.py         # HTTP client for tj (uses urllib, no deps)
 ```

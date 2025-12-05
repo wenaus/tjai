@@ -698,12 +698,27 @@ def _check_macos_venv() -> None:
         sys.exit(1)
 
 
+def _check_db_dir() -> None:
+    """Ensure configured db_dir exists."""
+    from pathlib import Path
+    from tj.config import get_config
+
+    config = get_config()
+    db_dir = Path(config.get("db_dir", "~/Dropbox/Current")).expanduser()
+
+    if not db_dir.exists():
+        print(f"ERROR: db_dir '{db_dir}' not found.", file=sys.stderr)
+        print("Set db_dir in ~/.tjai/config.json or create the directory.", file=sys.stderr)
+        sys.exit(1)
+
+
 def entrypoint() -> None:
     """Main entry point with error handling."""
     try:
         debug_mark("entrypoint_start")
 
         _check_macos_venv()
+        _check_db_dir()
 
         # Options already parsed by tj.options module at import time
         # Set up sys.argv for command parsing (options stripped)
