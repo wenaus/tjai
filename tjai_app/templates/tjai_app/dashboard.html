@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>tjai Dashboard</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 13px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+        .panel {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+        }
+        .panel-left {
+            border-right: 1px solid #333;
+        }
+        .panel-header {
+            color: #d8a070;
+            font-weight: bold;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #333;
+        }
+        .status-line {
+            margin-bottom: 8px;
+        }
+        .clock-status {
+            color: #9ccc65;
+            margin-bottom: 12px;
+        }
+        .week-header {
+            color: #d8a070;
+            margin-top: 16px;
+            margin-bottom: 8px;
+        }
+        .day-header {
+            color: #d8a070;
+            margin-top: 8px;
+            margin-left: 8px;
+        }
+        .day-today {
+            font-weight: bold;
+        }
+        .entry {
+            margin: 4px 0 4px 16px;
+            line-height: 1.4;
+        }
+        .entry-time {
+            color: #d8a070;
+        }
+        .entry-content {
+            color: #e0e0e0;
+        }
+        .clock-start {
+            color: #9ccc65;
+        }
+        .clock-stop {
+            color: #5d8a3e;
+        }
+        .context {
+            color: #ce93d8;
+        }
+        .tag {
+            color: #9ccc65;
+        }
+        .link {
+            color: #64b5f6;
+        }
+        a {
+            color: #64b5f6;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .entry-number {
+            color: #757575;
+            margin-right: 8px;
+        }
+        .refresh-indicator {
+            position: fixed;
+            top: 8px;
+            right: 8px;
+            color: #555;
+            font-size: 11px;
+        }
+        .now-marker {
+            color: #ef5350;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="panel panel-left" id="calendar-panel">
+            <div class="panel-header">Calendar</div>
+            <div id="calendar-content">Loading...</div>
+        </div>
+        <div class="panel panel-right" id="status-panel">
+            <div class="panel-header">Status</div>
+            <div id="status-content">Loading...</div>
+        </div>
+    </div>
+    <div class="refresh-indicator" id="refresh-indicator"></div>
+
+    <script>
+        function formatTime(timestamp) {
+            const d = new Date(timestamp * 1000);
+            let h = d.getHours();
+            const m = d.getMinutes().toString().padStart(2, '0');
+            const ampm = h >= 12 ? 'pm' : 'am';
+            h = h % 12 || 12;
+            return `${h}:${m}${ampm}`;
+        }
+
+        function formatDate(timestamp) {
+            const d = new Date(timestamp * 1000);
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            return `${days[d.getDay()]} ${months[d.getMonth()]} ${d.getDate().toString().padStart(2, '0')}`;
+        }
+
+        function formatDuration(minutes) {
+            const h = Math.floor(minutes / 60);
+            const m = minutes % 60;
+            if (h > 0) return `${h}h ${m}m`;
+            return `${m}m`;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function linkifyContent(content) {
+            // Convert markdown links [title](url) to HTML
+            content = content.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,
+                '<a href="$2" target="_blank">$1</a>');
+            // Convert bare URLs
+            content = content.replace(/(^|[^"'])(https?:\/\/[^\s<]+)/g,
+                '$1<a href="$2" target="_blank">$2</a>');
+            return content;
+        }
+
+        async function fetchCalendar() {
+            try {
+                const resp = await fetch('/api/dashboard/calendar');
+                const data = await resp.json();
+                renderCalendar(data);
+            } catch (e) {
+                document.getElementById('calendar-content').innerHTML = 'Error loading calendar';
+            }
+        }
+
+        async function fetchStatus() {
+            try {
+                const resp = await fetch('/api/dashboard/status');
+                const data = await resp.json();
+                renderStatus(data);
+            } catch (e) {
+                document.getElementById('status-content').innerHTML = 'Error loading status';
+            }
+        }
+
+        function renderCalendar(data) {
+            let html = '';
+            const now = Date.now() / 1000;
+            const today = new Date().toDateString();
+
+            let currentWeek = null;
+            let currentDay = null;
+            let entryNum = 1;
+
+            for (const entry of data.entries) {
+                const eventDate = entry.event_date;
+                const d = new Date(eventDate * 1000);
+                const weekNum = getWeekNumber(d);
+                const dayStr = d.toDateString();
+                const isToday = dayStr === today;
+
+                // Week header
+                if (weekNum !== currentWeek) {
+                    currentWeek = weekNum;
+                    const weekStart = getWeekStart(d);
+                    html += `<div class="week-header">${weekStart.getFullYear()}${(weekStart.getMonth()+1).toString().padStart(2,'0')}${weekStart.getDate().toString().padStart(2,'0')} Week ${weekNum}</div>`;
+                    currentDay = null;
+                }
+
+                // Day header
+                if (dayStr !== currentDay) {
+                    currentDay = dayStr;
+                    const dayClass = isToday ? 'day-header day-today' : 'day-header';
+                    const todayLabel = isToday ? ' <span class="now-marker">Today</span>' : '';
+                    html += `<div class="${dayClass}">${formatDate(eventDate)}${todayLabel}</div>`;
+                }
+
+                // Entry
+                const clockType = entry.data?.clock;
+                let contentClass = 'entry-content';
+                if (clockType === 'start') contentClass = 'clock-start';
+                else if (clockType === 'stop') contentClass = 'clock-stop';
+
+                const timeStr = (d.getHours() !== 0 || d.getMinutes() !== 0)
+                    ? `<span class="entry-time">${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}</span> `
+                    : '';
+
+                const content = linkifyContent(escapeHtml(entry.content));
+                html += `<div class="entry"><span class="entry-number">${entryNum++}</span>${timeStr}<span class="${contentClass}">${content}</span></div>`;
+            }
+
+            document.getElementById('calendar-content').innerHTML = html || 'No upcoming events';
+        }
+
+        function renderStatus(data) {
+            let html = '';
+
+            // Context line
+            html += `<div class="status-line"><span class="entry-time">${data.timestamp}</span> `;
+            if (data.context) {
+                html += `Context is <span class="context">=${data.context}</span>.`;
+                if (data.context_description) {
+                    html += ` ${escapeHtml(data.context_description)}`;
+                }
+            } else {
+                html += 'Context is clear.';
+            }
+            html += '</div>';
+
+            // Clock status
+            if (data.clock) {
+                const c = data.clock;
+                const status = c.stopped ? ', stopped.' : '.';
+                html += `<div class="clock-status">Clocked in ${c.context ? '=' + c.context : '(no context)'}: ${formatDuration(c.elapsed_min)} elapsed, ${formatDuration(c.work_min)} work, ${formatDuration(c.breaks_min)} breaks${status}</div>`;
+            }
+
+            // Recent entries
+            if (data.recent_entries && data.recent_entries.length > 0) {
+                html += '<div style="margin-top: 16px; border-top: 1px solid #333; padding-top: 12px;">';
+                html += '<div style="color: #d8a070; margin-bottom: 8px;">Recent entries</div>';
+                for (const entry of data.recent_entries) {
+                    const content = linkifyContent(escapeHtml(entry.content.split('\n')[0]));
+                    const kind = entry.kind !== 'memory' ? `<span style="color:#daa520">[${entry.kind}]</span> ` : '';
+                    html += `<div class="entry">${kind}${content}</div>`;
+                }
+                html += '</div>';
+            }
+
+            document.getElementById('status-content').innerHTML = html;
+        }
+
+        function getWeekNumber(d) {
+            const oneJan = new Date(d.getFullYear(), 0, 1);
+            const days = Math.floor((d - oneJan) / 86400000);
+            return Math.ceil((days + oneJan.getDay() + 1) / 7);
+        }
+
+        function getWeekStart(d) {
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            return new Date(d.getFullYear(), d.getMonth(), diff);
+        }
+
+        function updateRefreshIndicator() {
+            const now = new Date();
+            document.getElementById('refresh-indicator').textContent =
+                `Last refresh: ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+        }
+
+        async function refresh() {
+            await Promise.all([fetchCalendar(), fetchStatus()]);
+            updateRefreshIndicator();
+        }
+
+        // Initial load
+        refresh();
+
+        // Refresh every 10 seconds
+        setInterval(refresh, 10000);
+    </script>
+</body>
+</html>

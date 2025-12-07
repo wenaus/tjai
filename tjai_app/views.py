@@ -1,7 +1,9 @@
 import json
 import time
+from datetime import datetime, timedelta
 
 from django.http import JsonResponse
+from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
@@ -257,3 +259,111 @@ def api_command(request):
 
     else:
         return JsonResponse({"error": f"Unknown command: {command}"}, status=400)
+
+
+def dashboard(request):
+    """Render the dashboard HTML page."""
+    return render(request, 'tjai_app/dashboard.html')
+
+
+def dashboard_calendar(request):
+    """Return calendar data as JSON for dashboard."""
+    now = time.time()
+    # Get entries for next 30 days with event_date
+    end_ts = now + (30 * 24 * 60 * 60)
+
+    entries = Entry.objects.filter(
+        deleted_at__isnull=True,
+        kind='journal',
+        data__event_date__isnull=False,
+    ).order_by('data__event_date')
+
+    # Filter by event_date range and build response
+    result = []
+    for entry in entries:
+        if entry.data and 'event_date' in entry.data:
+            event_date = entry.data['event_date']
+            if now - (24*60*60) <= event_date < end_ts:  # Include today even if past
+                result.append({
+                    'id': entry.id,
+                    'content': entry.content,
+                    'event_date': event_date,
+                    'context': entry.context_id,
+                    'data': entry.data,
+                })
+
+    # Sort by event_date
+    result.sort(key=lambda x: x['event_date'])
+
+    return JsonResponse({'entries': result})
+
+
+def dashboard_status(request):
+    """Return status data as JSON for dashboard."""
+    now = time.time()
+    now_dt = datetime.now()
+
+    # Format timestamp
+    timestamp = now_dt.strftime('%a %m/%d/%H:%M')
+
+    # Get current context from most recent entry or default
+    # For dashboard, we show general status, not a specific machine's context
+    context = None
+    context_description = None
+
+    # Clock status - find latest clock start
+    try:
+        latest_clock_meta = SyncMetadata.objects.filter(key='latest_clock_start_id').first()
+        clock_data = None
+        if latest_clock_meta:
+            clock_entry = Entry.objects.filter(id=latest_clock_meta.value).first()
+            if clock_entry and clock_entry.data and clock_entry.data.get('clock') == 'start':
+                start_time = clock_entry.data.get('event_date', clock_entry.timestamp_created)
+                breaks_min = clock_entry.data.get('breaks', 0)
+                stop_id = clock_entry.data.get('stop_id')
+
+                if stop_id:
+                    # Stopped - get stop time
+                    stop_entry = Entry.objects.filter(id=stop_id).first()
+                    if stop_entry and stop_entry.data:
+                        end_time = stop_entry.data.get('event_date', stop_entry.timestamp_created)
+                    else:
+                        end_time = now
+                    stopped = True
+                else:
+                    end_time = now
+                    stopped = False
+
+                elapsed_min = int((end_time - start_time) / 60)
+                work_min = max(0, elapsed_min - breaks_min)
+
+                clock_data = {
+                    'context': clock_entry.context_id,
+                    'elapsed_min': elapsed_min,
+                    'work_min': work_min,
+                    'breaks_min': breaks_min,
+                    'stopped': stopped,
+                }
+    except Exception:
+        clock_data = None
+
+    # Recent entries (last 10, non-journal)
+    recent = Entry.objects.filter(
+        deleted_at__isnull=True,
+    ).exclude(
+        kind='journal'
+    ).order_by('-timestamp_created')[:10]
+
+    recent_entries = [{
+        'content': e.content,
+        'kind': e.kind,
+        'context': e.context_id,
+    } for e in recent]
+
+    return JsonResponse({
+        'timestamp': timestamp,
+        'context': context,
+        'context_description': context_description,
+        'clock': clock_data,
+        'recent_entries': recent_entries,
+    })
