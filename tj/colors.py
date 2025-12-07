@@ -3,7 +3,8 @@
 # ANSI color codes (optimized for dark mode)
 MEDIUM_BLUE = '\033[38;5;111m'  # Medium blue for URLs
 BRIGHT_CYAN_BLUE = '\033[38;5;81m'  # Bright cyan-blue for markdown link titles
-LIGHT_MINT_GREEN = '\033[38;5;156m'  # Light mint green for tags
+LIGHT_MINT_GREEN = '\033[38;5;156m'  # Light mint green for tags, clock start
+DARKER_GREEN = '\033[38;5;71m'  # Darker green for clock stop
 LIGHT_MAUVE = '\033[38;5;183m'  # Very light mauve for contexts
 TERRACOTTA = '\033[38;5;216m'  # Terracotta for event timestamps (calendar)
 SOFT_GREY = '\033[38;5;245m'  # Soft grey for creation timestamps

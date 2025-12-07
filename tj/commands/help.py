@@ -41,8 +41,10 @@ tj c w-1        Last week       tj <n> p=0      Remove priority
 tj c 4          Next 4 weeks    tj <n> s=val    Set status
 tj y            year view       tj <n> k=type   Change kind (ai,b,do,j,m,p)
                                 tj <n> l=N      Set truncation lines
-                                tj <n> l=0      Remove truncation
-                                tj cp <n> <datetime> Copy journal entry
+CLOCK (time tracking)           tj <n> l=0      Remove truncation
+tj start [time] Start clock     tj cp <n> <datetime> Copy journal entry
+tj stop [time]  Stop clock
+tj break <dur>  Add break (30 or 1h)
 
 METADATA (inline)               DATA
 @name           Named entry     tj dump         Export as commands

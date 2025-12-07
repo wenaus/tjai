@@ -261,6 +261,20 @@ def create_parser() -> argparse.ArgumentParser:
     p_sync = subparsers.add_parser('sync', help="Force a manual sync.")
     p_sync.set_defaults(func=not_yet_implemented)
 
+    # Clock commands
+    from tj.commands.clock import handle_clock_start, handle_clock_stop, handle_clock_break
+    p_start = subparsers.add_parser('start', help="Start time clock in current context.")
+    p_start.add_argument('time', nargs='?', help="Optional start time (e.g., '9am', '14:30')")
+    p_start.set_defaults(func=handle_clock_start)
+
+    p_stop = subparsers.add_parser('stop', help="Stop time clock.")
+    p_stop.add_argument('time', nargs='?', help="Optional stop time (e.g., '5pm', '17:30')")
+    p_stop.set_defaults(func=handle_clock_stop)
+
+    p_break = subparsers.add_parser('break', help="Add break time to current clock session.")
+    p_break.add_argument('duration', help="Break duration (e.g., '30' for minutes, '1h' for hours)")
+    p_break.set_defaults(func=handle_clock_break)
+
     # Help
     p_help = subparsers.add_parser('h', help="Show this help message.", add_help=False)
     p_help.set_defaults(func=handle_help)

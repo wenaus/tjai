@@ -130,6 +130,11 @@ tj l                                            # List all entries
     *   `tj c t+1`: Tomorrow
     *   `tj c w-1`: Last week
     *   `tj y`: Year summary with month headers and event counts
+*   **CLOCK (time tracking):**
+    *   `tj start [time]`: Start time clock (e.g., `tj start 9am`)
+    *   `tj stop [time]`: Stop clock and show session summary
+    *   `tj break <duration>`: Add break time (e.g., `30` for minutes, `1h` for hours)
+    *   Clock status (elapsed, work, breaks) shown in header when active
 *   **QUERY:** `tj q ...`
     *   `q [b|r|d|p]`: By type: **b**ookmark, **r**emembered, **d**o, **p**rofile.
     *   `q [t|w|m]`: By time: **t**oday, **w**eek, **m**onth.

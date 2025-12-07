@@ -258,7 +258,10 @@ def handle_calendar_view(args) -> None:
             event_date = entries[0][1].date() if entries else None
             if event_date == today:
                 # Find earliest future event today, or event in progress
+                # Skip clock entries for NOW/countdown logic
                 for event_ts, event_dt, entry in entries:
+                    if entry.data and entry.data.get('clock'):
+                        continue  # Skip clock entries
                     if event_dt.hour != 0 or event_dt.minute != 0:  # Not all-day
                         time_diff = event_dt - now_dt
                         seconds = time_diff.total_seconds()
@@ -343,8 +346,19 @@ def handle_calendar_view(args) -> None:
                 if len(lines) > (truncate_len + 1):
                     content = '\n'.join(lines[:truncate_len + 1]) + " [...]"
 
+                # Check if this is a clock entry for special coloring
+                clock_type = entry.data.get('clock') if entry.data else None
+
                 # Colorize content (converts markdown links to clickable terminal links)
                 display_text = colorize_content(content)
+
+                # Apply clock colors
+                if clock_type == 'start':
+                    from tj.colors import LIGHT_MINT_GREEN, RESET
+                    display_text = f"{LIGHT_MINT_GREEN}{content}{RESET}"
+                elif clock_type == 'stop':
+                    from tj.colors import DARKER_GREEN, RESET
+                    display_text = f"{DARKER_GREEN}{content}{RESET}"
 
                 # Calculate countdown for next upcoming event, or NOW for in-progress
                 countdown_str = ""

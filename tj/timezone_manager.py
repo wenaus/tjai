@@ -108,7 +108,7 @@ def parse_timezone(tz_input: str) -> Optional[str]:
 
 
 def format_time_in_timezone(timestamp: float, timezone: str) -> str:
-    """Format a timestamp in the specified timezone."""
+    """Format a timestamp in the specified timezone (includes date)."""
     try:
         tz = ZoneInfo(timezone)
         dt = datetime.fromtimestamp(timestamp, tz=tz)
@@ -117,6 +117,22 @@ def format_time_in_timezone(timestamp: float, timezone: str) -> str:
         # Fallback for any timezone errors - use local time
         dt = datetime.fromtimestamp(timestamp)
         return dt.strftime('%m/%d %I:%M%p').lower()
+
+
+def format_time_only(timestamp: float, timezone: str = None) -> str:
+    """Format a timestamp as time only (no date), no leading zero on hour."""
+    try:
+        if timezone:
+            tz = ZoneInfo(timezone)
+            dt = datetime.fromtimestamp(timestamp, tz=tz)
+        else:
+            dt = datetime.fromtimestamp(timestamp)
+        # %-I avoids leading zero on hour (Unix), lstrip('0') as fallback
+        time_str = dt.strftime('%I:%M%p').lower().lstrip('0')
+        return time_str
+    except Exception:
+        dt = datetime.fromtimestamp(timestamp)
+        return dt.strftime('%I:%M%p').lower().lstrip('0')
 
 
 def format_time_dashboard(timestamp: float) -> str:

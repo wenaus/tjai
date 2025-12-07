@@ -109,6 +109,12 @@ def display_context() -> None:
 
     print(f"{colorize_timestamp(timestamp_str)} {context_part}{agent_part}")
 
+    # Show clock status if any clocks active today
+    from tj.commands.clock import get_clock_status_for_display
+    clock_lines = get_clock_status_for_display()
+    for line in clock_lines:
+        print(line)
+
 
 def set_last_parent(entry_id: str) -> None:
     """Set the last parent ID for sub-item creation."""

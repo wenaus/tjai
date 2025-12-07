@@ -9,6 +9,47 @@ from tj.database import get_db_connection, DatabaseError
 from tj.repository import EntryRepository, Entry, Tag
 
 
+def encode_entry_data(**kwargs) -> Optional[Dict[str, Any]]:
+    """Create entry data dict from keyword arguments.
+
+    Use this to build the data field for Entry objects.
+    Returns None if no kwargs provided, otherwise returns the dict.
+
+    Example:
+        data = encode_entry_data(clock='start', breaks=0, event_date=ts)
+    """
+    if not kwargs:
+        return None
+    return kwargs
+
+
+def decode_entry_data(data: Any) -> Optional[Dict[str, Any]]:
+    """Decode entry data from storage format to dict.
+
+    Handles:
+    - None -> None
+    - dict -> dict (as-is)
+    - JSON string -> dict (parsed)
+    - Double-encoded JSON string -> dict (parsed twice)
+
+    Raises ValueError if data cannot be decoded.
+    """
+    if data is None:
+        return None
+    if isinstance(data, dict):
+        return data
+    if isinstance(data, str):
+        try:
+            parsed = json.loads(data)
+            # Check for double-encoding (string that parses to string)
+            if isinstance(parsed, str):
+                parsed = json.loads(parsed)
+            return parsed
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in entry data: {e}")
+    raise ValueError(f"Unexpected data type: {type(data)}")
+
+
 class SQLiteRepository(EntryRepository):
     """SQLite implementation of the entry repository."""
 
@@ -26,7 +67,7 @@ class SQLiteRepository(EntryRepository):
             name=row['name'],
             priority=row['priority'],
             status=row['status'],
-            data=json.loads(row['data']) if row['data'] else None
+            data=decode_entry_data(row['data'])
         )
 
     def create_entry(self, entry: Entry) -> str:
