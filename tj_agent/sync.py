@@ -98,7 +98,16 @@ def push_dirty_entries() -> int:
     cursor.execute(
         "SELECT * FROM entries WHERE is_dirty = 1"
     )
-    entries = [dict(row) for row in cursor.fetchall()]
+    entries = []
+    for row in cursor.fetchall():
+        entry = dict(row)
+        # Decode data from JSON string to dict for server
+        if entry.get('data') and isinstance(entry['data'], str):
+            try:
+                entry['data'] = json.loads(entry['data'])
+            except json.JSONDecodeError:
+                pass
+        entries.append(entry)
 
     if not entries:
         write_status(entries_pending=0)
@@ -129,7 +138,15 @@ def push_dirty_entries() -> int:
         f"SELECT * FROM sub_notes WHERE parent_id IN ({placeholders})",
         entry_ids
     )
-    sub_notes = [dict(row) for row in cursor.fetchall()]
+    sub_notes = []
+    for row in cursor.fetchall():
+        note = dict(row)
+        if note.get('data') and isinstance(note['data'], str):
+            try:
+                note['data'] = json.loads(note['data'])
+            except json.JSONDecodeError:
+                pass
+        sub_notes.append(note)
 
     # Push to server
     machine_id = get_machine_id()

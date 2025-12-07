@@ -115,6 +115,10 @@ USE_TZ = True
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Authentication
+LOGIN_URL = 'login'
+LOGIN_REDIRECT_URL = 'dashboard'
+
 # Logging
 LOG_LEVEL = env("DJANGO_LOG_LEVEL")
 LOGGING = {

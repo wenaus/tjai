@@ -22,9 +22,11 @@ Dashboard features:
 
 ## Pending
 
-1. **Move backup to agent** - backup only when dirty=0 and recently synced, removes latency from tj commands
+1. **Fix migration warning** - `manage.py makemigrations` reports model changes not reflected in migrations. Investigate and resolve.
 
-2. **MCP server in agent** - expose tj to Claude Code
+2. **Move backup to agent** - backup only when dirty=0 and recently synced, removes latency from tj commands
+
+3. **MCP server in agent** - expose tj to Claude Code
 
 ## Under consideration: Obsidian integration
 

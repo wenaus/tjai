@@ -190,6 +190,46 @@ tj dump > restore.sh
 
 The dump format outputs all contexts and entries as `tj` commands with original timestamps preserved via `at=` parameters. This provides a human-readable, executable backup format.
 
+## Server Deployment
+
+The tjai Django web server provides the REST API for sync and a web dashboard.
+
+### Production Setup (etaverse.com)
+
+- **Deployed path:** `/var/www/tjai/`
+- **Virtual environment:** `/var/www/tjai/.venv`
+- **Apache config:** `/etc/apache2/sites-enabled/etaverse.conf`
+- **URL mount point:** `https://etaverse.com/tjai/`
+
+### Deploy script
+
+```bash
+cd /home/admin/github/tjrepo/tjai
+./deploy/update_from_dev.sh
+```
+
+This rsyncs code to `/var/www/tjai/`, installs requirements, and runs migrations.
+
+### Manual Django commands
+
+```bash
+source /var/www/tjai/.venv/bin/activate
+cd /var/www/tjai
+python manage.py migrate
+python manage.py collectstatic --noinput
+python manage.py createsuperuser
+```
+
+### Endpoints
+
+- `/tjai/` - Landing page
+- `/tjai/login/` - Authentication
+- `/tjai/dashboard/` - Web dashboard (requires login)
+- `/tjai/api/health` - Health check
+- `/tjai/api/sync/push` - Push dirty entries from client
+- `/tjai/api/sync/pull` - Pull updates to client
+- `/tjai/api/command` - Server commands (sysconfig)
+
 ## Development Setup
 
 To set up your development environment and run tests:
