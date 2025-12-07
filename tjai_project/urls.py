@@ -9,8 +9,16 @@ urlpatterns = [
     path("api/sync/push", views.sync_push, name="sync_push"),
     path("api/sync/pull", views.sync_pull, name="sync_pull"),
     path("api/command", views.api_command, name="api_command"),
-    # Dashboard
-    path("", views.dashboard, name="dashboard"),
+    # Public landing
+    path("", views.public_home, name="public_home"),
+    # Login
+    path("login/", views.login_view, name="login"),
+    # Dashboard (protected by login)
+    path("dashboard/", views.dashboard, name="dashboard"),
     path("api/dashboard/calendar", views.dashboard_calendar, name="dashboard_calendar"),
     path("api/dashboard/status", views.dashboard_status, name="dashboard_status"),
+    path("entry/<str:entry_id>/", views.entry_detail, name="entry_detail"),
+    path("context/<str:context_name>/", views.context_entries, name="context_entries"),
+    path("tag/<str:tag_name>/", views.tag_entries, name="tag_entries"),
+    path("kind/<str:kind_name>/", views.kind_entries, name="kind_entries"),
 ]

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>tjai - {{ title }}</title>
+    <style>
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 13px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            padding: 16px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 { color: #d8a070; font-size: 16px; margin-bottom: 16px; }
+        .entry { margin: 6px 0; line-height: 1.4; }
+        .entry-num { color: #daa520; }
+        .timestamp { color: #8a8a8a; }
+        .kind { color: #daa520; }
+        .context { color: #ce93d8; }
+        .content { color: #e0e0e0; }
+        .lines { color: #daa520; }
+        .tag { color: #9ccc65; }
+        a { color: inherit; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .back { margin-bottom: 12px; }
+        .back a { color: #64b5f6; }
+    </style>
+</head>
+<body>
+    <div class="back"><a href="{% url 'dashboard' %}">&larr; Dashboard</a></div>
+    <h1>{{ title }} ({{ entries|length }} entries)</h1>
+    {% for e in entries %}
+    <div class="entry">
+        <a href="{% url 'entry_detail' e.id %}">
+            <span class="entry-num">===</span>
+            <span class="timestamp">{{ e.modified_dt|date:"D m/d/H:i" }}</span>
+        </a>
+        {% if e.context_id %}<span class="context">={{ e.context_id }}</span>{% endif %}
+        <span class="content" data-content="{{ e.first_line }}"></span>
+        {% if e.line_count %}<span class="lines">[{{ e.line_count }} lines]</span>{% endif %}
+        {% for t in e.display_tags %}<span class="tag">:{{ t }}</span> {% endfor %}
+    </div>
+    {% empty %}
+    <p>No entries found.</p>
+    {% endfor %}
+    <script>
+        function linkifyContent(content) {
+            content = content.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,
+                '<a href="$2" target="_blank" style="color:#64b5f6">$1</a>');
+            content = content.replace(/(^|[^"'])(https?:\/\/[^\s<]+)/g,
+                '$1<a href="$2" target="_blank" style="color:#64b5f6">$2</a>');
+            return content;
+        }
+        document.querySelectorAll('.content[data-content]').forEach(el => {
+            el.innerHTML = linkifyContent(el.dataset.content);
+        });
+    </script>
+</body>
+</html>

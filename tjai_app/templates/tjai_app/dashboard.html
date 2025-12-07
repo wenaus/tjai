@@ -23,12 +23,28 @@
             height: 100vh;
         }
         .panel {
-            flex: 1;
             padding: 16px;
             overflow-y: auto;
         }
         .panel-left {
+            flex: 3;
             border-right: 1px solid #333;
+        }
+        .panel-right {
+            flex: 5;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #status-fixed {
+            flex-shrink: 0;
+        }
+        #recent-entries {
+            flex: 1;
+            overflow-y: auto;
+            margin-top: 16px;
+            border-top: 1px solid #333;
+            padding-top: 12px;
         }
         .panel-header {
             color: #d8a070;
@@ -89,15 +105,11 @@
         a:hover {
             text-decoration: underline;
         }
-        .entry-number {
-            color: #757575;
-            margin-right: 8px;
-        }
         .refresh-indicator {
             position: fixed;
             top: 8px;
             right: 8px;
-            color: #555;
+            color: #999;
             font-size: 11px;
         }
         .now-marker {
@@ -114,7 +126,8 @@
         </div>
         <div class="panel panel-right" id="status-panel">
             <div class="panel-header">Status</div>
-            <div id="status-content">Loading...</div>
+            <div id="status-fixed">Loading...</div>
+            <div id="recent-entries"></div>
         </div>
     </div>
     <div class="refresh-indicator" id="refresh-indicator"></div>
@@ -150,18 +163,21 @@
         }
 
         function linkifyContent(content) {
-            // Convert markdown links [title](url) to HTML
+            // Convert markdown links [title](url) to clickable HTML
             content = content.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,
                 '<a href="$2" target="_blank">$1</a>');
             // Convert bare URLs
             content = content.replace(/(^|[^"'])(https?:\/\/[^\s<]+)/g,
                 '$1<a href="$2" target="_blank">$2</a>');
+            // Colorize :tags in content
+            content = content.replace(/(:[a-zA-Z][a-zA-Z0-9_-]*)/g,
+                '<span style="color:#9ccc65">$1</span>');
             return content;
         }
 
         async function fetchCalendar() {
             try {
-                const resp = await fetch('/api/dashboard/calendar');
+                const resp = await fetch('/tjai/api/dashboard/calendar');
                 const data = await resp.json();
                 renderCalendar(data);
             } catch (e) {
@@ -171,7 +187,7 @@
 
         async function fetchStatus() {
             try {
-                const resp = await fetch('/api/dashboard/status');
+                const resp = await fetch('/tjai/api/dashboard/status');
                 const data = await resp.json();
                 renderStatus(data);
             } catch (e) {
@@ -186,7 +202,6 @@
 
             let currentWeek = null;
             let currentDay = null;
-            let entryNum = 1;
 
             for (const entry of data.entries) {
                 const eventDate = entry.event_date;
@@ -222,7 +237,7 @@
                     : '';
 
                 const content = linkifyContent(escapeHtml(entry.content));
-                html += `<div class="entry"><span class="entry-number">${entryNum++}</span>${timeStr}<span class="${contentClass}">${content}</span></div>`;
+                html += `<div class="entry">${timeStr}<span class="${contentClass}">${content}</span></div>`;
             }
 
             document.getElementById('calendar-content').innerHTML = html || 'No upcoming events';
@@ -243,26 +258,132 @@
             }
             html += '</div>';
 
-            // Clock status
-            if (data.clock) {
-                const c = data.clock;
-                const status = c.stopped ? ', stopped.' : '.';
-                html += `<div class="clock-status">Clocked in ${c.context ? '=' + c.context : '(no context)'}: ${formatDuration(c.elapsed_min)} elapsed, ${formatDuration(c.work_min)} work, ${formatDuration(c.breaks_min)} breaks${status}</div>`;
+            // Contexts
+            if (data.contexts && data.contexts.length > 0) {
+                const ctxLinks = data.contexts.map(c =>
+                    `<a href="/tjai/context/${c}/" style="color:#ce93d8;text-decoration:none">${c}</a>`
+                ).join(', ');
+                html += `<div class="status-line">Contexts: ${ctxLinks}</div>`;
             }
 
-            // Recent entries
-            if (data.recent_entries && data.recent_entries.length > 0) {
-                html += '<div style="margin-top: 16px; border-top: 1px solid #333; padding-top: 12px;">';
-                html += '<div style="color: #d8a070; margin-bottom: 8px;">Recent entries</div>';
-                for (const entry of data.recent_entries) {
-                    const content = linkifyContent(escapeHtml(entry.content.split('\n')[0]));
-                    const kind = entry.kind !== 'memory' ? `<span style="color:#daa520">[${entry.kind}]</span> ` : '';
-                    html += `<div class="entry">${kind}${content}</div>`;
+            // Tags
+            if (data.all_tags && data.all_tags.length > 0) {
+                const tagLinks = data.all_tags.map(t =>
+                    `<a href="/tjai/tag/${t}/" style="color:#9ccc65;text-decoration:none">${t}</a>`
+                ).join(' ');
+                html += `<div class="status-line">Tags: ${tagLinks}</div>`;
+            }
+
+            // Entry types
+            const types = [
+                ['ai', 'AI guidance'], ['b', 'bookmark'], ['do', 'todo'],
+                ['j', 'journal'], ['m', 'memory'], ['p', 'profile']
+            ];
+            const typeLinks = types.map(([abbr, label]) =>
+                `<a href="/tjai/kind/${abbr}/" style="color:#daa520;text-decoration:none">[${abbr}]=${label}</a>`
+            ).join(' ');
+            html += `<div class="status-line">Types: ${typeLinks}</div>`;
+
+            // Open todos
+            if (data.open_todos && data.open_todos.length > 0) {
+                const todoStr = data.open_todos.map(t =>
+                    `${t.count} <span class="context">${t.context ? t.context : '(none)'}</span>`
+                ).join(' ');
+                html += `<div class="status-line">Todos: ${todoStr}</div>`;
+            }
+
+            // Machines
+            if (data.machines && data.machines.length > 0) {
+                const machineStrs = data.machines.slice().sort().map(m => {
+                    if (data.oldest_sync && data.oldest_sync.machine === m) {
+                        const age = data.oldest_sync.age_min;
+                        const ageStr = age < 60 ? `${age}m` : `${Math.floor(age/60)}h${age%60}m`;
+                        return `${m} <span style="color:#888">(${ageStr})</span>`;
+                    }
+                    return m;
+                });
+                html += `<div class="status-line">Machines: ${machineStrs.join(', ')}</div>`;
+            }
+
+            // Today's work sessions
+            if (data.work_sessions && data.work_sessions.length > 0) {
+                const tz = data.timezone || 'America/New_York';
+                let totalWork = 0;
+                let totalBreaks = 0;
+                html += '<div style="margin-bottom: 12px;">';
+                for (const s of data.work_sessions) {
+                    const startDt = new Date(s.start * 1000);
+                    const endDt = new Date(s.end * 1000);
+                    const startOpts = { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false };
+                    const startStr = new Intl.DateTimeFormat('en-US', startOpts).format(startDt);
+                    const endStr = new Intl.DateTimeFormat('en-US', startOpts).format(endDt);
+                    const ctx = s.context ? `<span style="color:#ce93d8">=${s.context}</span> ` : '';
+                    const status = s.stopped ? '' : ' <span style="color:#9ccc65">(active)</span>';
+                    html += `<div class="clock-status">${ctx}${startStr}-${endStr}: ${formatDuration(s.work_min)} work, ${formatDuration(s.breaks_min)} breaks${status}</div>`;
+                    totalWork += s.work_min;
+                    totalBreaks += s.breaks_min;
+                }
+                if (data.work_sessions.length > 1) {
+                    html += `<div class="clock-status" style="margin-top:4px;font-weight:bold;">Total: ${formatDuration(totalWork)} work, ${formatDuration(totalBreaks)} breaks</div>`;
                 }
                 html += '</div>';
             }
 
-            document.getElementById('status-content').innerHTML = html;
+            document.getElementById('status-fixed').innerHTML = html;
+
+            // Recent entries (tj l format)
+            let recentHtml = '';
+            if (data.recent_entries && data.recent_entries.length > 0) {
+                recentHtml += '<div style="color: #d8a070; margin-bottom: 8px;">Recent entries <span style="color:#8a8a8a">with mod time</span></div>';
+                const tz = data.timezone || 'America/New_York';
+                for (const entry of data.recent_entries) {
+                    const content = linkifyContent(escapeHtml(entry.content));
+                    const ts = new Date(entry.timestamp * 1000);
+                    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                    // Format in configured timezone
+                    const opts = { timeZone: tz, weekday: 'short', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false };
+                    const parts = new Intl.DateTimeFormat('en-US', opts).formatToParts(ts);
+                    const p = {};
+                    parts.forEach(x => p[x.type] = x.value);
+                    const tsStr = `${p.weekday} ${p.month}/${p.day}/${p.hour}:${p.minute}`;
+
+                    // Kind abbreviation
+                    const kindMap = {memory: 'm', todo: 'do', profile: 'p', bookmark: 'b', ai: 'ai', journal: 'j', log: 'log'};
+                    const kindAbbr = kindMap[entry.kind] || entry.kind;
+
+                    // Build entry line: ===  timestamp [kind] event_date =context @name content [N lines] :tags
+                    // Link from === through [kind] to entry detail page
+                    let line = `<a href="/tjai/entry/${entry.id}/" style="color:inherit;text-decoration:none">`;
+                    line += `<span style="color:#daa520">===</span>  `;
+                    line += `<span style="color:#8a8a8a">${tsStr}</span> `;
+                    line += `<span style="color:#daa520">[${kindAbbr}]</span></a> `;
+
+                    // For journal entries, show event_date before content
+                    if (entry.kind === 'journal' && entry.event_date) {
+                        const evd = new Date(entry.event_date * 1000);
+                        const evOpts = { timeZone: tz, weekday: 'short', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false };
+                        const evParts = new Intl.DateTimeFormat('en-US', evOpts).formatToParts(evd);
+                        const ev = {};
+                        evParts.forEach(x => ev[x.type] = x.value);
+                        const isAllDay = (ev.hour === '00' && ev.minute === '00');
+                        const evStr = isAllDay ? `${ev.weekday} ${ev.month}/${ev.day}` : `${ev.weekday} ${ev.month}/${ev.day}/${ev.hour}:${ev.minute}`;
+                        line += `<span style="color:#d8a070">${evStr}</span> `;
+                    }
+
+                    if (entry.context) line += `<span style="color:#ce93d8">=${entry.context}</span> `;
+                    if (entry.name) line += `<span style="font-weight:bold">@${entry.name}</span>  `;
+
+                    line += linkifyContent(entry.content);
+                    if (entry.line_count) line += ` <span style="color:#daa520">[${entry.line_count} lines]</span>`;
+                    if (entry.tags && entry.tags.length) {
+                        const tagStr = entry.tags.map(t => ':' + t).join(' ');
+                        line += ` <span style="color:#9ccc65">${tagStr}</span>`;
+                    }
+
+                    recentHtml += `<div class="entry" style="margin-left:0">${line}</div>`;
+                }
+            }
+            document.getElementById('recent-entries').innerHTML = recentHtml;
         }
 
         function getWeekNumber(d) {
@@ -277,22 +398,32 @@
             return new Date(d.getFullYear(), d.getMonth(), diff);
         }
 
+        let lastRefreshTime = Date.now();
+        let lastBuildTime = 0;
         function updateRefreshIndicator() {
-            const now = new Date();
-            document.getElementById('refresh-indicator').textContent =
-                `Last refresh: ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+            lastRefreshTime = Date.now();
+        }
+        function updateRefreshDisplay() {
+            const sec = Math.floor((Date.now() - lastRefreshTime) / 1000);
+            document.getElementById('refresh-indicator').textContent = `Last refresh ${sec}s ago. Build time ${lastBuildTime} ms`;
         }
 
         async function refresh() {
+            const start = performance.now();
             await Promise.all([fetchCalendar(), fetchStatus()]);
+            lastBuildTime = Math.round(performance.now() - start);
             updateRefreshIndicator();
+            updateRefreshDisplay();
         }
 
         // Initial load
         refresh();
 
-        // Refresh every 10 seconds
-        setInterval(refresh, 10000);
+        // Refresh every 20 seconds
+        setInterval(refresh, 20000);
+
+        // Update refresh display every second
+        setInterval(updateRefreshDisplay, 1000);
     </script>
 </body>
 </html>

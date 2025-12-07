@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TJAI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+    body {
+      background: linear-gradient(to top,
+        #966342 0%,
+        #cb7e58 15%,
+        #da8d63 30%,
+        #d08975 45%,
+        #c592a1 55%,
+        #a892b8 70%,
+        #8e88b0 82%,
+        #75779e 92%,
+        #656589 100%
+      );
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-bottom: 20vh;
+    }
+    .tjai {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 35vh;
+      font-weight: 500;
+      color: #a83820;
+      text-shadow:
+        0 0 40px rgba(180, 60, 35, 0.5),
+        0 0 80px rgba(180, 60, 35, 0.3),
+        0 0 120px rgba(180, 60, 35, 0.2),
+        4px 4px 8px rgba(0, 0, 0, 0.2);
+      user-select: none;
+      line-height: 1;
+      text-decoration: none;
+      cursor: pointer;
+      animation: glow 4s ease-in-out infinite alternate;
+    }
+    .tjai:hover {
+      color: #c04828;
+    }
+    @keyframes glow {
+      from {
+        text-shadow:
+          0 0 40px rgba(180, 60, 35, 0.4),
+          0 0 80px rgba(180, 60, 35, 0.25),
+          0 0 120px rgba(180, 60, 35, 0.15),
+          4px 4px 8px rgba(0, 0, 0, 0.2);
+      }
+      to {
+        text-shadow:
+          0 0 50px rgba(190, 70, 40, 0.6),
+          0 0 100px rgba(190, 70, 40, 0.4),
+          0 0 150px rgba(190, 70, 40, 0.25),
+          4px 4px 8px rgba(0, 0, 0, 0.2);
+      }
+    }
+  </style>
+</head>
+<body>
+  <a href="{% url 'dashboard' %}" class="tjai">TJAI</a>
+</body>
+</html>
