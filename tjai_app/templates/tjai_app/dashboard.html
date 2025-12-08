@@ -121,7 +121,7 @@
 <body>
     <div class="container">
         <div class="panel panel-left" id="calendar-panel">
-            <div class="panel-header">Calendar</div>
+            <div class="panel-header">Calendar <span id="calendar-time" style="color:#8a8a8a;font-weight:normal"></span></div>
             <div id="calendar-content">Loading...</div>
         </div>
         <div class="panel panel-right" id="status-panel">
@@ -130,7 +130,7 @@
             <div id="recent-entries"></div>
         </div>
     </div>
-    <div class="refresh-indicator" id="refresh-indicator"></div>
+    <div class="refresh-indicator"><span id="refresh-indicator"></span> <a href="{% url 'logout' %}" style="color:#999;margin-left:12px">Logout</a></div>
 
     <script>
         function formatTime(timestamp) {
@@ -406,6 +406,12 @@
         function updateRefreshDisplay() {
             const sec = Math.floor((Date.now() - lastRefreshTime) / 1000);
             document.getElementById('refresh-indicator').textContent = `Last refresh ${sec}s ago. Build time ${lastBuildTime} ms`;
+            // Update calendar time
+            const now = new Date();
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const timeStr = `${days[now.getDay()]} ${months[now.getMonth()]} ${now.getDate()} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+            document.getElementById('calendar-time').textContent = timeStr;
         }
 
         async function refresh() {

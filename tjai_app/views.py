@@ -2,7 +2,7 @@ import json
 import time
 from datetime import datetime, timedelta
 
-from django.contrib.auth import authenticate, login
+from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
@@ -303,6 +303,12 @@ def login_view(request):
 def public_home(request):
     """Render the public landing page."""
     return render(request, 'tjai_app/public_home.html')
+
+
+def logout_view(request):
+    """Log out the user and redirect to login."""
+    logout(request)
+    return redirect('login')
 
 
 @login_required

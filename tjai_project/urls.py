@@ -11,8 +11,9 @@ urlpatterns = [
     path("api/command", views.api_command, name="api_command"),
     # Public landing
     path("", views.public_home, name="public_home"),
-    # Login
+    # Login/Logout
     path("login/", views.login_view, name="login"),
+    path("logout/", views.logout_view, name="logout"),
     # Dashboard (protected by login)
     path("dashboard/", views.dashboard, name="dashboard"),
     path("api/dashboard/calendar", views.dashboard_calendar, name="dashboard_calendar"),
