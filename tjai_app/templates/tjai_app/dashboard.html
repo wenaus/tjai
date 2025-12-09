@@ -308,14 +308,6 @@
                         countdownStr = `<span style="color:#e57373;font-weight:bold">in ${hours}h ${minutes}m</span> `;
                     } else if (minutes > 0) {
                         countdownStr = `<span style="color:#e57373;font-weight:bold">in ${minutes}m</span> `;
-                        // Play reminder sound at 5 minutes
-                        if (minutes <= 5) {
-                            const eventKey = `${entry.id}-${eventDate}`;
-                            if (!notifiedEvents.has(eventKey)) {
-                                notifiedEvents.add(eventKey);
-                                playChime1();
-                            }
-                        }
                     }
                 }
 
@@ -513,66 +505,6 @@
 
         // Update refresh display every second
         setInterval(updateRefreshDisplay, 1000);
-
-        // === Meeting reminder sounds ===
-        let audioCtx = null;
-        const notifiedEvents = new Set();  // Track events we've already notified about
-        function getAudioContext() {
-            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            return audioCtx;
-        }
-
-        function playTone(freq, duration, startTime, type = 'sine') {
-            const ctx = getAudioContext();
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.type = type;
-            osc.frequency.value = freq;
-            gain.gain.setValueAtTime(0.3, startTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.start(startTime);
-            osc.stop(startTime + duration);
-        }
-
-        // Sound 1: Gentle hi-lo-mid chime
-        function playChime1() {
-            const ctx = getAudioContext();
-            const now = ctx.currentTime;
-            playTone(880, 0.3, now);        // A5 high
-            playTone(440, 0.3, now + 0.15); // A4 low
-            playTone(659, 0.4, now + 0.3);  // E5 mid
-        }
-
-        // Sound 2: Soft descending bells
-        function playChime2() {
-            const ctx = getAudioContext();
-            const now = ctx.currentTime;
-            playTone(1047, 0.25, now, 'triangle');      // C6
-            playTone(784, 0.25, now + 0.2, 'triangle'); // G5
-            playTone(523, 0.35, now + 0.4, 'triangle'); // C5
-        }
-
-        // Sound 3: Warm ascending
-        function playChime3() {
-            const ctx = getAudioContext();
-            const now = ctx.currentTime;
-            playTone(392, 0.3, now, 'sine');       // G4
-            playTone(523, 0.3, now + 0.2, 'sine'); // C5
-            playTone(659, 0.4, now + 0.4, 'sine'); // E5
-        }
-
-        // Sound 4: Soft double-ping
-        function playChime4() {
-            const ctx = getAudioContext();
-            const now = ctx.currentTime;
-            playTone(698, 0.2, now, 'sine');       // F5
-            playTone(880, 0.3, now + 0.15, 'sine'); // A5
-        }
-
-        // Test buttons - click to hear sounds
-        console.log('Sound test: call playChime1(), playChime2(), playChime3(), or playChime4() in console');
     </script>
 </body>
 </html>
