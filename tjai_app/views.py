@@ -537,6 +537,30 @@ def dashboard_status(request):
 
 
 @login_required
+def dashboard_named(request):
+    """Return named entries as JSON for dashboard."""
+    # Get entries with names, ordered by most recently modified
+    entries = Entry.objects.filter(
+        deleted_at__isnull=True,
+        name__isnull=False,
+    ).exclude(name='').order_by('-timestamp_modified')
+
+    result = []
+    for entry in entries:
+        lines = entry.content.split('\n')
+        result.append({
+            'id': str(entry.id),
+            'name': entry.name,
+            'content': lines[0] if lines else '',
+            'context': entry.context_id,
+            'timestamp': entry.timestamp_modified,
+            'line_count': len([l for l in lines if l.strip()]),
+        })
+
+    return JsonResponse({'entries': result})
+
+
+@login_required
 def entry_detail(request, entry_id):
     """Show single entry detail page."""
     import markdown

@@ -115,6 +115,7 @@ tj l                                            # List all entries
     *   `tj ^ <n>`: Pin entry to top (update timestamp).
     *   **Numbered shortcuts:** Quick metadata modifications on entry `<n>`:
         *   `tj <n> @name`: Assign name to entry.
+        *   `tj <n> @0`: Clear name from entry.
         *   `tj <n> =context`: Set context on entry.
         *   `tj <n> =0`: Clear context on entry.
         *   `tj <n> :tag`: Add tag to entry.

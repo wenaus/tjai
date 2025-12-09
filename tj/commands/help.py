@@ -33,8 +33,9 @@ tj =0           Clear context   tj ^ <n>        Pin to top
 
 CALENDAR                        NUMBERED SHORTCUTS
 tj j tomorrow <text>            tj <n> @name    Assign name
-tj j mon 10am   Team meeting    tj <n> =ctx     Set context
-tj j 0615 14:30 Doctor appt     tj <n> =0       Clear context
+tj j mon 10am   Team meeting    tj <n> @0       Clear name
+tj j 0615 14:30 Doctor appt     tj <n> =ctx     Set context
+                                tj <n> =0       Clear context
 tj c [t|w|m]    View calendar   tj <n> :tag     Add tag
 tj c t+1        Tomorrow        tj <n> p=N      Set priority
 tj c w-1        Last week       tj <n> p=0      Remove priority

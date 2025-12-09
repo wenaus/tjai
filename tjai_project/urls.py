@@ -18,6 +18,7 @@ urlpatterns = [
     path("dashboard/", views.dashboard, name="dashboard"),
     path("api/dashboard/calendar", views.dashboard_calendar, name="dashboard_calendar"),
     path("api/dashboard/status", views.dashboard_status, name="dashboard_status"),
+    path("api/dashboard/named", views.dashboard_named, name="dashboard_named"),
     path("entry/<str:entry_id>/", views.entry_detail, name="entry_detail"),
     path("context/<str:context_name>/", views.context_entries, name="context_entries"),
     path("tag/<str:tag_name>/", views.tag_entries, name="tag_entries"),

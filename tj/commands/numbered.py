@@ -31,8 +31,16 @@ def _update_entry(entry_id: str, num_identifier: int, success_msg: str, **change
 
 
 def handle_set_name(num_identifier: int, action_command: str) -> bool:
-    """Handle @name - assign name to entry."""
+    """Handle @name - assign name to entry (@0 clears name)."""
     name = action_command[1:]
+
+    # @0 clears the name
+    if name == '0':
+        entry = _get_entry_or_error(num_identifier)
+        if not entry:
+            return False
+        return _update_entry(entry.id, num_identifier, f"Entry {num_identifier} name cleared", name=None)
+
     if not re.match(r'^[a-zA-Z][a-zA-Z0-9_-]*$', name):
         print(f"Error: Invalid name '{name}'. Must start with letter, then alphanumeric/underscore/dash.", file=sys.stderr)
         return False
