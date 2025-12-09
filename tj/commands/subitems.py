@@ -45,12 +45,13 @@ def handle_add_subitem(args) -> None:
             return
 
         # Extract tags from content
+        from tj.commands.common import is_valid_tag
         content = " ".join(args.input)
         tags = set()
         for part in args.input:
             if part.startswith(':'):
                 tag_name = part[1:]
-                if tag_name:
+                if is_valid_tag(tag_name):
                     tags.add(tag_name)
 
         # Create sub-item entry

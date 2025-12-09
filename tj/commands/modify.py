@@ -46,13 +46,14 @@ def _parse_metadata_from_content(content: str, entry):
         entry_status = status_match.group(1)
         content = status_pattern.sub('', content)
 
-    # Extract tags
+    # Extract tags (must start with alpha character)
+    from tj.commands.common import is_valid_tag
     new_tags = set()
     for line in content.split('\n'):
         for part in line.split():
             if part.startswith(':'):
                 tag = part[1:]
-                if tag:
+                if is_valid_tag(tag):
                     new_tags.add(tag)
 
     # For journal entries with event_date, re-parse event date from content if a date is present

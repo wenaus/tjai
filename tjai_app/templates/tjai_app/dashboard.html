@@ -270,7 +270,7 @@
             if (data.all_tags && data.all_tags.length > 0) {
                 const tagLinks = data.all_tags.map(t =>
                     `<a href="/tjai/tag/${t}/" style="color:#9ccc65;text-decoration:none">${t}</a>`
-                ).join(' ');
+                ).join(', ');
                 html += `<div class="status-line">Tags: ${tagLinks}</div>`;
             }
 

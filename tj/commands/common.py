@@ -31,6 +31,15 @@ def confirm_action(message: str) -> bool:
     return response in ['y', 'yes']
 
 
+def is_valid_tag(tag: str) -> bool:
+    """Check if tag is valid (must start with alpha character).
+
+    Valid tags: :foo, :tag123, :my-tag, :my_tag
+    Invalid tags: :-), :123, :-foo
+    """
+    return bool(tag) and tag[0].isalpha()
+
+
 def truncate_content(content: str, max_length: int = None) -> str:
     """Truncate content for display preview.
 

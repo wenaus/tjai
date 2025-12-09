@@ -518,11 +518,11 @@ class SQLiteRepository(EntryRepository):
             raise DatabaseError(f"Failed to delete context: {e}")
 
     def remove_tag(self, entry_id: str, tag_name: str) -> bool:
-        """Remove a specific tag from an entry."""
+        """Remove a specific tag from an entry. Cleans up orphan tags."""
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             cursor.execute("""
                 DELETE FROM tags WHERE entry_id = ? AND tag_name = ?
             """, (entry_id, tag_name))

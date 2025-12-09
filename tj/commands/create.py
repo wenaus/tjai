@@ -108,11 +108,12 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
             return
 
         # Step 4: Extract tags for separate storage, but leave them in the content
+        from tj.commands.common import is_valid_tag
         tags = set()
         for word in content.split():
             if word.startswith(':'):
                 tag_name = word[1:]
-                if tag_name:  # Ensure tag is not empty
+                if is_valid_tag(tag_name):
                     tags.add(tag_name)
             
         entry_type = entry_type_override
