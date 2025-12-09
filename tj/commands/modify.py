@@ -625,11 +625,9 @@ def display_entry_details(entry, entry_identifier=None):
 
     print(format_entry_for_display(entry, entry_num))
 
-    # Show tags on next line if present
+    # Get tags
     repository = RepositoryFactory.get_repository()
     tags = repository.get_tags(entry.id)
-    if tags:
-        print(f"  Tags: {', '.join(tags)}")
 
     # Count visual lines in content
     lines = entry.content.split('\n')
@@ -642,17 +640,20 @@ def display_entry_details(entry, entry_identifier=None):
             # Estimate visual lines: divide by wrap_width and round up
             visual_line_count += (len(line) + wrap_width - 1) // wrap_width
 
-    # Show line count, truncation override, and links section on one line
+    # Show metadata on one line: Lines, Truncation, Tags, Links
     has_truncation = entry.data and 'truncate_lines' in entry.data
     has_links = entry.data and 'links' in entry.data and entry.data['links']
 
-    print()
+    from tj.colors import SOFT_GREY, RESET
+    print()  # Empty line before metadata
     info_parts = [f"Lines: {visual_line_count}"]
     if has_truncation:
         info_parts.append(f"Truncation: {entry.data['truncate_lines']}")
+    if tags:
+        info_parts.append(f"Tags: {', '.join(tags)}")
     if has_links:
         info_parts.append("Links:")
-    print("  ".join(info_parts))
+    print(f"{SOFT_GREY}{'  '.join(info_parts)}{RESET}")
 
     if has_links:
         from tj.colors import colorize_url
