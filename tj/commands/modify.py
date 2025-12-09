@@ -645,6 +645,7 @@ def display_entry_details(entry, entry_identifier=None):
     has_links = entry.data and 'links' in entry.data and entry.data['links']
 
     from tj.colors import SOFT_GREY, RESET
+    from tj.timezone_manager import format_time_dashboard
     print()  # Empty line before metadata
     info_parts = [f"Lines: {visual_line_count}"]
     if has_truncation:
@@ -653,6 +654,8 @@ def display_entry_details(entry, entry_identifier=None):
         info_parts.append(f"Tags: {', '.join(tags)}")
     if has_links:
         info_parts.append("Links:")
+    created_str = format_time_dashboard(entry.timestamp_created)
+    info_parts.append(f"Created: {created_str}")
     print(f"{SOFT_GREY}{'  '.join(info_parts)}{RESET}")
 
     if has_links:
