@@ -533,6 +533,8 @@ def handle_untag_command(args) -> None:
             return
 
         repository.remove_tag(entry.id, tag)
+        # Mark entry dirty so tag removal syncs to server
+        repository.update_entry(entry.id, is_dirty=True)
         print(f"Tag '{tag}' removed from entry {entry_identifier}.")
 
     except (ValueError, TypeError):
@@ -554,6 +556,8 @@ def handle_add_tag(args) -> None:
 
         repository = RepositoryFactory.get_repository()
         repository.add_tag(entry.id, tag)
+        # Mark entry dirty so tag addition syncs to server
+        repository.update_entry(entry.id, is_dirty=True)
         print(f"Tag '{tag}' added to entry {entry_num}.")
 
     except (ValueError, TypeError):

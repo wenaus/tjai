@@ -135,6 +135,8 @@ def handle_add_tag(num_identifier: int, action_command: str) -> bool:
     repository = RepositoryFactory.get_repository()
     try:
         repository.add_tag(entry.id, tag)
+        # Mark entry dirty so tag addition syncs to server
+        repository.update_entry(entry.id, is_dirty=True)
         print(f"Tag ':{tag}' added to entry {num_identifier}")
         return True
     except Exception as e:

@@ -104,9 +104,14 @@ def sync_push(request):
         )
         counts["entries"] += 1
 
-    # Upsert tags (delete existing for entry, then insert)
+    # Replace tags for pushed (dirty) entries: delete existing, then insert new
+    # This ensures tag removals are synced properly
+    pushed_entry_ids = [e["id"] for e in data.get("entries", [])]
+    if pushed_entry_ids:
+        Tag.objects.filter(entry_id__in=pushed_entry_ids).delete()
+
     for tag in data.get("tags", []):
-        Tag.objects.update_or_create(
+        Tag.objects.create(
             tag_name=tag["tag_name"],
             entry_id=tag["entry_id"],
         )
