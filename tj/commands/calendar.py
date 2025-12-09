@@ -331,9 +331,9 @@ def handle_calendar_view(args) -> None:
             if is_multi_day:
                 day_name = event_dt_for_display.strftime('%a %b %d')
                 if is_today:
-                    from tj.colors import BOLD, RESET, TERRACOTTA
+                    from tj.colors import BOLD, RESET, RED
                     current_time = now_dt.strftime('%H:%M')
-                    print(f"  {BOLD}{colorize_timestamp(f'{day_name} {current_time}')} {TERRACOTTA}{BOLD}Today{RESET}")
+                    print(f"  {BOLD}{colorize_timestamp(f'{day_name} {current_time}')} {RED}{BOLD}Today{RESET}")
                 else:
                     print(f"  {colorize_timestamp(day_name)}")
 

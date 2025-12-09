@@ -197,8 +197,20 @@
 
         function renderCalendar(data) {
             let html = '';
-            const now = Date.now() / 1000;
-            const today = new Date().toDateString();
+            const now = data.server_time || (Date.now() / 1000);
+            const tz = data.timezone || 'America/New_York';
+            const todayOpts = { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' };
+            const todayStr = new Intl.DateTimeFormat('en-US', todayOpts).format(new Date());
+
+            // Find next upcoming event (future, not clock entries)
+            let nextUpcomingTs = null;
+            for (const entry of data.entries) {
+                if (entry.data?.clock) continue;
+                if (entry.event_date > now) {
+                    nextUpcomingTs = entry.event_date;
+                    break;
+                }
+            }
 
             let currentWeek = null;
             let currentDay = null;
@@ -207,8 +219,9 @@
                 const eventDate = entry.event_date;
                 const d = new Date(eventDate * 1000);
                 const weekNum = getWeekNumber(d);
-                const dayStr = d.toDateString();
-                const isToday = dayStr === today;
+                // Use timezone-aware date string for comparison
+                const entryDateStr = new Intl.DateTimeFormat('en-US', todayOpts).format(d);
+                const isToday = entryDateStr === todayStr;
 
                 // Week header
                 if (weekNum !== currentWeek) {
@@ -219,8 +232,8 @@
                 }
 
                 // Day header
-                if (dayStr !== currentDay) {
-                    currentDay = dayStr;
+                if (entryDateStr !== currentDay) {
+                    currentDay = entryDateStr;
                     const dayClass = isToday ? 'day-header day-today' : 'day-header';
                     const todayLabel = isToday ? ' <span class="now-marker">Today</span>' : '';
                     html += `<div class="${dayClass}">${formatDate(eventDate)}${todayLabel}</div>`;
@@ -232,12 +245,32 @@
                 if (clockType === 'start') contentClass = 'clock-start';
                 else if (clockType === 'stop') contentClass = 'clock-stop';
 
-                const timeStr = (d.getHours() !== 0 || d.getMinutes() !== 0)
-                    ? `<span class="entry-time">${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}</span> `
+                // Format time in configured timezone
+                const timeOpts = { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false };
+                const timeParts = new Intl.DateTimeFormat('en-US', timeOpts).formatToParts(d);
+                const tp = {};
+                timeParts.forEach(p => tp[p.type] = p.value);
+                const hour = parseInt(tp.hour || '0');
+                const minute = parseInt(tp.minute || '0');
+                const timeStr = (hour !== 0 || minute !== 0)
+                    ? `<span class="entry-time">${tp.hour}:${tp.minute}</span> `
                     : '';
 
+                // Countdown for next upcoming event
+                let countdownStr = '';
+                if (eventDate === nextUpcomingTs) {
+                    const diffSec = eventDate - now;
+                    const hours = Math.floor(diffSec / 3600);
+                    const minutes = Math.floor((diffSec % 3600) / 60);
+                    if (hours > 0) {
+                        countdownStr = `<span style="color:#e57373;font-weight:bold">in ${hours}h ${minutes}m</span> `;
+                    } else if (minutes > 0) {
+                        countdownStr = `<span style="color:#e57373;font-weight:bold">in ${minutes}m</span> `;
+                    }
+                }
+
                 const content = linkifyContent(escapeHtml(entry.content));
-                html += `<div class="entry">${timeStr}<span class="${contentClass}">${content}</span></div>`;
+                html += `<div class="entry">${timeStr}${countdownStr}<span class="${contentClass}">${content}</span></div>`;
             }
 
             document.getElementById('calendar-content').innerHTML = html || 'No upcoming events';

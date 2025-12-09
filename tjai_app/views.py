@@ -346,7 +346,15 @@ def dashboard_calendar(request):
                 'data': data,
             })
 
-    return JsonResponse({'entries': result})
+    # Get timezone from SysConfig
+    tz_config = SysConfig.objects.filter(key='timezone').first()
+    timezone_name = tz_config.value if tz_config else 'America/New_York'
+
+    return JsonResponse({
+        'entries': result,
+        'server_time': now,
+        'timezone': timezone_name,
+    })
 
 
 @login_required
