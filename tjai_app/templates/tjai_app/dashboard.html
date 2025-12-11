@@ -299,9 +299,9 @@
                     ? `<span class="entry-time">${tp.hour}:${tp.minute}</span> `
                     : '';
 
-                // Countdown for next upcoming event
+                // Countdown for next upcoming event (only if it's today)
                 let countdownStr = '';
-                if (eventDate === nextUpcomingTs) {
+                if (eventDate === nextUpcomingTs && isToday) {
                     const diffSec = eventDate - now;
                     const hours = Math.floor(diffSec / 3600);
                     const minutes = Math.floor((diffSec % 3600) / 60);

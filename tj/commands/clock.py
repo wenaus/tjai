@@ -307,21 +307,11 @@ def get_clock_status_for_display() -> List[str]:
     stop_id = data.get('stop_id')
 
     if stop_id:
-        # Stopped session - get stop time
-        stop_entry = repository.get_entry(stop_id)
-        if stop_entry and stop_entry.data:
-            try:
-                stop_data = decode_entry_data(stop_entry.data)
-                end_time = stop_data.get('event_date', stop_entry.timestamp_created)
-            except ValueError:
-                return []
-        else:
-            return []
-        status_suffix = ", stopped."
-    else:
-        # Running session
-        end_time = now.timestamp()
-        status_suffix = "."
+        # Stopped session - no active clock, return nothing
+        return []
+
+    # Running session
+    end_time = now.timestamp()
 
     elapsed_min = int((end_time - start_time) / 60)
     work_min = max(0, elapsed_min - breaks_min)
@@ -330,5 +320,5 @@ def get_clock_status_for_display() -> List[str]:
     work = format_duration(work_min)
     breaks = format_duration(breaks_min)
 
-    line = f"{LIGHT_MINT_GREEN}Clocked in {ctx_display}: {elapsed} elapsed, {work} work, {breaks} breaks{status_suffix}{RESET}"
+    line = f"{LIGHT_MINT_GREEN}Clocked in {ctx_display}: {elapsed} elapsed, {work} work, {breaks} breaks.{RESET}"
     return [line]

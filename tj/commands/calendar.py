@@ -349,6 +349,12 @@ def handle_calendar_view(args) -> None:
                 # Check if this is a clock entry for special coloring
                 clock_type = entry.data.get('clock') if entry.data else None
 
+                # Build context prefix for clock entries
+                context_prefix = ""
+                if clock_type and entry.context:
+                    from tj.colors import colorize_context
+                    context_prefix = f"{colorize_context(entry.context)} "
+
                 # Colorize content (converts markdown links to clickable terminal links)
                 display_text = colorize_content(content)
 
@@ -400,9 +406,9 @@ def handle_calendar_view(args) -> None:
                     # Build first line with optional bold for today and countdown
                     if is_today:
                         from tj.colors import BOLD, RESET
-                        first_line = f"{first_indent}{number_str} {BOLD}{time_str}{countdown_str} {lines[0]}{arrow_suffix}{RESET}"
+                        first_line = f"{first_indent}{number_str} {BOLD}{time_str}{countdown_str} {context_prefix}{lines[0]}{arrow_suffix}{RESET}"
                     else:
-                        first_line = f"{first_indent}{number_str} {time_str} {lines[0]}"
+                        first_line = f"{first_indent}{number_str} {time_str} {context_prefix}{lines[0]}"
 
                     print(first_line)
                     entry_number += 1
@@ -429,11 +435,11 @@ def handle_calendar_view(args) -> None:
                     # Print with bold if today
                     if is_today:
                         from tj.colors import BOLD, RESET
-                        print(f"{first_indent}{number_str} {BOLD}{lines[0]}{RESET}")
+                        print(f"{first_indent}{number_str} {BOLD}{context_prefix}{lines[0]}{RESET}")
                         for line in lines[1:]:
                             print(f"{subsequent_indent}{BOLD}{line}{RESET}")
                     else:
-                        print(f"{first_indent}{number_str} {lines[0]}")
+                        print(f"{first_indent}{number_str} {context_prefix}{lines[0]}")
                         for line in lines[1:]:
                             print(f"{subsequent_indent}{line}")
                     entry_number += 1
