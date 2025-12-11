@@ -326,8 +326,12 @@ def dashboard(request):
 def dashboard_calendar(request):
     """Return calendar data as JSON for dashboard."""
     now = time.time()
-    # Get entries for next 30 days with event_date
-    start_ts = now - (24 * 60 * 60)  # Include today even if past
+    # Go back 7 days, then to Monday of that week (to show full previous week)
+    seven_days_ago = datetime.now() - timedelta(days=7)
+    # Monday is weekday 0
+    days_since_monday = seven_days_ago.weekday()
+    monday_of_prev_week = seven_days_ago - timedelta(days=days_since_monday)
+    start_ts = monday_of_prev_week.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
     end_ts = now + (60 * 24 * 60 * 60)
 
     # Query journal entries with event_date in range

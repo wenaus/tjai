@@ -278,7 +278,8 @@
                     currentDay = entryDateStr;
                     const dayClass = isToday ? 'day-header day-today' : 'day-header';
                     const todayLabel = isToday ? ' <span class="now-marker">Today</span>' : '';
-                    html += `<div class="${dayClass}">${formatDate(eventDate)}${todayLabel}</div>`;
+                    const todayId = isToday ? ' id="today-marker"' : '';
+                    html += `<div${todayId} class="${dayClass}">${formatDate(eventDate)}${todayLabel}</div>`;
                 }
 
                 // Entry
@@ -316,6 +317,16 @@
             }
 
             document.getElementById('calendar-content').innerHTML = html || 'No upcoming events';
+
+            // Scroll to today, positioning it in the upper-middle of the calendar section
+            const todayEl = document.getElementById('today-marker');
+            if (todayEl) {
+                const calSection = document.getElementById('calendar-section');
+                const todayTop = todayEl.offsetTop;
+                const sectionHeight = calSection.clientHeight;
+                // Position today about 1/3 from the top
+                calSection.scrollTop = todayTop - (sectionHeight / 3);
+            }
         }
 
         function renderStatus(data) {
