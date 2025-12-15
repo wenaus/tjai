@@ -261,13 +261,48 @@
             let html = '';
             const now = data.server_time || (Date.now() / 1000);
             const tz = data.timezone || 'America/New_York';
-            const todayOpts = { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' };
-            const todayStr = new Intl.DateTimeFormat('en-US', todayOpts).format(new Date());
+            // Server provides today's date as YYYYMMDD string in configured timezone
+            const serverTodayDate = data.today_date;
+
+            // Helper to get YYYYMMDD from timestamp in configured timezone
+            function getDateKey(timestamp) {
+                const d = new Date(timestamp * 1000);
+                const opts = { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' };
+                const parts = new Intl.DateTimeFormat('en-US', opts).formatToParts(d);
+                const p = {};
+                parts.forEach(x => p[x.type] = x.value);
+                return p.year + p.month + p.day;
+            }
+
+            let entries = data.entries.slice();  // Copy array
+
+            // Check if today has any entries
+            let hasTodayEntry = false;
+            for (const entry of entries) {
+                if (getDateKey(entry.event_date) === serverTodayDate) {
+                    hasTodayEntry = true;
+                    break;
+                }
+            }
+
+            // If no entries for today, inject a placeholder
+            if (!hasTodayEntry && serverTodayDate) {
+                entries.push({
+                    id: '__today_placeholder__',
+                    content: '',
+                    event_date: now,  // Use current time, dateKey will match serverTodayDate
+                    context: null,
+                    data: { _placeholder: true, _dateKey: serverTodayDate }
+                });
+                // Re-sort by event_date
+                entries.sort((a, b) => a.event_date - b.event_date);
+            }
 
             // Find next upcoming event (future, not clock entries)
             let nextUpcomingTs = null;
-            for (const entry of data.entries) {
+            for (const entry of entries) {
                 if (entry.data?.clock) continue;
+                if (entry.data?._placeholder) continue;
                 if (entry.event_date > now) {
                     nextUpcomingTs = entry.event_date;
                     break;
@@ -277,13 +312,13 @@
             let currentWeek = null;
             let currentDay = null;
 
-            for (const entry of data.entries) {
+            for (const entry of entries) {
                 const eventDate = entry.event_date;
                 const d = new Date(eventDate * 1000);
                 const weekNum = getWeekNumber(d);
-                // Use timezone-aware date string for comparison
-                const entryDateStr = new Intl.DateTimeFormat('en-US', todayOpts).format(d);
-                const isToday = entryDateStr === todayStr;
+                // Use server's today_date for comparison
+                const entryDateKey = entry.data?._dateKey || getDateKey(eventDate);
+                const isToday = entryDateKey === serverTodayDate;
 
                 // Week header
                 if (weekNum !== currentWeek) {
@@ -294,13 +329,16 @@
                 }
 
                 // Day header
-                if (entryDateStr !== currentDay) {
-                    currentDay = entryDateStr;
+                if (entryDateKey !== currentDay) {
+                    currentDay = entryDateKey;
                     const dayClass = isToday ? 'day-header day-today' : 'day-header';
                     const todayLabel = isToday ? ' <span class="now-marker">Today</span>' : '';
                     const todayId = isToday ? ' id="today-marker"' : '';
                     html += `<div${todayId} class="${dayClass}">${formatDate(eventDate)}${todayLabel}</div>`;
                 }
+
+                // Skip rendering placeholder entries (they only trigger the day header)
+                if (entry.data?._placeholder) continue;
 
                 // Entry
                 const clockType = entry.data?.clock;

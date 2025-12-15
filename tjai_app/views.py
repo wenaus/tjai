@@ -359,10 +359,20 @@ def dashboard_calendar(request):
     tz_config = SysConfig.objects.filter(key='timezone').first()
     timezone_name = tz_config.value if tz_config else 'America/New_York'
 
+    # Calculate today's date string in configured timezone
+    try:
+        import zoneinfo
+        tz = zoneinfo.ZoneInfo(timezone_name)
+        now_dt = datetime.now(tz)
+        today_date_str = now_dt.strftime('%Y%m%d')
+    except Exception:
+        today_date_str = datetime.now().strftime('%Y%m%d')
+
     return JsonResponse({
         'entries': result,
         'server_time': now,
         'timezone': timezone_name,
+        'today_date': today_date_str,
     })
 
 
