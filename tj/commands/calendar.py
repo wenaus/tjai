@@ -217,14 +217,13 @@ def handle_calendar_view(args) -> None:
             start_dt = datetime.fromtimestamp(start_ts)
 
         # Print header based on timeframe
+        # Note: week headers are printed by the main loop, not here
         if unit == 'w':
-            # For multi-week view, show date range instead of just week number
+            # For multi-week view, show date range
             end_dt = datetime.fromtimestamp(end_ts, tz=tz) if tz else datetime.fromtimestamp(end_ts)
             if (end_ts - start_ts) > (7 * 24 * 60 * 60):  # More than one week
                 print(colorize_timestamp(f"{start_dt.strftime('%Y%m%d')}-{end_dt.strftime('%Y%m%d')} {desc}"))
-            else:
-                week_num = start_dt.isocalendar()[1]
-                print(colorize_timestamp(f"{start_dt.strftime('%Y%m%d')} Week {week_num}"))
+            # Single week: no header here, loop prints week header
         elif unit == 'm':
             print(colorize_timestamp(f"{start_dt.strftime('%Y%m')} {start_dt.strftime('%B %Y')}"))
         elif is_multi_day:
