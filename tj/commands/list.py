@@ -159,9 +159,11 @@ def _list_entries_with_filters(repository, filters, no_truncate=False):
     exclude_tags = []
     priority = None
     status = None
+    status_exclude = 'archive'  # Default: hide archived entries
     time_cutoff = None
     text_filter = None
     max_entries = None
+    filter_by_priority = False  # True if 'priority' filter specified
     query_parts = []
 
     # Check if any explicit context filter is provided
@@ -185,9 +187,23 @@ def _list_entries_with_filters(repository, filters, no_truncate=False):
             else:
                 query_parts.append(f"limit {max_entries}")
             continue
+
+        # Special filter: 'archive' shows archived entries
+        if filter_arg == 'archive':
+            status = 'archive'
+            status_exclude = None  # Don't exclude archived when explicitly requesting
+            query_parts.append('archive')
+            continue
+
+        # Special filter: 'priority' shows all prioritized entries sorted by priority
+        if filter_arg == 'priority':
+            filter_by_priority = True
+            query_parts.append('priority')
+            continue
+
         # Query by kind
-        if filter_arg in ['b', 'd', 'p', 'ai', 'm', 'j', 'log']:
-            from tj.commands.common import ENTRY_TYPE_MAP
+        from tj.commands.common import ENTRY_TYPE_MAP
+        if filter_arg in ENTRY_TYPE_MAP:
             kind = ENTRY_TYPE_MAP[filter_arg]
             query_parts.append(kind)
 
@@ -264,6 +280,7 @@ def _list_entries_with_filters(repository, filters, no_truncate=False):
         tag=tag,
         priority=priority,
         status=status,
+        status_exclude=status_exclude,
         exclude_tags=safe_exclude_tags
     )
     debug_time("list_query_entries", time_query_start)
@@ -290,8 +307,16 @@ def _list_entries_with_filters(repository, filters, no_truncate=False):
     # Filter out deleted entries
     active_entries = [e for e in entries if not getattr(e, 'deleted_at', None)]
 
-    # Sort by timestamp, oldest first (newest at bottom)
-    active_entries.sort(key=lambda e: e.timestamp_modified, reverse=False)
+    # Filter to prioritized entries if 'priority' filter specified
+    if filter_by_priority:
+        active_entries = [e for e in active_entries if e.priority is not None]
+
+    # Sort: by priority ascending if priority filter, otherwise by timestamp
+    # Within same priority, oldest first (newest at bottom) - consistent with standard listing
+    if filter_by_priority:
+        active_entries.sort(key=lambda e: (e.priority, e.timestamp_modified))
+    else:
+        active_entries.sort(key=lambda e: e.timestamp_modified, reverse=False)
 
     # Apply max_entries limit
     if max_entries and len(active_entries) > abs(max_entries):

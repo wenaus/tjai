@@ -1,4 +1,4 @@
-"""Delete command handlers for tj."""
+"""Delete and archive command handlers for tj."""
 
 import sys
 
@@ -6,6 +6,72 @@ from tj.colors import colorize_context, colorize_creation_timestamp
 from tj.commands.common import get_entry_from_recent_list, confirm_action, truncate_content
 from tj.repository_factory import RepositoryFactory
 from tj.timezone_manager import format_time_dashboard
+
+
+def handle_archive_command(args) -> None:
+    """Handle archive operations: tj archive <n> [<n2> ...]"""
+    try:
+        if not args.args:
+            print("Error: Please specify entry number(s) to archive.", file=sys.stderr)
+            print("Usage: tj archive <n> [<n2> <n3> ...]")
+            return
+
+        repository = RepositoryFactory.get_repository()
+        archived_count = 0
+
+        for arg in args.args:
+            if not arg.isdigit():
+                print(f"Error: Invalid entry number '{arg}'.", file=sys.stderr)
+                continue
+            entry_num = int(arg)
+            entry = get_entry_from_recent_list(entry_num)
+            if not entry:
+                print(f"Error: Entry {entry_num} not found in recent list.", file=sys.stderr)
+                continue
+            if repository.update_entry_status_only(entry.id, 'archive'):
+                print(f"Entry {entry_num} archived")
+                archived_count += 1
+            else:
+                print(f"Error: Failed to archive entry {entry_num}.", file=sys.stderr)
+
+        if len(args.args) > 1:
+            print(f"Archived {archived_count} of {len(args.args)} entries.")
+
+    except Exception as e:
+        print(f"Archive error: {e}", file=sys.stderr)
+
+
+def handle_unarchive_command(args) -> None:
+    """Handle unarchive operations: tj unarchive <n> [<n2> ...]"""
+    try:
+        if not args.args:
+            print("Error: Please specify entry number(s) to unarchive.", file=sys.stderr)
+            print("Usage: tj unarchive <n> [<n2> <n3> ...]")
+            return
+
+        repository = RepositoryFactory.get_repository()
+        unarchived_count = 0
+
+        for arg in args.args:
+            if not arg.isdigit():
+                print(f"Error: Invalid entry number '{arg}'.", file=sys.stderr)
+                continue
+            entry_num = int(arg)
+            entry = get_entry_from_recent_list(entry_num)
+            if not entry:
+                print(f"Error: Entry {entry_num} not found in recent list.", file=sys.stderr)
+                continue
+            if repository.update_entry_status_only(entry.id, None):
+                print(f"Entry {entry_num} unarchived")
+                unarchived_count += 1
+            else:
+                print(f"Error: Failed to unarchive entry {entry_num}.", file=sys.stderr)
+
+        if len(args.args) > 1:
+            print(f"Unarchived {unarchived_count} of {len(args.args)} entries.")
+
+    except Exception as e:
+        print(f"Unarchive error: {e}", file=sys.stderr)
 
 
 def handle_delete_new(args) -> None:
@@ -118,7 +184,7 @@ def handle_delete_entries(entry_nums: list) -> None:
             num, entry = entries_to_delete[0]
             time_str = colorize_creation_timestamp(format_time_dashboard(entry.timestamp_created))
             context_str = f" {colorize_context(entry.context)}" if entry.context else ""
-            if not confirm_action(f"Delete: {time_str} {entry.content}{context_str}"):
+            if not confirm_action(f"Delete (rather than archive): {time_str} {entry.content}{context_str}"):
                 print("Delete cancelled.")
                 return
         else:

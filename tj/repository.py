@@ -84,12 +84,22 @@ class EntryRepository(ABC):
                      tag: Optional[str] = None,
                      priority: Optional[int] = None,
                      status: Optional[str] = None,
+                     status_exclude: Optional[str] = None,
                      limit: Optional[int] = None,
                      exclude_tags: Optional[List[str]] = None) -> List[Entry]:
         """Query entries with optional filters.
 
         Args:
             exclude_tags: List of tag names to exclude (entries with any of these tags will be filtered out)
+            status_exclude: Exclude entries with this status (e.g., 'archive')
+        """
+        pass
+
+    @abstractmethod
+    def update_entry_status_only(self, entry_id: str, status: Optional[str]) -> bool:
+        """Update status field without modifying timestamp_modified.
+
+        Used for archive/unarchive operations where mod time should be preserved.
         """
         pass
     

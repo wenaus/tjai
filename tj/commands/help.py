@@ -14,6 +14,8 @@ tj config       Show config     tj l [ai|b|do|j|m|p|log] By type
 tj <N>          List N entries  tj l [Nd|N|-N]           By time/count
                                 tj l =ctx :tag p=N s=val Composite
                                 tj l [c|t|@]             Metadata (c/t/@=named)
+                                tj l archive             Archived entries
+                                tj l priority            Prioritized entries
 
 CREATE                          MODIFY
 tj <text>       Memory          tj . <text>     Sub-item of last
@@ -30,6 +32,8 @@ tj =ctx -t ...  With title      tj t- <n> <tag> Remove tag
 tj =ctx -t .. -d .. With desc   tj mv <n> <ctx> Move to context
 tj =0           Clear context   tj ^ <n>        Pin to top
                                 tj d <n|@name>  Delete
+                                tj archive <n>  Archive entry
+                                tj unarchive <n> Unarchive
 
 CALENDAR                        NUMBERED SHORTCUTS
 tj j tomorrow <text>            tj <n> @name    Assign name
@@ -42,7 +46,8 @@ tj c w-1        Last week       tj <n> p=0      Remove priority
 tj c 4          Next 4 weeks    tj <n> s=val    Set status
 tj y            year view       tj <n> k=type   Change kind (ai,b,do,j,m,p)
                                 tj <n> l=N      Set truncation lines
-CLOCK (time tracking)           tj <n> l=0      Remove truncation
+                                tj <n> l=0      Remove truncation
+CLOCK (time tracking)
 tj start [time] Start clock     tj cp <n> <datetime> Copy journal entry
 tj stop [time]  Stop clock
 tj break <dur>  Add break (30 or 1h)

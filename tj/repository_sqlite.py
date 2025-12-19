@@ -252,9 +252,14 @@ class SQLiteRepository(EntryRepository):
                      tag: Optional[str] = None,
                      priority: Optional[int] = None,
                      status: Optional[str] = None,
+                     status_exclude: Optional[str] = None,
                      limit: Optional[int] = None,
                      exclude_tags: Optional[List[str]] = None) -> List[Entry]:
-        """Query entries with optional filters."""
+        """Query entries with optional filters.
+
+        Args:
+            status_exclude: Exclude entries with this status (e.g., 'archive')
+        """
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
@@ -287,6 +292,10 @@ class SQLiteRepository(EntryRepository):
             if status:
                 conditions.append("status = ?")
                 params.append(status)
+
+            if status_exclude:
+                conditions.append("(status IS NULL OR status != ?)")
+                params.append(status_exclude)
             
             where_clause = " AND ".join(conditions)
             query = f"""
@@ -550,3 +559,24 @@ class SQLiteRepository(EntryRepository):
 
         except sqlite3.Error as e:
             raise DatabaseError(f"Failed to remove all tag instances: {e}")
+
+    def update_entry_status_only(self, entry_id: str, status: Optional[str]) -> bool:
+        """Update status field without modifying timestamp_modified.
+
+        Used for archive/unarchive operations where mod time should be preserved.
+        """
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                UPDATE entries SET status = ?, is_dirty = 1
+                WHERE id = ? AND deleted_at IS NULL
+            """, (status, entry_id))
+
+            success = cursor.rowcount > 0
+            conn.commit()
+            return success
+
+        except sqlite3.Error as e:
+            raise DatabaseError(f"Failed to update entry status: {e}")

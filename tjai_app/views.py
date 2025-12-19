@@ -467,9 +467,11 @@ def dashboard_status(request):
         })
     work_sessions.reverse()  # Oldest first for display
 
-    # Recent entries (last 15, all types) - oldest first like tj l
+    # Recent entries (last 50, all types, excluding archived) - oldest first like tj l
     recent = Entry.objects.filter(
         deleted_at__isnull=True,
+    ).exclude(
+        status='archive'
     ).order_by('-timestamp_modified')[:50]
 
     # Batch fetch tags for all entries

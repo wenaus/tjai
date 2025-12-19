@@ -144,7 +144,7 @@ def create_parser() -> argparse.ArgumentParser:
 
     # List commands
     p_list = subparsers.add_parser('l', help="List metadata and entries.")
-    p_list.add_argument('filters', nargs='*', help="Filters: c/t (metadata), d/p/b/j/ai (type), =ctx, :tag, p=N, s=val, t/w/m (time)")
+    p_list.add_argument('filters', nargs='*', help="Filters: c/t/@ (metadata), d/p/b/j/ai (type), =ctx, :tag, p=N, s=val, priority, archive")
     p_list.set_defaults(func=handle_list_command, no_truncate=False)
 
     # List all (no truncation)
@@ -240,6 +240,16 @@ def create_parser() -> argparse.ArgumentParser:
     p_delete = subparsers.add_parser('d', help="Delete an entry or tag.")
     p_delete.add_argument('args', nargs='*', help="Arguments for delete operation")
     p_delete.set_defaults(func=handle_delete_new)
+
+    # Archive/Unarchive
+    from tj.commands.delete import handle_archive_command, handle_unarchive_command
+    p_archive = subparsers.add_parser('archive', help="Archive an entry (hide from default listings).")
+    p_archive.add_argument('args', nargs='*', help="Entry number(s) to archive")
+    p_archive.set_defaults(func=handle_archive_command)
+
+    p_unarchive = subparsers.add_parser('unarchive', help="Unarchive an entry (restore to default listings).")
+    p_unarchive.add_argument('args', nargs='*', help="Entry number(s) to unarchive")
+    p_unarchive.set_defaults(func=handle_unarchive_command)
 
     # Copy
     p_copy = subparsers.add_parser('cp', help="Copy an entry with new date/time.")

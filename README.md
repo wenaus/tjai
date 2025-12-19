@@ -79,6 +79,8 @@ tj l                                            # List all entries
     *   `l c`: Lists all contexts with entry counts.
     *   `l t`: Lists all tags with counts.
     *   `l p/b/d/ai`: Lists profiles/bookmarks/todos/AI guidelines.
+    *   `l priority`: Lists all prioritized entries, sorted by priority (p=1 first).
+    *   `l archive`: Lists archived entries.
 *   **CONTEXT:** `tj =<context>` with optional flags
     *   `tj =tjai`: Switch to/create context (terse name only)
     *   `tj =tjai -t AI app development`: Create with title
