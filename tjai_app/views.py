@@ -9,6 +9,7 @@ from django.shortcuts import render, redirect
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
+from django.db.models.functions import Lower
 from django.http import Http404
 from .models import Context, Entry, Tag, SubNote, Machine, SysConfig
 
@@ -467,12 +468,12 @@ def dashboard_status(request):
         })
     work_sessions.reverse()  # Oldest first for display
 
-    # Recent entries (last 50, all types, excluding archived) - oldest first like tj l
+    # All entries (excluding archived), most recent first
     recent = Entry.objects.filter(
         deleted_at__isnull=True,
     ).exclude(
         status='archive'
-    ).order_by('-timestamp_modified')[:50]
+    ).order_by('-timestamp_modified')
 
     # Batch fetch tags for all entries
     entry_ids = [e.id for e in recent]
@@ -555,11 +556,11 @@ def dashboard_status(request):
 @login_required
 def dashboard_named(request):
     """Return named entries as JSON for dashboard."""
-    # Get entries with names, ordered by most recently modified
+    # Get entries with names, ordered alphabetically (case-insensitive)
     entries = Entry.objects.filter(
         deleted_at__isnull=True,
         name__isnull=False,
-    ).exclude(name='').order_by('-timestamp_modified')
+    ).exclude(name='').order_by(Lower('name'))
 
     result = []
     for entry in entries:

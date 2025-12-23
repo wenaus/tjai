@@ -475,10 +475,10 @@
 
             document.getElementById('status-fixed').innerHTML = html;
 
-            // Recent entries (tj l format)
+            // Entries (tj l format)
             let recentHtml = '';
             if (data.recent_entries && data.recent_entries.length > 0) {
-                recentHtml += '<div style="color: #d8a070; margin-bottom: 8px;">Recent entries <span style="color:#8a8a8a">with mod time</span></div>';
+                recentHtml += '<div style="color: #d8a070; margin-bottom: 8px;">Entries <span style="color:#8a8a8a">with mod time</span></div>';
                 const tz = data.timezone || 'America/New_York';
                 for (const entry of data.recent_entries) {
                     const content = linkifyContent(escapeHtml(entry.content));
