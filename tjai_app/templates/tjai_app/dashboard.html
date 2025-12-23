@@ -248,7 +248,7 @@
         function renderNamed(data) {
             let html = '';
             for (const entry of data.entries) {
-                const nameStr = `<span style="color:#daa520">@${escapeHtml(entry.name)}</span>`;
+                const nameStr = `<span style="color:#c0d8f0;font-weight:bold">@${escapeHtml(entry.name)}</span>`;
                 const contextStr = entry.context ? ` <span style="color:#ce93d8">=${entry.context}</span>` : '';
                 const content = linkifyContent(escapeHtml(entry.content));
                 const lineCount = entry.line_count > 1 ? ` <span style="color:#8a8a8a">[${entry.line_count} lines]</span>` : '';
@@ -515,7 +515,7 @@
                     }
 
                     if (entry.context) line += `<span style="color:#ce93d8">=${entry.context}</span> `;
-                    if (entry.name) line += `<span style="font-weight:bold">@${entry.name}</span>  `;
+                    if (entry.name) line += `<span style="color:#c0d8f0;font-weight:bold">@${entry.name}</span>  `;
 
                     line += linkifyContent(entry.content);
                     if (entry.line_count) line += ` <span style="color:#daa520">[${entry.line_count} lines]</span>`;
