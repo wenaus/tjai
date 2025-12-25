@@ -128,7 +128,7 @@ class SQLiteRepository(EntryRepository):
                 SELECT id, parent_id, content, kind, timestamp_created,
                        timestamp_modified, context, is_dirty, name, priority, status, data
                 FROM entries
-                WHERE name = ? AND deleted_at IS NULL
+                WHERE name = ? COLLATE NOCASE AND deleted_at IS NULL
                 ORDER BY timestamp_modified DESC
             """, (name,))
 
@@ -153,7 +153,7 @@ class SQLiteRepository(EntryRepository):
                     SELECT id, parent_id, content, kind, timestamp_created,
                            timestamp_modified, context, is_dirty, name, priority, status, data
                     FROM entries
-                    WHERE name = ? AND deleted_at IS NULL
+                    WHERE name = ? COLLATE NOCASE AND deleted_at IS NULL
                 """, (name,))
             else:
                 # Search within specific context
@@ -161,7 +161,7 @@ class SQLiteRepository(EntryRepository):
                     SELECT id, parent_id, content, kind, timestamp_created,
                            timestamp_modified, context, is_dirty, name, priority, status, data
                     FROM entries
-                    WHERE name = ? AND context IS ? AND deleted_at IS NULL
+                    WHERE name = ? COLLATE NOCASE AND context IS ? AND deleted_at IS NULL
                 """, (name, context))
 
             row = cursor.fetchone()

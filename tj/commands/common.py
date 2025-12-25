@@ -377,6 +377,15 @@ def format_entry_for_display(entry, entry_number=None, truncate_lines=None, tags
     if truncate_lines is not None:  # None means no truncation
         lines = content.split('\n')
 
+        # Strip leading blank lines after the first line (preserves blanks elsewhere in content)
+        if len(lines) > 1:
+            first_line = lines[0]
+            rest = lines[1:]
+            while rest and not rest[0].strip():
+                rest.pop(0)
+            lines = [first_line] + rest
+            content = '\n'.join(lines)
+
         # Count visual lines (accounting for line wrapping)
         wrap_width = get_line_wrap_width()
         visual_line_count = 0
