@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "mcp_server",
     "tjai_app",
 ]
 
@@ -136,4 +137,25 @@ LOGGING = {
         },
     },
     "root": {"handlers": ["console"], "level": LOG_LEVEL},
+}
+
+# MCP (Model Context Protocol) Configuration
+DJANGO_MCP_GLOBAL_SERVER_CONFIG = {
+    "name": "tjai",
+    "instructions": """tjai is a personal AI memory and task management system.
+
+Available tools provide access to:
+- Calendar/journal entries (date-specific events and notes)
+- Profile facts (personal information about the user)
+- AI guidance (instructions for AI assistants, general and context-specific)
+- Entry creation (add new memories, todos, journal entries, etc.)
+- Context listing (project/topic groupings)
+
+Entry types: memory, todo, journal, profile, bookmark, ai, list
+
+Contexts group entries by project/topic. AI guidance can be general (no context)
+or context-specific for project-specific instructions.
+
+Use list_contexts() to see available contexts.
+Use get_ai_guidance() to get instructions before starting work on a context.""",
 }
