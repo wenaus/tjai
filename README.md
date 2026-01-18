@@ -232,6 +232,15 @@ python manage.py createsuperuser
 - `/tjai/api/sync/push` - Push dirty entries from client
 - `/tjai/api/sync/pull` - Pull updates to client
 - `/tjai/api/command` - Server commands (sysconfig)
+- `/tjai/mcp/` - MCP (Model Context Protocol) server for AI assistants
+
+### Claude Code MCP Integration
+
+To add tjai as an MCP server in Claude Code:
+
+```bash
+claude mcp add --transport http tjai https://etaverse.com/tjai/mcp/
+```
 
 ## Development Setup
 
