@@ -144,18 +144,27 @@ DJANGO_MCP_GLOBAL_SERVER_CONFIG = {
     "name": "tjai",
     "instructions": """tjai is a personal AI memory and task management system.
 
-Available tools provide access to:
-- Calendar/journal entries (date-specific events and notes)
-- Profile facts (personal information about the user)
-- AI guidance (instructions for AI assistants, general and context-specific)
-- Entry creation (add new memories, todos, journal entries, etc.)
-- Context listing (project/topic groupings)
+Tools:
+- get_ai_guidance(context): Get behavioral instructions for AI assistants.
+  Returns general guidance plus context-specific guidance if context provided.
+  CALL THIS when starting work on any project.
+- get_profile(): Get personal facts and preferences about the user.
+- get_todos(context, status, include_done): Get task list with filtering.
+  Valid statuses: active, done, blocked, archive.
+- get_calendar(start_date, end_date, context, days): Get calendar entries
+  for a date range. Dates in ISO or YYYYMMDD format.
+- list_contexts(): List all projects/topics to discover what contexts exist.
+- search_entries(query, kind, context, limit): Full-text search across entries.
+- create_entry(content, kind, context, name, tags, event_date, priority, status,
+  create_context): Add new entries. Context must exist unless create_context=True.
 
-Entry types: memory, todo, journal, profile, bookmark, ai, list
+Entry types: memory (notes), todo (tasks), journal (calendar events), profile
+(user facts), ai (AI instructions), bookmark (URLs), list (lists).
+Valid statuses: active, done, blocked, archive. Priority: positive integers (1=highest).
 
-Contexts group entries by project/topic. AI guidance can be general (no context)
-or context-specific for project-specific instructions.
-
-Use list_contexts() to see available contexts.
-Use get_ai_guidance() to get instructions before starting work on a context.""",
+Error handling: All tools return {"error": "message"} on validation failures.
+Always check for "error" key in response before processing results.""",
 }
+
+# MCP endpoint path (empty string since we mount at /mcp/ in urls.py)
+DJANGO_MCP_ENDPOINT = ""

@@ -11,8 +11,8 @@ rsync -av --delete \
   --exclude '.venv' --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' --exclude '.env' \
   "$REPO_ROOT/" "$TARGET_DIR/"
 
-# Fix permissions for Apache
-chmod -R o+rX "$TARGET_DIR/"
+# Fix permissions for Apache (exclude .venv which has different ownership)
+find "$TARGET_DIR" -path "$TARGET_DIR/.venv" -prune -o -type f -exec chmod o+r {} \; -o -type d -exec chmod o+rx {} \;
 
 # ensure env
 if [[ ! -f $TARGET_DIR/.env ]]; then

@@ -1,39 +1,78 @@
 """
 MCP (Model Context Protocol) tools for tjai.
 
-Provides AI assistants with access to:
-- Calendar/journal entries
-- Profile facts about the user
-- AI guidance (general and context-specific)
-- Entry creation
-- Context listing
+tjai is a personal AI memory and task management system. These tools provide
+AI assistants with structured access to the user's knowledge base.
+
+Available tools:
+    get_calendar      - Retrieve journal entries for a date range (events, appointments)
+    get_profile       - Get personal facts and preferences about the user
+    get_ai_guidance   - Get behavioral instructions for AI assistants
+    list_contexts     - List all projects/topics for organizing entries
+    create_entry      - Add new entries (memories, todos, journal, profile, ai, bookmark)
+    get_todos         - Retrieve todo items with filtering options
+    search_entries    - Full-text search across all entries
+
+Entry types: memory, todo, journal, profile, bookmark, ai, list
+
+Contexts group entries by project or topic. Most tools accept a context parameter
+to filter results. Use get_ai_guidance(context) before starting work on any
+project to get project-specific instructions.
+
+Error handling: Tools return {"error": "message"} on validation failures.
+Check for "error" key in response before processing results.
 """
 
+import re
 import time
 import uuid
 from datetime import datetime, timedelta
 
 from asgiref.sync import sync_to_async
+from django.db import models
+from django.db.models import Count
 from django.utils import timezone
 from mcp_server import mcp_server as mcp
 
 from .models import Entry, Context, Tag
 
+VALID_KINDS = ('memory', 'todo', 'journal', 'profile', 'ai', 'bookmark', 'list')
+VALID_STATUSES = ('active', 'done', 'blocked', 'archive')
+
 
 def _parse_date(date_str: str):
-    """Parse date string to datetime. Supports ISO format and YYYYMMDD."""
+    """Parse date string to datetime. Supports ISO format and YYYYMMDD.
+
+    Returns:
+        (datetime, None) on success
+        (None, None) if date_str is empty/None
+        (None, error_message) on parse failure
+    """
+    if not date_str:
+        return None, None
+    try:
+        if 'T' in date_str or '-' in date_str:
+            return datetime.fromisoformat(date_str.replace('Z', '+00:00')), None
+        if len(date_str) == 8 and date_str.isdigit():
+            return datetime.strptime(date_str, '%Y%m%d'), None
+        return None, f"Invalid date format '{date_str}'. Use ISO format or YYYYMMDD."
+    except (ValueError, TypeError) as e:
+        return None, f"Invalid date '{date_str}': {e}"
+
+
+def _validate_event_date(date_str: str):
+    """Validate event_date is YYYYMMDD format. Returns error message or None."""
     if not date_str:
         return None
+    if not isinstance(date_str, str):
+        return f"event_date must be a string, got {type(date_str).__name__}"
+    if len(date_str) != 8 or not date_str.isdigit():
+        return f"Invalid event_date '{date_str}'. Must be YYYYMMDD format."
     try:
-        # Try ISO format first
-        if 'T' in date_str or '-' in date_str:
-            return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-        # Try YYYYMMDD format
-        if len(date_str) == 8 and date_str.isdigit():
-            return datetime.strptime(date_str, '%Y%m%d')
+        datetime.strptime(date_str, '%Y%m%d')
         return None
-    except (ValueError, TypeError):
-        return None
+    except ValueError:
+        return f"Invalid event_date '{date_str}'. Not a valid date."
 
 
 def _format_entry(entry) -> dict:
@@ -48,13 +87,12 @@ def _format_entry(entry) -> dict:
     }
     if entry.name:
         result["name"] = entry.name
-    if entry.priority:
+    if entry.priority is not None:
         result["priority"] = entry.priority
-    if entry.status:
+    if entry.status is not None:
         result["status"] = entry.status
     if entry.data:
         result["data"] = entry.data
-    # Include tags
     tags = list(entry.tags.values_list('tag_name', flat=True))
     if tags:
         result["tags"] = tags
@@ -71,60 +109,92 @@ async def get_calendar(
     """
     Get calendar/journal entries within a date range.
 
-    Journal entries are date-specific events, appointments, and notes.
-    By default returns entries for the next 30 days.
-
     Args:
         start_date: Start date (ISO format or YYYYMMDD). Default: today.
         end_date: End date (ISO format or YYYYMMDD). Default: start + 30 days.
         context: Filter to entries in this context/project.
         days: Alternative to end_date - number of days from start_date.
 
-    Returns list of journal entries with: id, content, event_date, context, tags.
+    Returns:
+        List of entries sorted by date/time, each containing:
+        - date: YYYY-MM-DD
+        - day: Day of week (Mon, Tue, etc.)
+        - time: HH:MM
+        - title: Event title (plain text)
+        - url: Link URL (only if event has a link)
+
+    OUTPUT FORMAT: When presenting to user, show each entry as:
+        TIME TITLE URL
+    Example:
+        **2026-01-15 Thu**
+        - 14:00 HSF coord https://indico.cern.ch/e/1606598
+        - 15:00 Team meeting
+    Always include the URL after the title when present.
     """
+    start, err = _parse_date(start_date)
+    if err:
+        return {"error": err}
+    if not start:
+        start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    if days is not None:
+        if not isinstance(days, int) or days < 0:
+            return {"error": f"days must be a non-negative integer, got {days}"}
+        end = start + timedelta(days=days)
+    elif end_date:
+        end, err = _parse_date(end_date)
+        if err:
+            return {"error": err}
+        if not end:
+            return {"error": f"Invalid end_date: {end_date}"}
+    else:
+        end = start + timedelta(days=30)
+
     @sync_to_async
     def fetch():
-        # Parse dates
-        start = _parse_date(start_date)
-        if not start:
-            start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
-
-        if days:
-            end = start + timedelta(days=days)
-        elif end_date:
-            end = _parse_date(end_date)
-            if not end:
-                end = start + timedelta(days=30)
-        else:
-            end = start + timedelta(days=30)
-
-        # Query journal entries
         qs = Entry.objects.filter(
             kind='journal',
             deleted_at__isnull=True,
         ).select_related('context').prefetch_related('tags')
 
-        # Filter by context if specified
         if context:
             qs = qs.filter(context__name=context)
 
-        # Filter by event_date in data field
-        # Journal entries store event_date as YYYYMMDD in data.event_date
-        start_str = start.strftime('%Y%m%d')
-        end_str = end.strftime('%Y%m%d')
+        # Convert date range to timestamps for comparison
+        start_ts = start.timestamp()
+        end_ts = (end + timedelta(days=1)).timestamp()  # Include full end day
 
         results = []
         for entry in qs:
-            event_date = None
-            if entry.data and 'event_date' in entry.data:
-                event_date = entry.data.get('event_date')
-            if event_date and start_str <= event_date <= end_str:
-                result = _format_entry(entry)
-                result['event_date'] = event_date
+            if not entry.data or not isinstance(entry.data, dict):
+                continue
+            event_date = entry.data.get('event_date')
+            if event_date is None:
+                continue
+            # event_date is stored as Unix timestamp (float)
+            if not isinstance(event_date, (int, float)):
+                continue
+            if start_ts <= event_date < end_ts:
+                event_dt = datetime.fromtimestamp(event_date)
+                # Extract title and url from markdown link if present
+                md_match = re.match(r'\[([^\]]+)\]\(([^)]+)\)', entry.content)
+                if md_match:
+                    title = md_match.group(1)
+                    url = md_match.group(2)
+                else:
+                    title = entry.content
+                    url = None
+                result = {
+                    'date': event_dt.strftime('%Y-%m-%d'),
+                    'day': event_dt.strftime('%a'),
+                    'time': event_dt.strftime('%H:%M'),
+                    'title': title,
+                }
+                if url:
+                    result['url'] = url
                 results.append(result)
 
-        # Sort by event_date
-        results.sort(key=lambda x: x.get('event_date', ''))
+        results.sort(key=lambda x: (x['date'], x['time']))
         return results
 
     return await fetch()
@@ -136,10 +206,14 @@ async def get_profile() -> list:
     Get all profile entries about the user.
 
     Profile entries contain personal facts, preferences, and information
-    that AI assistants should know about the user. Use this to understand
-    context about who you're helping.
+    that AI assistants should know about the user. Examples: preferred tools,
+    working style, technical background, personal preferences.
 
-    Returns list of profile entries with: id, content, context, tags.
+    Call this early in a session to understand context about who you're helping.
+
+    Returns:
+        List of profile entries ordered by most recently modified, each containing:
+        id, content, context, kind, created, modified, tags.
     """
     @sync_to_async
     def fetch():
@@ -156,22 +230,23 @@ async def get_profile() -> list:
 @mcp.tool()
 async def get_ai_guidance(context: str = None) -> list:
     """
-    Get AI guidance entries - instructions for AI assistants.
+    Get AI guidance entries - behavioral instructions for AI assistants.
 
-    AI guidance entries contain behavioral instructions, preferences,
-    and guidelines that AI assistants should follow. These can be:
-    - General (no context) - apply to all interactions
-    - Context-specific - apply when working on that project/topic
+    AI guidance entries define how AI assistants should behave. They include:
+    - General guidance (no context): Universal rules applying to all interactions
+    - Context-specific guidance: Rules for working on particular projects/topics
 
-    IMPORTANT: Always call this before starting work on a context to get
-    project-specific instructions.
+    IMPORTANT: Always call this before starting work on any context/project to
+    get project-specific instructions. The user expects you to follow these.
 
     Args:
-        context: Filter to guidance for this context. If None, returns
-                 general guidance (entries with no context) plus any
-                 context-specific guidance.
+        context: If provided, returns general guidance PLUS guidance specific
+                 to this context. If None, returns all guidance entries.
 
-    Returns list of AI guidance entries with: id, content, context, tags.
+    Returns:
+        List of AI guidance entries ordered by context then modification date,
+        each containing: id, content, context (null for general), kind,
+        created, modified, tags.
     """
     @sync_to_async
     def fetch():
@@ -183,13 +258,10 @@ async def get_ai_guidance(context: str = None) -> list:
         results = []
         for entry in qs:
             entry_context = entry.context.name if entry.context else None
-
-            # If context filter specified, return general + that context
             if context:
                 if entry_context is None or entry_context == context:
                     results.append(_format_entry(entry))
             else:
-                # No filter - return all
                 results.append(_format_entry(entry))
 
         return results
@@ -202,15 +274,18 @@ async def list_contexts() -> list:
     """
     List all available contexts (projects/topics).
 
-    Contexts group entries by project or topic. Use this to understand
-    what projects exist and to filter other queries.
+    Contexts are organizational units that group entries by project or topic.
+    Use this to discover what projects exist and to understand the scope of
+    the user's knowledge base. Most other tools accept a context parameter
+    to filter results.
 
-    Returns list of contexts with: name, title, description, entry_count.
+    Returns:
+        List of contexts ordered alphabetically by name, each containing:
+        name (identifier), title (display name, may be null),
+        description (may be null), entry_count (number of non-deleted entries).
     """
     @sync_to_async
     def fetch():
-        from django.db.models import Count
-
         contexts = Context.objects.annotate(
             entry_count=Count('entry', filter=models.Q(entry__deleted_at__isnull=True))
         ).order_by('name')
@@ -225,7 +300,6 @@ async def list_contexts() -> list:
             for c in contexts
         ]
 
-    from django.db import models
     return await fetch()
 
 
@@ -239,53 +313,88 @@ async def create_entry(
     event_date: str = None,
     priority: int = None,
     status: str = None,
+    create_context: bool = False,
 ) -> dict:
     """
-    Create a new entry in tjai.
+    Create a new entry in the user's tjai knowledge base.
 
-    Use this to add information to the user's personal knowledge base.
+    Use this to record information, create tasks, add calendar events, or store
+    any other data the user wants to remember. Entries sync across all the
+    user's devices.
 
     Args:
-        content: The entry content (required).
-        kind: Entry type - one of: memory, todo, journal, profile, ai, bookmark.
-              Default: memory.
-        context: Context/project name to associate with. Creates context if needed.
-        name: Optional unique name for easy reference (must be unique within context).
-        tags: Comma-separated tags to add (e.g., "important,followup").
-        event_date: For journal entries - the date (YYYYMMDD format).
-        priority: Priority level (1=highest). For todos.
-        status: Status value (active, done, blocked). For todos.
+        content: The entry text content (required).
+        kind: Entry type. One of: memory (general notes, default), todo (tasks),
+              journal (calendar events with event_date), profile (facts about user),
+              ai (instructions for AI assistants), bookmark (URLs), list (lists).
+        context: Context/project name to associate with. Must exist unless
+                 create_context=True. Use list_contexts() to see existing contexts.
+        name: Optional unique identifier for easy reference (e.g., @budget).
+              Must be unique within the context. Fails if name already exists.
+        tags: Comma-separated tags (e.g., "important,followup,dev").
+        event_date: For journal entries only - the event date in YYYYMMDD format.
+        priority: Priority level where 1 is highest (positive integers only).
+        status: Status value. One of: active, done, blocked, archive.
+        create_context: If True, creates context if it doesn't exist. Default: False
+                        (fails if context doesn't exist, preventing typos).
 
-    Returns the created entry with its id.
+    Returns:
+        The created entry with id, content, kind, context, created, modified,
+        and any optional fields (name, priority, status, tags, data).
+        Returns {"error": "..."} if validation fails.
     """
+    if not content or not content.strip():
+        return {"error": "content is required and cannot be empty"}
+
+    if kind not in VALID_KINDS:
+        return {"error": f"Invalid kind '{kind}'. Must be one of: {', '.join(VALID_KINDS)}"}
+
+    if status is not None and status not in VALID_STATUSES:
+        return {"error": f"Invalid status '{status}'. Must be one of: {', '.join(VALID_STATUSES)}"}
+
+    if priority is not None:
+        if not isinstance(priority, int) or priority < 1:
+            return {"error": f"priority must be a positive integer, got {priority}"}
+
+    if event_date:
+        err = _validate_event_date(event_date)
+        if err:
+            return {"error": err}
+
     @sync_to_async
     def create():
         now = time.time()
 
-        # Validate kind
-        valid_kinds = ['memory', 'todo', 'journal', 'profile', 'ai', 'bookmark', 'list']
-        if kind not in valid_kinds:
-            return {"error": f"Invalid kind '{kind}'. Must be one of: {', '.join(valid_kinds)}"}
-
-        # Get or create context if specified
         context_obj = None
         if context:
-            context_obj, _ = Context.objects.get_or_create(
-                name=context,
-                defaults={
-                    'timestamp_created': now,
-                    'timestamp_modified': now,
-                }
-            )
+            try:
+                context_obj = Context.objects.get(name=context)
+            except Context.DoesNotExist:
+                if create_context:
+                    context_obj = Context.objects.create(
+                        name=context,
+                        timestamp_created=now,
+                        timestamp_modified=now,
+                    )
+                else:
+                    return {"error": f"Context '{context}' does not exist. Use list_contexts() to see valid contexts, or set create_context=True."}
 
-        # Build data field
+        if name:
+            existing = Entry.objects.filter(
+                name=name,
+                context=context_obj,
+                deleted_at__isnull=True,
+            ).exists()
+            if existing:
+                ctx_desc = f"context '{context}'" if context else "no context"
+                return {"error": f"Name '{name}' already exists in {ctx_desc}. Names must be unique within a context."}
+
         data = {}
         if event_date:
             data['event_date'] = event_date
         if not data:
             data = None
 
-        # Create entry
         entry = Entry.objects.create(
             id=str(uuid.uuid4()),
             content=content,
@@ -300,7 +409,6 @@ async def create_entry(
             is_dirty=1,
         )
 
-        # Add tags
         if tags:
             tag_list = [t.strip() for t in tags.split(',') if t.strip()]
             for tag_name in tag_list:
@@ -318,15 +426,29 @@ async def get_todos(
     include_done: bool = False,
 ) -> list:
     """
-    Get todo entries.
+    Get todo/task entries.
+
+    Retrieves the user's task list. By default excludes completed todos (status='done')
+    to show only active work. Todos with no status set are considered incomplete and
+    are included by default.
 
     Args:
-        context: Filter to todos in this context/project.
-        status: Filter by status (active, done, blocked, archive).
-        include_done: If True, include completed todos. Default: False.
+        context: Filter to todos in this context/project only.
+        status: Filter by specific status: active, done, blocked, or archive.
+                If specified, returns only todos with this exact status.
+                Overrides include_done.
+        include_done: If True, include all todos regardless of status.
+                      Default: False (excludes status='done' only).
 
-    Returns list of todos with: id, content, context, status, priority, tags.
+    Returns:
+        List of todos ordered by priority (1=highest first, nulls last) then by
+        modification date (newest first). Each contains: id, content, context,
+        kind, created, modified, and optional priority, status, tags.
+        Returns {"error": "..."} if status parameter is invalid.
     """
+    if status is not None and status not in VALID_STATUSES:
+        return {"error": f"Invalid status '{status}'. Must be one of: {', '.join(VALID_STATUSES)}"}
+
     @sync_to_async
     def fetch():
         qs = Entry.objects.filter(
@@ -342,15 +464,63 @@ async def get_todos(
         elif not include_done:
             qs = qs.exclude(status='done')
 
-        # Order by priority (nulls last), then by modified date
         qs = qs.order_by(
             models.F('priority').asc(nulls_last=True),
             '-timestamp_modified'
         )
 
-        return [_format_entry(entry) for entry in qs[:100]]
+        return [_format_entry(entry) for entry in qs]
 
-    from django.db import models
+    return await fetch()
+
+
+@mcp.tool()
+async def get_memories(
+    context: str = None,
+    limit: int = 50,
+) -> list:
+    """
+    Get memory entries - general notes and information.
+
+    Memories are the default entry type for storing facts, notes, and
+    information the user wants to remember.
+
+    Args:
+        context: Filter to memories in this context/project.
+        limit: Maximum results to return. Default: 50.
+
+    Returns:
+        List of memories ordered by modification date (newest first),
+        each containing: content, context, created, modified, tags.
+
+    OUTPUT FORMAT: When presenting to user, show each memory as:
+        - CONTENT
+    Group by context if multiple contexts present.
+    """
+    @sync_to_async
+    def fetch():
+        qs = Entry.objects.filter(
+            kind='memory',
+            deleted_at__isnull=True,
+        ).select_related('context').prefetch_related('tags')
+
+        if context:
+            qs = qs.filter(context__name=context)
+
+        qs = qs.order_by('-timestamp_modified')[:limit]
+
+        results = []
+        for entry in qs:
+            result = {
+                'content': entry.content,
+                'context': entry.context.name if entry.context else None,
+            }
+            tags = list(entry.tags.values_list('tag_name', flat=True))
+            if tags:
+                result['tags'] = tags
+            results.append(result)
+        return results
+
     return await fetch()
 
 
@@ -362,16 +532,34 @@ async def search_entries(
     limit: int = 50,
 ) -> list:
     """
-    Search entries by content.
+    Full-text search across entries.
+
+    Performs case-insensitive search in entry content. Use this to find specific
+    information, locate entries by keyword, or explore what the user has stored
+    on a topic.
 
     Args:
-        query: Search term to find in entry content.
-        kind: Filter to specific entry type (memory, todo, journal, etc.).
-        context: Filter to entries in this context.
-        limit: Maximum results to return. Default: 50.
+        query: Search term to find in entry content (case-insensitive substring match).
+        kind: Filter to specific entry type: memory, todo, journal, profile,
+              ai, bookmark, or list.
+        context: Filter to entries in this context/project only.
+        limit: Maximum results to return. Default: 50. Set higher if needed.
 
-    Returns list of matching entries.
+    Returns:
+        List of matching entries ordered by modification date (newest first),
+        each containing: id, content, kind, context, created, modified, and
+        optional name, priority, status, tags.
+        Returns {"error": "..."} if parameters are invalid.
     """
+    if not query:
+        return {"error": "query is required"}
+
+    if kind is not None and kind not in VALID_KINDS:
+        return {"error": f"Invalid kind '{kind}'. Must be one of: {', '.join(VALID_KINDS)}"}
+
+    if not isinstance(limit, int) or limit < 1:
+        return {"error": f"limit must be a positive integer, got {limit}"}
+
     @sync_to_async
     def fetch():
         qs = Entry.objects.filter(
