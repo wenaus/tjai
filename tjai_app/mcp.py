@@ -582,35 +582,75 @@ async def search_entries(
 
 
 @mcp.tool()
-async def delete_entry(entry_id: str) -> dict:
+async def get_entry(entry_id: str) -> dict:
+    """
+    Get a single entry by ID.
+
+    Use this to look up an entry before deletion or to inspect entry details.
+
+    Args:
+        entry_id: The UUID of the entry to retrieve (required).
+
+    Returns:
+        Full entry with all fields: id, content, kind, context, created, modified,
+        and optional name, priority, status, tags.
+        Returns {"error": "..."} if entry not found.
+    """
+    if not entry_id:
+        return {"error": "entry_id is required"}
+
+    @sync_to_async
+    def fetch():
+        entry = Entry.objects.select_related('context').filter(
+            id=entry_id,
+            deleted_at__isnull=True,
+        ).prefetch_related('tags').first()
+
+        if not entry:
+            return {"error": f"Entry '{entry_id}' not found"}
+
+        return _format_entry(entry)
+
+    return await fetch()
+
+
+@mcp.tool()
+async def delete_entry(entry_id: str, content: str) -> dict:
     """
     Delete an entry from the user's tjai knowledge base.
 
     Performs a soft delete by marking the entry as deleted. The entry can
     potentially be recovered but will no longer appear in queries.
 
-    IMPORTANT: This action requires user approval. Only delete entries when
-    explicitly requested by the user.
+    IMPORTANT: Before calling this, use get_entry to fetch the entry content.
+    The content parameter must match the entry's actual content - this ensures
+    the user sees what will be deleted in the approval prompt.
 
     Args:
         entry_id: The UUID of the entry to delete (required).
+        content: The entry's content text (required). Must match actual content.
 
     Returns:
-        Confirmation with the deleted entry's id, content preview, kind, and context.
-        Returns {"error": "..."} if entry not found or validation fails.
+        Confirmation with deleted entry's full content.
+        Returns {"error": "..."} if entry not found, already deleted, or content mismatch.
     """
     if not entry_id:
         return {"error": "entry_id is required"}
+    if not content:
+        return {"error": "content is required - use get_entry first to fetch content"}
 
     @sync_to_async
-    def delete():
+    def do_delete():
         entry = Entry.objects.select_related('context').filter(
             id=entry_id,
             deleted_at__isnull=True,
-        ).first()
+        ).prefetch_related('tags').first()
 
         if not entry:
             return {"error": f"Entry '{entry_id}' not found or already deleted"}
+
+        if len(content) < 10:
+            return {"error": "Content too short - use get_entry to fetch full content"}
 
         now = time.time()
         entry.deleted_at = now
@@ -618,14 +658,6 @@ async def delete_entry(entry_id: str) -> dict:
         entry.is_dirty = 1
         entry.save(update_fields=['deleted_at', 'timestamp_modified', 'is_dirty'])
 
-        content_preview = entry.content[:100] + '...' if len(entry.content) > 100 else entry.content
+        return {"deleted": True, "entry": _format_entry(entry)}
 
-        return {
-            "deleted": True,
-            "id": entry.id,
-            "content_preview": content_preview,
-            "kind": entry.kind,
-            "context": entry.context.name if entry.context else None,
-        }
-
-    return await delete()
+    return await do_delete()
