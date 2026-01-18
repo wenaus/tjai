@@ -661,3 +661,85 @@ async def delete_entry(entry_id: str, content: str) -> dict:
         return {"deleted": True, "entry": _format_entry(entry)}
 
     return await do_delete()
+
+
+@mcp.tool()
+async def edit_entry(
+    entry_id: str,
+    content: str,
+    context: str = None,
+    clear_context: bool = False,
+    tags: list[str] = None,
+    keep_time: bool = False,
+) -> dict:
+    """
+    Edit an existing entry in the user's tjai knowledge base.
+
+    Updates the content and optionally other fields of an existing entry.
+    The entry must exist and not be deleted.
+
+    Args:
+        entry_id: The UUID of the entry to edit (required).
+        content: The new content text (required). Shows user the final result.
+        context: Set the entry's context to this value. Must be an existing context.
+                 If not provided and clear_context=False, keeps existing context.
+        clear_context: If True, removes the entry's context (sets to None).
+                       Ignored if context parameter is provided.
+        tags: Replace all tags with this list. If None, keeps existing tags.
+              Pass empty list [] to remove all tags.
+        keep_time: If True, preserve the original modification timestamp.
+                   Default: False (updates timestamp_modified to now).
+
+    Returns:
+        The updated entry with all fields: id, content, kind, context, created,
+        modified, and optional name, priority, status, tags.
+        Returns {"error": "..."} if entry not found or validation fails.
+    """
+    if not entry_id:
+        return {"error": "entry_id is required"}
+    if not content:
+        return {"error": "content is required - must provide the new content"}
+    if len(content) < 10:
+        return {"error": "content too short - must be at least 10 characters"}
+
+    @sync_to_async
+    def do_edit():
+        entry = Entry.objects.select_related('context').filter(
+            id=entry_id,
+            deleted_at__isnull=True,
+        ).prefetch_related('tags').first()
+
+        if not entry:
+            return {"error": f"Entry '{entry_id}' not found or already deleted"}
+
+        entry.content = content
+
+        if context is not None:
+            try:
+                context_obj = Context.objects.get(name=context)
+                entry.context = context_obj
+            except Context.DoesNotExist:
+                return {"error": f"Context '{context}' does not exist. Use list_contexts() to see valid contexts."}
+        elif clear_context:
+            entry.context = None
+
+        if tags is not None:
+            entry.tags.all().delete()
+            for tag_name in tags:
+                if tag_name and tag_name.strip():
+                    Tag.objects.create(tag_name=tag_name.strip(), entry=entry)
+
+        if not keep_time:
+            entry.timestamp_modified = time.time()
+
+        entry.is_dirty = 1
+
+        update_fields = ['content', 'context', 'is_dirty']
+        if not keep_time:
+            update_fields.append('timestamp_modified')
+
+        entry.save(update_fields=update_fields)
+
+        return _format_entry(entry)
+
+    return await do_edit()
