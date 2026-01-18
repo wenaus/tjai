@@ -242,6 +242,56 @@ To add tjai as an MCP server in Claude Code:
 claude mcp add --transport http tjai https://etaverse.com/tjai/mcp/
 ```
 
+### Claude Code Settings Example
+
+Full `~/.claude/settings.json` with tjai MCP server, permissions, and status line:
+
+```json
+{
+  "mcpServers": {
+    "tjai": {
+      "type": "http",
+      "url": "https://etaverse.com/tjai/mcp/"
+    }
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.sh"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(grep:*)",
+      "mcp__tjai__get_calendar",
+      "mcp__tjai__get_profile",
+      "mcp__tjai__get_ai_guidance",
+      "mcp__tjai__get_todos",
+      "mcp__tjai__get_memories",
+      "mcp__tjai__list_contexts",
+      "mcp__tjai__search_entries",
+      "mcp__tjai__create_entry",
+      "mcp__tjai__get_server_instructions",
+      "WebSearch",
+      "WebFetch"
+    ],
+    "defaultMode": "default"
+  },
+  "alwaysThinkingEnabled": true
+}
+```
+
+**Status line script** (`~/.claude/statusline.sh`):
+
+```bash
+#!/bin/bash
+input=$(cat)
+MODEL=$(echo "$input" | jq -r '.model.display_name')
+USED=$(echo "$input" | jq -r '.context_window.used_percentage // 0')
+REMAINING=$(echo "$input" | jq -r '.context_window.remaining_percentage // 100')
+echo "[$MODEL] ${USED}% used | ${REMAINING}% remaining"
+```
+
 ## Development Setup
 
 To set up your development environment and run tests:

@@ -11,7 +11,9 @@ Available tools:
     list_contexts     - List all projects/topics for organizing entries
     create_entry      - Add new entries (memories, todos, journal, profile, ai, bookmark)
     get_todos         - Retrieve todo items with filtering options
+    get_memories      - Get memory entries (general notes)
     search_entries    - Full-text search across all entries
+    delete_entry      - Soft delete an entry (requires user approval)
 
 Entry types: memory, todo, journal, profile, bookmark, ai, list
 
@@ -577,3 +579,53 @@ async def search_entries(
         return [_format_entry(entry) for entry in qs]
 
     return await fetch()
+
+
+@mcp.tool()
+async def delete_entry(entry_id: str) -> dict:
+    """
+    Delete an entry from the user's tjai knowledge base.
+
+    Performs a soft delete by marking the entry as deleted. The entry can
+    potentially be recovered but will no longer appear in queries.
+
+    IMPORTANT: This action requires user approval. Only delete entries when
+    explicitly requested by the user.
+
+    Args:
+        entry_id: The UUID of the entry to delete (required).
+
+    Returns:
+        Confirmation with the deleted entry's id, content preview, kind, and context.
+        Returns {"error": "..."} if entry not found or validation fails.
+    """
+    if not entry_id:
+        return {"error": "entry_id is required"}
+
+    @sync_to_async
+    def delete():
+        entry = Entry.objects.select_related('context').filter(
+            id=entry_id,
+            deleted_at__isnull=True,
+        ).first()
+
+        if not entry:
+            return {"error": f"Entry '{entry_id}' not found or already deleted"}
+
+        now = time.time()
+        entry.deleted_at = now
+        entry.timestamp_modified = now
+        entry.is_dirty = 1
+        entry.save(update_fields=['deleted_at', 'timestamp_modified', 'is_dirty'])
+
+        content_preview = entry.content[:100] + '...' if len(entry.content) > 100 else entry.content
+
+        return {
+            "deleted": True,
+            "id": entry.id,
+            "content_preview": content_preview,
+            "kind": entry.kind,
+            "context": entry.context.name if entry.context else None,
+        }
+
+    return await delete()

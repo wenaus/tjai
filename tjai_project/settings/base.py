@@ -157,6 +157,7 @@ Tools:
 - search_entries(query, kind, context, limit): Full-text search across entries.
 - create_entry(content, kind, context, name, tags, event_date, priority, status,
   create_context): Add new entries. Context must exist unless create_context=True.
+- delete_entry(entry_id): Soft delete an entry. Requires user approval.
 
 Entry types: memory (notes), todo (tasks), journal (calendar events), profile
 (user facts), ai (AI instructions), bookmark (URLs), list (lists).

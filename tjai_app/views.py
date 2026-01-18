@@ -283,6 +283,37 @@ def api_command(request):
         return JsonResponse({"error": f"Unknown command: {command}"}, status=400)
 
 
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def api_delete_entry(request, entry_id):
+    """
+    Soft delete an entry by ID.
+
+    Response:
+        {"status": "ok", "deleted": {...entry details...}}
+        {"error": "..."} on failure
+    """
+    entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
+    if not entry:
+        return JsonResponse({"error": f"Entry '{entry_id}' not found or already deleted"}, status=404)
+
+    now = time.time()
+    entry.deleted_at = now
+    entry.timestamp_modified = now
+    entry.is_dirty = 1
+    entry.save(update_fields=['deleted_at', 'timestamp_modified', 'is_dirty'])
+
+    return JsonResponse({
+        "status": "ok",
+        "deleted": {
+            "id": entry.id,
+            "content_preview": entry.content[:100] + '...' if len(entry.content) > 100 else entry.content,
+            "kind": entry.kind,
+            "context": entry.context.name if entry.context else None,
+        }
+    })
+
+
 def login_view(request):
     """Custom login page."""
     if request.user.is_authenticated:
