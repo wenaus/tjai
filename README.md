@@ -236,7 +236,22 @@ python manage.py createsuperuser
 
 ### Claude Code MCP Integration
 
-To add tjai as an MCP server in Claude Code:
+The tjai MCP server endpoint is `https://etaverse.com/tjai/mcp/` (HTTP transport).
+
+**Project-level config:** A `.mcp.json` file in this directory auto-configures the tjai MCP server when Claude Code is launched from here:
+
+```json
+{
+  "mcpServers": {
+    "tjai": {
+      "type": "http",
+      "url": "https://etaverse.com/tjai/mcp/"
+    }
+  }
+}
+```
+
+**Global config:** To add tjai globally via CLI:
 
 ```bash
 claude mcp add --transport http tjai https://etaverse.com/tjai/mcp/
