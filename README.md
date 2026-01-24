@@ -309,6 +309,33 @@ REMAINING=$(echo "$input" | jq -r '.context_window.remaining_percentage // 100')
 echo "[$MODEL] ${USED}% used | ${REMAINING}% remaining"
 ```
 
+### OAuth 2.1 Authentication (Claude.ai Integration)
+
+The MCP server supports OAuth 2.1 authentication via [Auth0](https://auth0.com) for Claude.ai third-party connector integration.
+
+**Auth0 Configuration:**
+
+| Setting | Value |
+|---------|-------|
+| Domain | `dev-yjnmn4q2uqphuam2.us.auth0.com` |
+| Client ID | `KDoHUD5L0xydOVJywP5f9DoByTpkeOg9` |
+| API Identifier | `https://etaverse.com/tjai/mcp` |
+| Callback URL | `https://claude.ai/api/mcp/auth_callback` |
+
+**Authentication Modes:**
+
+- **Claude.ai (web)**: OAuth 2.1 with PKCE via Auth0
+- **Claude Code (CLI)**: Direct HTTP, no auth required (local config)
+
+**Environment Variables (server):**
+
+```bash
+AUTH0_DOMAIN=dev-yjnmn4q2uqphuam2.us.auth0.com
+AUTH0_CLIENT_ID=KDoHUD5L0xydOVJywP5f9DoByTpkeOg9
+AUTH0_CLIENT_SECRET=<secret>  # Do not commit
+AUTH0_API_IDENTIFIER=https://etaverse.com/tjai/mcp
+```
+
 ## Development Setup
 
 To set up your development environment and run tests:
