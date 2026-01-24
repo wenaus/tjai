@@ -46,8 +46,9 @@ def handle_list_command(args) -> None:
                 return
 
         # Otherwise, list entries with filters
-        no_truncate = getattr(args, 'no_truncate', False)
-        _list_entries_with_filters(repository, filters, no_truncate)
+        clean_mode = getattr(args, 'clean', False)
+        no_truncate = getattr(args, 'no_truncate', False) or getattr(args, 'all', False) or clean_mode
+        _list_entries_with_filters(repository, filters, no_truncate, clean_mode)
 
     except Exception as e:
         print(f"List error: {e}", file=sys.stderr)
@@ -141,7 +142,7 @@ def _list_tags(repository):
         print(f"{colorize_entry_number(i)}  {tag_name} - {count}")
 
 
-def _list_entries_with_filters(repository, filters, no_truncate=False):
+def _list_entries_with_filters(repository, filters, no_truncate=False, clean_mode=False):
     """List entries with composite filters.
 
     Context behavior:
@@ -332,20 +333,21 @@ def _list_entries_with_filters(repository, filters, no_truncate=False):
         print(f"No {query_desc} entries found")
         return
 
-    # Print legend and headers
-    from tj.colors import BRIGHT_YELLOW, RESET
-    filter_desc = f" ({query_desc})" if query_desc else ""
-    print(f"{BRIGHT_YELLOW}========== tj entries{filter_desc} =========={RESET}")
-    legend = "Entry types: [ai]=AI guidance [b]=bookmark [do]=todo [j]=journal [m]=memory [p]=profile"
-    print(legend)
+    # Print legend and headers (skip in clean mode)
+    if not clean_mode:
+        from tj.colors import BRIGHT_YELLOW, RESET
+        filter_desc = f" ({query_desc})" if query_desc else ""
+        print(f"{BRIGHT_YELLOW}========== tj entries{filter_desc} =========={RESET}")
+        legend = "Entry types: [ai]=AI guidance [b]=bookmark [do]=todo [j]=journal [m]=memory [p]=profile"
+        print(legend)
 
-    # Add metadata line
-    print("Metadata: =context :tag @name p=priority s=status")
+        # Add metadata line
+        print("Metadata: =context :tag @name p=priority s=status")
 
-    # Add column headers with timezone info
-    from tj.timezone_manager import get_current_timezone
-    tz = get_current_timezone()
-    print(f"Entry   Timestamp       Type Content     (TZ: {tz})")
+        # Add column headers with timezone info
+        from tj.timezone_manager import get_current_timezone
+        tz = get_current_timezone()
+        print(f"Entry   Timestamp       Type Content     (TZ: {tz})")
     # Get truncate length from config
     from tj.config import get_content_truncate_length
     from tj.commands.common import format_entry_for_display
@@ -378,7 +380,10 @@ def _list_entries_with_filters(repository, filters, no_truncate=False):
         else:
             entry_truncate = truncate_len
         entry_tags = tags_by_entry.get(entry.id, [])
-        print(format_entry_for_display(entry, i, entry_truncate, entry_tags))
+        if clean_mode:
+            print(entry.content)
+        else:
+            print(format_entry_for_display(entry, i, entry_truncate, entry_tags))
     debug_time("list_format_entries", time_format_start)
 
     # Auto-create any orphaned contexts found during display

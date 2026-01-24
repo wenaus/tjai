@@ -145,7 +145,9 @@ def create_parser() -> argparse.ArgumentParser:
     # List commands
     p_list = subparsers.add_parser('l', help="List metadata and entries.")
     p_list.add_argument('filters', nargs='*', help="Filters: c/t/@ (metadata), d/p/b/j/ai (type), =ctx, :tag, p=N, s=val, priority, archive")
-    p_list.set_defaults(func=handle_list_command, no_truncate=False)
+    p_list.add_argument('--clean', action='store_true', help="Output only entry content, no preamble")
+    p_list.add_argument('--all', action='store_true', help="Show full content (no truncation)")
+    p_list.set_defaults(func=handle_list_command)
 
     # List all (no truncation)
     p_all = subparsers.add_parser('a', help="List entries with full content (no truncation).")

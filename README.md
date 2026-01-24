@@ -81,6 +81,8 @@ tj l                                            # List all entries
     *   `l p/b/d/ai`: Lists profiles/bookmarks/todos/AI guidelines.
     *   `l priority`: Lists all prioritized entries, sorted by priority (p=1 first).
     *   `l archive`: Lists archived entries.
+    *   `l --all`: No truncation (full content).
+    *   `l --clean`: Content only, no preamble.
 *   **CONTEXT:** `tj =<context>` with optional flags
     *   `tj =tjai`: Switch to/create context (terse name only)
     *   `tj =tjai -t AI app development`: Create with title
