@@ -299,15 +299,21 @@ Full `~/.claude/settings.json` with tjai MCP server, permissions, and status lin
 }
 ```
 
-**Status line script setup:**
+**Claude Code configuration files:**
 
-The status line script is maintained at `tjrepo/computers/common/claude-statusline.sh`. Symlink it to your `.claude` directory:
+Settings and status line are maintained in `tjrepo/computers/common/`. Symlink them:
 
 ```bash
+ln -s ~/github/tjrepo/computers/common/claude-settings.json ~/.claude/settings.json
 ln -s ~/github/tjrepo/computers/common/claude-statusline.sh ~/.claude/statusline.sh
 ```
 
-The script displays model, cost, context usage, session duration, and working directory.
+The settings file configures:
+- MCP server connection to tjai
+- Pre-approved permissions for read-only MCP tools and common bash commands
+- Status line display
+
+The status line shows model, cost, context usage, session duration, and working directory.
 
 ### Claude.ai Integration
 
