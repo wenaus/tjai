@@ -1,6 +1,7 @@
 """Delete and archive command handlers for tj."""
 
 import sys
+import traceback
 
 from tj.colors import colorize_context, colorize_creation_timestamp
 from tj.commands.common import get_entry_from_recent_list, confirm_action, truncate_content
@@ -38,6 +39,7 @@ def handle_archive_command(args) -> None:
             print(f"Archived {archived_count} of {len(args.args)} entries.")
 
     except Exception as e:
+        traceback.print_exc()
         print(f"Archive error: {e}", file=sys.stderr)
 
 
@@ -71,6 +73,7 @@ def handle_unarchive_command(args) -> None:
             print(f"Unarchived {unarchived_count} of {len(args.args)} entries.")
 
     except Exception as e:
+        traceback.print_exc()
         print(f"Unarchive error: {e}", file=sys.stderr)
 
 
@@ -162,6 +165,7 @@ def handle_delete_new(args) -> None:
             print("Error: No valid entry numbers specified.", file=sys.stderr)
 
     except Exception as e:
+        traceback.print_exc()
         print(f"Delete error: {e}", file=sys.stderr)
 
 
@@ -209,6 +213,7 @@ def handle_delete_entries(entry_nums: list) -> None:
             print(f"Deleted {deleted_count} of {len(entries_to_delete)} entries.", file=sys.stderr)
 
     except Exception as e:
+        traceback.print_exc()
         print(f"Delete entries error: {e}", file=sys.stderr)
 
 
@@ -249,6 +254,7 @@ def handle_delete_tag_from_entry(entry_num: int, tag: str) -> None:
             print("Error: Failed to remove tag.", file=sys.stderr)
 
     except Exception as e:
+        traceback.print_exc()
         print(f"Delete tag error: {e}", file=sys.stderr)
 
 
@@ -279,6 +285,7 @@ def handle_delete_all_tag_instances(tagname: str) -> None:
             print("Error: No tag instances were removed.", file=sys.stderr)
 
     except Exception as e:
+        traceback.print_exc()
         print(f"Delete all tags error: {e}", file=sys.stderr)
 
 
@@ -322,4 +329,5 @@ def handle_delete_context(context_name: str) -> None:
             print("Error: Failed to delete context.", file=sys.stderr)
 
     except Exception as e:
+        traceback.print_exc()
         print(f"Delete context error: {e}", file=sys.stderr)

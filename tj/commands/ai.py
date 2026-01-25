@@ -1,6 +1,7 @@
 """AI command for creating and querying AI behavioral guidelines."""
 
 import sys
+import traceback
 from typing import Optional
 
 from tj.repository_factory import RepositoryFactory
@@ -128,4 +129,5 @@ def query_ai_guidelines(context: Optional[str], tag: Optional[str]) -> None:
             print("No universal AI guidelines found.")
 
     except Exception as e:
+        traceback.print_exc()
         print(f"Error querying AI guidelines: {e}", file=sys.stderr)

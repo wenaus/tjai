@@ -1,6 +1,7 @@
 import json
 import re
 import sys
+import traceback
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -233,4 +234,5 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
     except DatabaseError as e:
         print(f"Database error: {e}", file=sys.stderr)
     except Exception as e:
+        traceback.print_exc()
         print(f"Error creating entry: {e}", file=sys.stderr)

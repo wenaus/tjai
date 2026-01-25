@@ -2,6 +2,7 @@
 
 import sys
 import time
+import traceback
 from datetime import datetime, timedelta
 
 from tj.colors import colorize_content, colorize_context, colorize_kind, colorize_timestamp, colorize_creation_timestamp, colorize_entry_number, BOLD, RESET
@@ -51,6 +52,7 @@ def handle_list_command(args) -> None:
         _list_entries_with_filters(repository, filters, no_truncate, clean_mode)
 
     except Exception as e:
+        traceback.print_exc()
         print(f"List error: {e}", file=sys.stderr)
 
 
@@ -374,7 +376,7 @@ def _list_entries_with_filters(repository, filters, no_truncate=False, clean_mod
             entry_truncate = None
         # Check for per-entry truncate setting, otherwise use global
         elif entry.data and 'truncate_lines' in entry.data:
-            entry_truncate = entry.data['truncate_lines']
+            entry_truncate = int(entry.data['truncate_lines'])
         elif skip_truncate:
             entry_truncate = None
         else:
@@ -460,4 +462,5 @@ def handle_list_all(args) -> None:
             print(format_entry_for_display(entry, i))
 
     except Exception as e:
+        traceback.print_exc()
         print(f"List all error: {e}", file=sys.stderr)

@@ -2,6 +2,7 @@
 
 import re
 import sys
+import traceback
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -148,6 +149,7 @@ def handle_add_tag(num_identifier: int, action_command: str) -> bool:
         print(f"Tag ':{tag}' added to entry {num_identifier}")
         return True
     except Exception as e:
+        traceback.print_exc()
         print(f"Error: Failed to add tag ':{tag}': {e}", file=sys.stderr)
         return False
 

@@ -1,6 +1,7 @@
 """List command handlers for tj."""
 
 import sys
+import traceback
 from datetime import datetime, timezone
 
 from tj.repository_factory import RepositoryFactory
@@ -75,4 +76,5 @@ def handle_add_list_item(args) -> None:
             print("Error: Failed to add list item.", file=sys.stderr)
 
     except Exception as e:
+        traceback.print_exc()
         print(f"Error adding list item: {e}", file=sys.stderr)

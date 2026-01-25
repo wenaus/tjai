@@ -1,6 +1,7 @@
 """Journal/calendar command handlers for tj."""
 
 import sys
+import traceback
 from datetime import datetime, date, time, timedelta
 from zoneinfo import ZoneInfo
 from typing import Tuple, List, Optional
@@ -463,4 +464,5 @@ def handle_journal(args) -> None:
         handle_creation(journal_args, entry_type_override='journal')
 
     except Exception as e:
+        traceback.print_exc()
         print(f"Error creating journal entry: {e}", file=sys.stderr)

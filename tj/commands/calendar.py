@@ -2,6 +2,7 @@
 
 import sys
 import re
+import traceback
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 
@@ -444,6 +445,7 @@ def handle_calendar_view(args) -> None:
                     entry_number += 1
 
     except Exception as e:
+        traceback.print_exc()
         print(f"Calendar view error: {e}", file=sys.stderr)
 
 
@@ -541,4 +543,5 @@ def handle_yearly_summary(args) -> None:
                 current_dt = current_dt.replace(month=current_dt.month + 1, day=1)
 
     except Exception as e:
+        traceback.print_exc()
         print(f"Yearly summary error: {e}", file=sys.stderr)

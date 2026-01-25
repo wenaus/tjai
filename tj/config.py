@@ -1,6 +1,7 @@
 """Configuration management for tjai."""
 
 import json
+import traceback
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -47,6 +48,7 @@ def get_config() -> Dict[str, Any]:
             _cached_config = DEFAULT_CONFIG.copy()
             return _cached_config
     except Exception:
+        traceback.print_exc()
         # Fallback to defaults if config is corrupted
         _cached_config = DEFAULT_CONFIG.copy()
         return _cached_config
@@ -61,6 +63,7 @@ def save_config(config: Dict[str, Any]) -> None:
             json.dump(config, f, indent=2)
         _cached_config = config.copy()  # Update cache
     except Exception as e:
+        traceback.print_exc()
         print(f"Warning: Could not save config: {e}")
 
 
@@ -97,6 +100,7 @@ def get_db_path() -> Path:
     try:
         base_dir.mkdir(parents=True, exist_ok=True)
     except Exception as e:
+        traceback.print_exc()
         print(f"Warning: Could not create database directory: {e}")
 
     # Bootstrap: copy from generic tjai.db if location-specific doesn't exist
@@ -124,6 +128,7 @@ def _reset_sync_time(db_path: Path) -> None:
         conn.close()
         print("Reset sync time for full sync on first run.")
     except Exception as e:
+        traceback.print_exc()
         print(f"Warning: Could not reset sync time: {e}")
 
 
@@ -137,6 +142,7 @@ def get_backup_dir() -> Path:
     try:
         expanded_path.mkdir(parents=True, exist_ok=True)
     except Exception as e:
+        traceback.print_exc()
         print(f"Warning: Could not create backup directory: {e}")
 
     return expanded_path

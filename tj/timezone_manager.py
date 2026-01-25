@@ -1,6 +1,7 @@
 """Timezone management for tjai."""
 
 import sqlite3
+import traceback
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import Optional, Dict
@@ -61,6 +62,7 @@ def get_timezone_object() -> Optional[ZoneInfo]:
     try:
         _cached_tz_object = ZoneInfo(tz_name)
     except Exception:
+        traceback.print_exc()
         _cached_tz_object = None
     return _cached_tz_object
 
@@ -114,6 +116,7 @@ def format_time_in_timezone(timestamp: float, timezone: str) -> str:
         dt = datetime.fromtimestamp(timestamp, tz=tz)
         return dt.strftime('%m/%d %I:%M%p').lower()
     except Exception:
+        traceback.print_exc()
         # Fallback for any timezone errors - use local time
         dt = datetime.fromtimestamp(timestamp)
         return dt.strftime('%m/%d %I:%M%p').lower()
@@ -131,6 +134,7 @@ def format_time_only(timestamp: float, timezone: str = None) -> str:
         time_str = dt.strftime('%I:%M%p').lower().lstrip('0')
         return time_str
     except Exception:
+        traceback.print_exc()
         dt = datetime.fromtimestamp(timestamp)
         return dt.strftime('%I:%M%p').lower().lstrip('0')
 
@@ -143,6 +147,7 @@ def format_time_dashboard(timestamp: float) -> str:
         entry_time = datetime.fromtimestamp(timestamp, tz=tz)
         return entry_time.strftime("%a %m/%d/%H:%M")
     except Exception:
+        traceback.print_exc()
         # Fallback on any error
         return "--- --/--/--:--"
 

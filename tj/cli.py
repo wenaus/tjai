@@ -1,6 +1,7 @@
 import argparse
 import sys
 import time
+import traceback
 from typing import List, Optional, Tuple
 from datetime import datetime
 
@@ -60,6 +61,7 @@ def _ensure_agent_running() -> None:
         from tj_agent.daemon import ensure_running
         ensure_running()
     except Exception as e:
+        traceback.print_exc()
         print(f"Agent startup failed: {e}", file=sys.stderr)
 
 
@@ -404,8 +406,7 @@ def show_status() -> None:
             else:
                 print(f"\nBackups: No backups found [{backup_dir}]")
         except Exception:
-            # Don't let backup info failure break the status display
-            pass
+            traceback.print_exc()
         debug_time("list_backups", _t)
 
         # Config info
@@ -415,8 +416,9 @@ def show_status() -> None:
             print(line)
 
         print("\nTry: tj \"your memory here\", tj h for help")
-        
+
     except Exception as e:
+        traceback.print_exc()
         print(f"Status unavailable: {e}")
         print("Try: tj \"your memory here\", tj h for help")
 
@@ -774,5 +776,6 @@ def entrypoint() -> None:
         print("\nInterrupted by user.", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
+        traceback.print_exc()
         print(f"Unexpected error: {e}", file=sys.stderr)
         sys.exit(1)

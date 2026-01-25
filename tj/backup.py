@@ -3,6 +3,7 @@
 import os
 import shutil
 import sqlite3
+import traceback
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, List, Dict
@@ -132,12 +133,14 @@ def cleanup_old_backups() -> None:
                 backup_info['path'].unlink()
                 deleted_count += 1
             except Exception as e:
+                traceback.print_exc()
                 print(f"Warning: Failed to delete backup {backup_info['filename']}: {e}")
-        
+
         if deleted_count > 0:
             print(f"Cleaned up {deleted_count} old backup(s)")
-                
+
     except Exception as e:
+        traceback.print_exc()
         print(f"Warning: Backup cleanup failed: {e}")
 
 
@@ -180,6 +183,7 @@ def create_backup() -> tuple[bool, Optional[str]]:
             return False, error_msg
 
     except Exception as e:
+        traceback.print_exc()
         error_msg = f"{type(e).__name__}: {str(e)}"
         print(f"Backup failed: {error_msg}")
         return False, error_msg
@@ -215,6 +219,7 @@ def auto_backup() -> None:
             elif not success:
                 print("Warning: Backup failed")
     except Exception as e:
+        traceback.print_exc()
         # Don't let backup failures break the main command
         error_msg = f"{type(e).__name__}: {str(e)}"
         print(f"Warning: Backup check failed: {error_msg}")
@@ -266,7 +271,8 @@ def restore_backup(backup_filename: str) -> bool:
         shutil.copyfile(backup_path, db_path)
         print(f"Database restored from: {backup_filename}")
         return True
-        
+
     except Exception as e:
+        traceback.print_exc()
         print(f"Restore failed: {e}")
         return False

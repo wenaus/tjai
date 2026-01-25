@@ -3,6 +3,7 @@
 import os
 import subprocess
 import tempfile
+import traceback
 from typing import Optional
 
 
@@ -84,6 +85,7 @@ def open_editor(initial_content: str = "", entry_type: Optional[str] = None, fil
             print(f"Error: Editor '{editor}' not found")
             return None
         except Exception as e:
+            traceback.print_exc()
             print(f"Error launching editor: {e}")
             return None
 

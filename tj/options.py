@@ -8,6 +8,7 @@ Usage:
 """
 import shlex
 import sys
+import traceback
 import time
 from pathlib import Path
 from typing import Optional
@@ -77,6 +78,7 @@ if FILE_PATH:
         print(f"Error: File not found: {FILE_PATH}", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
+        traceback.print_exc()
         print(f"Error reading file: {e}", file=sys.stderr)
         sys.exit(1)
 

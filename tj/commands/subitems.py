@@ -1,6 +1,7 @@
 """Sub-item command handlers for tj."""
 
 import sys
+import traceback
 import uuid
 from datetime import datetime, timezone
 
@@ -84,4 +85,5 @@ def handle_add_subitem(args) -> None:
         print(f"Sub-item added: {content[:preview_len]}{'...' if len(content) > preview_len else ''}")
 
     except Exception as e:
+        traceback.print_exc()
         print(f"Error creating sub-item: {e}", file=sys.stderr)

@@ -1,6 +1,7 @@
 """Dump command - outputs database as executable tj commands."""
 
 import sys
+import traceback
 from datetime import datetime
 from typing import List
 
@@ -165,4 +166,5 @@ def handle_dump(args) -> None:
         print(f"# Dumped {len(contexts)} contexts, {len(rows)} entries", file=sys.stderr)
 
     except Exception as e:
+        traceback.print_exc()
         print(f"Dump error: {e}", file=sys.stderr)

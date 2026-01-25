@@ -1,6 +1,7 @@
 """Admin commands for tj database maintenance."""
 
 import sys
+import traceback
 from datetime import datetime, timezone
 
 from tj.commands.common import log_operation, confirm_action, truncate_content
@@ -34,6 +35,7 @@ def handle_backup() -> None:
             print("Backup failed.", file=sys.stderr)
             log_operation('backup', 'error', {'error': error_msg})
     except Exception as e:
+        traceback.print_exc()
         error_msg = f"{type(e).__name__}: {str(e)}"
         print(f"Backup error: {error_msg}", file=sys.stderr)
         log_operation('backup', 'error', {'error': error_msg})
@@ -218,5 +220,6 @@ def handle_purge() -> None:
         })
 
     except Exception as e:
+        traceback.print_exc()
         print(f"Purge error: {e}", file=sys.stderr)
         log_operation('purge', 'error', {'error': str(e)})

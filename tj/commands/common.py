@@ -1,6 +1,7 @@
 import sys
 import json
 import socket
+import traceback
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, Tuple, List
@@ -115,6 +116,7 @@ def log_operation(operation: str, result: str, details: dict = None) -> None:
         repository.create_entry(entry)
 
     except Exception as e:
+        traceback.print_exc()
         print(f"Warning: Failed to log operation: {e}", file=sys.stderr)
 
 
@@ -147,6 +149,7 @@ def should_log_backup(success: bool) -> bool:
         return True  # First backup of day
 
     except Exception:
+        traceback.print_exc()
         return False  # Don't log on error
 
 
@@ -352,6 +355,7 @@ def get_entry_from_recent_list(entry_identifier) -> Optional[Entry]:
             return recent_entries[entry_num - 1]
         return None
     except Exception:
+        traceback.print_exc()
         return None
 
 
@@ -375,6 +379,8 @@ def format_entry_for_display(entry, entry_number=None, truncate_lines=None, tags
     # Truncate content if requested
     content = entry.content
     if truncate_lines is not None:  # None means no truncation
+        # Defensive: ensure truncate_lines is int (may come as string from JSON)
+        truncate_lines = int(truncate_lines)
         lines = content.split('\n')
 
         # Strip leading blank lines after the first line (preserves blanks elsewhere in content)
@@ -440,10 +446,12 @@ def format_entry_for_display(entry, entry_number=None, truncate_lines=None, tags
     event_date_str = ""
     if entry.kind == 'journal' and entry.data and 'event_date' in entry.data:
         tz = get_timezone_object()
+        # Defensive: ensure event_date is numeric (may come as string from JSON)
+        event_ts = float(entry.data['event_date'])
         if tz:
-            event_dt = datetime.fromtimestamp(entry.data['event_date'], tz=tz)
+            event_dt = datetime.fromtimestamp(event_ts, tz=tz)
         else:
-            event_dt = datetime.fromtimestamp(entry.data['event_date'])
+            event_dt = datetime.fromtimestamp(event_ts)
 
         # If time is midnight (00:00), show just date with weekday
         if event_dt.hour == 0 and event_dt.minute == 0:
@@ -554,6 +562,7 @@ def handle_delete(args, num_identifier: Optional[int] = None) -> None:
             print("Entry deleted successfully.")
         else:
             print("Error: Failed to delete entry.", file=sys.stderr)
-            
+
     except Exception as e:
+        traceback.print_exc()
         print(f"Delete error: {e}", file=sys.stderr)

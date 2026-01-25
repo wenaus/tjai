@@ -1,6 +1,7 @@
 """Copy command for tj entries."""
 
 import sys
+import traceback
 import uuid
 from datetime import datetime, date, time, timezone as dt_timezone
 from zoneinfo import ZoneInfo
@@ -59,6 +60,7 @@ def handle_copy(args) -> None:
         tz = ZoneInfo(tz_name)
         original_dt = datetime.fromtimestamp(original_event_ts, tz=tz)
     except Exception:
+        traceback.print_exc()
         original_dt = datetime.fromtimestamp(original_event_ts)
 
     # Parse new date/time from remaining args

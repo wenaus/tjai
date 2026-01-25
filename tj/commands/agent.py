@@ -3,6 +3,7 @@
 import json
 import sys
 import time
+import traceback
 from pathlib import Path
 
 from tj.database import APP_DIR
@@ -143,6 +144,7 @@ def handle_agent(args) -> None:
                 else:
                     print(f"Failed: {result.get('error', 'Unknown error')}", file=sys.stderr)
             except Exception as e:
+                traceback.print_exc()
                 print(f"Failed to set interval: {e}", file=sys.stderr)
         else:
             # Show current interval from status file

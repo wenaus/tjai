@@ -1,6 +1,7 @@
 """Server API client using urllib (no external dependencies)."""
 
 import json
+import traceback
 import urllib.request
 import urllib.error
 
@@ -15,6 +16,7 @@ def get_server_url() -> str:
         config = get_config()
         return config.get("sync_server", DEFAULT_SERVER)
     except Exception:
+        traceback.print_exc()
         return DEFAULT_SERVER
 
 

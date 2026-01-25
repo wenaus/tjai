@@ -1,6 +1,7 @@
 """Modification command handlers for tj."""
 
 import sys
+import traceback
 from datetime import datetime, timezone
 
 from tj.colors import colorize_content, colorize_context, colorize_timestamp, colorize_entry_number
@@ -90,6 +91,7 @@ def _parse_metadata_from_content(content: str, entry):
                     original_dt = datetime.fromtimestamp(original_event_ts, tz=tz)
                     new_dt = datetime.fromtimestamp(event_timestamp, tz=tz)
                 except Exception:
+                    traceback.print_exc()
                     original_dt = datetime.fromtimestamp(original_event_ts)
                     new_dt = datetime.fromtimestamp(event_timestamp)
 
@@ -101,6 +103,7 @@ def _parse_metadata_from_content(content: str, entry):
                         combined_dt = datetime.combine(original_dt.date(), dt_time(new_dt.hour, new_dt.minute))
                     event_timestamp = combined_dt.timestamp()
                 except Exception:
+                    traceback.print_exc()
                     pass  # Fall back to parsed timestamp if combination fails
 
             # Rebuild content without the date/time prefix
@@ -136,8 +139,10 @@ def handle_add_subnote(args) -> None:
         print(f"Sub-note added to entry {entry_num}: {text[:preview_len]}...")
 
     except (ValueError, TypeError):
+        traceback.print_exc()
         print("Error: Invalid entry number.", file=sys.stderr)
     except Exception as e:
+        traceback.print_exc()
         print(f"Add sub-note error: {e}", file=sys.stderr)
 
 
@@ -509,8 +514,10 @@ def handle_tag_command(args) -> None:
                     print(f"{colorize_entry_number(i)}  {time_str} [{entry.kind}] {content_colored}{context_str}")
 
     except (ValueError, TypeError):
+        traceback.print_exc()
         print("Error: Invalid entry number.", file=sys.stderr)
     except Exception as e:
+        traceback.print_exc()
         print(f"Tag command error: {e}", file=sys.stderr)
 
 
@@ -538,8 +545,10 @@ def handle_untag_command(args) -> None:
         print(f"Tag '{tag}' removed from entry {entry_identifier}.")
 
     except (ValueError, TypeError):
+        traceback.print_exc()
         print("Error: Invalid entry number.", file=sys.stderr)
     except Exception as e:
+        traceback.print_exc()
         print(f"Untag command error: {e}", file=sys.stderr)
 
 
@@ -561,8 +570,10 @@ def handle_add_tag(args) -> None:
         print(f"Tag '{tag}' added to entry {entry_num}.")
 
     except (ValueError, TypeError):
+        traceback.print_exc()
         print("Error: Invalid entry number.", file=sys.stderr)
     except Exception as e:
+        traceback.print_exc()
         print(f"Add tag error: {e}", file=sys.stderr)
 
 
@@ -602,6 +613,7 @@ def handle_move(args) -> None:
             print("Error: Failed to move entry.", file=sys.stderr)
 
     except Exception as e:
+        traceback.print_exc()
         print(f"Move error: {e}", file=sys.stderr)
 
 
@@ -735,8 +747,10 @@ def handle_show(args) -> None:
             set_last_parent(entry.id)
 
     except (ValueError, TypeError):
+        traceback.print_exc()
         print("Error: Invalid entry number.", file=sys.stderr)
     except Exception as e:
+        traceback.print_exc()
         print(f"Show error: {e}", file=sys.stderr)
 
 
@@ -766,4 +780,5 @@ def handle_pin(args) -> None:
             print("Error: Failed to move entry to top.", file=sys.stderr)
 
     except Exception as e:
+        traceback.print_exc()
         print(f"Pin error: {e}", file=sys.stderr)
