@@ -288,6 +288,7 @@ Full `~/.claude/settings.json` with tjai MCP server, permissions, and status lin
       "mcp__tjai__list_contexts",
       "mcp__tjai__search_entries",
       "mcp__tjai__create_entry",
+      "mcp__tjai__get_entry",
       "mcp__tjai__get_server_instructions",
       "WebSearch",
       "WebFetch"

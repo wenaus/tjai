@@ -13,6 +13,8 @@ Available tools:
     get_todos         - Retrieve todo items with filtering options
     get_memories      - Get memory entries (general notes)
     search_entries    - Full-text search across all entries
+    get_entry         - Get a single entry by ID
+    edit_entry        - Edit an existing entry
     delete_entry      - Soft delete an entry (requires user approval)
 
 Entry types: memory, todo, journal, profile, bookmark, ai, list
