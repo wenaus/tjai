@@ -29,8 +29,12 @@ class MCPAuthMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        # Only apply to MCP endpoints
-        if not request.path.startswith("/mcp/"):
+        # Build the MCP path prefix accounting for FORCE_SCRIPT_NAME
+        script_name = settings.FORCE_SCRIPT_NAME or ""
+        mcp_path = f"{script_name}/mcp"
+
+        # Only apply to MCP endpoints (with or without trailing slash)
+        if not (request.path == mcp_path or request.path.startswith(mcp_path + "/")):
             return self.get_response(request)
 
         # Check for Bearer token

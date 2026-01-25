@@ -33,7 +33,7 @@ def oauth_protected_resource(request):
     scheme = "https" if request.is_secure() else "http"
     host = request.get_host()
     script_name = django_settings.FORCE_SCRIPT_NAME or ""
-    resource = f"{scheme}://{host}{script_name}/mcp/"
+    resource = f"{scheme}://{host}{script_name}/mcp"
 
     metadata = {
         "resource": resource,

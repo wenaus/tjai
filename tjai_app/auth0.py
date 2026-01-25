@@ -48,13 +48,18 @@ def validate_token(token: str) -> dict | None:
         logger.warning("Auth0 not configured, skipping token validation")
         return None
 
+    # Log token preview for debugging
+    logger.warning(f"Validating token: {token[:50]}..." if len(token) > 50 else f"Validating token: {token}")
+
     jwks = get_jwks()
     if not jwks:
+        logger.warning("Failed to get JWKS")
         return None
 
     try:
         # Get the key ID from the token header
         unverified_header = jwt.get_unverified_header(token)
+        logger.warning(f"Token header: {unverified_header}")
         kid = unverified_header.get("kid")
 
         # Find the matching key
