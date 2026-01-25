@@ -570,6 +570,9 @@ async def get_memories(
         - CONTENT
     Group by context if multiple contexts present.
     """
+    if not isinstance(limit, int) or limit < 1:
+        return {"error": f"limit must be a positive integer, got {limit}"}
+
     @sync_to_async
     def fetch():
         qs = Entry.objects.filter(
