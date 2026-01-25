@@ -299,16 +299,15 @@ Full `~/.claude/settings.json` with tjai MCP server, permissions, and status lin
 }
 ```
 
-**Status line script** (`~/.claude/statusline.sh`):
+**Status line script setup:**
+
+The status line script is maintained at `tjrepo/computers/common/claude-statusline.sh`. Symlink it to your `.claude` directory:
 
 ```bash
-#!/bin/bash
-input=$(cat)
-MODEL=$(echo "$input" | jq -r '.model.display_name')
-USED=$(echo "$input" | jq -r '.context_window.used_percentage // 0')
-REMAINING=$(echo "$input" | jq -r '.context_window.remaining_percentage // 100')
-echo "[$MODEL] ${USED}% used | ${REMAINING}% remaining"
+ln -s ~/github/tjrepo/computers/common/claude-statusline.sh ~/.claude/statusline.sh
 ```
+
+The script displays model, cost, context usage, session duration, and working directory.
 
 ### Claude.ai Integration
 
