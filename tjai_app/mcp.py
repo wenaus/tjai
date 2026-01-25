@@ -29,6 +29,7 @@ import re
 import time
 import uuid
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from asgiref.sync import sync_to_async
 from django.db import models
@@ -36,7 +37,8 @@ from django.db.models import Count
 from django.utils import timezone
 from mcp_server import mcp_server as mcp
 
-from .models import Entry, Context, Tag
+from .models import Entry, Context, Tag, SysConfig
+from tj.commands.journal import parse_time
 
 VALID_KINDS = ('memory', 'todo', 'journal', 'profile', 'ai', 'bookmark', 'list')
 VALID_STATUSES = ('active', 'done', 'blocked', 'archive')
@@ -69,12 +71,50 @@ def _validate_event_date(date_str: str):
     if not isinstance(date_str, str):
         return f"event_date must be a string, got {type(date_str).__name__}"
     if len(date_str) != 8 or not date_str.isdigit():
-        return f"Invalid event_date '{date_str}'. Must be YYYYMMDD format."
+        return f"event_date must be YYYYMMDD format, got '{date_str}'"
     try:
         datetime.strptime(date_str, '%Y%m%d')
         return None
     except ValueError:
-        return f"Invalid event_date '{date_str}'. Not a valid date."
+        return f"Invalid date '{date_str}'"
+
+
+def _validate_event_time(time_str: str):
+    """Validate event_time is HHMM format. Returns error message or None."""
+    if not time_str:
+        return None
+    if not isinstance(time_str, str):
+        return f"event_time must be a string, got {type(time_str).__name__}"
+    if len(time_str) != 4 or not time_str.isdigit():
+        return f"event_time must be HHMM format, got '{time_str}'"
+    hour, minute = int(time_str[:2]), int(time_str[2:])
+    if not (0 <= hour <= 23):
+        return f"Hour must be 00-23, got {hour:02d}"
+    if not (0 <= minute <= 59):
+        return f"Minute must be 00-59, got {minute:02d}"
+    return None
+
+
+def _extract_time_from_content(content: str) -> tuple[str, int, int] | tuple[str, None, None]:
+    """Extract time from start of content if present.
+
+    Uses parse_time from CLI for consistent parsing.
+
+    Returns:
+        (remaining_content, hour, minute) if time found
+        (original_content, None, None) if no time found
+    """
+    parts = content.strip().split(None, 1)  # Split on first whitespace
+    if not parts:
+        return content, None, None
+
+    first = parts[0]
+    try:
+        hour, minute = parse_time(first)
+        remaining = parts[1] if len(parts) > 1 else ""
+        return remaining.strip(), hour, minute
+    except ValueError:
+        return content, None, None
 
 
 def _format_entry(entry) -> dict:
@@ -313,6 +353,7 @@ async def create_entry(
     name: str = None,
     tags: str = None,
     event_date: str = None,
+    event_time: str = None,
     priority: int = None,
     status: str = None,
     create_context: bool = False,
@@ -325,7 +366,7 @@ async def create_entry(
     user's devices.
 
     Args:
-        content: The entry text content (required).
+        content: The entry text (required). Do NOT include time in content - use event_time.
         kind: Entry type. One of: memory (general notes, default), todo (tasks),
               journal (calendar events with event_date), profile (facts about user),
               ai (instructions for AI assistants), bookmark (URLs), list (lists).
@@ -334,11 +375,16 @@ async def create_entry(
         name: Optional unique identifier for easy reference (e.g., @budget).
               Must be unique within the context. Fails if name already exists.
         tags: Comma-separated tags (e.g., "important,followup,dev").
-        event_date: For journal entries only - the event date in YYYYMMDD format.
+        event_date: For journal entries - date in YYYYMMDD format (e.g., "20260128").
+        event_time: For journal entries - time in HHMM 24-hour format (e.g., "0900" for 9am,
+                    "1430" for 2:30pm). Defaults to 1200 (noon) if omitted.
         priority: Priority level where 1 is highest (positive integers only).
         status: Status value. One of: active, done, blocked, archive.
         create_context: If True, creates context if it doesn't exist. Default: False
                         (fails if context doesn't exist, preventing typos).
+
+    Example for calendar event "Meeting at 9am on Jan 28, 2026":
+        create_entry(content="Meeting", kind="journal", event_date="20260128", event_time="0900")
 
     Returns:
         The created entry with id, content, kind, context, created, modified,
@@ -360,6 +406,11 @@ async def create_entry(
 
     if event_date:
         err = _validate_event_date(event_date)
+        if err:
+            return {"error": err}
+
+    if event_time:
+        err = _validate_event_time(event_time)
         if err:
             return {"error": err}
 
@@ -391,15 +442,32 @@ async def create_entry(
                 ctx_desc = f"context '{context}'" if context else "no context"
                 return {"error": f"Name '{name}' already exists in {ctx_desc}. Names must be unique within a context."}
 
+        # Extract time from content if not provided via event_time
+        actual_content = content
+        if event_date:
+            if event_time:
+                hour, minute = int(event_time[:2]), int(event_time[2:])
+            else:
+                # Try to extract time from content (e.g., "09:00 Pack boxes" -> "Pack boxes")
+                actual_content, hour, minute = _extract_time_from_content(content)
+                if hour is None:
+                    hour, minute = 12, 0  # Default to noon
+
         data = {}
         if event_date:
-            data['event_date'] = event_date
+            # Get configured timezone (default America/New_York)
+            tz_config = SysConfig.objects.filter(key='timezone').first()
+            tz_name = tz_config.value if tz_config else 'America/New_York'
+            tz = ZoneInfo(tz_name)
+            # Convert to timestamp in user's timezone
+            dt = datetime.strptime(event_date, '%Y%m%d').replace(hour=hour, minute=minute, tzinfo=tz)
+            data['event_date'] = dt.timestamp()
         if not data:
             data = None
 
         entry = Entry.objects.create(
             id=str(uuid.uuid4()),
-            content=content,
+            content=actual_content,
             kind=kind,
             context=context_obj,
             name=name,
@@ -415,6 +483,9 @@ async def create_entry(
             tag_list = [t.strip() for t in tags.split(',') if t.strip()]
             for tag_name in tag_list:
                 Tag.objects.create(tag_name=tag_name, entry=entry)
+
+        # Always tag MCP-created entries
+        Tag.objects.create(tag_name='fromai', entry=entry)
 
         return _format_entry(entry)
 
@@ -511,17 +582,7 @@ async def get_memories(
 
         qs = qs.order_by('-timestamp_modified')[:limit]
 
-        results = []
-        for entry in qs:
-            result = {
-                'content': entry.content,
-                'context': entry.context.name if entry.context else None,
-            }
-            tags = list(entry.tags.values_list('tag_name', flat=True))
-            if tags:
-                result['tags'] = tags
-            results.append(result)
-        return results
+        return [_format_entry(entry) for entry in qs]
 
     return await fetch()
 
@@ -649,8 +710,8 @@ async def delete_entry(entry_id: str, content: str) -> dict:
         if not entry:
             return {"error": f"Entry '{entry_id}' not found or already deleted"}
 
-        if len(content) < 10:
-            return {"error": "Content too short - use get_entry to fetch full content"}
+        if entry.content != content:
+            return {"error": "Content does not match entry. Use get_entry to fetch current content."}
 
         now = time.time()
         entry.deleted_at = now
@@ -670,6 +731,15 @@ async def edit_entry(
     context: str = None,
     clear_context: bool = False,
     tags: list[str] = None,
+    event_date: str = None,
+    event_time: str = None,
+    clear_event_date: bool = False,
+    priority: int = None,
+    clear_priority: bool = False,
+    status: str = None,
+    clear_status: bool = False,
+    name: str = None,
+    clear_name: bool = False,
     keep_time: bool = False,
 ) -> dict:
     """
@@ -682,18 +752,22 @@ async def edit_entry(
         entry_id: The UUID of the entry to edit (required).
         content: The new content text (required). Shows user the final result.
         context: Set the entry's context to this value. Must be an existing context.
-                 If not provided and clear_context=False, keeps existing context.
-        clear_context: If True, removes the entry's context (sets to None).
-                       Ignored if context parameter is provided.
-        tags: Replace all tags with this list. If None, keeps existing tags.
-              Pass empty list [] to remove all tags.
-        keep_time: If True, preserve the original modification timestamp.
-                   Default: False (updates timestamp_modified to now).
+        clear_context: If True, removes the entry's context.
+        tags: Replace all tags with this list. Pass [] to remove all tags.
+        event_date: Set event date in YYYYMMDD format (for journal entries).
+        event_time: Set event time in HHMM format (e.g., "0900", "1430").
+        clear_event_date: If True, removes the event date.
+        priority: Set priority level (positive integer, 1=highest).
+        clear_priority: If True, removes priority.
+        status: Set status. One of: active, done, blocked, archive.
+        clear_status: If True, removes status.
+        name: Set unique identifier for easy reference.
+        clear_name: If True, removes name.
+        keep_time: If True, preserve original modification timestamp.
 
     Returns:
-        The updated entry with all fields: id, content, kind, context, created,
-        modified, and optional name, priority, status, tags.
-        Returns {"error": "..."} if entry not found or validation fails.
+        The updated entry with all fields.
+        Returns {"error": "..."} if validation fails.
     """
     if not entry_id:
         return {"error": "entry_id is required"}
@@ -701,6 +775,22 @@ async def edit_entry(
         return {"error": "content is required - must provide the new content"}
     if len(content) < 10:
         return {"error": "content too short - must be at least 10 characters"}
+
+    if event_date:
+        err = _validate_event_date(event_date)
+        if err:
+            return {"error": err}
+
+    if event_time:
+        err = _validate_event_time(event_time)
+        if err:
+            return {"error": err}
+
+    if priority is not None and (not isinstance(priority, int) or priority < 1):
+        return {"error": f"priority must be a positive integer, got {priority}"}
+
+    if status is not None and status not in VALID_STATUSES:
+        return {"error": f"Invalid status '{status}'. Must be one of: {', '.join(VALID_STATUSES)}"}
 
     @sync_to_async
     def do_edit():
@@ -712,8 +802,15 @@ async def edit_entry(
         if not entry:
             return {"error": f"Entry '{entry_id}' not found or already deleted"}
 
-        entry.content = content
+        # Handle content - extract time if event_date set and no event_time
+        actual_content = content
+        hour, minute = None, None
+        if event_date and not event_time:
+            actual_content, hour, minute = _extract_time_from_content(content)
 
+        entry.content = actual_content
+
+        # Context
         if context is not None:
             try:
                 context_obj = Context.objects.get(name=context)
@@ -723,18 +820,58 @@ async def edit_entry(
         elif clear_context:
             entry.context = None
 
+        # Tags
         if tags is not None:
             entry.tags.all().delete()
             for tag_name in tags:
                 if tag_name and tag_name.strip():
                     Tag.objects.create(tag_name=tag_name.strip(), entry=entry)
 
+        # Event date/time
+        if event_date or clear_event_date:
+            if entry.data is None:
+                entry.data = {}
+            if clear_event_date:
+                entry.data.pop('event_date', None)
+            else:
+                tz_config = SysConfig.objects.filter(key='timezone').first()
+                tz_name = tz_config.value if tz_config else 'America/New_York'
+                tz = ZoneInfo(tz_name)
+                if event_time:
+                    h, m = int(event_time[:2]), int(event_time[2:])
+                elif hour is not None:
+                    h, m = hour, minute
+                else:
+                    h, m = 12, 0
+                dt = datetime.strptime(event_date, '%Y%m%d').replace(hour=h, minute=m, tzinfo=tz)
+                entry.data['event_date'] = dt.timestamp()
+            if not entry.data:
+                entry.data = None
+
+        # Priority
+        if priority is not None:
+            entry.priority = priority
+        elif clear_priority:
+            entry.priority = None
+
+        # Status
+        if status is not None:
+            entry.status = status
+        elif clear_status:
+            entry.status = None
+
+        # Name
+        if name is not None:
+            entry.name = name
+        elif clear_name:
+            entry.name = None
+
         if not keep_time:
             entry.timestamp_modified = time.time()
 
         entry.is_dirty = 1
 
-        update_fields = ['content', 'context', 'is_dirty']
+        update_fields = ['content', 'context', 'data', 'priority', 'status', 'name', 'is_dirty']
         if not keep_time:
             update_fields.append('timestamp_modified')
 

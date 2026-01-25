@@ -309,7 +309,20 @@ REMAINING=$(echo "$input" | jq -r '.context_window.remaining_percentage // 100')
 echo "[$MODEL] ${USED}% used | ${REMAINING}% remaining"
 ```
 
-### OAuth 2.1 Authentication (Claude.ai Integration)
+### Claude.ai Integration
+
+Full support for Claude.ai across all platforms:
+
+- **Desktop app** (macOS, Windows)
+- **Browser** (claude.ai)
+- **Mobile** (iOS, Android)
+- **Voice** - create memories hands-free while driving
+
+**Setup:** Settings → Connectors → Add custom connector → `https://etaverse.com/tjai/mcp`
+
+Claude.ai authenticates via OAuth 2.1 (Auth0). Once connected, Claude can read your calendar, todos, memories, and create new entries. All AI-created entries are automatically tagged with `fromai` for easy identification.
+
+### OAuth 2.1 Authentication (Technical Details)
 
 The MCP server supports OAuth 2.1 authentication via [Auth0](https://auth0.com) for Claude.ai third-party connector integration.
 

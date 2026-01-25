@@ -52,14 +52,19 @@ class MCPAuthMiddleware:
                 # Invalid token - return 401
                 return self._unauthorized_response(request, "Invalid or expired token")
 
-        # No token - check if Auth0 is configured
-        if not settings.AUTH0_DOMAIN:
-            # Auth0 not configured - allow passthrough (Claude Code mode)
+        # No token present - determine behavior by request method:
+        # - POST: Claude Code making tool calls, allow through
+        # - GET: Claude.ai doing OAuth discovery, return 401 with metadata
+        if request.method == "POST":
+            # Claude Code - allow through without auth
             return self.get_response(request)
 
-        # Auth0 configured but no token - return 401 with OAuth metadata
-        # This triggers Claude.ai's OAuth discovery flow
-        return self._oauth_required_response(request)
+        # GET request - if Auth0 configured, trigger OAuth discovery
+        if settings.AUTH0_DOMAIN:
+            return self._oauth_required_response(request)
+
+        # Auth0 not configured - allow all through
+        return self.get_response(request)
 
     def _unauthorized_response(self, request, message: str):
         """Return 401 for invalid token."""
