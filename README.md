@@ -357,14 +357,14 @@ AUTH0_API_IDENTIFIER=https://etaverse.com/tjai/mcp
 
 ### Telegram Bot
 
-A personal AI assistant via Telegram with full tjai access.
+A personal AI assistant via Telegram with full tjai access, voice dialogue, and location awareness. Designed for hands-free use while driving.
 
 **Features:**
-- Text chat with Claude Sonnet
-- Access to all tjai tools (calendar, todos, memories, bookmarks, search)
-- Date range queries ("what did we discuss yesterday?", "show bookmarks from last week")
-- Create entries via natural language
-- Persistent conversation history - survives bot restarts (stored as tjai entries with tag `tgchat`)
+- **Voice I/O** - speak to the bot and hear responses back. Uses OpenAI Whisper for speech-to-text and OpenAI TTS (Nova voice, OGG Opus format) for text-to-speech. Bot responds with voice by default (`ALWAYS_VOICE_RESPONSE` flag).
+- **GPS location** - share your Telegram live location and the bot uses reverse geocoding (OpenStreetMap Nominatim) to provide location-aware responses (weather, local info, etc.)
+- **Web search and fetch** - Claude server tools (`web_search`, `web_fetch`) with user location context for real-time information
+- **Text chat** with Claude Sonnet, with access to all tjai tools (calendar, todos, memories, bookmarks, search)
+- **Persistent conversation history** - survives bot restarts (stored as tjai entries with tag `tgchat`)
 - Single-user authentication via Telegram user ID
 
 **Setup:**
@@ -376,15 +376,17 @@ A personal AI assistant via Telegram with full tjai access.
    TELEGRAM_BOT_TOKEN=<from_botfather>
    TELEGRAM_USER_ID=<your_user_id>
    ANTHROPIC_API_KEY=<key>
-   OPENAI_API_KEY=<key>  # For future voice support
+   OPENAI_API_KEY=<key>  # Whisper STT and TTS
    ```
 4. Install dependencies: `pip install -r requirements-tgbot.txt`
 5. Start: `./deploy/restart_tgbot.sh --sync`
 
-**Commands:**
+**Usage:**
 - `/start` - Initialize bot
 - `/clear` - Clear conversation history
-- Any text message - Chat with AI assistant
+- **Text message** - Chat with AI assistant
+- **Voice message** - Speak to the bot; it transcribes, processes, and responds with voice
+- **Share location** - Send your GPS location to enable location-aware responses
 
 **Management:**
 ```bash
