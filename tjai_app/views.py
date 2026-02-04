@@ -382,17 +382,26 @@ def dashboard(request):
 @login_required
 def dashboard_calendar(request):
     """Return calendar data as JSON for dashboard."""
+    import zoneinfo
+
     now = time.time()
+
+    # Get timezone from SysConfig
+    tz_config = SysConfig.objects.filter(key='timezone').first()
+    timezone_name = tz_config.value if tz_config else 'America/New_York'
+    try:
+        tz = zoneinfo.ZoneInfo(timezone_name)
+    except Exception:
+        tz = None
+
     # Go back 7 days, then to Monday of that week (to show full previous week)
     seven_days_ago = datetime.now() - timedelta(days=7)
-    # Monday is weekday 0
     days_since_monday = seven_days_ago.weekday()
     monday_of_prev_week = seven_days_ago - timedelta(days=days_since_monday)
     start_ts = monday_of_prev_week.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
     end_ts = now + (60 * 24 * 60 * 60)
 
     # Query journal entries with event_date in range
-    # Data is proper JSON, use Django JSON field lookups
     entries = Entry.objects.filter(
         deleted_at__isnull=True,
         kind='journal',
@@ -400,30 +409,44 @@ def dashboard_calendar(request):
         data__event_date__lt=end_ts,
     ).order_by('data__event_date')
 
+    # Calculate today's date key in configured timezone
+    if tz:
+        now_dt = datetime.now(tz)
+    else:
+        now_dt = datetime.now()
+    today_date_str = now_dt.strftime('%Y%m%d')
+
     result = []
     for entry in entries:
         data = entry.data
         if isinstance(data, dict) and 'event_date' in data:
+            event_ts = data['event_date']
+            # Convert to timezone-aware datetime for formatting
+            if tz:
+                event_dt = datetime.fromtimestamp(event_ts, tz=tz)
+            else:
+                event_dt = datetime.fromtimestamp(event_ts)
+
+            # Pre-format all date/time strings server-side
+            date_key = event_dt.strftime('%Y%m%d')
+            date_display = event_dt.strftime('%a %b %d')  # "Mon Feb 09"
+            time_display = event_dt.strftime('%H:%M') if (event_dt.hour or event_dt.minute) else None
+            week_num = event_dt.isocalendar()[1]
+            week_start = event_dt - timedelta(days=event_dt.weekday())
+            week_start_key = week_start.strftime('%Y%m%d')
+
             result.append({
                 'id': str(entry.id),
                 'content': entry.content,
-                'event_date': data['event_date'],
+                'event_date': event_ts,
+                'date_key': date_key,
+                'date_display': date_display,
+                'time_display': time_display,
+                'week_num': week_num,
+                'week_start_key': week_start_key,
                 'context': entry.context_id,
                 'data': data,
             })
-
-    # Get timezone from SysConfig
-    tz_config = SysConfig.objects.filter(key='timezone').first()
-    timezone_name = tz_config.value if tz_config else 'America/New_York'
-
-    # Calculate today's date string in configured timezone
-    try:
-        import zoneinfo
-        tz = zoneinfo.ZoneInfo(timezone_name)
-        now_dt = datetime.now(tz)
-        today_date_str = now_dt.strftime('%Y%m%d')
-    except Exception:
-        today_date_str = datetime.now().strftime('%Y%m%d')
 
     return JsonResponse({
         'entries': result,

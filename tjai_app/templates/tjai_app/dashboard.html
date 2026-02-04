@@ -182,12 +182,7 @@
             return `${h}:${m}${ampm}`;
         }
 
-        function formatDate(timestamp) {
-            const d = new Date(timestamp * 1000);
-            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            return `${days[d.getDay()]} ${months[d.getMonth()]} ${d.getDate().toString().padStart(2, '0')}`;
-        }
+        // formatDate removed - server provides pre-formatted date_display
 
         function formatDuration(minutes) {
             const h = Math.floor(minutes / 60);
@@ -260,26 +255,14 @@
         function renderCalendar(data) {
             let html = '';
             const now = data.server_time || (Date.now() / 1000);
-            const tz = data.timezone || 'America/New_York';
-            // Server provides today's date as YYYYMMDD string in configured timezone
             const serverTodayDate = data.today_date;
-
-            // Helper to get YYYYMMDD from timestamp in configured timezone
-            function getDateKey(timestamp) {
-                const d = new Date(timestamp * 1000);
-                const opts = { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' };
-                const parts = new Intl.DateTimeFormat('en-US', opts).formatToParts(d);
-                const p = {};
-                parts.forEach(x => p[x.type] = x.value);
-                return p.year + p.month + p.day;
-            }
 
             let entries = data.entries.slice();  // Copy array
 
-            // Check if today has any entries
+            // Check if today has any entries (using server-provided date_key)
             let hasTodayEntry = false;
             for (const entry of entries) {
-                if (getDateKey(entry.event_date) === serverTodayDate) {
+                if (entry.date_key === serverTodayDate) {
                     hasTodayEntry = true;
                     break;
                 }
@@ -287,12 +270,29 @@
 
             // If no entries for today, inject a placeholder
             if (!hasTodayEntry && serverTodayDate) {
+                // Get today's display info from server or construct minimal placeholder
+                const todayYear = serverTodayDate.slice(0, 4);
+                const todayMonth = parseInt(serverTodayDate.slice(4, 6)) - 1;
+                const todayDay = parseInt(serverTodayDate.slice(6, 8));
+                const todayDate = new Date(todayYear, todayMonth, todayDay);
+                const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                const todayDisplay = `${days[todayDate.getDay()]} ${months[todayDate.getMonth()]} ${String(todayDay).padStart(2, '0')}`;
+                const weekNum = getWeekNumber(todayDate);
+                const weekStart = getWeekStart(todayDate);
+                const weekStartKey = `${weekStart.getFullYear()}${String(weekStart.getMonth()+1).padStart(2,'0')}${String(weekStart.getDate()).padStart(2,'0')}`;
+
                 entries.push({
                     id: '__today_placeholder__',
                     content: '',
-                    event_date: now,  // Use current time, dateKey will match serverTodayDate
+                    event_date: now,
+                    date_key: serverTodayDate,
+                    date_display: todayDisplay,
+                    time_display: null,
+                    week_num: weekNum,
+                    week_start_key: weekStartKey,
                     context: null,
-                    data: { _placeholder: true, _dateKey: serverTodayDate }
+                    data: { _placeholder: true }
                 });
                 // Re-sort by event_date
                 entries.sort((a, b) => a.event_date - b.event_date);
@@ -313,28 +313,22 @@
             let currentDay = null;
 
             for (const entry of entries) {
-                const eventDate = entry.event_date;
-                const d = new Date(eventDate * 1000);
-                const weekNum = getWeekNumber(d);
-                // Use server's today_date for comparison
-                const entryDateKey = entry.data?._dateKey || getDateKey(eventDate);
-                const isToday = entryDateKey === serverTodayDate;
+                const isToday = entry.date_key === serverTodayDate;
 
-                // Week header
-                if (weekNum !== currentWeek) {
-                    currentWeek = weekNum;
-                    const weekStart = getWeekStart(d);
-                    html += `<div class="week-header">${weekStart.getFullYear()}${(weekStart.getMonth()+1).toString().padStart(2,'0')}${weekStart.getDate().toString().padStart(2,'0')} Week ${weekNum}</div>`;
+                // Week header (using server-provided week_num and week_start_key)
+                if (entry.week_num !== currentWeek) {
+                    currentWeek = entry.week_num;
+                    html += `<div class="week-header">${entry.week_start_key} Week ${entry.week_num}</div>`;
                     currentDay = null;
                 }
 
-                // Day header
-                if (entryDateKey !== currentDay) {
-                    currentDay = entryDateKey;
+                // Day header (using server-provided date_key and date_display)
+                if (entry.date_key !== currentDay) {
+                    currentDay = entry.date_key;
                     const dayClass = isToday ? 'day-header day-today' : 'day-header';
                     const todayLabel = isToday ? ' <span class="now-marker">Today</span>' : '';
                     const todayId = isToday ? ' id="today-marker"' : '';
-                    html += `<div${todayId} class="${dayClass}">${formatDate(eventDate)}${todayLabel}</div>`;
+                    html += `<div${todayId} class="${dayClass}">${entry.date_display}${todayLabel}</div>`;
                 }
 
                 // Skip rendering placeholder entries (they only trigger the day header)
@@ -346,21 +340,15 @@
                 if (clockType === 'start') contentClass = 'clock-start';
                 else if (clockType === 'stop') contentClass = 'clock-stop';
 
-                // Format time in configured timezone
-                const timeOpts = { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false };
-                const timeParts = new Intl.DateTimeFormat('en-US', timeOpts).formatToParts(d);
-                const tp = {};
-                timeParts.forEach(p => tp[p.type] = p.value);
-                const hour = parseInt(tp.hour || '0');
-                const minute = parseInt(tp.minute || '0');
-                const timeStr = (hour !== 0 || minute !== 0)
-                    ? `<span class="entry-time">${tp.hour}:${tp.minute}</span> `
+                // Use server-provided time_display
+                const timeStr = entry.time_display
+                    ? `<span class="entry-time">${entry.time_display}</span> `
                     : '';
 
                 // Countdown for next upcoming event (only if it's today)
                 let countdownStr = '';
-                if (eventDate === nextUpcomingTs && isToday) {
-                    const diffSec = eventDate - now;
+                if (entry.event_date === nextUpcomingTs && isToday) {
+                    const diffSec = entry.event_date - now;
                     const hours = Math.floor(diffSec / 3600);
                     const minutes = Math.floor((diffSec % 3600) / 60);
                     if (hours > 0) {
