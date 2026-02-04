@@ -715,7 +715,12 @@ async def delete_entry(entry_id: str, content: str) -> dict:
         if not entry:
             return {"error": f"Entry '{entry_id}' not found or already deleted"}
 
-        if entry.content != content:
+        # Strip punctuation for comparison (MCP may alter unicode punctuation)
+        import re
+        def strip_punct(s):
+            return re.sub(r'[^\w\s]', '', s)
+
+        if strip_punct(entry.content) != strip_punct(content):
             return {"error": "Content does not match entry. Use get_entry to fetch current content."}
 
         now = time.time()

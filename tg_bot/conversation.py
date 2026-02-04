@@ -54,7 +54,7 @@ class PersistentConversationStore:
 
         self._history = []
         for entry in entries_list:
-            if entry.data and 'role' in entry.data:
+            if entry.data and 'role' in entry.data and entry.content:
                 self._history.append({
                     'role': entry.data['role'],
                     'content': entry.content,
