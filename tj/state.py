@@ -80,6 +80,68 @@ def _get_agent_status_brief() -> str:
         return f" {BRIGHT_YELLOW}{location_name} agent synced {ago // 3600}h ago ({interval}s).{RESET}"
 
 
+def get_tgbot_status() -> dict:
+    """Get Telegram bot status.
+
+    Returns dict with:
+        running: bool - whether process is running
+        pid: int or None - process ID if running
+        exchanges_24h: int - number of entries with 'fromtg' tag in last 24h
+    """
+    import subprocess
+    import time
+    from pathlib import Path
+
+    result = {
+        'running': False,
+        'pid': None,
+        'exchanges_24h': 0,
+    }
+
+    # Check PID file first
+    pidfile = Path('/tmp/tg_bot.pid')
+    if pidfile.exists():
+        try:
+            pid = int(pidfile.read_text().strip())
+            # Verify process is actually running
+            proc = subprocess.run(['ps', '-p', str(pid), '-o', 'cmd='],
+                                  capture_output=True, text=True)
+            if 'tg_bot' in proc.stdout:
+                result['running'] = True
+                result['pid'] = pid
+        except (ValueError, OSError):
+            pass
+
+    # Fallback: search for process
+    if not result['running']:
+        try:
+            proc = subprocess.run(
+                ['pgrep', '-f', r'\.venv/bin/python -m tg_bot'],
+                capture_output=True, text=True
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                pid = int(proc.stdout.strip().split()[0])
+                result['running'] = True
+                result['pid'] = pid
+        except (ValueError, OSError):
+            pass
+
+    # Count recent exchanges (entries with 'fromtg' tag)
+    try:
+        from tj.repository_factory import RepositoryFactory
+        repository = RepositoryFactory.get_repository()
+        cutoff = time.time() - (24 * 60 * 60)
+        all_entries = repository.query_entries(tag='fromtg')
+        result['exchanges_24h'] = sum(
+            1 for e in all_entries
+            if e.timestamp_created >= cutoff and not getattr(e, 'deleted_at', None)
+        )
+    except Exception:
+        pass
+
+    return result
+
+
 def display_context() -> None:
     """Prints the current context and agent status at the start of every command response."""
     from datetime import datetime

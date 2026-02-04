@@ -355,6 +355,45 @@ AUTH0_CLIENT_SECRET=<secret>  # Do not commit
 AUTH0_API_IDENTIFIER=https://etaverse.com/tjai/mcp
 ```
 
+### Telegram Bot
+
+A personal AI assistant via Telegram with full tjai access.
+
+**Features:**
+- Text chat with Claude Sonnet
+- Access to all tjai tools (calendar, todos, memories, bookmarks, search)
+- Date range queries ("what did we discuss yesterday?", "show bookmarks from last week")
+- Create entries via natural language
+- Single-user authentication via Telegram user ID
+
+**Setup:**
+
+1. Create a bot via [@BotFather](https://t.me/botfather) on Telegram
+2. Get your user ID from [@userinfobot](https://t.me/userinfobot)
+3. Add to `/var/www/tjai/.env`:
+   ```bash
+   TELEGRAM_BOT_TOKEN=<from_botfather>
+   TELEGRAM_USER_ID=<your_user_id>
+   ANTHROPIC_API_KEY=<key>
+   OPENAI_API_KEY=<key>  # For future voice support
+   ```
+4. Install dependencies: `pip install -r requirements-tgbot.txt`
+5. Start: `./deploy/restart_tgbot.sh --sync`
+
+**Commands:**
+- `/start` - Initialize bot
+- `/clear` - Clear conversation history
+- Any text message - Chat with AI assistant
+
+**Management:**
+```bash
+./deploy/restart_tgbot.sh          # Restart bot
+./deploy/restart_tgbot.sh --sync   # Sync code from dev and restart
+tj                                  # Shows bot status in CLI
+```
+
+Entries created via Telegram are tagged with `fromtg` and `fromai`.
+
 ## Development Setup
 
 To set up your development environment and run tests:

@@ -409,6 +409,14 @@ def show_status() -> None:
             traceback.print_exc()
         debug_time("list_backups", _t)
 
+        # Telegram bot status
+        from tj.state import get_tgbot_status
+        tgbot = get_tgbot_status()
+        if tgbot['running']:
+            print(f"\nTelegram bot: running (PID {tgbot['pid']}), {tgbot['exchanges_24h']} exchanges in 24h")
+        else:
+            print(f"\nTelegram bot: not running")
+
         # Config info
         from tj.config import get_config_lines
         print("\nConfig:")
