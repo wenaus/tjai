@@ -364,6 +364,7 @@ A personal AI assistant via Telegram with full tjai access.
 - Access to all tjai tools (calendar, todos, memories, bookmarks, search)
 - Date range queries ("what did we discuss yesterday?", "show bookmarks from last week")
 - Create entries via natural language
+- Persistent conversation history - survives bot restarts (stored as tjai entries with tag `tgchat`)
 - Single-user authentication via Telegram user ID
 
 **Setup:**

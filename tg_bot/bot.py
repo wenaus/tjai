@@ -14,46 +14,9 @@ from telegram.ext import (
 
 from .ai import get_assistant
 from .config import Config
+from .conversation import get_conversation_store
 
 logger = logging.getLogger(__name__)
-
-
-class ConversationStore:
-    """Simple in-memory conversation history."""
-
-    def __init__(self, max_turns: int = 20):
-        self.history: list = []
-        self.max_turns = max_turns
-
-    def add_user(self, text: str):
-        self.history.append({"role": "user", "content": text})
-        self._trim()
-
-    def add_assistant(self, text: str):
-        self.history.append({"role": "assistant", "content": text})
-        self._trim()
-
-    def get_history(self) -> list:
-        return list(self.history)
-
-    def clear(self):
-        self.history.clear()
-
-    def _trim(self):
-        # Keep max_turns * 2 messages (user + assistant pairs)
-        max_messages = self.max_turns * 2
-        if len(self.history) > max_messages:
-            self.history = self.history[-max_messages:]
-
-
-# Per-user conversation stores (but we only allow one user)
-_conversations: dict[int, ConversationStore] = {}
-
-
-def get_conversation(user_id: int) -> ConversationStore:
-    if user_id not in _conversations:
-        _conversations[user_id] = ConversationStore()
-    return _conversations[user_id]
 
 
 def is_authorized(user_id: int) -> bool:
@@ -79,7 +42,7 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Unauthorized.")
         return
 
-    conv = get_conversation(update.effective_user.id)
+    conv = await asyncio.to_thread(get_conversation_store, update.effective_user.id)
     conv.clear()
     await asyncio.to_thread(get_assistant().refresh_context)
     await update.message.reply_text("Conversation cleared.")
@@ -95,7 +58,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
     logger.info(f"Message from {user_id}: {user_text[:50]}...")
 
-    conv = get_conversation(user_id)
+    conv = await asyncio.to_thread(get_conversation_store, user_id)
     assistant = get_assistant()
 
     # Show typing indicator
@@ -106,9 +69,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         history = conv.get_history()
         response = await asyncio.to_thread(assistant.chat, user_text, history)
 
-        # Update conversation history
-        conv.add_user(user_text)
-        conv.add_assistant(response)
+        # Save to DB (run in thread for ORM)
+        await asyncio.to_thread(conv.add_user, user_text)
+        await asyncio.to_thread(conv.add_assistant, response)
 
         # Send response
         await update.message.reply_text(response)
