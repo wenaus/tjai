@@ -15,6 +15,7 @@ from telegram.ext import (
 from .ai import get_assistant, set_user_location
 from .config import Config
 from .conversation import get_conversation_store
+from .reminders import check_reminders
 from .voice import transcribe_telegram_voice, text_to_speech
 
 logger = logging.getLogger(__name__)
@@ -136,6 +137,9 @@ def create_application() -> Application:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     application.add_handler(MessageHandler(filters.VOICE, handle_voice))
     application.add_handler(MessageHandler(filters.LOCATION, handle_location))
+
+    # Calendar reminders: check every 5 minutes, start after 10 seconds
+    application.job_queue.run_repeating(check_reminders, interval=300, first=10)
 
     return application
 

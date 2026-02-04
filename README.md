@@ -364,6 +364,7 @@ A personal AI assistant via Telegram with full tjai access, voice dialogue, and 
 - **GPS location** - share your Telegram live location and the bot uses reverse geocoding (OpenStreetMap Nominatim) to provide location-aware responses (weather, local info, etc.)
 - **Web search and fetch** - Claude server tools (`web_search`, `web_fetch`) with user location context for real-time information
 - **Text chat** with Claude Sonnet, with access to all tjai tools (calendar, todos, memories, bookmarks, search)
+- **Calendar reminders** - background job checks every 5 minutes for upcoming calendar events and sends a Telegram push notification 15 minutes before
 - **Persistent conversation history** - survives bot restarts (stored as tjai entries with tag `tgchat`)
 - Single-user authentication via Telegram user ID
 
