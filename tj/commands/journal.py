@@ -171,9 +171,10 @@ def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
 
         return dt.timestamp(), remaining
 
-    # Check for 'tomorrow'
-    if first == 'tomorrow':
-        tomorrow = now.date() + timedelta(days=1)
+    # Check for 'tomorrow' or 'yesterday'
+    if first in ('tomorrow', 'yesterday'):
+        offset = 1 if first == 'tomorrow' else -1
+        target_date = now.date() + timedelta(days=offset)
 
         # Check for time
         if remaining and (':' in remaining[0] or remaining[0].lower().endswith(('am', 'pm'))):
@@ -187,9 +188,9 @@ def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
             hour, minute = 0, 0
 
         if tz:
-            dt = datetime.combine(tomorrow, time(hour, minute, tzinfo=tz))
+            dt = datetime.combine(target_date, time(hour, minute, tzinfo=tz))
         else:
-            dt = datetime.combine(tomorrow, time(hour, minute))
+            dt = datetime.combine(target_date, time(hour, minute))
 
         return dt.timestamp(), remaining
 

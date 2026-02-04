@@ -96,7 +96,7 @@ tj l                                            # List all entries
     *   `tj do <text>`: Creates a todo item (alias: todo).
     *   `tj p <fact>`: Adds a persistent fact to your profile.
     *   `tj ai <guideline>`: Adds AI behavioral guideline or instruction.
-    *   `tj j <date/time> <content>`: Creates journal entry (tomorrow, mon-sun, HH:MM, mmdd, YYYYMMDD)
+    *   `tj j <date/time> <content>`: Creates journal entry (yesterday, tomorrow, mon-sun, HH:MM, mmdd, YYYYMMDD)
     *   `tj <YYYYMMDD> ...`: Creates a new journal entry.
     *   `tj <url> ...`: Creates a new bookmark.
     *   *(All creation commands auto-apply current context and can include `:tags`)*.
@@ -137,7 +137,7 @@ tj l                                            # List all entries
     *   `tj y`: Year summary with month headers and event counts
 *   **CLOCK (time tracking):**
     *   `tj start [time]`: Start time clock (e.g., `tj start 9am`)
-    *   `tj stop [time]`: Stop clock and show session summary
+    *   `tj stop [time|datetime]`: Stop clock (supports retroactive: `yesterday 5pm`, `20260203/09:30`)
     *   `tj break <duration>`: Add break time (e.g., `30` for minutes, `1h` for hours)
     *   Clock status (elapsed, work, breaks) shown in header when active
 *   **QUERY:** `tj q ...`

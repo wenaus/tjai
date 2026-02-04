@@ -37,7 +37,7 @@ tj =0           Clear context   tj ^ <n>        Pin to top
                                 tj unarchive <n> Unarchive
 
 CALENDAR                        NUMBERED SHORTCUTS
-tj j tomorrow <text>            tj <n> @name    Assign name
+tj j yesterday/tomorrow <text>  tj <n> @name    Assign name
 tj j mon 10am   Team meeting    tj <n> @0       Clear name
 tj j 0615 14:30 Doctor appt     tj <n> =ctx     Set context
                                 tj <n> =0       Clear context
@@ -48,9 +48,9 @@ tj c 4          Next 4 weeks    tj <n> s=val    Set status
 tj y            year view       tj <n> k=type   Change kind (ai,b,do,j,m,p)
                                 tj <n> l=N      Set truncation lines
                                 tj <n> l=0      Remove truncation
-CLOCK (time tracking)
-tj start [time] Start clock     tj cp <n> <datetime> Copy journal entry
-tj stop [time]  Stop clock
+CLOCK (time tracking)           tj cp <n> <datetime> Copy journal entry
+tj start [time] Start clock
+tj stop [time|datetime] Stop clock
 tj break <dur>  Add break (30 or 1h)
 
 METADATA (inline)               DATA

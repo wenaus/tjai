@@ -358,8 +358,21 @@
                     }
                 }
 
-                const content = linkifyContent(escapeHtml(entry.content));
-                html += `<div class="entry">${timeStr}${countdownStr}<span class="${contentClass}">${content}</span></div>`;
+                // For clock entries: show title in color, truncate description on new line
+                let contentHtml;
+                if (clockType) {
+                    const lines = entry.content.split('\n').filter(l => l.trim());
+                    const title = lines[0] || entry.content;
+                    const hasMore = lines.length > 1;
+                    contentHtml = `<span class="${contentClass}">${escapeHtml(title)}</span>`;
+                    if (hasMore) {
+                        const descPreview = lines[1].substring(0, 40) + (lines[1].length > 40 || lines.length > 2 ? '...' : '');
+                        contentHtml += `<br><span class="entry-content" style="margin-left:3em">${escapeHtml(descPreview)}</span>`;
+                    }
+                } else {
+                    contentHtml = `<span class="${contentClass}">${linkifyContent(escapeHtml(entry.content))}</span>`;
+                }
+                html += `<div class="entry">${timeStr}${countdownStr}${contentHtml}</div>`;
             }
 
             document.getElementById('calendar-content').innerHTML = html || 'No upcoming events';

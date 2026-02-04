@@ -355,16 +355,29 @@ def handle_calendar_view(args) -> None:
                     from tj.colors import colorize_context
                     context_prefix = f"{colorize_context(entry.context)} "
 
-                # Colorize content (converts markdown links to clickable terminal links)
-                display_text = colorize_content(content)
+                # Apply clock colors to title only, description in normal color
+                if clock_type:
+                    from tj.colors import LIGHT_MINT_GREEN, DARKER_GREEN, RESET
+                    # Split into title (first line) and description (rest), strip leading blank lines
+                    content_lines = content.split('\n')
+                    while content_lines and not content_lines[0].strip():
+                        content_lines.pop(0)
+                    title = content_lines[0] if content_lines else content
+                    desc_lines = content_lines[1:] if len(content_lines) > 1 else []
+                    # Strip leading blank lines from description too
+                    while desc_lines and not desc_lines[0].strip():
+                        desc_lines.pop(0)
 
-                # Apply clock colors
-                if clock_type == 'start':
-                    from tj.colors import LIGHT_MINT_GREEN, RESET
-                    display_text = f"{LIGHT_MINT_GREEN}{content}{RESET}"
-                elif clock_type == 'stop':
-                    from tj.colors import DARKER_GREEN, RESET
-                    display_text = f"{DARKER_GREEN}{content}{RESET}"
+                    clock_color = LIGHT_MINT_GREEN if clock_type == 'start' else DARKER_GREEN
+                    if desc_lines:
+                        # Title in clock color, description in normal (colorized for links)
+                        desc_text = colorize_content('\n'.join(desc_lines))
+                        display_text = f"{clock_color}{title}{RESET}\n{desc_text}"
+                    else:
+                        display_text = f"{clock_color}{title}{RESET}"
+                else:
+                    # Colorize content (converts markdown links to clickable terminal links)
+                    display_text = colorize_content(content)
 
                 # Calculate countdown for next upcoming event, or NOW for in-progress
                 countdown_str = ""

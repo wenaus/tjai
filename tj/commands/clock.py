@@ -2,7 +2,7 @@
 
 import sys
 import uuid
-from datetime import datetime, timezone, date, time as dt_time
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
 from tj.repository import Entry
@@ -10,49 +10,59 @@ from tj.repository_factory import RepositoryFactory
 from tj.repository_sqlite import encode_entry_data, decode_entry_data
 from tj.state import get_state
 from tj.timezone_manager import get_timezone_object, format_time_only
-from tj.commands.journal import parse_time
+from tj.commands.journal import parse_date_spec
 
 
-def get_active_clock_for_context(context: Optional[str]) -> Optional[Dict[str, Any]]:
-    """Get active (running) clock for specific context, or None.
+def get_active_clock(context: Optional[str] = None, any_context: bool = False) -> Optional[Dict[str, Any]]:
+    """Get active (running) clock, or None.
 
-    Fast lookup via latest_clock_start_id.
+    Args:
+        context: Filter to this context (used for start command)
+        any_context: If True, find any active clock regardless of context (used for stop)
+
+    Fast lookup via latest_clock_start_id, with fallback to searching journal entries
+    (needed when clock was started on a different machine and synced).
     """
     from tj.database import get_db_connection
 
+    repository = RepositoryFactory.get_repository()
+
+    # Try fast lookup first
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT value FROM sync_metadata WHERE key = 'latest_clock_start_id'")
     row = cursor.fetchone()
-    if not row:
-        return None
 
-    latest_id = row['value']
+    if row:
+        latest_id = row['value']
+        entry = repository.get_entry(latest_id)
+        if entry and entry.data:
+            try:
+                data = decode_entry_data(entry.data)
+                if data.get('clock') == 'start' and not data.get('stop_id'):
+                    if any_context or entry.context == context:
+                        return {'entry': entry, 'data': data, 'context': entry.context}
+            except ValueError:
+                pass  # Fall through to search
 
-    repository = RepositoryFactory.get_repository()
-    entry = repository.get_entry(latest_id)
-    if not entry or not entry.data:
-        return None
+    # Fallback: search recent journal entries for active clock
+    # Look in last 7 days for clock starts without stop_id
+    now = datetime.now(timezone.utc).timestamp()
+    week_ago = now - (7 * 24 * 60 * 60)
 
-    try:
-        data = decode_entry_data(entry.data)
-    except ValueError as e:
-        print(f"Warning: Corrupt clock data in entry {latest_id}: {e}", file=sys.stderr)
-        return None
+    entries = repository.query_entries(kind='journal')
+    for entry in entries:
+        if not entry.data or entry.timestamp_created < week_ago:
+            continue
+        try:
+            data = decode_entry_data(entry.data)
+        except ValueError:
+            continue
+        if data.get('clock') == 'start' and not data.get('stop_id'):
+            if any_context or entry.context == context:
+                return {'entry': entry, 'data': data, 'context': entry.context}
 
-    # Must be a start entry, running (no stop_id), and matching context
-    if data.get('clock') != 'start':
-        return None
-    if data.get('stop_id'):
-        return None
-    if entry.context != context:
-        return None
-
-    return {
-        'entry': entry,
-        'data': data,
-        'context': entry.context
-    }
+    return None
 
 
 def format_duration(minutes: int) -> str:
@@ -67,34 +77,23 @@ def format_duration(minutes: int) -> str:
 
 
 def parse_clock_time(time_str: Optional[str]) -> float:
-    """Parse optional time string, return timestamp.
+    """Parse optional time/date string, return timestamp.
 
     If time_str is None, returns current time.
-    Otherwise parses time and returns timestamp for today at that time.
+    Delegates to parse_date_spec which supports:
+    - HH:MM, am/pm times -> today at that time
+    - YYYYMMDD/HH:MM -> that date at that time
+    - yesterday, tomorrow + optional time
+    - weekday names + optional time
     """
-    tz = get_timezone_object()
-
-    if tz:
-        now = datetime.now(tz)
-    else:
-        now = datetime.now()
-
     if not time_str:
-        return now.timestamp()
-
-    try:
-        hour, minute = parse_time(time_str)
-        today = now.date()
-
+        tz = get_timezone_object()
         if tz:
-            dt = datetime.combine(today, dt_time(hour, minute, tzinfo=tz))
-        else:
-            dt = datetime.combine(today, dt_time(hour, minute))
+            return datetime.now(tz).timestamp()
+        return datetime.now().timestamp()
 
-        return dt.timestamp()
-    except ValueError as e:
-        print(f"Error: Invalid time format '{time_str}': {e}", file=sys.stderr)
-        sys.exit(1)
+    timestamp, _ = parse_date_spec([time_str])
+    return timestamp
 
 
 def handle_clock_start(args) -> None:
@@ -102,20 +101,11 @@ def handle_clock_start(args) -> None:
     state = get_state()
     context = state.get("current_context")
 
-    # Check if already clocked in for this context
-    active = get_active_clock_for_context(context)
+    # Check if already clocked in (any context)
+    active = get_active_clock(any_context=True)
     if active:
-        entry = active['entry']
-        start_time = entry.data.get('event_date', entry.timestamp_created) if isinstance(entry.data, dict) else entry.timestamp_created
-        try:
-            data = decode_entry_data(entry.data)
-            if data:
-                start_time = data.get('event_date', entry.timestamp_created)
-        except ValueError as e:
-            print(f"Warning: Failed to parse clock data: {e}", file=sys.stderr)
-            start_time = entry.timestamp_created
-
-        ctx_display = f"={context}" if context else "(no context)"
+        active_ctx = active['context']
+        ctx_display = f"={active_ctx}" if active_ctx else "(no context)"
         print(f"Error: Clock already running for {ctx_display}", file=sys.stderr)
         return
 
@@ -160,18 +150,15 @@ def handle_clock_start(args) -> None:
 
 def handle_clock_stop(args) -> None:
     """Stop time clock."""
-    state = get_state()
-    context = state.get("current_context")
-
-    # Find active clock for this context
-    active = get_active_clock_for_context(context)
+    # Find any active clock (regardless of current context)
+    active = get_active_clock(any_context=True)
     if not active:
-        ctx_display = f"={context}" if context else "(no context)"
-        print(f"Error: No clock running for {ctx_display}", file=sys.stderr)
+        print("Error: No clock running", file=sys.stderr)
         return
 
     start_entry = active['entry']
     start_data = active['data']
+    clock_context = active['context']  # Use start entry's context
 
     # Parse stop time
     time_arg = args.time if hasattr(args, 'time') else None
@@ -185,7 +172,7 @@ def handle_clock_stop(args) -> None:
     elapsed_min = int((stop_timestamp - start_timestamp) / 60)
     work_min = max(0, elapsed_min - break_min)
 
-    # Create stop entry
+    # Create stop entry with same context as start
     repository = RepositoryFactory.get_repository()
     stop_entry_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).timestamp()
@@ -196,7 +183,7 @@ def handle_clock_stop(args) -> None:
         kind='journal',
         timestamp_created=now,
         timestamp_modified=now,
-        context=context,
+        context=clock_context,
         is_dirty=True,
         data=encode_entry_data(clock='stop', event_date=stop_timestamp, start_id=start_entry.id)
     )
@@ -217,14 +204,10 @@ def handle_clock_stop(args) -> None:
 
 def handle_clock_break(args) -> None:
     """Add break time to current clock session."""
-    state = get_state()
-    context = state.get("current_context")
-
-    # Find active clock for this context
-    active = get_active_clock_for_context(context)
+    # Find any active clock
+    active = get_active_clock(any_context=True)
     if not active:
-        ctx_display = f"={context}" if context else "(no context)"
-        print(f"Error: No clock running for {ctx_display}", file=sys.stderr)
+        print("Error: No clock running", file=sys.stderr)
         return
 
     # Parse duration
