@@ -53,12 +53,87 @@ A location-aware system that combines GPS, the LLM, web search, and tjai's knowl
 - Current location shown on same map
 - Filter by context, tags, proximity
 
-### POI Databases
+### Curated Place Databases for Import
 
-For structured POI alerts (Love's, rest areas, etc.):
-- Public POI datasets or one-time scrape
-- Store as tjai entries with lat/lon, context=poi or context=travel
-- Same proximity check as personal places
+The goal is databases curated by people with taste and specific sensibilities - not generic tourist/commercial POI data. Ranked by curation quality and importability.
+
+#### Top Tier
+
+**Atlas Obscura** (~32K unusual/hidden/curious places worldwide)
+- Community-submitted, editorially reviewed. Highest curation quality for "kindred spirits" sensibility.
+- All places have lat/lon coordinates, descriptions, tags, rarity rankings.
+- No official API but multiple unofficial scrapers:
+  - [bartholomej/atlas-obscura-api](https://github.com/bartholomej/atlas-obscura-api) - JS/NPM, methods include `placesAll()`, `search({lat, lng})`, `placeFull(id)`
+  - [csshen/atlas-obscura-api](https://github.com/csshen/atlas-obscura-api) - Flask/Python
+- `placesAll()` returns all ~32K places with id, lat, lng in a single call. JSON format.
+- **Recommended first import.** One scrape → 32K geotagged entries ready for tjai.
+
+**Wikidata SPARQL** (millions of items, filtered to thousands by your taste)
+- The power tool. You define your taste via queries. All Art Deco buildings with coordinates? All lighthouses? All astronomical observatories? All brutalist architecture? One SPARQL query, export CSV.
+- Query at [query.wikidata.org](https://query.wikidata.org). Export as JSON, CSV, TSV, GeoJSON.
+- Example: all Art Deco buildings worldwide with coordinates:
+  ```sparql
+  SELECT ?item ?itemLabel ?coord WHERE {
+    ?item wdt:P149 wd:Q131681 .   # architectural style = Art Deco
+    ?item wdt:P625 ?coord .        # has coordinates
+    SERVICE wikibase:label { bd:serviceParam wikibase:language "en" }
+  }
+  ```
+- Encyclopedic quality; your queries make it personal.
+
+**Spotted by Locals** (~80 cities, ~2-4K places)
+- Handpicked local residents writing about their own cities. Exactly the right curation sensibility.
+- No API - would need scraping + geocoding addresses. Small enough to be manageable.
+- [spottedbylocals.com](https://www.spottedbylocals.com/)
+
+#### Practical and Easy
+
+**UNESCO World Heritage** (1,248 sites)
+- Gold standard curation. CSV download from [UNESCO DataHub](https://data.unesco.org/explore/dataset/whc001/). Also on Kaggle.
+- Fields: name, country, category, criteria, year, description, lat, lon, area.
+- Trivial import. Small, high-quality foundation layer.
+
+**OpenStreetMap Overpass** (millions, filtered by tag)
+- Query for specific categories matching your interests:
+  - `historic=ruins`, `historic=castle`, `historic=archaeological_site`
+  - `tourism=artwork`, `tourism=viewpoint`, `tourism=museum`
+  - `man_made=lighthouse`, `man_made=windmill`
+  - `building=cathedral`
+- Use [Overpass Turbo](https://overpass-turbo.eu/) for interactive queries, Overpass API for programmatic access.
+- Returns GeoJSON with coordinates. You pick the categories that match your sensibilities.
+
+**WikiVoyage** (tens of thousands of POI listings)
+- Open travel guide with structured listings (See/Do/Eat with coordinates).
+- [DBvoyage](https://github.com/kwh44/dbvoyage) extracts structured data (1.7M semantic triples).
+- MediaWiki API supports GeoSearch near coordinates.
+- More "practical traveler" than "curiosity-driven explorer."
+
+#### Niche
+
+**iOverlander** (tens of thousands, road trip focused)
+- Campsites, fuel, water, wild camping, border crossings, mechanics.
+- Export as KML/GPX/CSV (subscription required). All include lat/lon.
+- High quality for overlanding. Community-verified with last-verified dates.
+
+**Carte-Urbex** (carte-urbex.com) - Abandoned places with GPS coordinates. Enthusiast-curated urban exploration.
+
+**Google My Maps** - Individual curated maps exportable as KML. Finding the good ones is the challenge. Search `site:google.com/maps/d "hidden gems"`.
+
+#### Not Worth It (generic/commercial)
+
+- Foursquare OS Places (100M generic POIs, every chain restaurant)
+- Overture Maps (same problem - massive and generic)
+- Reddit (great taste, no structure - would need NLP + geocoding pipeline)
+- Yelp/TripAdvisor/Google Maps (pleases everyone, therefore no one)
+
+#### Recommended First Imports
+
+1. **Atlas Obscura full scrape** → ~32K curated places with minimal effort
+2. **Wikidata SPARQL queries** for specific architectural/cultural interests
+3. **UNESCO World Heritage CSV** → 1,248 sites, trivial import
+4. **OSM Overpass thematic queries** for categories that match personal taste
+
+All import as: parse JSON/CSV/GeoJSON → create tjai entries with `data={"lat": N, "lon": N}`, context=places or context=poi.
 
 ### Telegram API Methods
 
