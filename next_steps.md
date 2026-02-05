@@ -142,6 +142,79 @@ All import as: parse JSON/CSV/GeoJSON → create tjai entries with `data={"lat":
 - Live location updates include `heading` (1-360°) for direction filtering
 - Mini App via `InlineKeyboardButton(web_app=WebAppInfo(url=...))` for multi-pin map
 
+### Art-Informed Place Discovery
+
+The art collection in `primus/art/` (630 works, 180+ artists) defines a clear taste profile that should drive museum and gallery recommendations. The LLM should know this profile when suggesting places.
+
+#### Taste Profile (from collection analysis)
+
+**Core artists (by collection depth):**
+- Degas (62), Cezanne (61), Mucha (54), Klimt (48), Schiele (42), Van Gogh (37), Mapplethorpe (29), Toulouse-Lautrec (22), Macke (16), Crewdson (14), Bouguereau (14), Botticelli (14), de Lempicka (12), Redon (11), Cassatt (10), Ansel Adams (10)
+
+**Periods & movements:**
+- Heaviest: 1870-1920 (Impressionism through early Modernism)
+- Strong: Art Nouveau, Austrian Expressionism, fine art photography
+- Represented: Renaissance, Baroque, Romanticism, Symbolism, Cubism, Surrealism, Art Deco
+
+**Aesthetic sensibility:** Technical mastery, figural art (especially ballet/female subjects), decorative/ornamental beauty, European tradition, museum-quality fine art. Both classical representation and symbolic/interpretive approaches.
+
+#### Wikidata Queries for Art-Related Places
+
+Museums holding works by collected artists:
+```sparql
+SELECT ?museum ?museumLabel ?coord ?collectionLabel WHERE {
+  ?painting wdt:P170 wd:Q46373 .    # creator = Edgar Degas
+  ?painting wdt:P195 ?museum .       # collection (museum)
+  ?museum wdt:P625 ?coord .          # museum has coordinates
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en" }
+}
+```
+Replace Degas entity (Q46373) with any artist. Key artist Wikidata IDs:
+- Degas: Q46373, Cezanne: Q35548, Mucha: Q147837, Klimt: Q34661
+- Schiele: Q44032, Van Gogh: Q5582, Toulouse-Lautrec: Q82445
+- Botticelli: Q5669, Mapplethorpe: Q365737, de Lempicka: Q230570
+
+All Art Nouveau buildings with coordinates:
+```sparql
+SELECT ?item ?itemLabel ?coord WHERE {
+  ?item wdt:P149 wd:Q34636 .   # architectural style = Art Nouveau
+  ?item wdt:P625 ?coord .
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en" }
+}
+```
+
+#### Key Museums by Alignment with Collection
+
+**Essential (deep holdings in core interests):**
+- Musée d'Orsay, Paris (Impressionism, 19th century core)
+- Neue Galerie, New York (Klimt, Schiele - Austrian/German Expressionism)
+- Leopold Museum, Vienna (world's largest Schiele collection)
+- Mucha Museum, Prague
+- Belvedere, Vienna (Klimt's "The Kiss" and extensive Austrian Modernism)
+
+**Strong alignment:**
+- Art Institute of Chicago (major Impressionism holdings)
+- Musée de l'Orangerie, Paris (Monet water lilies, Cezanne, Renoir)
+- Van Gogh Museum, Amsterdam
+- Kröller-Müller Museum, Otterlo (Van Gogh, Mondrian)
+- National Gallery, London (European masters breadth)
+- Kunsthistorisches Museum, Vienna
+
+**Photography:**
+- Getty Center, Los Angeles (Mapplethorpe, Adams)
+- International Center of Photography, New York
+- SFMOMA (strong photography collection)
+
+#### Integration with LLM Place Research
+
+When the user asks "what's interesting nearby?" or is driving through a region, the LLM should:
+1. Know the taste profile above (add to AI guidance or system prompt)
+2. Cross-reference nearby museums/galleries against collected artists and movements
+3. Prioritize lesser-known venues over obvious tourist destinations
+4. Note specific works: "The Neue Galerie has Klimt's Adele Bloch-Bauer I - 15 minutes off your route"
+
+The art collection metadata at `primus/art-metadata.txt` and `primus/artist-metadata.txt` could be used to build a tjai AI guidance entry summarizing the taste profile, so the Telegram bot's Claude instance knows the user's art interests without needing to read the full collection each time.
+
 ### Dependencies on Existing Infrastructure
 
 - GPS location from Telegram: working
