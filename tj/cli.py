@@ -412,8 +412,20 @@ def show_status() -> None:
         # Telegram bot status
         from tj.state import get_tgbot_status
         tgbot = get_tgbot_status()
+        exchanges = f", {tgbot['exchanges_24h']} exchanges in 24h"
         if tgbot['running']:
-            print(f"\nTelegram bot: running (PID {tgbot['pid']}), {tgbot['exchanges_24h']} exchanges in 24h")
+            if tgbot.get('remote'):
+                age = tgbot['heartbeat_age']
+                ago = f"{age}s" if age < 120 else f"{age // 60}m"
+                print(f"\nTelegram bot: running (heartbeat {ago} ago){exchanges}")
+            else:
+                print(f"\nTelegram bot: running (PID {tgbot['pid']}){exchanges}")
+        elif tgbot.get('remote'):
+            age = tgbot['heartbeat_age']
+            ago = f"{age // 60}m" if age < 7200 else f"{age // 3600}h"
+            print(f"\nTelegram bot: not responding (last heartbeat {ago} ago)")
+        elif tgbot.get('remote_error'):
+            print(f"\nTelegram bot: unknown (server unreachable)")
         else:
             print(f"\nTelegram bot: not running")
 

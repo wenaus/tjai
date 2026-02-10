@@ -126,6 +126,21 @@ def get_tgbot_status() -> dict:
         except (ValueError, OSError):
             pass
 
+    # Remote fallback: query server heartbeat if not found locally
+    if not result['running']:
+        try:
+            from tj.server import send_command
+            resp = send_command("get_sysconfig")
+            if resp.get("status") == "ok":
+                heartbeat = resp["result"].get("tg_bot_heartbeat")
+                if heartbeat:
+                    age = int(time.time() - float(heartbeat))
+                    result['remote'] = True
+                    result['heartbeat_age'] = age
+                    result['running'] = age < 300  # healthy if < 5 min
+        except Exception:
+            result['remote_error'] = True
+
     # Count recent exchanges (entries with 'fromtg' tag)
     try:
         from tj.repository_factory import RepositoryFactory

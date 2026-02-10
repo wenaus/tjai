@@ -61,6 +61,20 @@ def set_voice_mode(voice: bool):
     logger.info(f"Voice mode set to {'voice' if voice else 'text'}")
 
 
+def _write_heartbeat():
+    """Write bot heartbeat timestamp to SysConfig."""
+    from tjai_app.models import SysConfig
+    SysConfig.objects.update_or_create(
+        key='tg_bot_heartbeat',
+        defaults={'value': str(time.time()), 'timestamp_modified': time.time()}
+    )
+
+
+async def heartbeat_job(context):
+    """Periodic heartbeat update for remote health checks."""
+    await asyncio.to_thread(_write_heartbeat)
+
+
 def check_trigger(text: str) -> str | None:
     """Check for voice command triggers.
 
@@ -786,6 +800,9 @@ def create_application() -> Application:
 
     # Calendar reminders: check every 5 minutes, start after 10 seconds
     application.job_queue.run_repeating(check_reminders, interval=300, first=10)
+
+    # Bot heartbeat: update every 60 seconds for remote health checks
+    application.job_queue.run_repeating(heartbeat_job, interval=60, first=5)
 
     return application
 
