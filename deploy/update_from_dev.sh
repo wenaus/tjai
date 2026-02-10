@@ -37,4 +37,8 @@ popd >/dev/null
 # reload apache
 sudo systemctl reload apache2
 
+# restart telegram bot
+echo "Restarting Telegram bot..."
+"$REPO_ROOT/deploy/restart_tgbot.sh"
+
 echo "Deployment complete."
