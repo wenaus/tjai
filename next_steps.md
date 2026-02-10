@@ -215,6 +215,92 @@ When the user asks "what's interesting nearby?" or is driving through a region, 
 
 The art collection metadata at `primus/art-metadata.txt` and `primus/artist-metadata.txt` could be used to build a tjai AI guidance entry summarizing the taste profile, so the Telegram bot's Claude instance knows the user's art interests without needing to read the full collection each time.
 
+### dkbapp Data Recovery: 5,400 Personally Curated Places
+
+The predecessor project **dkbapp** (https://github.com/wenaus/dkbapp), built ~2014-2018, was a full-stack Node.js/Express knowledge base app. Its primary deployed instance was **Mappeteer** - a map-centric personal knowledge base for curating places. Uses MySQL backend with Leaflet maps, mobile-optimized browser UI.
+
+#### Recoverable Data
+
+**`data/TorrePlaces.geojson`** (3.6MB) - **5,298 personally curated places + 100 regions**
+- Global coverage: NYC, London, LA, and many other cities
+- Breakdown: 2,998 restaurants, 526 sights, 334 bars, 264 culture, 241 beer, 205 food, 128 hotels, 115 wine, 112 cafes, 95 shopping, 84 music, 58 bookstores, 58 galleries, 56 info
+- Fields: name, coordinates [lon, lat], category type, description, review URLs
+- Standard GeoJSON, directly parseable
+
+**`data/MirandaPlaces.geojson`** (98KB) - **138 London places**
+- Shopping (31), Food (29), Restaurant (23), Culture (13), Bookshop (10), Cafe (10), Sights (7), Beer (6), Wine (5), Bar (3)
+- Same fields as above with richer descriptions
+
+**`data/mykb-dump.sql`** (56MB) - Full MySQL dump of the MyKB module (markdown notes/documents). May contain additional content worth examining.
+
+#### GeoJSON Format
+
+```json
+{
+  "name": "Houseman",
+  "type": "restaurant",
+  "description": "a restaurant for grown-ups. friendly service, great food. mustsee",
+  "review url": "http://housemanrestaurant.com/ http://www.theinfatuation.com/...",
+  "coordinates": [-74.009344, 40.725746]
+}
+```
+
+Note: GeoJSON convention is `[longitude, latitude]` - reversed from typical lat/lon.
+
+#### Import Script
+
+Parse GeoJSON → create tjai entries:
+- `kind`: `place` (new kind) or `bookmark` with geotagging
+- `content`: place name
+- `data`: `{"lat": N, "lon": N, "type": "restaurant", "description": "...", "urls": [...]}`
+- `context`: `places` or by city
+- `tags`: category type (restaurant, sights, culture, etc.)
+
+One script, ~50 lines of Python, using tjai's Django ORM or REST API.
+
+#### 100 Region Polygons
+
+TorrePlaces.geojson includes 100 polygon regions (NYC neighborhoods, city boundaries, etc.) that could serve as organizational groupings for proximity queries. Store as entries with polygon geometry in data field.
+
+#### dkbapp Entity Model (for reference)
+
+The original entity had rich fields worth preserving where populated:
+- `ename`, `nickname` - names
+- `lat`, `lng` - coordinates
+- `etype` (place, food, person, etc.), `subtype` (restaurant, cafe, sights, etc.)
+- `description`, `content` (markdown/HTML)
+- `attributes` (links, images), `tags`, `url`
+- `json` - flexible JSON data
+- Entity-relation system connecting places to each other
+
+Entity IDs were formatted as `{name_normalized}@{lat:.3f},{lng:.3f}`.
+
+#### Lessons and Takeaways from dkbapp for tjai
+
+**What worked well in dkbapp:**
+- GeoJSON as the interchange format - standard, portable, tooling everywhere
+- Category/subtype system (restaurant, sights, culture, etc.) - good granularity for filtering
+- Entity-relation model connecting places to each other and to regions
+- Review URLs attached to places - links to the source of the recommendation
+- Mobile-optimized browser UI with Leaflet - proven approach, reuse for Mini App
+- Google My Maps → KMZ → GeoJSON pipeline for bulk import
+
+**What tjai can do better:**
+- No separate app needed - Telegram Mini App replaces the standalone web app
+- Voice-first interaction - "save this place" while walking, no typing
+- LLM intelligence - dkbapp had no AI; tjai can infer, recommend, research
+- Unified knowledge base - places live alongside calendar, todos, memories, not in a silo
+- Cross-session context - the LLM knows your places AND your schedule AND your preferences
+- Sync built in - tjai's multi-device sync means places are everywhere instantly
+
+**What to preserve from dkbapp's design:**
+- The category/subtype taxonomy (restaurant, cafe, sights, culture, etc.) - proven useful over years of curation
+- Region polygons for grouping (NYC neighborhoods, etc.)
+- The entity-relation concept - "this restaurant is in this neighborhood" / "this gallery is near this park"
+- Review URL linkage - knowing *why* a place was saved (which article, which recommendation)
+
+**Key architectural difference:** dkbapp was a standalone app that needed its own hosting, auth, mobile optimization, offline support. tjai delegates all of that to Telegram (mobile), etaverse.com (hosting), and the existing sync infrastructure. The places feature is just more entries in the same system, not a new system.
+
 ### Dependencies on Existing Infrastructure
 
 - GPS location from Telegram: working
