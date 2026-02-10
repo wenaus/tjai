@@ -360,7 +360,8 @@ AUTH0_API_IDENTIFIER=https://etaverse.com/tjai/mcp
 A personal AI assistant via Telegram with full tjai access, voice dialogue, and location awareness. Designed for hands-free use while driving.
 
 **Features:**
-- **Voice I/O** - speak to the bot and hear responses back. Uses OpenAI Whisper for speech-to-text and OpenAI TTS (Nova voice, OGG Opus format) for text-to-speech. Bot responds with voice by default (`ALWAYS_VOICE_RESPONSE` flag).
+- **Voice I/O** - speak to the bot and hear responses back. Uses OpenAI Whisper for speech-to-text and OpenAI TTS (Nova voice, OGG Opus format) for text-to-speech
+- **Voice/text mode toggle** - switch between voice and text responses; mode persists across sessions. Claude adapts response style to the current mode
 - **GPS location** - share your Telegram live location and the bot uses reverse geocoding (OpenStreetMap Nominatim) to provide location-aware responses (weather, local info, etc.)
 - **Web search and fetch** - Claude server tools (`web_search`, `web_fetch`) with user location context for real-time information
 - **Text chat** with Claude Sonnet, with access to all tjai tools (calendar, todos, memories, bookmarks, search)
@@ -384,10 +385,18 @@ A personal AI assistant via Telegram with full tjai access, voice dialogue, and 
 
 **Usage:**
 - `/start` - Initialize bot
-- `/clear` - Clear conversation history
+- `/clear`, `/voice`, `/text` - Typed commands
 - **Text message** - Chat with AI assistant
 - **Voice message** - Speak to the bot; it transcribes, processes, and responds with voice
 - **Share location** - Send your GPS location to enable location-aware responses
+
+**Voice commands** (say or type):
+- "use voice" - switch to voice responses
+- "use text" - switch to text responses
+- "clear history" - start fresh conversation
+- "repeat that" - repeat last response
+- "save that" - save last response to tjai memory
+- "voice help" - list voice commands
 
 **Management:**
 ```bash
