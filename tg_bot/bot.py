@@ -2,6 +2,8 @@
 
 import asyncio
 import logging
+import time
+import uuid
 
 from telegram import Update
 from telegram.ext import (
@@ -20,8 +22,66 @@ from .voice import transcribe_telegram_voice, text_to_speech
 
 logger = logging.getLogger(__name__)
 
-# Voice response mode: if True, always respond with voice; if False, match input type
-ALWAYS_VOICE_RESPONSE = True
+# Voice mode preference
+_voice_mode_cache: bool | None = None
+DEFAULT_VOICE_MODE = True
+
+# Last response cache for "repeat that"
+_last_response: dict[int, str] = {}  # user_id -> last response text
+
+
+def get_voice_mode() -> bool:
+    """Get voice mode preference (True=voice, False=text)."""
+    global _voice_mode_cache
+    if _voice_mode_cache is not None:
+        return _voice_mode_cache
+
+    from tjai_app.models import SysConfig
+    config = SysConfig.objects.filter(key='tg_voice_mode').first()
+    if config:
+        _voice_mode_cache = config.value == 'voice'
+    else:
+        _voice_mode_cache = DEFAULT_VOICE_MODE
+    return _voice_mode_cache
+
+
+def set_voice_mode(voice: bool):
+    """Set voice mode preference."""
+    global _voice_mode_cache
+    from tjai_app.models import SysConfig
+
+    _voice_mode_cache = voice
+    SysConfig.objects.update_or_create(
+        key='tg_voice_mode',
+        defaults={
+            'value': 'voice' if voice else 'text',
+            'timestamp_modified': time.time(),
+        }
+    )
+    logger.info(f"Voice mode set to {'voice' if voice else 'text'}")
+
+
+def check_trigger(text: str) -> str | None:
+    """Check for voice command triggers."""
+    lower = text.lower().strip().rstrip('.')
+    triggers = {
+        'use voice': 'voice',
+        'use text': 'text',
+        'clear history': 'clear',
+        'repeat that': 'repeat',
+        'save that': 'save',
+        'voice help': 'help',
+    }
+    return triggers.get(lower)
+
+
+VOICE_HELP_TEXT = """Voice commands:
+- use voice: switch to voice responses
+- use text: switch to text responses
+- clear history: start fresh conversation
+- repeat that: repeat last response
+- save that: save last response to memory
+- voice help: show this help"""
 
 
 def is_authorized(user_id: int) -> bool:
@@ -53,11 +113,136 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Conversation cleared.")
 
 
-async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE, user_text: str, voice_response: bool = False):
+async def voice_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /voice command to switch to voice mode."""
+    if not is_authorized(update.effective_user.id):
+        await update.message.reply_text("Unauthorized.")
+        return
+    await asyncio.to_thread(set_voice_mode, True)
+    await update.message.reply_text("Switched to voice mode.")
+
+
+async def text_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /text command to switch to text mode."""
+    if not is_authorized(update.effective_user.id):
+        await update.message.reply_text("Unauthorized.")
+        return
+    await asyncio.to_thread(set_voice_mode, False)
+    await update.message.reply_text("Switched to text mode.")
+
+
+async def handle_trigger(update: Update, context: ContextTypes.DEFAULT_TYPE, trigger: str, use_voice: bool):
+    """Handle a voice command trigger."""
+    user_id = update.effective_user.id
+
+    if trigger == 'voice':
+        await asyncio.to_thread(set_voice_mode, True)
+        msg = "Switched to voice mode."
+        if use_voice:
+            audio_path = await asyncio.to_thread(text_to_speech, msg)
+            try:
+                await update.message.reply_voice(voice=open(audio_path, "rb"))
+            finally:
+                audio_path.unlink(missing_ok=True)
+        else:
+            await update.message.reply_text(msg)
+
+    elif trigger == 'text':
+        await asyncio.to_thread(set_voice_mode, False)
+        await update.message.reply_text("Switched to text mode.")
+
+    elif trigger == 'clear':
+        conv = await asyncio.to_thread(get_conversation_store, user_id)
+        conv.clear()
+        await asyncio.to_thread(get_assistant().refresh_context)
+        msg = "Conversation cleared."
+        if use_voice and get_voice_mode():
+            audio_path = await asyncio.to_thread(text_to_speech, msg)
+            try:
+                await update.message.reply_voice(voice=open(audio_path, "rb"))
+            finally:
+                audio_path.unlink(missing_ok=True)
+        else:
+            await update.message.reply_text(msg)
+
+    elif trigger == 'repeat':
+        last = _last_response.get(user_id)
+        if not last:
+            await update.message.reply_text("Nothing to repeat.")
+            return
+        if use_voice or get_voice_mode():
+            audio_path = await asyncio.to_thread(text_to_speech, last)
+            try:
+                await update.message.reply_voice(voice=open(audio_path, "rb"))
+            finally:
+                audio_path.unlink(missing_ok=True)
+        else:
+            await update.message.reply_text(last)
+
+    elif trigger == 'save':
+        last = _last_response.get(user_id)
+        if not last:
+            await update.message.reply_text("Nothing to save.")
+            return
+        await asyncio.to_thread(_save_to_memory, last, user_id)
+        msg = "Response saved to memory."
+        if use_voice and get_voice_mode():
+            audio_path = await asyncio.to_thread(text_to_speech, msg)
+            try:
+                await update.message.reply_voice(voice=open(audio_path, "rb"))
+            finally:
+                audio_path.unlink(missing_ok=True)
+        else:
+            await update.message.reply_text(msg)
+
+    elif trigger == 'help':
+        if use_voice and get_voice_mode():
+            audio_path = await asyncio.to_thread(text_to_speech, VOICE_HELP_TEXT)
+            try:
+                await update.message.reply_voice(voice=open(audio_path, "rb"))
+            finally:
+                audio_path.unlink(missing_ok=True)
+        else:
+            await update.message.reply_text(VOICE_HELP_TEXT)
+
+
+def _save_to_memory(content: str, user_id: int):
+    """Save content to tjai memory."""
+    from tjai_app.models import Entry, Context, Tag
+
+    now = time.time()
+    context, _ = Context.objects.get_or_create(
+        name='tgbot',
+        defaults={
+            'title': 'Telegram Bot',
+            'timestamp_created': now,
+            'timestamp_modified': now,
+        }
+    )
+
+    entry = Entry.objects.create(
+        id=str(uuid.uuid4()),
+        content=content,
+        kind='memory',
+        context=context,
+        data={'telegram_user_id': user_id, 'saved_via': 'voice_command'},
+        timestamp_created=now,
+        timestamp_modified=now,
+        is_dirty=1,
+    )
+    Tag.objects.create(tag_name='fromai', entry=entry)
+    Tag.objects.create(tag_name='fromtg', entry=entry)
+    logger.info(f"Saved response to memory: {entry.id}")
+
+
+async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE, user_text: str, from_voice: bool = False):
     """Process a message and send response."""
     user_id = update.effective_user.id
     conv = await asyncio.to_thread(get_conversation_store, user_id)
     assistant = get_assistant()
+
+    # Determine response mode
+    voice_response = get_voice_mode()
 
     # Show typing/recording indicator
     action = "record_voice" if voice_response else "typing"
@@ -68,12 +253,15 @@ async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE, us
         history = conv.get_history()
         response = await asyncio.to_thread(assistant.chat, user_text, history)
 
+        # Cache for "repeat that" / "save that"
+        _last_response[user_id] = response
+
         # Save to DB
         await asyncio.to_thread(conv.add_user, user_text)
         await asyncio.to_thread(conv.add_assistant, response)
 
-        # Send response (voice if requested or ALWAYS_VOICE_RESPONSE is True)
-        if voice_response or ALWAYS_VOICE_RESPONSE:
+        # Send response based on mode
+        if voice_response:
             audio_path = await asyncio.to_thread(text_to_speech, response)
             try:
                 await update.message.reply_voice(voice=open(audio_path, "rb"))
@@ -96,7 +284,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_text = update.message.text
     logger.info(f"Text from {user_id}: {user_text[:50]}...")
-    await process_message(update, context, user_text, voice_response=False)
+
+    # Check for voice command triggers
+    trigger = check_trigger(user_text)
+    if trigger:
+        await handle_trigger(update, context, trigger, use_voice=False)
+        return
+
+    await process_message(update, context, user_text, from_voice=False)
 
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -110,7 +305,14 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     voice_file = await update.message.voice.get_file()
     user_text = await transcribe_telegram_voice(voice_file)
     logger.info(f"Transcribed: {user_text[:50]}...")
-    await process_message(update, context, user_text, voice_response=True)
+
+    # Check for voice command triggers
+    trigger = check_trigger(user_text)
+    if trigger:
+        await handle_trigger(update, context, trigger, use_voice=True)
+        return
+
+    await process_message(update, context, user_text, from_voice=True)
 
 
 async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -134,6 +336,8 @@ def create_application() -> Application:
     # Add handlers
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("clear", clear_command))
+    application.add_handler(CommandHandler("voice", voice_command))
+    application.add_handler(CommandHandler("text", text_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     application.add_handler(MessageHandler(filters.VOICE, handle_voice))
     application.add_handler(MessageHandler(filters.LOCATION, handle_location))

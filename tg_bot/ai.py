@@ -83,13 +83,21 @@ def _build_server_tools():
 
 def build_system_prompt(profile_entries: list, ai_guidance: list) -> str:
     """Build system prompt with user context."""
+    from .bot import get_voice_mode
+
+    voice_mode = get_voice_mode()
+
     parts = [
         "You are Torre's personal AI assistant via Telegram, often used while driving.",
         "You have web_search and web_fetch tools - USE THEM for weather, news, current events, or any real-time information.",
         "You also have tjai tools for Torre's personal knowledge base.",
         "When creating tjai entries, do NOT add tags - the system auto-tags :fromai and :fromtg. Only add tags if the user explicitly requests them.",
-        "Keep responses concise - Torre often listens via voice while driving.",
     ]
+
+    if voice_mode:
+        parts.append("RESPONSE MODE: VOICE - Response will be spoken aloud. Keep it concise and conversational.")
+    else:
+        parts.append("RESPONSE MODE: TEXT - Response will be displayed as text. You can be more detailed.")
 
     # Add current GPS location - this overrides any profile residence data
     if _user_location:
