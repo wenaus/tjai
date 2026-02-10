@@ -390,12 +390,17 @@ A personal AI assistant via Telegram with full tjai access, voice dialogue, and 
 - **Voice message** - Speak to the bot; it transcribes, processes, and responds with voice
 - **Share location** - Send your GPS location to enable location-aware responses
 
-**Voice commands** (say or type):
+**Voice commands** (say or type) - instant response, no LLM:
 - "use voice" - switch to voice responses
 - "use text" - switch to text responses
 - "clear history" - start fresh conversation
 - "repeat that" - repeat last response
 - "save that" - save last response to tjai memory
+- "get shopping" - retrieve named entry (case-insensitive)
+- "memo buy milk" - save text as memory
+- "calendar" - today and tomorrow's events
+- "journal tomorrow 2pm doctors" - create calendar event
+- "recent" - last 5 entries
 - "voice help" - list voice commands
 
 **Management:**
