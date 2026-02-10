@@ -397,6 +397,7 @@ A personal AI assistant via Telegram with full tjai access, voice dialogue, and 
 - "repeat that" - repeat last response
 - "save that" - save last response to tjai memory
 - "get shopping" - retrieve named entry (case-insensitive)
+- "add shopping pizza dough" - append to named entry
 - "memo buy milk" - save text as memory
 - "calendar" - today and tomorrow's events
 - "journal tomorrow 2pm doctors" - create calendar event

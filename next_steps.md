@@ -1,5 +1,9 @@
 # Next Steps
 
+## tj Command: Remote Bot Health Check
+
+`tj` on remote machines reports "Telegram bot: not running" because it checks local process. Should determine bot health via etaverse.com, presumably via db status (timestamp of last activity or heartbeat entry).
+
 ## Location-Aware Personal Guide
 
 A location-aware system that combines GPS, the LLM, web search, and tjai's knowledge of the user to provide contextual place recommendations and build a personal places database through natural conversation.

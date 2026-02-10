@@ -114,6 +114,15 @@ def check_trigger(text: str) -> str | None:
     if args:
         return f'journal:{args}'
 
+    # Check for "add <name> <text>" command - append to named entry
+    # Format: add <name> <text> - name is first word, rest is text
+    args = extract_args('add', text)
+    if args:
+        parts = args.split(None, 1)  # split into name and rest
+        if len(parts) == 2:
+            name, content = parts
+            return f'add:{name.lower()}:{content}'
+
     return None
 
 
@@ -132,6 +141,7 @@ VOICE_HELP_TEXT = """Voice commands:
 - repeat that: repeat last response
 - save that: save last response to memory
 - get <name>: retrieve named entry
+- add <name> <text>: append to named entry
 - memo <text>: save text as memory
 - calendar: today and tomorrow's events
 - journal <datetime> <text>: create calendar event
@@ -151,6 +161,28 @@ def get_entry_by_name(name: str) -> str | None:
     if entry:
         return entry.content
     return None
+
+
+def append_to_entry(name: str, text: str) -> tuple[str, str] | None:
+    """Append text to a named entry. Returns (text_msg, voice_msg) or None if not found."""
+    from tjai_app.models import Entry
+
+    entry = Entry.objects.filter(
+        name__iexact=name,
+        deleted_at__isnull=True
+    ).first()
+
+    if not entry:
+        return None
+
+    # Append with newline
+    entry.content = entry.content.rstrip() + '\n' + text.strip()
+    entry.timestamp_modified = time.time()
+    entry.is_dirty = 1
+    entry.save(update_fields=['content', 'timestamp_modified', 'is_dirty'])
+
+    msg = f"Added to {name}: {text.strip()}"
+    return msg, msg
 
 
 def create_memo(content: str, user_id: int) -> str:
@@ -529,6 +561,26 @@ async def _handle_trigger_impl(update: Update, context: ContextTypes.DEFAULT_TYP
                 await update.message.reply_voice(voice=open(audio_path, "rb"))
             finally:
                 audio_path.unlink(missing_ok=True)
+
+    elif trigger.startswith('add:'):
+        # Format: add:name:content
+        parts = trigger[4:].split(':', 1)
+        if len(parts) == 2:
+            name, content = parts
+            result = await asyncio.to_thread(append_to_entry, name, content)
+            if result:
+                text_msg, voice_msg = result
+                await update.message.reply_text(text_msg)
+                if await asyncio.to_thread(get_voice_mode):
+                    audio_path = await asyncio.to_thread(text_to_speech, voice_msg)
+                    try:
+                        await update.message.reply_voice(voice=open(audio_path, "rb"))
+                    finally:
+                        audio_path.unlink(missing_ok=True)
+            else:
+                # Entry not found - treat as normal message to LLM
+                original_text = update.message.text
+                await process_message(update, context, original_text, from_voice=use_voice)
 
     elif trigger == 'calendar':
         content, tz_abbrev = await asyncio.to_thread(get_calendar_summary)
