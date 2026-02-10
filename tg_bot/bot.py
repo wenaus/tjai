@@ -138,14 +138,13 @@ async def handle_trigger(update: Update, context: ContextTypes.DEFAULT_TYPE, tri
     if trigger == 'voice':
         await asyncio.to_thread(set_voice_mode, True)
         msg = "Switched to voice mode."
+        await update.message.reply_text(msg)
         if use_voice:
             audio_path = await asyncio.to_thread(text_to_speech, msg)
             try:
                 await update.message.reply_voice(voice=open(audio_path, "rb"))
             finally:
                 audio_path.unlink(missing_ok=True)
-        else:
-            await update.message.reply_text(msg)
 
     elif trigger == 'text':
         await asyncio.to_thread(set_voice_mode, False)
@@ -156,28 +155,26 @@ async def handle_trigger(update: Update, context: ContextTypes.DEFAULT_TYPE, tri
         conv.clear()
         await asyncio.to_thread(get_assistant().refresh_context)
         msg = "Conversation cleared."
+        await update.message.reply_text(msg)
         if use_voice and get_voice_mode():
             audio_path = await asyncio.to_thread(text_to_speech, msg)
             try:
                 await update.message.reply_voice(voice=open(audio_path, "rb"))
             finally:
                 audio_path.unlink(missing_ok=True)
-        else:
-            await update.message.reply_text(msg)
 
     elif trigger == 'repeat':
         last = _last_response.get(user_id)
         if not last:
             await update.message.reply_text("Nothing to repeat.")
             return
+        await update.message.reply_text(last)
         if use_voice or get_voice_mode():
             audio_path = await asyncio.to_thread(text_to_speech, last)
             try:
                 await update.message.reply_voice(voice=open(audio_path, "rb"))
             finally:
                 audio_path.unlink(missing_ok=True)
-        else:
-            await update.message.reply_text(last)
 
     elif trigger == 'save':
         last = _last_response.get(user_id)
@@ -186,24 +183,22 @@ async def handle_trigger(update: Update, context: ContextTypes.DEFAULT_TYPE, tri
             return
         await asyncio.to_thread(_save_to_memory, last, user_id)
         msg = "Response saved to memory."
+        await update.message.reply_text(msg)
         if use_voice and get_voice_mode():
             audio_path = await asyncio.to_thread(text_to_speech, msg)
             try:
                 await update.message.reply_voice(voice=open(audio_path, "rb"))
             finally:
                 audio_path.unlink(missing_ok=True)
-        else:
-            await update.message.reply_text(msg)
 
     elif trigger == 'help':
+        await update.message.reply_text(VOICE_HELP_TEXT)
         if use_voice and get_voice_mode():
             audio_path = await asyncio.to_thread(text_to_speech, VOICE_HELP_TEXT)
             try:
                 await update.message.reply_voice(voice=open(audio_path, "rb"))
             finally:
                 audio_path.unlink(missing_ok=True)
-        else:
-            await update.message.reply_text(VOICE_HELP_TEXT)
 
 
 def _save_to_memory(content: str, user_id: int):
@@ -262,6 +257,8 @@ async def process_message(update: Update, context: ContextTypes.DEFAULT_TYPE, us
 
         # Send response based on mode
         if voice_response:
+            # Voice mode: send text first, then voice
+            await update.message.reply_text(response)
             audio_path = await asyncio.to_thread(text_to_speech, response)
             try:
                 await update.message.reply_voice(voice=open(audio_path, "rb"))
