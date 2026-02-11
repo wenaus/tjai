@@ -453,15 +453,18 @@ def format_entry_for_display(entry, entry_number=None, truncate_lines=None, tags
         else:
             event_dt = datetime.fromtimestamp(event_ts)
 
+        # Include year if not current year
+        now = datetime.now(tz) if tz else datetime.now()
+        other_year = event_dt.year != now.year
+
         # If time is midnight (00:00), show just date with weekday
         if event_dt.hour == 0 and event_dt.minute == 0:
-            event_date_str = f"{colorize_timestamp(event_dt.strftime('%a %m/%d'))} "
+            fmt = '%a %Y/%m/%d' if other_year else '%a %m/%d'
         else:
-            # Show full date and time with weekday
-            event_date_str = f"{colorize_timestamp(event_dt.strftime('%a %m/%d/%H:%M'))} "
+            fmt = '%a %Y/%m/%d/%H:%M' if other_year else '%a %m/%d/%H:%M'
+        event_date_str = f"{colorize_timestamp(event_dt.strftime(fmt))} "
 
         # Add "Today in Xh Ym" marker if event is today with a time
-        now = datetime.now(tz) if tz else datetime.now()
         if event_dt.date() == now.date() and not (event_dt.hour == 0 and event_dt.minute == 0):
             time_diff = event_dt - now
             total_seconds = int(time_diff.total_seconds())

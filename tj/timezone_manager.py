@@ -145,6 +145,9 @@ def format_time_dashboard(timestamp: float) -> str:
         current_tz = get_current_timezone()
         tz = ZoneInfo(current_tz)
         entry_time = datetime.fromtimestamp(timestamp, tz=tz)
+        now = datetime.now(tz)
+        if entry_time.year != now.year:
+            return entry_time.strftime("%a %Y/%m/%d %H:%M %Z")
         return entry_time.strftime("%a %m/%d/%H:%M %Z")
     except Exception:
         traceback.print_exc()
