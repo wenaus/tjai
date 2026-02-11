@@ -426,7 +426,7 @@ A Gmail sidebar add-on that detects calendar invite emails (.ics attachments) an
 - Gmail permalink via `GmailThread.getPermalink()` API
 
 **Files:**
-- `tjai/gmail_addon/Code.gs` — Apps Script code, manually pasted into the [Apps Script editor](https://script.google.com)
+- `tjai/gmail_addon/Code.gs` — Apps Script code, manually pasted into the [Apps Script project](https://script.google.com/home/projects/18IPT5WjVYnsecm_j9Sv8LSsgbYi9hDM49Pjxc48rWH9tGNLbaN4Fq4jO/edit)
 - `tjai/gmail_addon/appsscript.json` — manifest (OAuth scope: `gmail.readonly`)
 - Server endpoint: `api/add-journal` in `tjai_app/views.py` (Bearer token auth)
 
