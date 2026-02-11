@@ -14,6 +14,7 @@ urlpatterns = [
     path("api/sync/pull", views.sync_pull, name="sync_pull"),
     path("api/command", views.api_command, name="api_command"),
     path("api/entry/<str:entry_id>", views.api_delete_entry, name="api_delete_entry"),
+    path("api/add-journal", views.api_add_journal, name="api_add_journal"),
     # Public landing
     path("", views.public_home, name="public_home"),
     # Login/Logout

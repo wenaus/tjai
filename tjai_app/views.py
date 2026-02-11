@@ -1,5 +1,6 @@
 import json
 import time
+import uuid
 from datetime import datetime, timedelta
 
 from django.contrib.auth import authenticate, login, logout
@@ -751,4 +752,61 @@ def kind_entries(request, kind_name):
     return render(request, 'tjai_app/entry_list.html', {
         'title': f'[{kind_name}] {label}',
         'entries': _entries_for_list(entries),
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_add_journal(request):
+    """Create a journal entry from an external source (Gmail Add-on).
+
+    Requires Bearer token matching SysConfig 'gmail_addon_api_key'.
+
+    Request body: {title, event_timestamp, location (optional)}
+    """
+    auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+    if not auth_header.startswith('Bearer '):
+        return JsonResponse({"error": "Authorization required"}, status=401)
+    token = auth_header[7:]
+
+    try:
+        api_key = SysConfig.objects.get(key='gmail_addon_api_key').value
+    except SysConfig.DoesNotExist:
+        return JsonResponse({"error": "API key not configured"}, status=503)
+
+    if token != api_key:
+        return JsonResponse({"error": "Invalid API key"}, status=403)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    title = data.get("title", "").strip()
+    event_timestamp = data.get("event_timestamp")
+    location = data.get("location", "").strip()
+
+    if not title:
+        return JsonResponse({"error": "title is required"}, status=400)
+    if not isinstance(event_timestamp, (int, float)):
+        return JsonResponse({"error": "event_timestamp must be a number"}, status=400)
+
+    content = f"{title} @ {location}" if location else title
+
+    now = time.time()
+    entry = Entry.objects.create(
+        id=str(uuid.uuid4()),
+        content=content,
+        kind='journal',
+        data={'event_date': float(event_timestamp)},
+        timestamp_created=now,
+        timestamp_modified=now,
+        is_dirty=1,
+    )
+    Tag.objects.create(tag_name='gmail', entry=entry)
+
+    return JsonResponse({
+        "status": "ok",
+        "entry_id": entry.id,
+        "content": content,
     })
