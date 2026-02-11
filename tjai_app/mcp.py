@@ -208,6 +208,11 @@ async def get_calendar(
         start_ts = start.timestamp()
         end_ts = (end + timedelta(days=1)).timestamp()  # Include full end day
 
+        tz_config = SysConfig.objects.filter(key='timezone').first()
+        if not tz_config:
+            return [{"error": "SysConfig 'timezone' not set"}]
+        tz = ZoneInfo(tz_config.value)
+
         results = []
         for entry in qs:
             if not entry.data or not isinstance(entry.data, dict):
@@ -219,7 +224,7 @@ async def get_calendar(
             if not isinstance(event_date, (int, float)):
                 continue
             if start_ts <= event_date < end_ts:
-                event_dt = datetime.fromtimestamp(event_date)
+                event_dt = datetime.fromtimestamp(event_date, tz=tz)
                 # Extract title and url from markdown link if present
                 md_match = re.match(r'\[([^\]]+)\]\(([^)]+)\)', entry.content)
                 if md_match:
@@ -457,9 +462,10 @@ async def create_entry(
 
         data = {}
         if event_date:
-            # Get configured timezone (default America/New_York)
             tz_config = SysConfig.objects.filter(key='timezone').first()
-            tz_name = tz_config.value if tz_config else 'America/New_York'
+            if not tz_config:
+                return {"error": "SysConfig 'timezone' not set"}
+            tz_name = tz_config.value
             tz = ZoneInfo(tz_name)
             # Convert to timestamp in user's timezone
             dt = datetime.strptime(event_date, '%Y%m%d').replace(hour=hour, minute=minute, tzinfo=tz)
@@ -845,8 +851,9 @@ async def edit_entry(
                 entry.data.pop('event_date', None)
             else:
                 tz_config = SysConfig.objects.filter(key='timezone').first()
-                tz_name = tz_config.value if tz_config else 'America/New_York'
-                tz = ZoneInfo(tz_name)
+                if not tz_config:
+                    return {"error": "SysConfig 'timezone' not set"}
+                tz = ZoneInfo(tz_config.value)
                 if event_time:
                     h, m = int(event_time[:2]), int(event_time[2:])
                 elif hour is not None:

@@ -784,6 +784,8 @@ def api_add_journal(request):
 
     title = data.get("title", "").strip()
     event_timestamp = data.get("event_timestamp")
+    zoom_url = data.get("zoom_url", "").strip()
+    gmail_url = data.get("gmail_url", "").strip()
     location = data.get("location", "").strip()
 
     if not title:
@@ -791,7 +793,14 @@ def api_add_journal(request):
     if not isinstance(event_timestamp, (int, float)):
         return JsonResponse({"error": "event_timestamp must be a number"}, status=400)
 
-    content = f"{title} @ {location}" if location else title
+    parts = [title]
+    if location:
+        parts.append(f"@ {location}")
+    if zoom_url:
+        parts.append(f"[Zoom]({zoom_url})")
+    if gmail_url:
+        parts.append(f"[Gmail]({gmail_url})")
+    content = " ".join(parts)
 
     now = time.time()
     entry = Entry.objects.create(

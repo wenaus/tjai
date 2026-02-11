@@ -413,6 +413,32 @@ tj                                  # Shows bot status in CLI
 
 Entries created via Telegram are tagged with `fromtg` and `fromai`.
 
+### Gmail Add-on
+
+A Gmail sidebar add-on that detects calendar invite emails (.ics attachments) and creates tjai journal entries with one click.
+
+**What it does:**
+- Contextual trigger fires when viewing an email with .ics attachments
+- Parses ICS VEVENT: summary, date/time, location, Zoom URL
+- Handles Outlook/Exchange Windows timezone names (WINDOWS_TZ_ map), IANA names (validated via probe), and UTC
+- Displays time in Eastern with EST/EDT abbreviation
+- Creates journal entry formatted as: `Title [Zoom](url) [Gmail](permalink)`
+- Gmail permalink via `GmailThread.getPermalink()` API
+
+**Files:**
+- `tjai/gmail_addon/Code.gs` — Apps Script code, manually pasted into the [Apps Script editor](https://script.google.com)
+- `tjai/gmail_addon/appsscript.json` — manifest (OAuth scope: `gmail.readonly`)
+- Server endpoint: `api/add-journal` in `tjai_app/views.py` (Bearer token auth)
+
+**Setup:**
+1. Create a Google Apps Script project at script.google.com
+2. Paste contents of `Code.gs` and `appsscript.json`
+3. In `setApiKey()`, replace `REPLACE_WITH_ACTUAL_KEY` with the value from SysConfig `gmail_addon_api_key` (also in `~/.env` as `TJAI_GMAIL_ADDON_API_KEY`)
+4. Run `setApiKey` once from the editor
+5. Deploy as test deployment (Gmail Add-on type)
+
+**Server endpoint accepts:** `{title, event_timestamp, zoom_url, gmail_url, location}`
+
 ## Development Setup
 
 To set up your development environment and run tests:
