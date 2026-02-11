@@ -757,6 +757,59 @@ def kind_entries(request, kind_name):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+def api_add_bookmark(request):
+    """Create a bookmark entry from an external source (Chrome extension).
+
+    Requires Bearer token matching SysConfig 'gmail_addon_api_key'.
+
+    Request body: {title, url}
+    """
+    auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+    if not auth_header.startswith('Bearer '):
+        return JsonResponse({"error": "Authorization required"}, status=401)
+    token = auth_header[7:]
+
+    try:
+        api_key = SysConfig.objects.get(key='gmail_addon_api_key').value
+    except SysConfig.DoesNotExist:
+        return JsonResponse({"error": "API key not configured"}, status=503)
+
+    if token != api_key:
+        return JsonResponse({"error": "Invalid API key"}, status=403)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    title = data.get("title", "").strip()
+    url = data.get("url", "").strip()
+
+    if not url:
+        return JsonResponse({"error": "url is required"}, status=400)
+
+    content = f"[{title}]({url})" if title else url
+
+    now = time.time()
+    entry = Entry.objects.create(
+        id=str(uuid.uuid4()),
+        content=content,
+        kind='bookmark',
+        timestamp_created=now,
+        timestamp_modified=now,
+        is_dirty=1,
+    )
+    Tag.objects.create(tag_name='chrome', entry=entry)
+
+    return JsonResponse({
+        "status": "ok",
+        "entry_id": entry.id,
+        "content": content,
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
 def api_add_journal(request):
     """Create a journal entry from an external source (Gmail Add-on).
 

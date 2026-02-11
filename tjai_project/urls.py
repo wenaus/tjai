@@ -15,6 +15,7 @@ urlpatterns = [
     path("api/command", views.api_command, name="api_command"),
     path("api/entry/<str:entry_id>", views.api_delete_entry, name="api_delete_entry"),
     path("api/add-journal", views.api_add_journal, name="api_add_journal"),
+    path("api/add-bookmark", views.api_add_bookmark, name="api_add_bookmark"),
     # Public landing
     path("", views.public_home, name="public_home"),
     # Login/Logout
