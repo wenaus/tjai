@@ -790,6 +790,20 @@ def api_add_bookmark(request):
 
     content = f"[{title}]({url})" if title else url
 
+    from django.db.models import Q
+    duplicate = Entry.objects.filter(
+        kind='bookmark',
+        deleted_at__isnull=True,
+    ).filter(
+        Q(content__endswith=f'({url})') | Q(content=url)
+    ).first()
+    if duplicate:
+        return JsonResponse({
+            "status": "duplicate",
+            "entry_id": duplicate.id,
+            "content": duplicate.content,
+        })
+
     now = time.time()
     entry = Entry.objects.create(
         id=str(uuid.uuid4()),
