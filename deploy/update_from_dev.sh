@@ -29,9 +29,10 @@ fi
 "$VENV/bin/pip" install --upgrade pip
 "$VENV/bin/pip" install -r "$TARGET_DIR/requirements/prod.txt"
 
-# migrate
+# migrate and collect static files
 pushd "$TARGET_DIR" >/dev/null
 "$VENV/bin/python" manage.py migrate --noinput
+"$VENV/bin/python" manage.py collectstatic --noinput
 popd >/dev/null
 
 # reload apache

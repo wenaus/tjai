@@ -11,6 +11,7 @@
   "addOns": {
     "common": {
       "name": "tjai Calendar",
+      "logoUrl": "https://etaverse.com/tjai/static/tjai/icon128.png",
       "layoutProperties": {
         "primaryColor": "#4285F4"
       }
