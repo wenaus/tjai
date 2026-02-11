@@ -439,6 +439,31 @@ A Gmail sidebar add-on that detects calendar invite emails (.ics attachments) an
 
 **Server endpoint accepts:** `{title, event_timestamp, zoom_url, gmail_url, location}`
 
+### Chrome Extension (tj-getlink)
+
+A Chrome extension for copying markdown links and saving bookmarks to tjai. Source code is in the separate `tj-getlink/` directory in this repo.
+
+**Features:**
+- Copy page title + URL as markdown link `[Title](url)`
+- Copy with clean URL (strips query params and fragments)
+- Save to tjai as a bookmark entry (kind `bookmark`, tagged `chrome`)
+
+**Bookmarking:**
+- Clicks "Save to tjai" to POST to `api/add-bookmark` endpoint with Bearer token auth
+- API key prompted on first use, stored in `chrome.storage.sync`
+- Uses browser tab title as the bookmark title
+- Server creates entry with content `[Title](url)`
+
+**Files:**
+- `tj-getlink/manifest.json` — Manifest V3, permissions: `activeTab`, `clipboardWrite`, `storage`
+- `tj-getlink/popup.html/js/css` — Extension popup UI and logic
+- Server endpoint: `api/add-bookmark` in `tjai_app/views.py` (same Bearer token as Gmail Add-on)
+
+**Setup:**
+1. In Chrome, go to `chrome://extensions/`, enable Developer Mode
+2. Click "Load unpacked" and select the `tj-getlink/` directory
+3. Click the extension icon, then "Save to tjai" — enter API key when prompted (same key as Gmail Add-on, from SysConfig `gmail_addon_api_key`)
+
 ## Development Setup
 
 To set up your development environment and run tests:
