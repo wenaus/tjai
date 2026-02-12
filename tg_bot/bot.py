@@ -113,10 +113,14 @@ def check_trigger(text: str) -> str | None:
             return match.group(1).strip()
         return None
 
+    def strip_trailing_punct(s: str) -> str:
+        """Strip trailing punctuation from a name token (voice transcription artifact)."""
+        return s.rstrip(',.:;!')
+
     # Check for "get <name>" command
     args = extract_args('get', text)
     if args:
-        return f'get:{args.lower()}'
+        return f'get:{strip_trailing_punct(args).lower()}'
 
     # Check for "memo <text>" command - preserve case
     args = extract_args('memo', text)
@@ -135,7 +139,7 @@ def check_trigger(text: str) -> str | None:
         parts = args.split(None, 1)  # split into name and rest
         if len(parts) == 2:
             name, content = parts
-            return f'add:{name.lower()}:{content}'
+            return f'add:{strip_trailing_punct(name).lower()}:{content}'
 
     return None
 
