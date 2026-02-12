@@ -4,6 +4,7 @@ import sys
 import traceback
 from datetime import datetime, timezone
 
+from tj.commands.common import get_entry_from_recent_list
 from tj.repository_factory import RepositoryFactory
 from tj.state import get_state, save_state
 
@@ -18,6 +19,47 @@ def detect_list_creation(content: str) -> bool:
     return lower.endswith("list") or lower.endswith("checklist")
 
 
+def _add_to_named_entry(args) -> None:
+    """Append text to a named entry's content.
+
+    Usage: tj + @name item text
+    Resolves @name, appends item text as a new line.
+    """
+    name_arg = args.input[0]  # e.g. "@shopping"
+    item_parts = args.input[1:]
+
+    if not item_parts:
+        print(f"Error: No text to add. Usage: tj + {name_arg} <text>", file=sys.stderr)
+        return
+
+    try:
+        entry = get_entry_from_recent_list(name_arg)
+        if not entry:
+            print(f"Error: Named entry '{name_arg}' not found.", file=sys.stderr)
+            return
+
+        item_text = " ".join(item_parts)
+        new_content = entry.content + "\n" + item_text
+
+        repository = RepositoryFactory.get_repository()
+        now = datetime.now(timezone.utc).timestamp()
+        success = repository.update_entry(
+            entry.id,
+            content=new_content,
+            timestamp_modified=now,
+            is_dirty=True
+        )
+
+        if success:
+            print(f"Added to @{entry.name}: {item_text}")
+        else:
+            print("Error: Failed to update entry.", file=sys.stderr)
+
+    except Exception as e:
+        traceback.print_exc()
+        print(f"Error adding to named entry: {e}", file=sys.stderr)
+
+
 def handle_add_list_item(args) -> None:
     """Add item to last referenced list entry.
 
@@ -26,6 +68,11 @@ def handle_add_list_item(args) -> None:
     """
     if not hasattr(args, 'input') or not args.input:
         print("Error: No content provided for list item.", file=sys.stderr)
+        return
+
+    # Handle @name syntax: tj + @shopping milk
+    if args.input[0].startswith('@'):
+        _add_to_named_entry(args)
         return
 
     try:
