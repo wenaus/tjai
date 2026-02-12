@@ -110,13 +110,22 @@ tj l                                            # List all entries
 *   **MODIFY:**
     *   `tj . <content>`: Adds a sub-item to last parent entry.
     *   `tj + <item>`: Adds item to current list.
+    *   `tj + @name <text>`: Appends text as new line to named entry's content.
     *   `tj e`: Create new entry in $EDITOR.
+    *   `tj e [ai|do|p|b|j]`: Create typed entry in $EDITOR.
     *   `tj e <n>`: Edit entry `<n>` in $EDITOR.
+    *   `tj e <n> -k`: Edit entry, keep original modification time.
+    *   `tj e <n> =ctx`: Set context on entry (no editor).
     *   `tj e <n> <text>`: Replace entry `<n>` content (with confirmation).
     *   `tj s <n>` or `tj s @name`: Show entry details.
+    *   `tj s =ctx`: Show context description.
     *   `tj t <n> <tag>`: Add tag to entry.
+    *   `tj t- <n> <tag>`: Remove tag from entry.
     *   `tj mv <n> <context>`: Move entry to context.
     *   `tj ^ <n>`: Pin entry to top (update timestamp).
+    *   `tj cp <n> <datetime>`: Copy journal entry to new date/time.
+    *   `tj archive <n>`: Archive entry.
+    *   `tj unarchive <n>`: Unarchive entry.
     *   **Numbered shortcuts:** Quick metadata modifications on entry `<n>`:
         *   `tj <n> @name`: Assign name to entry.
         *   `tj <n> @0`: Clear name from entry.
@@ -124,7 +133,11 @@ tj l                                            # List all entries
         *   `tj <n> =0`: Clear context on entry.
         *   `tj <n> :tag`: Add tag to entry.
         *   `tj <n> p=N`: Set priority on entry.
+        *   `tj <n> p=0`: Remove priority.
         *   `tj <n> s=status`: Set status on entry.
+        *   `tj <n> k=type`: Change kind (ai, b, do, j, m, p).
+        *   `tj <n> l=N`: Set truncation lines for display.
+        *   `tj <n> l=0`: Remove truncation.
     *   `tj d <n>` or `tj d @name`: Delete entry (with confirmation).
 *   **CALENDAR:**
     *   `tj c`: View calendar (default 30 days)
@@ -232,7 +245,10 @@ python manage.py createsuperuser
 - `/tjai/dashboard/` - Web dashboard (requires login)
 - `/tjai/api/health` - Health check
 - `/tjai/api/sync/push` - Push dirty entries from client
-- `/tjai/api/sync/pull` - Pull updates to client
+- `/tjai/api/sync/pull` - Pull updates to client (paginated, 500 entries/batch)
+- `/tjai/api/bulk-import` - Bulk import bookmarks (Bearer token auth)
+- `/tjai/api/add-bookmark` - Single bookmark from Chrome extension (Bearer token auth)
+- `/tjai/api/add-journal` - Journal entry from Gmail add-on (Bearer token auth)
 - `/tjai/api/command` - Server commands (sysconfig)
 - `/tjai/mcp/` - MCP (Model Context Protocol) server for AI assistants
 

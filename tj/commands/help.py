@@ -21,6 +21,7 @@ tj <N>          List N entries  tj l [ai|b|do|j|m|p|log] By type
 CREATE                          MODIFY
 tj <text>       Memory          tj . <text>     Sub-item of last
 tj m <text>     Memory          tj + <item>     Add to list
+                                tj + @name <text> Append to named
 tj do <text>    Todo            tj e            New in $EDITOR
 tj p <text>     Profile fact    tj e [ai|do|p|b|j] Type in $EDITOR
 tj ai <text>    AI guideline    tj e <n>        Edit entry <n>

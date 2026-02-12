@@ -65,18 +65,23 @@ Colors:
 
 ### Pull (server → local)
 
-1. GET `https://etaverse.com/tjai/api/sync/pull?since={last_sync_time}`
-2. Server returns entries modified since that timestamp, plus `sysconfig`
+Paginated — server returns entries in batches of 500, using cursor-based pagination by `(timestamp_modified, id)` to handle same-timestamp boundaries.
+
+1. GET `https://etaverse.com/tjai/api/sync/pull?since={last_sync_time}&after_id={cursor}`
+2. Server returns batch of entries modified since that timestamp, plus `has_more` flag
 3. Upsert received data (skip if local is dirty or newer)
-4. Update `last_sync_time` to server's timestamp
-5. Apply `sysconfig` (e.g., sync interval)
+4. If `has_more`, advance cursor to last entry's `(timestamp_modified, id)` and repeat
+5. When `has_more` is false, update `last_sync_time` to server's timestamp
+6. Apply `sysconfig` (e.g., sync interval)
+
+Normal incremental syncs complete in 1 batch. Full resyncs (`tj admin agent sync`) page through all entries safely regardless of volume.
 
 ### Sync Cycle
 
 ```
 while running:
     push_dirty_entries()
-    pull_updates()  # includes sysconfig
+    pull_updates()  # paginated batches, includes sysconfig
     sleep(sync_interval)  # from server sysconfig
 ```
 
@@ -148,7 +153,7 @@ tjai/
 |----------|--------|---------|
 | `/api/health` | GET | Health check |
 | `/api/sync/push` | POST | Push dirty entries |
-| `/api/sync/pull` | GET | Pull updates + sysconfig |
+| `/api/sync/pull` | GET | Pull updates + sysconfig (paginated, 500/batch) |
 | `/api/command` | POST | Execute commands (set_sysconfig, get_sysconfig) |
 
 ## Server Deployment (ec2dev)

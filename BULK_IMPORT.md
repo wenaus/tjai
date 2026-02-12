@@ -142,6 +142,16 @@ for bm in bookmarks:
 }
 ```
 
+## Sync After Import
+
+Bulk imports preserve original historical timestamps. Since sync pulls filter by `timestamp_modified > last_sync_time`, imported entries with old timestamps won't appear on other machines automatically. After importing, run a full resync on each machine:
+
+```bash
+tj admin agent sync
+```
+
+This resets `last_sync_time` to 0 and the paginated pull fetches all entries in batches of 500.
+
 ## Auto-Tagging
 
 Server applies `tjai_app/tagger.py` rules:
