@@ -416,7 +416,7 @@
                 const tagLinks = data.all_tags.map(t =>
                     `<a href="/tjai/tag/${t}/" style="color:#9ccc65;text-decoration:none">${t}</a>`
                 ).join(', ');
-                html += `<div class="status-line">Tags: ${tagLinks}</div>`;
+                html += `<div class="status-line">Tags: ${tagLinks}, <a href="/tjai/tag/_none/" style="color:#888;text-decoration:none">(none)</a></div>`;
             }
 
             // Entry types

@@ -751,13 +751,24 @@ def context_entries(request, context_name):
 
 @login_required
 def tag_entries(request, tag_name):
-    """Show all entries for a tag."""
-    entry_ids = Tag.objects.filter(tag_name=tag_name).values_list('entry_id', flat=True)
-    entries = Entry.objects.filter(
-        id__in=entry_ids, deleted_at__isnull=True
-    ).order_by('-timestamp_modified')[:100]
+    """Show all entries for a tag. Special name '_none' shows untagged entries."""
+    META_TAGS = {'dynalist', 'chrome', 'test', 'fave', 'cool', 'readme'}
+    if tag_name == '_none':
+        tagged_ids = Tag.objects.exclude(tag_name__in=META_TAGS).values_list('entry_id', flat=True)
+        entries = Entry.objects.filter(
+            deleted_at__isnull=True, context__isnull=True
+        ).exclude(id__in=tagged_ids).exclude(
+            kind__in=('journal', 'ai', 'log', 'profile')
+        ).order_by('-timestamp_modified')[:100]
+        title = '(none)'
+    else:
+        entry_ids = Tag.objects.filter(tag_name=tag_name).values_list('entry_id', flat=True)
+        entries = Entry.objects.filter(
+            id__in=entry_ids, deleted_at__isnull=True
+        ).order_by('-timestamp_modified')[:100]
+        title = f':{tag_name}'
     return render(request, 'tjai_app/entry_list.html', {
-        'title': f':{tag_name}',
+        'title': title,
         'entries': _entries_for_list(entries),
     })
 
