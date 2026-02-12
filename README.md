@@ -4,7 +4,7 @@
 
 `tjai` is a personal AI assistant, companion, and memory aid, operated via a concise and powerful command-line interface (`tj`). Its ultimate purpose is to serve as a definitive, structured **"me descriptor"** — a single source of truth about your life, projects, and knowledge that can be used to provide deep context to other AI systems.
 
-This project is built on an offline-first, distributed architecture. The `tj` client works locally, syncing to a personal cloud backend, ensuring it's always fast, available, and resilient. See [DESIGN.md](DESIGN.md) for architecture details.
+This project is built on an offline-first, distributed architecture. The `tj` client works locally, syncing to a personal cloud backend, ensuring it's always fast, available, and resilient. See [DESIGN.md](DESIGN.md) for architecture details and [BULK_IMPORT.md](BULK_IMPORT.md) for importing bookmarks from external sources.
 
 ## Core Concepts
 

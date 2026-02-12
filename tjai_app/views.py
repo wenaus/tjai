@@ -902,3 +902,66 @@ def api_add_journal(request):
         "entry_id": entry.id,
         "content": content,
     })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_bulk_import(request):
+    """Bulk import bookmarks from external sources.
+
+    Requires Bearer token matching SysConfig 'gmail_addon_api_key'.
+
+    Request body: {
+        "items": [
+            {"content": "[Title](url)", "tags": ["tag1"], "timestamp": 1234567890.0},
+            ...
+        ],
+        "source_tag": "dynalist",  // optional, added to all entries
+        "skip_existing": true,     // optional, default true
+        "create_context": false    // optional, default false
+    }
+
+    Response: {
+        "imported": 100,
+        "skipped": 5,
+        "errors": ["Item 3: empty content"],
+        "auto_tags": {"recipe": 10, "video": 3}
+    }
+    """
+    auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+    if not auth_header.startswith('Bearer '):
+        return JsonResponse({"error": "Authorization required"}, status=401)
+    token = auth_header[7:]
+
+    try:
+        api_key = SysConfig.objects.get(key='gmail_addon_api_key').value
+    except SysConfig.DoesNotExist:
+        return JsonResponse({"error": "API key not configured"}, status=503)
+
+    if token != api_key:
+        return JsonResponse({"error": "Invalid API key"}, status=403)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    items = data.get("items", [])
+    if not items:
+        return JsonResponse({"error": "items array is required"}, status=400)
+    if not isinstance(items, list):
+        return JsonResponse({"error": "items must be an array"}, status=400)
+
+    source_tag = data.get("source_tag")
+    skip_existing = data.get("skip_existing", True)
+    create_context = data.get("create_context", False)
+
+    from bulk_import.loader import bulk_import_bookmarks
+    results = bulk_import_bookmarks(
+        items,
+        source_tag=source_tag,
+        skip_existing=skip_existing,
+        create_context=create_context,
+    )
+
+    return JsonResponse(results)
