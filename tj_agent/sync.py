@@ -85,11 +85,14 @@ def write_status(last_push: float = None, last_pull: float = None,
     STATUS_FILE.write_text(json.dumps(status))
 
 
+PUSH_BATCH_SIZE = 500
+
+
 def push_dirty_entries() -> int:
     """
-    Push all dirty entries to server.
+    Push dirty entries to server in batches.
 
-    Returns count of entries pushed.
+    Returns total count of entries pushed.
     """
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -98,7 +101,7 @@ def push_dirty_entries() -> int:
     cursor.execute(
         "SELECT * FROM entries WHERE is_dirty = 1"
     )
-    entries = []
+    all_entries = []
     for row in cursor.fetchall():
         entry = dict(row)
         # Decode data from JSON string to dict for server
@@ -107,72 +110,83 @@ def push_dirty_entries() -> int:
                 entry['data'] = json.loads(entry['data'])
             except json.JSONDecodeError:
                 pass
-        entries.append(entry)
+        all_entries.append(entry)
 
-    if not entries:
+    if not all_entries:
         write_status(entries_pending=0)
         return 0
 
-    # Get contexts referenced by dirty entries
-    context_names = {e["context"] for e in entries if e.get("context")}
-    contexts = []
-    if context_names:
-        placeholders = ",".join("?" * len(context_names))
-        cursor.execute(
-            f"SELECT * FROM contexts WHERE name IN ({placeholders})",
-            list(context_names)
-        )
-        contexts = [dict(row) for row in cursor.fetchall()]
-
-    # Get tags for dirty entries
-    entry_ids = [e["id"] for e in entries]
-    placeholders = ",".join("?" * len(entry_ids))
-    cursor.execute(
-        f"SELECT * FROM tags WHERE entry_id IN ({placeholders})",
-        entry_ids
-    )
-    tags = [dict(row) for row in cursor.fetchall()]
-
-    # Get sub_notes for dirty entries
-    cursor.execute(
-        f"SELECT * FROM sub_notes WHERE parent_id IN ({placeholders})",
-        entry_ids
-    )
-    sub_notes = []
-    for row in cursor.fetchall():
-        note = dict(row)
-        if note.get('data') and isinstance(note['data'], str):
-            try:
-                note['data'] = json.loads(note['data'])
-            except json.JSONDecodeError:
-                pass
-        sub_notes.append(note)
-
-    # Push to server
     machine_id = get_machine_id()
     location_name = get_location_name()
+    total_pushed = 0
 
-    response = client.push(
-        machine_id=machine_id,
-        hostname=location_name,
-        entries=entries,
-        contexts=contexts,
-        tags=tags,
-        sub_notes=sub_notes,
-    )
+    # Push in batches
+    for batch_start in range(0, len(all_entries), PUSH_BATCH_SIZE):
+        entries = all_entries[batch_start:batch_start + PUSH_BATCH_SIZE]
+        entry_ids = [e["id"] for e in entries]
+        placeholders = ",".join("?" * len(entry_ids))
 
-    if response.get("status") == "ok":
-        # Mark entries as clean
+        # Get contexts referenced by this batch
+        context_names = {e["context"] for e in entries if e.get("context")}
+        contexts = []
+        if context_names:
+            ctx_placeholders = ",".join("?" * len(context_names))
+            cursor.execute(
+                f"SELECT * FROM contexts WHERE name IN ({ctx_placeholders})",
+                list(context_names)
+            )
+            contexts = [dict(row) for row in cursor.fetchall()]
+
+        # Get tags for this batch
         cursor.execute(
-            f"UPDATE entries SET is_dirty = 0 WHERE id IN ({placeholders})",
+            f"SELECT * FROM tags WHERE entry_id IN ({placeholders})",
             entry_ids
         )
-        conn.commit()
-        logger.info(f"Pushed {len(entries)} entries")
-        write_status(last_push=time.time(), entries_pending=0)
-        return len(entries)
+        tags = [dict(row) for row in cursor.fetchall()]
 
-    return 0
+        # Get sub_notes for this batch
+        cursor.execute(
+            f"SELECT * FROM sub_notes WHERE parent_id IN ({placeholders})",
+            entry_ids
+        )
+        sub_notes = []
+        for row in cursor.fetchall():
+            note = dict(row)
+            if note.get('data') and isinstance(note['data'], str):
+                try:
+                    note['data'] = json.loads(note['data'])
+                except json.JSONDecodeError:
+                    pass
+            sub_notes.append(note)
+
+        response = client.push(
+            machine_id=machine_id,
+            hostname=location_name,
+            entries=entries,
+            contexts=contexts,
+            tags=tags,
+            sub_notes=sub_notes,
+        )
+
+        if response.get("status") == "ok":
+            # Mark batch as clean
+            cursor.execute(
+                f"UPDATE entries SET is_dirty = 0 WHERE id IN ({placeholders})",
+                entry_ids
+            )
+            conn.commit()
+            total_pushed += len(entries)
+            remaining = len(all_entries) - batch_start - len(entries)
+            if remaining > 0:
+                logger.info(f"Pushed batch of {len(entries)} entries, {remaining} remaining...")
+        else:
+            logger.error(f"Push batch failed: {response}")
+            break
+
+    if total_pushed:
+        logger.info(f"Pushed {total_pushed} entries total")
+    write_status(last_push=time.time(), entries_pending=len(all_entries) - total_pushed)
+    return total_pushed
 
 
 def _merge_batch(cursor, response) -> int:

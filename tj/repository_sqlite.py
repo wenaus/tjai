@@ -322,11 +322,15 @@ class SQLiteRepository(EntryRepository):
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             cursor.execute("""
                 INSERT OR IGNORE INTO tags (tag_name, entry_id) VALUES (?, ?)
             """, (tag_name, entry_id))
-            
+
+            cursor.execute(
+                "UPDATE entries SET is_dirty = 1 WHERE id = ?", (entry_id,)
+            )
+
             conn.commit()
 
         except sqlite3.Error as e:
@@ -537,6 +541,12 @@ class SQLiteRepository(EntryRepository):
             """, (entry_id, tag_name))
 
             success = cursor.rowcount > 0
+
+            if success:
+                cursor.execute(
+                    "UPDATE entries SET is_dirty = 1 WHERE id = ?", (entry_id,)
+                )
+
             conn.commit()
             return success
 
@@ -548,7 +558,13 @@ class SQLiteRepository(EntryRepository):
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
+            # Mark affected entries dirty before deleting tags
+            cursor.execute("""
+                UPDATE entries SET is_dirty = 1
+                WHERE id IN (SELECT entry_id FROM tags WHERE tag_name = ?)
+            """, (tag_name,))
+
             cursor.execute("""
                 DELETE FROM tags WHERE tag_name = ?
             """, (tag_name,))
