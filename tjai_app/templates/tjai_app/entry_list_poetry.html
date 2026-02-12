@@ -15,12 +15,19 @@
             margin: 0 auto;
         }
         h1 { color: #d8a070; font-size: 16px; margin-bottom: 16px; }
+        .author-bar {
+            margin-bottom: 16px;
+            line-height: 1.8;
+            font-size: 12px;
+        }
+        .author-bar a { color: #d8a070; text-decoration: none; }
+        .author-bar a:hover { text-decoration: underline; }
+        .author-bar .count { color: #8a8a8a; }
         .entry { margin: 6px 0; line-height: 1.4; }
         .entry-num { color: #daa520; }
         .timestamp { color: #8a8a8a; }
-        .kind { color: #daa520; }
-        .context { color: #ce93d8; }
         .content { color: #e0e0e0; }
+        .author { color: #8a8a8a; }
         .lines { color: #daa520; }
         .tag { color: #9ccc65; }
         a { color: inherit; text-decoration: none; }
@@ -30,43 +37,26 @@
     </style>
 </head>
 <body>
-    <div class="back"><a href="{% url 'dashboard' %}">&larr; Dashboard</a></div>
+    <div class="back"><a href="{% url 'dashboard' %}">&larr; Dashboard</a> &nbsp; {% if authors %}<a href="{% url 'context_entries' 'poetry' %}">All Poetry</a>{% endif %}</div>
     <h1>{{ title }} ({{ entries|length }} entries)</h1>
+    {% if authors %}
+    <div class="author-bar">
+        {% for name, count in authors %}{% if not forloop.first %}, {% endif %}<a href="{% url 'poetry_author_entries' name %}">{{ name }}</a> <span class="count">({{ count }})</span>{% endfor %}
+    </div>
+    {% endif %}
     {% for e in entries %}
     <div class="entry">
         <a href="{% url 'entry_detail' e.id %}">
             <span class="entry-num">===</span>
             <span class="timestamp">{{ e.date_display }}</span>
+            <span class="content">{{ e.first_line }}</span>
+            {% if e.author %}<span class="author"> — {{ e.author }}</span>{% endif %}
         </a>
-        {% if e.context_id %}<span class="context">={{ e.context_id }}</span>{% endif %}
-        <a href="{% url 'entry_detail' e.id %}" class="content-link"><span class="content" data-content="{{ e.first_line }}"></span></a>
         {% if e.line_count %}<span class="lines">[{{ e.line_count }} lines]</span>{% endif %}
         {% for t in e.display_tags %}<span class="tag">:{{ t }}</span> {% endfor %}
     </div>
     {% empty %}
     <p>No entries found.</p>
     {% endfor %}
-    <script>
-        document.querySelectorAll('.content[data-content]').forEach(el => {
-            var content = el.dataset.content;
-            var hasUrl = /https?:\/\//.test(content);
-            if (hasUrl) {
-                content = content.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,
-                    '<a href="$2" target="_blank" style="color:#64b5f6">$1</a>');
-                content = content.replace(/(^|[^"'])(https?:\/\/[^\s<]+)/g,
-                    '$1<a href="$2" target="_blank" style="color:#64b5f6">$2</a>');
-                // Move linkified content out of the wrapping link
-                var wrapper = el.closest('a.content-link');
-                if (wrapper) {
-                    var span = document.createElement('span');
-                    span.className = 'content';
-                    span.innerHTML = content;
-                    wrapper.replaceWith(span);
-                }
-            } else {
-                el.textContent = content;
-            }
-        });
-    </script>
 </body>
 </html>

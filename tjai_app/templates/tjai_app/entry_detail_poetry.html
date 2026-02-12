@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>tjai - {{ title }}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Buda:wght@300&family=Cardo&family=Cormorant+Garamond:wght@400;500&family=EB+Garamond:wght@400;500&family=Spectral:wght@400;500&family=Lora:wght@400;500&family=Playfair+Display:wght@400;500&family=Crimson+Text&family=Libre+Baskerville&family=Sorts+Mill+Goudy&family=GFS+Didot&family=Alegreya:wght@400;500&family=Gentium+Book+Plus&family=Vollkorn:wght@400;500&family=Old+Standard+TT&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background: #cc9966;
+            color: black;
+            margin: 0;
+            padding: 20px;
+        }
+        .back {
+            font-size: 14px;
+            margin-bottom: 16px;
+            font-family: monospace;
+        }
+        .back a {
+            color: #553311;
+            text-decoration: none;
+        }
+        .back a:hover { text-decoration: underline; }
+        .label {
+            max-width: 800px;
+            margin: 30px auto 0;
+            color: #331100;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .poem {
+            background: #ffcc99;
+            padding: 30px 40px;
+            max-width: 800px;
+            margin: 10px auto;
+            white-space: pre;
+            font-size: 18pt;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="back"><a href="{% url 'dashboard' %}">&larr; Dashboard</a> &nbsp; <a href="{% url 'context_entries' 'poetry' %}">&larr; Poetry</a></div>
+
+    <div class="label">1. Lora</div>
+    <div class="poem" style="font-family:'Lora',serif;">{{ entry.content }}</div>
+
+    <div class="label">2. Buda 300</div>
+    <div class="poem" style="font-family:'Buda',serif;">{{ entry.content }}</div>
+
+    <div class="label">3. Cormorant Garamond</div>
+    <div class="poem" style="font-family:'Cormorant Garamond',serif;">{{ entry.content }}</div>
+
+    <div class="label">4. EB Garamond</div>
+    <div class="poem" style="font-family:'EB Garamond',serif;">{{ entry.content }}</div>
+
+    <div class="label">5. Playfair Display</div>
+    <div class="poem" style="font-family:'Playfair Display',serif;">{{ entry.content }}</div>
+
+    <div class="label">6. Spectral</div>
+    <div class="poem" style="font-family:'Spectral',serif;">{{ entry.content }}</div>
+
+    <div class="label">7. Crimson Text</div>
+    <div class="poem" style="font-family:'Crimson Text',serif;">{{ entry.content }}</div>
+
+    <div class="label">8. Libre Baskerville</div>
+    <div class="poem" style="font-family:'Libre Baskerville',serif;">{{ entry.content }}</div>
+
+    <div class="label">9. Sorts Mill Goudy</div>
+    <div class="poem" style="font-family:'Sorts Mill Goudy',serif;">{{ entry.content }}</div>
+
+    <div class="label">10. GFS Didot</div>
+    <div class="poem" style="font-family:'GFS Didot',serif;">{{ entry.content }}</div>
+
+    <div class="label">11. Alegreya</div>
+    <div class="poem" style="font-family:'Alegreya',serif;">{{ entry.content }}</div>
+
+    <div class="label">12. Gentium Book Plus</div>
+    <div class="poem" style="font-family:'Gentium Book Plus',serif;">{{ entry.content }}</div>
+
+    <div class="label">13. Vollkorn</div>
+    <div class="poem" style="font-family:'Vollkorn',serif;">{{ entry.content }}</div>
+
+    <div class="label">14. Old Standard TT</div>
+    <div class="poem" style="font-family:'Old Standard TT',serif;">{{ entry.content }}</div>
+
+    <div class="label">15. Cardo</div>
+    <div class="poem" style="font-family:'Cardo',serif;">{{ entry.content }}</div>
+</body>
+</html>

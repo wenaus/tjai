@@ -706,6 +706,12 @@ def entry_detail(request, entry_id):
         content_html
     )
     first_line = lines[0] if lines else ''
+    if entry.context_id == 'poetry':
+        return render(request, 'tjai_app/entry_detail_poetry.html', {
+            'entry': entry,
+            'title': first_line,
+            'tags': tags,
+        })
     return render(request, 'tjai_app/entry_detail.html', {
         'entry': entry,
         'content_html': content_html,
@@ -731,6 +737,8 @@ def _entries_for_list(entries):
         e.line_count = len(lines) if len(lines) > 1 else None
         entry_tags = tags_by_entry.get(e.id, [])
         e.display_tags = [t for t in entry_tags if f':{t}' not in e.first_line]
+        data = e.data if isinstance(e.data, dict) else None
+        e.author = data.get('author') if data else None
         # Convert float timestamp to datetime for template formatting
         e.modified_dt = datetime.fromtimestamp(e.timestamp_modified)
         if e.context_id == 'quote':
@@ -747,8 +755,36 @@ def context_entries(request, context_name):
     entries = Entry.objects.filter(
         context_id=context_name, deleted_at__isnull=True
     ).order_by('-timestamp_modified')
+
+    if context_name == 'poetry':
+        # Compute author stats for the author bar
+        from collections import Counter
+        author_counter = Counter()
+        for e in entries:
+            if isinstance(e.data, dict) and e.data.get('author'):
+                author_counter[e.data['author']] += 1
+        authors = sorted(author_counter.items(), key=lambda x: x[0].lstrip('? ').lower())
+        return render(request, 'tjai_app/entry_list_poetry.html', {
+            'title': f'={context_name}',
+            'entries': _entries_for_list(entries),
+            'authors': authors,
+        })
+
     return render(request, 'tjai_app/entry_list.html', {
         'title': f'={context_name}',
+        'entries': _entries_for_list(entries),
+    })
+
+
+@login_required
+def poetry_author_entries(request, author_name):
+    """Show poetry entries filtered by author."""
+    entries = Entry.objects.filter(
+        context_id='poetry', deleted_at__isnull=True,
+        data__author=author_name,
+    ).order_by('-timestamp_modified')
+    return render(request, 'tjai_app/entry_list_poetry.html', {
+        'title': f'=poetry — {author_name}',
         'entries': _entries_for_list(entries),
     })
 
