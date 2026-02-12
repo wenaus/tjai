@@ -301,6 +301,35 @@ Entity IDs were formatted as `{name_normalized}@{lat:.3f},{lng:.3f}`.
 
 **Key architectural difference:** dkbapp was a standalone app that needed its own hosting, auth, mobile optimization, offline support. tjai delegates all of that to Telegram (mobile), etaverse.com (hosting), and the existing sync infrastructure. The places feature is just more entries in the same system, not a new system.
 
+## Fix Quotation Timestamps (BROKEN)
+
+194 quotations were imported into the `quote` context from `website/www.wenaus.com/quotations.html`. The content is correct but **the timestamps are wrong** — they all display as `07/01/00` on the context page.
+
+### What happened
+
+A previous AI session set `timestamp_created` and `timestamp_modified` using Python `datetime(year, 7, 1).timestamp()`. This produced negative Unix timestamps for pre-1970 dates, and all dates show July 1 with broken year display. The approach was fundamentally flawed.
+
+### What needs to happen
+
+1. **Look at how other entries' timestamps work.** All other entry types display correctly in `entry_list.html` (line 39: `{{ e.modified_dt|date:"D m/d/H:i" }}`). The `_entries_for_list()` function in `views.py:735` does `datetime.fromtimestamp(e.timestamp_modified)`. Study working entries to understand what timestamp values produce correct display.
+
+2. **Build a correct source→year mapping.** Most quotations have identifiable sources (movies, books, people) with known dates. The mapping was already built — the source→year data is correct, only the timestamp conversion was wrong. Sources and approximate years:
+   - Movies: MST3K (1988), Buckaroo Banzai (1984), Hannah and her Sisters (1986), After Hours (1985), Crossing Delancey (1988), Casablanca (1942), Almost Famous (2000), Big Lebowski (1998), Jerry Maguire (1996), etc.
+   - Historical figures: Churchill (1940), JFK (1961), Obama (2008), Trudeau (2015), etc.
+   - Authors/thinkers: Twain (1890), Feynman (1965), Thoreau (1854), etc.
+   - ~5 entries have no identifiable date (anonymous sayings) — leave at 1999
+
+3. **Generate correct timestamps and UPDATE.** Must produce timestamps that `datetime.fromtimestamp()` handles correctly and that display properly in Django's `date` template filter. For pre-1970 sources, pick a reasonable representation (e.g. just use 1970 or store year info differently). Test with a single entry first before bulk updating.
+
+4. **Verify on the live context page** at `/tjai/context/quote/` that dates display correctly.
+
+### Current state of the data
+
+- 194 entries in `quote` context, all `kind=memory`, all tagged `quote`
+- Content is clean (HTML stripped, one duplicate removed)
+- Timestamps are WRONG — need to be fixed
+- The entries' IDs and content should not be changed, only timestamps
+
 ### Dependencies on Existing Infrastructure
 
 - GPS location from Telegram: working

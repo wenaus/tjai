@@ -36,7 +36,7 @@
     <div class="entry">
         <a href="{% url 'entry_detail' e.id %}">
             <span class="entry-num">===</span>
-            <span class="timestamp">{{ e.modified_dt|date:"D m/d/H:i" }}</span>
+            <span class="timestamp">{{ e.date_display }}</span>
         </a>
         {% if e.context_id %}<span class="context">={{ e.context_id }}</span>{% endif %}
         <span class="content" data-content="{{ e.first_line }}"></span>

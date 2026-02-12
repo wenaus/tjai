@@ -733,6 +733,10 @@ def _entries_for_list(entries):
         e.display_tags = [t for t in entry_tags if f':{t}' not in e.first_line]
         # Convert float timestamp to datetime for template formatting
         e.modified_dt = datetime.fromtimestamp(e.timestamp_modified)
+        if e.context_id == 'quote':
+            e.date_display = str(e.modified_dt.year)
+        else:
+            e.date_display = e.modified_dt.strftime('%a %m/%d/%y %H:%M')
         result.append(e)
     return result
 
@@ -742,7 +746,7 @@ def context_entries(request, context_name):
     """Show all entries for a context."""
     entries = Entry.objects.filter(
         context_id=context_name, deleted_at__isnull=True
-    ).order_by('-timestamp_modified')[:100]
+    ).order_by('-timestamp_modified')
     return render(request, 'tjai_app/entry_list.html', {
         'title': f'={context_name}',
         'entries': _entries_for_list(entries),
@@ -759,13 +763,13 @@ def tag_entries(request, tag_name):
             deleted_at__isnull=True, context__isnull=True
         ).exclude(id__in=tagged_ids).exclude(
             kind__in=('journal', 'ai', 'log', 'profile')
-        ).order_by('-timestamp_modified')[:100]
+        ).order_by('-timestamp_modified')
         title = '(none)'
     else:
         entry_ids = Tag.objects.filter(tag_name=tag_name).values_list('entry_id', flat=True)
         entries = Entry.objects.filter(
             id__in=entry_ids, deleted_at__isnull=True
-        ).order_by('-timestamp_modified')[:100]
+        ).order_by('-timestamp_modified')
         title = f':{tag_name}'
     return render(request, 'tjai_app/entry_list.html', {
         'title': title,
@@ -788,7 +792,7 @@ def kind_entries(request, kind_name):
     kind = abbrev_to_kind.get(kind_name, kind_name)
     entries = Entry.objects.filter(
         kind=kind, deleted_at__isnull=True
-    ).order_by('-timestamp_modified')[:100]
+    ).order_by('-timestamp_modified')
     label = kind_labels.get(kind_name, kind_name)
     return render(request, 'tjai_app/entry_list.html', {
         'title': f'[{kind_name}] {label}',

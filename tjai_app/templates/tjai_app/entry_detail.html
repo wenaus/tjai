@@ -37,7 +37,7 @@
 <body>
     <div class="back"><a href="{% url 'dashboard' %}">&larr; Dashboard</a></div>
     <div class="summary">
-        <span class="timestamp">{{ entry.timestamp_modified|date:"D m/d/H:i" }}</span>
+        <span class="timestamp">{{ entry.timestamp_modified|date:"D m/d/Y H:i" }}</span>
         <span class="kind">[{{ entry.kind }}]</span>
         {% if entry.context_id %}<span class="context">={{ entry.context_id }}</span>{% endif %}
         {% if entry.name %}<strong>@{{ entry.name }}</strong>{% endif %}
