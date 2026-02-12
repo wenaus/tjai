@@ -144,6 +144,15 @@ def sync_push(request):
         )
         counts["tags"] += 1
 
+    # Auto-tag bookmarks arriving via sync
+    from .tagger import tag_bookmark
+    for entry in data.get("entries", []):
+        if entry["kind"] == "bookmark" and not entry.get("deleted_at"):
+            try:
+                tag_bookmark(Entry.objects.get(id=entry["id"]))
+            except Entry.DoesNotExist:
+                pass
+
     # Upsert sub_notes
     for note in data.get("sub_notes", []):
         note_data = note.get("data")

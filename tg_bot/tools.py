@@ -541,6 +541,10 @@ def create_entry(content, kind="memory", context=None, tags=None, event_date=Non
     Tag.objects.create(tag_name='fromai', entry=entry)
     Tag.objects.create(tag_name='fromtg', entry=entry)
 
+    if kind == 'bookmark':
+        from tjai_app.tagger import tag_bookmark
+        tag_bookmark(entry)
+
     return _format_entry(entry)
 
 

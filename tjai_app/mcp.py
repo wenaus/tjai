@@ -495,6 +495,10 @@ async def create_entry(
         # Always tag MCP-created entries
         Tag.objects.create(tag_name='fromai', entry=entry)
 
+        if kind == 'bookmark':
+            from .tagger import tag_bookmark
+            tag_bookmark(entry)
+
         return _format_entry(entry)
 
     return await create()
