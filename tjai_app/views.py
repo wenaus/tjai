@@ -818,10 +818,14 @@ def api_add_bookmark(request):
     )
     Tag.objects.create(tag_name='chrome', entry=entry)
 
+    from .tagger import tag_bookmark
+    auto_tags = tag_bookmark(entry)
+
     return JsonResponse({
         "status": "ok",
         "entry_id": entry.id,
         "content": content,
+        "auto_tags": auto_tags,
     })
 
 
