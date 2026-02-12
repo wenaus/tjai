@@ -784,18 +784,21 @@ def api_add_bookmark(request):
 
     title = data.get("title", "").strip()
     url = data.get("url", "").strip()
+    text = data.get("text", "").strip()
 
     if not url:
         return JsonResponse({"error": "url is required"}, status=400)
 
     content = f"[{title}]({url})" if title else url
+    if text:
+        content += '   ' + text
 
     from django.db.models import Q
     duplicate = Entry.objects.filter(
         kind='bookmark',
         deleted_at__isnull=True,
     ).filter(
-        Q(content__endswith=f'({url})') | Q(content=url)
+        Q(content__contains=f'({url})') | Q(content=url) | Q(content__startswith=url + ' ')
     ).first()
     if duplicate:
         return JsonResponse({
