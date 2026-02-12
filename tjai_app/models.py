@@ -102,6 +102,18 @@ class Machine(models.Model):
         db_table = 'machines'
 
 
+class TagStats(models.Model):
+    """Precomputed per-tag metadata for efficient dashboard queries."""
+    tag_name = models.CharField(max_length=255, primary_key=True)
+    entry_count = models.IntegerField(default=0)
+    is_context_only = models.BooleanField(default=False)
+    only_context = models.CharField(max_length=255, null=True, blank=True)
+    updated_at = models.FloatField()
+
+    class Meta:
+        db_table = 'tag_stats'
+
+
 class SysConfig(models.Model):
     """System-wide configuration parameters (server-authoritative)."""
     key = models.CharField(max_length=255, primary_key=True)

@@ -168,6 +168,11 @@ def bulk_import_bookmarks(items, source_tag=None, skip_existing=True,
         results['imported'] += 1
 
     progress_callback(total, total, "Import complete")
+
+    if results['imported'] > 0:
+        from tjai_app.tag_stats import rebuild_tag_stats
+        rebuild_tag_stats()
+
     return results
 
 

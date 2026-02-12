@@ -338,6 +338,9 @@ def create_entry(content, kind="memory", context=None, name=None, tags=None,
     if kind == 'bookmark':
         tag_bookmark(entry)
 
+    from .tag_stats import rebuild_tag_stats
+    rebuild_tag_stats()
+
     return _format_entry(entry)
 
 
@@ -485,11 +488,13 @@ def edit_entry(entry_id, content, context=None, clear_context=False,
     elif clear_context:
         entry.context = None
 
+    tags_changed = False
     if tags is not None:
         entry.tags.all().delete()
         for tag_name in tags:
             if tag_name and tag_name.strip():
                 Tag.objects.create(tag_name=tag_name.strip(), entry=entry)
+        tags_changed = True
 
     if event_date or clear_event_date:
         if entry.data is None:
@@ -532,6 +537,10 @@ def edit_entry(entry_id, content, context=None, clear_context=False,
     if not keep_time:
         update_fields.append('timestamp_modified')
     entry.save(update_fields=update_fields)
+
+    if tags_changed:
+        from .tag_stats import rebuild_tag_stats
+        rebuild_tag_stats()
 
     return _format_entry(entry)
 

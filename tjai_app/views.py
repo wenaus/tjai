@@ -13,7 +13,7 @@ from django.views.decorators.http import require_http_methods
 from django.db.models.functions import Lower
 from django.http import Http404
 from django.conf import settings as django_settings
-from .models import Context, Entry, Tag, SubNote, Machine, SysConfig
+from .models import Context, Entry, Tag, TagStats, SubNote, Machine, SysConfig
 
 
 def api_health(request):
@@ -171,6 +171,10 @@ def sync_push(request):
             }
         )
         counts["sub_notes"] += 1
+
+    if counts["tags"] > 0:
+        from .tag_stats import rebuild_tag_stats
+        rebuild_tag_stats()
 
     return JsonResponse({"status": "ok", "received": counts})
 
@@ -616,8 +620,9 @@ def dashboard_status(request):
         deleted_at__isnull=True, context_id__isnull=False
     ).values_list('context_id', flat=True).distinct().order_by('context_id'))
 
-    # Tags (alpha sorted)
-    all_tags = list(Tag.objects.values_list('tag_name', flat=True).distinct().order_by('tag_name'))
+    # Tags (alpha sorted, excluding context-only tags)
+    all_tags = list(TagStats.objects.filter(is_context_only=False)
+        .values_list('tag_name', flat=True).order_by('tag_name'))
 
     # Open todos by context
     todos_by_ctx = list(Entry.objects.filter(
