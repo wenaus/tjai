@@ -49,13 +49,16 @@ def push(machine_id: str, hostname: str, entries: list, contexts: list,
         raise Exception(f"Connection error: {e.reason}")
 
 
-def pull(machine_id: str, since: float) -> dict[str, Any]:
+def pull(machine_id: str, since: float, after_id: str = "") -> dict[str, Any]:
     """
-    Pull entries modified since timestamp.
+    Pull entries modified since timestamp, with cursor-based pagination.
 
-    Returns server response dict with entries, contexts, tags, sub_notes, server_time.
+    Returns server response dict with entries, contexts, tags, sub_notes,
+    server_time, and has_more flag.
     """
     url = f"{get_sync_server()}/api/sync/pull?machine_id={machine_id}&since={since}"
+    if after_id:
+        url += f"&after_id={after_id}"
 
     req = urllib.request.Request(url, method="GET")
 

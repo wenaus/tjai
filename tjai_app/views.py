@@ -175,14 +175,18 @@ def sync_push(request):
     return JsonResponse({"status": "ok", "received": counts})
 
 
+SYNC_BATCH_SIZE = 500
+
+
 @csrf_exempt
 @require_http_methods(["GET"])
 def sync_pull(request):
     """
-    Return entries modified since a given timestamp.
+    Return entries modified since a given timestamp, paginated.
 
     Query params:
         since: Unix timestamp (float). Returns entries with timestamp_modified > since.
+        after_id: Entry ID for cursor-based pagination (handles same-timestamp boundaries).
         machine_id: Client machine ID (for tracking).
 
     Response:
@@ -192,10 +196,12 @@ def sync_pull(request):
         "entries": [...],
         "contexts": [...],
         "tags": [...],
-        "sub_notes": [...]
+        "sub_notes": [...],
+        "has_more": true/false
     }
     """
     since = float(request.GET.get("since", 0))
+    after_id = request.GET.get("after_id", "")
     machine_id = request.GET.get("machine_id")
 
     now = time.time()
@@ -211,32 +217,41 @@ def sync_pull(request):
             }
         )
 
-    # Get modified contexts
+    # Get modified contexts (small table, no pagination needed)
     contexts = list(
         Context.objects.filter(timestamp_modified__gt=since).values(
             "name", "title", "description", "timestamp_created", "timestamp_modified"
         )
     )
 
-    # Get modified entries
+    # Get modified entries — cursor-based pagination by (timestamp_modified, id)
+    from django.db.models import Q
+    if after_id:
+        q = Q(timestamp_modified__gt=since) | Q(timestamp_modified=since, id__gt=after_id)
+    else:
+        q = Q(timestamp_modified__gt=since)
+
     entries = list(
-        Entry.objects.filter(timestamp_modified__gt=since).values(
+        Entry.objects.filter(q).order_by("timestamp_modified", "id")
+        .values(
             "id", "parent_id", "content", "kind", "timestamp_created",
             "timestamp_modified", "context_id", "deleted_at", "name",
             "priority", "status", "data"
-        )
+        )[:SYNC_BATCH_SIZE]
     )
+    has_more = len(entries) == SYNC_BATCH_SIZE
+
     # Rename context_id to context for client compatibility
     for e in entries:
         e["context"] = e.pop("context_id")
 
-    # Get tags for modified entries
+    # Get tags for this batch of entries
     entry_ids = [e["id"] for e in entries]
     tags = list(
         Tag.objects.filter(entry_id__in=entry_ids).values("tag_name", "entry_id")
     )
 
-    # Get modified sub_notes
+    # Get modified sub_notes (small table, no pagination needed)
     sub_notes = list(
         SubNote.objects.filter(timestamp_created__gt=since).values(
             "id", "parent_id", "content", "timestamp_created", "data"
@@ -257,6 +272,7 @@ def sync_pull(request):
         "tags": tags,
         "sub_notes": sub_notes,
         "sysconfig": sysconfig,
+        "has_more": has_more,
     })
 
 

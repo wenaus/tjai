@@ -175,22 +175,8 @@ def push_dirty_entries() -> int:
     return 0
 
 
-def pull_updates() -> int:
-    """
-    Pull updates from server and merge into local DB.
-
-    Returns count of entries updated.
-    """
-    machine_id = get_machine_id()
-    since = get_last_sync_time()
-
-    response = client.pull(machine_id=machine_id, since=since)
-
-    if response.get("status") != "ok":
-        return 0
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
+def _merge_batch(cursor, response) -> int:
+    """Merge a single batch of pull response into local DB. Returns entry count."""
     count = 0
 
     # Merge contexts
@@ -265,19 +251,61 @@ def pull_updates() -> int:
              json.dumps(note.get("data")) if note.get("data") else None)
         )
 
-    conn.commit()
+    return count
 
-    # Update last sync time
+
+def pull_updates() -> int:
+    """
+    Pull updates from server and merge into local DB.
+    Handles paginated responses, pulling batches until server signals completion.
+
+    Returns (count of entries updated, sysconfig dict).
+    """
+    machine_id = get_machine_id()
+    since = get_last_sync_time()
+    after_id = ""
+    total_count = 0
+    sysconfig = {}
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    batch_num = 0
+    while True:
+        batch_num += 1
+        response = client.pull(machine_id=machine_id, since=since, after_id=after_id)
+
+        if response.get("status") != "ok":
+            logger.error(f"Pull batch {batch_num} failed: {response}")
+            return 0, sysconfig
+
+        count = _merge_batch(cursor, response)
+        total_count += count
+        conn.commit()
+
+        sysconfig = response.get("sysconfig", sysconfig)
+
+        entries = response.get("entries", [])
+        has_more = response.get("has_more", False)
+
+        if has_more and entries:
+            # Advance cursor to last entry in batch (ordered by timestamp_modified, id)
+            last = entries[-1]
+            since = last["timestamp_modified"]
+            after_id = last["id"]
+            logger.info(f"Pull batch {batch_num}: {count} entries merged, fetching more...")
+        else:
+            break
+
+    # Update last sync time only after all batches complete
     server_time = response.get("server_time", time.time())
     set_last_sync_time(server_time)
 
-    if count:
-        logger.info(f"Pulled {count} entries")
+    if total_count:
+        logger.info(f"Pulled {total_count} entries in {batch_num} batch(es)")
     write_status(last_pull=time.time())
 
-    # Return sysconfig for caller to use
-    sysconfig = response.get("sysconfig", {})
-    return count, sysconfig
+    return total_count, sysconfig
 
 
 def sync_cycle() -> dict:
