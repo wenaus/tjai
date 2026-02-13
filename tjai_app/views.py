@@ -582,7 +582,7 @@ def dashboard_status(request):
         deleted_at__isnull=True,
     ).exclude(
         status='archive'
-    ).order_by('-timestamp_modified')
+    ).order_by('-timestamp_modified')[:1000]
 
     # Batch fetch tags for all entries
     entry_ids = [e.id for e in recent]
@@ -606,6 +606,7 @@ def dashboard_status(request):
             'timestamp': e.timestamp_modified,
             'line_count': line_count if line_count > 1 else None,
             'name': e.name,
+            'nickname': data.get('nickname') if data else None,
             'event_date': data.get('event_date') if data else None,
             'tags': missing_tags,
         })
@@ -664,6 +665,49 @@ def dashboard_status(request):
 
 
 @login_required
+def dashboard_search(request):
+    """Search entries and return JSON in same format as dashboard_status entries."""
+    q = request.GET.get('q', '').strip()
+    if not q:
+        return JsonResponse({'entries': []})
+
+    entries = Entry.objects.filter(
+        content__icontains=q,
+        deleted_at__isnull=True,
+    ).exclude(
+        status='archive'
+    ).order_by('-timestamp_modified')[:200]
+
+    # Batch fetch tags
+    entry_ids = [e.id for e in entries]
+    tags_by_entry = {}
+    for t in Tag.objects.filter(entry_id__in=entry_ids):
+        tags_by_entry.setdefault(t.entry_id, []).append(t.tag_name)
+
+    result = []
+    for e in entries:
+        lines = e.content.split('\n')
+        line_count = len([l for l in lines if l.strip()])
+        entry_tags = tags_by_entry.get(e.id, [])
+        missing_tags = [t for t in entry_tags if f':{t}' not in e.content]
+        data = e.data if isinstance(e.data, dict) else None
+        result.append({
+            'id': e.id,
+            'content': lines[0],
+            'kind': e.kind,
+            'context': e.context_id,
+            'timestamp': e.timestamp_modified,
+            'line_count': line_count if line_count > 1 else None,
+            'name': e.name,
+            'nickname': data.get('nickname') if data else None,
+            'event_date': data.get('event_date') if data else None,
+            'tags': missing_tags,
+        })
+
+    return JsonResponse({'entries': result})
+
+
+@login_required
 def dashboard_named(request):
     """Return named entries as JSON for dashboard."""
     # Get entries with names, ordered alphabetically (case-insensitive)
@@ -689,12 +733,17 @@ def dashboard_named(request):
 
 @login_required
 def entry_detail(request, entry_id):
-    """Show single entry detail page."""
+    """Show single entry detail page. Accepts nickname (data->nickname), @name, or UUID."""
     import markdown
-    entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
+    # Try nickname first, then @name, then UUID
+    entry = Entry.objects.filter(data__nickname=entry_id, deleted_at__isnull=True).first()
+    if not entry:
+        entry = Entry.objects.filter(name=entry_id, deleted_at__isnull=True).first()
+    if not entry:
+        entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
     if not entry:
         raise Http404("Entry not found")
-    tags = list(Tag.objects.filter(entry_id=entry_id).values_list('tag_name', flat=True))
+    tags = list(Tag.objects.filter(entry_id=entry.id).values_list('tag_name', flat=True))
     lines = [l for l in entry.content.split('\n') if l.strip()]
     data = entry.data if isinstance(entry.data, dict) else None
     content_html = markdown.markdown(entry.content)
@@ -707,9 +756,14 @@ def entry_detail(request, entry_id):
     )
     first_line = lines[0] if lines else ''
     if entry.context_id == 'poetry':
+        content_lines = entry.content.split('\n')
+        poem_title = content_lines[0] if content_lines else ''
+        poem_body = '\n'.join(content_lines[1:]) if len(content_lines) > 1 else ''
         return render(request, 'tjai_app/entry_detail_poetry.html', {
             'entry': entry,
             'title': first_line,
+            'poem_title': poem_title,
+            'poem_body': poem_body,
             'tags': tags,
         })
     return render(request, 'tjai_app/entry_detail.html', {
@@ -739,12 +793,15 @@ def _entries_for_list(entries):
         e.display_tags = [t for t in entry_tags if f':{t}' not in e.first_line]
         data = e.data if isinstance(e.data, dict) else None
         e.author = data.get('author') if data else None
+        e.detail_slug = (data.get('nickname') if data else None) or e.name or str(e.id)
         # Convert float timestamp to datetime for template formatting
         e.modified_dt = datetime.fromtimestamp(e.timestamp_modified)
         if e.context_id == 'quote':
             e.date_display = str(e.modified_dt.year)
+        elif e.modified_dt.year != datetime.now().year:
+            e.date_display = e.modified_dt.strftime('%m/%d/%Y')
         else:
-            e.date_display = e.modified_dt.strftime('%a %m/%d/%y %H:%M')
+            e.date_display = e.modified_dt.strftime('%a %m/%d %H:%M')
         result.append(e)
     return result
 

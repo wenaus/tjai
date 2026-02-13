@@ -38,54 +38,58 @@
             font-size: 18pt;
             line-height: 1.6;
         }
+        .poem .title {
+            display: block;
+            margin-bottom: 0.6em;
+        }
     </style>
 </head>
 <body>
     <div class="back"><a href="{% url 'dashboard' %}">&larr; Dashboard</a> &nbsp; <a href="{% url 'context_entries' 'poetry' %}">&larr; Poetry</a></div>
 
     <div class="label">1. Lora</div>
-    <div class="poem" style="font-family:'Lora',serif;">{{ entry.content }}</div>
+    <div class="poem" style="font-family:'Lora',serif;"><span class="title">{{ poem_title }}</span>{{ poem_body }}</div>
 
     <div class="label">2. Buda 300</div>
-    <div class="poem" style="font-family:'Buda',serif;">{{ entry.content }}</div>
+    <div class="poem" style="font-family:'Buda',serif;"><span class="title">{{ poem_title }}</span>{{ poem_body }}</div>
 
     <div class="label">3. Cormorant Garamond</div>
-    <div class="poem" style="font-family:'Cormorant Garamond',serif;">{{ entry.content }}</div>
+    <div class="poem" style="font-family:'Cormorant Garamond',serif;"><span class="title">{{ poem_title }}</span>{{ poem_body }}</div>
 
     <div class="label">4. EB Garamond</div>
-    <div class="poem" style="font-family:'EB Garamond',serif;">{{ entry.content }}</div>
+    <div class="poem" style="font-family:'EB Garamond',serif;"><span class="title">{{ poem_title }}</span>{{ poem_body }}</div>
 
     <div class="label">5. Playfair Display</div>
-    <div class="poem" style="font-family:'Playfair Display',serif;">{{ entry.content }}</div>
+    <div class="poem" style="font-family:'Playfair Display',serif;"><span class="title">{{ poem_title }}</span>{{ poem_body }}</div>
 
     <div class="label">6. Spectral</div>
-    <div class="poem" style="font-family:'Spectral',serif;">{{ entry.content }}</div>
+    <div class="poem" style="font-family:'Spectral',serif;"><span class="title">{{ poem_title }}</span>{{ poem_body }}</div>
 
     <div class="label">7. Crimson Text</div>
-    <div class="poem" style="font-family:'Crimson Text',serif;">{{ entry.content }}</div>
+    <div class="poem" style="font-family:'Crimson Text',serif;"><span class="title">{{ poem_title }}</span>{{ poem_body }}</div>
 
     <div class="label">8. Libre Baskerville</div>
-    <div class="poem" style="font-family:'Libre Baskerville',serif;">{{ entry.content }}</div>
+    <div class="poem" style="font-family:'Libre Baskerville',serif;"><span class="title">{{ poem_title }}</span>{{ poem_body }}</div>
 
     <div class="label">9. Sorts Mill Goudy</div>
-    <div class="poem" style="font-family:'Sorts Mill Goudy',serif;">{{ entry.content }}</div>
+    <div class="poem" style="font-family:'Sorts Mill Goudy',serif;"><span class="title">{{ poem_title }}</span>{{ poem_body }}</div>
 
     <div class="label">10. GFS Didot</div>
-    <div class="poem" style="font-family:'GFS Didot',serif;">{{ entry.content }}</div>
+    <div class="poem" style="font-family:'GFS Didot',serif;"><span class="title">{{ poem_title }}</span>{{ poem_body }}</div>
 
     <div class="label">11. Alegreya</div>
-    <div class="poem" style="font-family:'Alegreya',serif;">{{ entry.content }}</div>
+    <div class="poem" style="font-family:'Alegreya',serif;"><span class="title">{{ poem_title }}</span>{{ poem_body }}</div>
 
     <div class="label">12. Gentium Book Plus</div>
-    <div class="poem" style="font-family:'Gentium Book Plus',serif;">{{ entry.content }}</div>
+    <div class="poem" style="font-family:'Gentium Book Plus',serif;"><span class="title">{{ poem_title }}</span>{{ poem_body }}</div>
 
     <div class="label">13. Vollkorn</div>
-    <div class="poem" style="font-family:'Vollkorn',serif;">{{ entry.content }}</div>
+    <div class="poem" style="font-family:'Vollkorn',serif;"><span class="title">{{ poem_title }}</span>{{ poem_body }}</div>
 
     <div class="label">14. Old Standard TT</div>
-    <div class="poem" style="font-family:'Old Standard TT',serif;">{{ entry.content }}</div>
+    <div class="poem" style="font-family:'Old Standard TT',serif;"><span class="title">{{ poem_title }}</span>{{ poem_body }}</div>
 
     <div class="label">15. Cardo</div>
-    <div class="poem" style="font-family:'Cardo',serif;">{{ entry.content }}</div>
+    <div class="poem" style="font-family:'Cardo',serif;"><span class="title">{{ poem_title }}</span>{{ poem_body }}</div>
 </body>
 </html>

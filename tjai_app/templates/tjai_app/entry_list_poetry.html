@@ -46,7 +46,7 @@
     {% endif %}
     {% for e in entries %}
     <div class="entry">
-        <a href="{% url 'entry_detail' e.id %}">
+        <a href="{% url 'entry_detail' e.detail_slug %}">
             <span class="entry-num">===</span>
             <span class="timestamp">{{ e.date_display }}</span>
             <span class="content">{{ e.first_line }}</span>

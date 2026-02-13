@@ -34,12 +34,12 @@
     <h1>{{ title }} ({{ entries|length }} entries)</h1>
     {% for e in entries %}
     <div class="entry">
-        <a href="{% url 'entry_detail' e.id %}">
+        <a href="{% url 'entry_detail' e.detail_slug %}">
             <span class="entry-num">===</span>
             <span class="timestamp">{{ e.date_display }}</span>
         </a>
         {% if e.context_id %}<span class="context">={{ e.context_id }}</span>{% endif %}
-        <a href="{% url 'entry_detail' e.id %}" class="content-link"><span class="content" data-content="{{ e.first_line }}"></span></a>
+        <a href="{% url 'entry_detail' e.detail_slug %}" class="content-link"><span class="content" data-content="{{ e.first_line }}"></span></a>
         {% if e.line_count %}<span class="lines">[{{ e.line_count }} lines]</span>{% endif %}
         {% for t in e.display_tags %}<span class="tag">:{{ t }}</span> {% endfor %}
     </div>

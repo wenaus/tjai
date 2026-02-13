@@ -167,7 +167,13 @@
         <div class="panel panel-right" id="status-panel">
             <div class="panel-header">Status</div>
             <div id="status-fixed">Loading...</div>
-            <div id="recent-entries"></div>
+            <div id="recent-entries">
+                <div id="entries-header" style="display:flex; align-items:center; gap:12px; margin-bottom:8px; position:sticky; top:0; background:#1e1e1e; padding-bottom:4px;">
+                    <span id="entries-label" style="color: #d8a070;">Entries <span style="color:#8a8a8a">with mod time</span></span>
+                    <input type="text" id="entry-search" placeholder="Search..." style="background:#2a2a2a; color:#e0e0e0; border:1px solid #555; padding:2px 6px; font-family:inherit; font-size:inherit; width:180px; border-radius:3px;">
+                </div>
+                <div id="entries-list"></div>
+            </div>
         </div>
     </div>
     <div class="refresh-indicator"><span id="refresh-indicator"></span> <a href="{% url 'logout' %}" style="color:#999;margin-left:12px">Logout</a></div>
@@ -388,6 +394,76 @@
             }
         }
 
+        function renderEntries(entries, tz) {
+            let html = '';
+            for (const entry of entries) {
+                const ts = new Date(entry.timestamp * 1000);
+                const opts = { timeZone: tz, weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false };
+                const parts = new Intl.DateTimeFormat('en-US', opts).formatToParts(ts);
+                const p = {};
+                parts.forEach(x => p[x.type] = x.value);
+                const currentYear = new Date().getFullYear().toString();
+                const tsStr = p.year === currentYear
+                    ? `${p.weekday} ${p.month}/${p.day}/${p.hour}:${p.minute}`
+                    : `${p.month}/${p.day}/${p.year}`;
+
+                const kindMap = {memory: 'm', todo: 'do', profile: 'p', bookmark: 'b', ai: 'ai', journal: 'j', log: 'log'};
+                const kindAbbr = kindMap[entry.kind] || entry.kind;
+
+                const entrySlug = entry.nickname || entry.name || entry.id;
+                let line = `<a href="/tjai/entry/${encodeURIComponent(entrySlug)}/" style="color:inherit;text-decoration:none">`;
+                line += `<span style="color:#daa520">===</span>  `;
+                line += `<span style="color:#8a8a8a">${tsStr}</span> `;
+                line += `<span style="color:#daa520">[${kindAbbr}]</span> `;
+
+                if (entry.kind === 'journal' && entry.event_date) {
+                    const evd = new Date(entry.event_date * 1000);
+                    const evOpts = { timeZone: tz, weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false };
+                    const evParts = new Intl.DateTimeFormat('en-US', evOpts).formatToParts(evd);
+                    const ev = {};
+                    evParts.forEach(x => ev[x.type] = x.value);
+                    const isAllDay = (ev.hour === '00' && ev.minute === '00');
+                    let evStr;
+                    if (ev.year !== currentYear) {
+                        evStr = `${ev.month}/${ev.day}/${ev.year}`;
+                    } else if (isAllDay) {
+                        evStr = `${ev.weekday} ${ev.month}/${ev.day}`;
+                    } else {
+                        evStr = `${ev.weekday} ${ev.month}/${ev.day}/${ev.hour}:${ev.minute}`;
+                    }
+                    line += `<span style="color:#d8a070">${evStr}</span> `;
+                }
+
+                if (entry.context) line += `<span style="color:#ce93d8">=${entry.context}</span> `;
+                if (entry.name) line += `<span style="color:#c0d8f0;font-weight:bold">@${entry.name}</span>  `;
+
+                line += escapeHtml(entry.content);
+                if (entry.line_count) line += ` <span style="color:#daa520">[${entry.line_count} lines]</span>`;
+                if (entry.tags && entry.tags.length) {
+                    const tagStr = entry.tags.map(t => ':' + t).join(' ');
+                    line += ` <span style="color:#9ccc65">${tagStr}</span>`;
+                }
+                line += `</a>`;
+
+                html += `<div class="entry" style="margin-left:0">${line}</div>`;
+            }
+            return html;
+        }
+
+        let dashboardTimezone = 'America/New_York';
+
+        async function searchEntries(query) {
+            try {
+                const resp = await fetch(`/tjai/api/dashboard/search?q=${encodeURIComponent(query)}`);
+                const data = await resp.json();
+                const count = data.entries ? data.entries.length : 0;
+                document.getElementById('entries-label').innerHTML = `Search: "${escapeHtml(query)}" <span style="color:#8a8a8a">(${count} results)</span>`;
+                document.getElementById('entries-list').innerHTML = renderEntries(data.entries || [], dashboardTimezone);
+            } catch (err) {
+                document.getElementById('entries-list').innerHTML = `<div style="color:#f44">Search error: ${escapeHtml(err.message)}</div>`;
+            }
+        }
+
         function renderStatus(data) {
             let html = '';
 
@@ -476,59 +552,13 @@
 
             document.getElementById('status-fixed').innerHTML = html;
 
-            // Entries (tj l format)
-            let recentHtml = '';
-            if (data.recent_entries && data.recent_entries.length > 0) {
-                recentHtml += '<div style="color: #d8a070; margin-bottom: 8px;">Entries <span style="color:#8a8a8a">with mod time</span></div>';
-                const tz = data.timezone || 'America/New_York';
-                for (const entry of data.recent_entries) {
-                    const content = linkifyContent(escapeHtml(entry.content));
-                    const ts = new Date(entry.timestamp * 1000);
-                    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                    // Format in configured timezone
-                    const opts = { timeZone: tz, weekday: 'short', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false };
-                    const parts = new Intl.DateTimeFormat('en-US', opts).formatToParts(ts);
-                    const p = {};
-                    parts.forEach(x => p[x.type] = x.value);
-                    const tsStr = `${p.weekday} ${p.month}/${p.day}/${p.hour}:${p.minute}`;
-
-                    // Kind abbreviation
-                    const kindMap = {memory: 'm', todo: 'do', profile: 'p', bookmark: 'b', ai: 'ai', journal: 'j', log: 'log'};
-                    const kindAbbr = kindMap[entry.kind] || entry.kind;
-
-                    // Build entry line: ===  timestamp [kind] event_date =context @name content [N lines] :tags
-                    // Link from === through [kind] to entry detail page
-                    let line = `<a href="/tjai/entry/${entry.id}/" style="color:inherit;text-decoration:none">`;
-                    line += `<span style="color:#daa520">===</span>  `;
-                    line += `<span style="color:#8a8a8a">${tsStr}</span> `;
-                    line += `<span style="color:#daa520">[${kindAbbr}]</span></a> `;
-
-                    // For journal entries, show event_date before content
-                    if (entry.kind === 'journal' && entry.event_date) {
-                        const evd = new Date(entry.event_date * 1000);
-                        const evOpts = { timeZone: tz, weekday: 'short', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false };
-                        const evParts = new Intl.DateTimeFormat('en-US', evOpts).formatToParts(evd);
-                        const ev = {};
-                        evParts.forEach(x => ev[x.type] = x.value);
-                        const isAllDay = (ev.hour === '00' && ev.minute === '00');
-                        const evStr = isAllDay ? `${ev.weekday} ${ev.month}/${ev.day}` : `${ev.weekday} ${ev.month}/${ev.day}/${ev.hour}:${ev.minute}`;
-                        line += `<span style="color:#d8a070">${evStr}</span> `;
-                    }
-
-                    if (entry.context) line += `<span style="color:#ce93d8">=${entry.context}</span> `;
-                    if (entry.name) line += `<span style="color:#c0d8f0;font-weight:bold">@${entry.name}</span>  `;
-
-                    line += linkifyContent(entry.content);
-                    if (entry.line_count) line += ` <span style="color:#daa520">[${entry.line_count} lines]</span>`;
-                    if (entry.tags && entry.tags.length) {
-                        const tagStr = entry.tags.map(t => ':' + t).join(' ');
-                        line += ` <span style="color:#9ccc65">${tagStr}</span>`;
-                    }
-
-                    recentHtml += `<div class="entry" style="margin-left:0">${line}</div>`;
-                }
+            // Entries (tj l format) - skip if search is active
+            dashboardTimezone = data.timezone || 'America/New_York';
+            if (!document.getElementById('entry-search').value.trim()) {
+                const count = (data.recent_entries || []).length;
+                document.getElementById('entries-label').innerHTML = `Entries <span style="color:#8a8a8a">with mod time (${count})</span>`;
+                document.getElementById('entries-list').innerHTML = renderEntries(data.recent_entries || [], dashboardTimezone);
             }
-            document.getElementById('recent-entries').innerHTML = recentHtml;
         }
 
         function getWeekNumber(d) {
@@ -566,6 +596,19 @@
             updateRefreshIndicator();
             updateRefreshDisplay();
         }
+
+        // Search on Enter key
+        document.getElementById('entry-search').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                const q = this.value.trim();
+                if (q) {
+                    searchEntries(q);
+                } else {
+                    // Empty search — force refresh to restore normal listing
+                    refresh();
+                }
+            }
+        });
 
         // Initial load
         refresh();

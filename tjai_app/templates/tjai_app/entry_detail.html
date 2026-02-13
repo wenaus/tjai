@@ -42,10 +42,10 @@
         {% if entry.context_id %}<span class="context">={{ entry.context_id }}</span>{% endif %}
         {% if entry.name %}<strong>@{{ entry.name }}</strong>{% endif %}
         <span id="first-line"></span>
+        {% if tags %}{% for t in tags %}<span class="tag">:{{ t }}</span> {% endfor %}{% endif %}
     </div>
     <div class="content">{{ content_html|safe }}</div>
     <div class="meta">
-        {% if tags %}Tags: {% for t in tags %}<span class="tag">:{{ t }}</span> {% endfor %}<br>{% endif %}
         Lines: {{ line_count }}
     </div>
     <script>
