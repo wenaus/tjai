@@ -47,6 +47,19 @@
     <p>No entries found.</p>
     {% endfor %}
     <script>
+        // Save scroll position before navigating away
+        var scrollKey = 'scroll_' + location.pathname;
+        window.addEventListener('beforeunload', () => {
+            sessionStorage.setItem(scrollKey, window.scrollY);
+        });
+        var saved = sessionStorage.getItem(scrollKey);
+        if (saved) {
+            var nav = (performance.getEntriesByType && performance.getEntriesByType('navigation')[0]);
+            if (nav && nav.type === 'back_forward') {
+                window.scrollTo(0, parseInt(saved));
+            }
+        }
+
         document.querySelectorAll('.content[data-content]').forEach(el => {
             var content = el.dataset.content;
             var hasUrl = /https?:\/\//.test(content);

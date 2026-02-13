@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>tjai - Entry</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/theme/material-darker.min.css">
     <style>
         body {
             font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
@@ -25,13 +27,39 @@
         .context { color: #ce93d8; }
         .tag { color: #9ccc65; }
         .content {
-            white-space: pre-wrap;
             line-height: 1.5;
         }
         a { color: #64b5f6; text-decoration: none; }
         a:hover { text-decoration: underline; }
         .meta { color: #888; margin-top: 16px; padding-top: 12px; border-top: 1px solid #333; }
         .back { margin-bottom: 12px; }
+        .toolbar-btn {
+            background: #333;
+            color: #e0e0e0;
+            border: 1px solid #555;
+            padding: 3px 12px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+        }
+        .toolbar-btn:hover { background: #444; }
+        .save-btn { background: #2e5a2e; border-color: #4a8a4a; }
+        .save-btn:hover { background: #3a6a3a; }
+        .status { color: #9ccc65; font-size: 12px; margin-left: 8px; }
+        #editMode { display: none; }
+        .edit-toolbar { margin-top: 8px; }
+        .CodeMirror { height: auto; min-height: 300px; font-size: 13px; }
+        .field-row { margin-bottom: 8px; }
+        .field-row label { color: #8a8a8a; margin-right: 6px; }
+        .field-row input {
+            background: #111; color: #c0d8f0; border: 1px solid #555;
+            padding: 3px 6px; font-family: inherit; font-size: 13px;
+            width: 300px; border-radius: 3px;
+        }
+        .field-row input:focus { outline: 1px solid #64b5f6; border-color: #64b5f6; }
+        .delete-link { color: #cc4444; cursor: pointer; font-size: 12px; }
+        .delete-link:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -42,13 +70,38 @@
         {% if entry.context_id %}<span class="context">={{ entry.context_id }}</span>{% endif %}
         {% if entry.name %}<strong>@{{ entry.name }}</strong>{% endif %}
         <span id="first-line"></span>
-        {% if tags %}{% for t in tags %}<span class="tag">:{{ t }}</span> {% endfor %}{% endif %}
+        {% for t in tags %}<span class="tag">:{{ t }}</span> {% endfor %}
+        <button class="toolbar-btn" id="editBtn">edit</button>
     </div>
-    <div class="content">{{ content_html|safe }}</div>
+    <div id="viewMode">
+        <div class="content">{{ content_html|safe }}</div>
+    </div>
+    <div id="editMode">
+        <div class="field-row">
+            <label>@name</label>
+            <input id="nameField" type="text" value="{{ entry.name|default:'' }}" placeholder="(none)">
+        </div>
+        <textarea id="editor">{{ entry.content }}</textarea>
+        <div class="edit-toolbar">
+            <button class="toolbar-btn save-btn" id="saveBtn">save</button>
+            <button class="toolbar-btn" id="cancelBtn">cancel</button>
+            <span class="status" id="saveStatus" style="display:none">saved</span>
+        </div>
+    </div>
     <div class="meta">
         Lines: {{ line_count }}
+        <span style="float:right"><span class="delete-link" id="deleteBtn">delete</span></span>
     </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/mode/markdown/markdown.min.js"></script>
     <script>
+        var originalContent = "{{ entry.content|escapejs }}";
+        var originalName = "{{ entry.name|default:''|escapejs }}";
+        var csrfToken = "{{ csrf_token }}";
+        var saveUrl = "{% url 'api_entry_save' entry.id %}";
+        var deleteUrl = "{% url 'api_delete_entry' entry.id %}";
+        var cm = null;
+
         function linkifyContent(content) {
             content = content.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,
                 '<a href="$2" target="_blank">$1</a>');
@@ -56,8 +109,77 @@
                 '$1<a href="$2" target="_blank">$2</a>');
             return content;
         }
-        const raw = "{{ first_line|escapejs }}";
-        document.getElementById('first-line').innerHTML = linkifyContent(raw);
+        document.getElementById('first-line').innerHTML = linkifyContent("{{ first_line|escapejs }}");
+
+        function startEdit() {
+            document.getElementById('viewMode').style.display = 'none';
+            document.getElementById('editMode').style.display = 'block';
+            document.getElementById('editBtn').style.display = 'none';
+            document.getElementById('nameField').value = originalName;
+            if (!cm) {
+                cm = CodeMirror.fromTextArea(document.getElementById('editor'), {
+                    mode: 'markdown',
+                    theme: 'material-darker',
+                    lineWrapping: true,
+                    lineNumbers: true,
+                    extraKeys: {
+                        'Ctrl-S': function() { doSave(); },
+                        'Cmd-S': function() { doSave(); },
+                        'Esc': function() { cancelEdit(); },
+                    }
+                });
+            }
+            cm.setValue(originalContent);
+            cm.refresh();
+            cm.focus();
+        }
+
+        function cancelEdit() {
+            document.getElementById('viewMode').style.display = 'block';
+            document.getElementById('editMode').style.display = 'none';
+            document.getElementById('editBtn').style.display = '';
+        }
+
+        function doSave() {
+            var content = cm ? cm.getValue() : document.getElementById('editor').value;
+            var name = document.getElementById('nameField').value.trim();
+            fetch(saveUrl, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+                body: JSON.stringify({content: content, name: name})
+            }).then(function(r) { return r.json(); }).then(function(data) {
+                if (data.ok) {
+                    var st = document.getElementById('saveStatus');
+                    st.style.display = 'inline';
+                    setTimeout(function() { st.style.display = 'none'; }, 2000);
+                    location.reload();
+                } else {
+                    alert('Save failed: ' + (data.error || 'unknown'));
+                }
+            }).catch(function(err) { alert('Save failed: ' + err); });
+        }
+
+        var deleting = false;
+        function doDelete() {
+            if (deleting) return;
+            if (!confirm('Delete this entry? This cannot be undone.')) return;
+            deleting = true;
+            fetch(deleteUrl, {
+                method: 'DELETE',
+                headers: {'X-CSRFToken': csrfToken},
+            }).then(function(r) { return r.json(); }).then(function(data) {
+                if (data.status === 'ok') {
+                    location.href = "{% url 'dashboard' %}";
+                } else {
+                    alert('Delete failed: ' + (data.error || 'unknown'));
+                }
+            }).catch(function(err) { alert('Delete failed: ' + err); });
+        }
+
+        document.getElementById('editBtn').addEventListener('click', startEdit);
+        document.getElementById('saveBtn').addEventListener('click', doSave);
+        document.getElementById('cancelBtn').addEventListener('click', cancelEdit);
+        document.getElementById('deleteBtn').addEventListener('click', doDelete);
     </script>
 </body>
 </html>

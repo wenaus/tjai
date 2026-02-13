@@ -10,6 +10,7 @@ from django.shortcuts import render, redirect
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
+from django.db.models import Count
 from django.db.models.functions import Lower
 from django.http import Http404
 from django.conf import settings as django_settings
@@ -746,7 +747,7 @@ def entry_detail(request, entry_id):
     tags = list(Tag.objects.filter(entry_id=entry.id).values_list('tag_name', flat=True))
     lines = [l for l in entry.content.split('\n') if l.strip()]
     data = entry.data if isinstance(entry.data, dict) else None
-    content_html = markdown.markdown(entry.content)
+    content_html = markdown.markdown(entry.content, extensions=['nl2br'])
     # Linkify bare URLs not already in anchor tags
     import re
     content_html = re.sub(
@@ -776,6 +777,26 @@ def entry_detail(request, entry_id):
     })
 
 
+@login_required
+@require_http_methods(["POST"])
+def api_entry_save(request, entry_id):
+    """Save entry content from the inline editor."""
+    entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
+    if not entry:
+        return JsonResponse({'error': 'Entry not found'}, status=404)
+    try:
+        data = json.loads(request.body)
+        content = data.get('content', '')
+    except (json.JSONDecodeError, KeyError):
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    entry.content = content
+    if 'name' in data:
+        entry.name = data['name'] or None  # empty string → None
+    entry.timestamp_modified = time.time()
+    entry.save()
+    return JsonResponse({'ok': True})
+
+
 def _entries_for_list(entries):
     """Prepare entries for list display with first_line, line_count, tags."""
     from datetime import datetime
@@ -790,6 +811,7 @@ def _entries_for_list(entries):
         e.first_line = lines[0] if lines else ''
         e.line_count = len(lines) if len(lines) > 1 else None
         entry_tags = tags_by_entry.get(e.id, [])
+        e.all_tags_csv = ','.join(entry_tags)
         e.display_tags = [t for t in entry_tags if f':{t}' not in e.first_line]
         data = e.data if isinstance(e.data, dict) else None
         e.author = data.get('author') if data else None
@@ -825,6 +847,25 @@ def context_entries(request, context_name):
             'title': f'={context_name}',
             'entries': _entries_for_list(entries),
             'authors': authors,
+        })
+
+    if context_name == 'recipe':
+        META_TAGS = {'tjweb', 'dynalist', 'chrome', 'test', 'fave', 'cool', 'readme'}
+        # Get tag counts for all recipe entries
+        tag_counts = (
+            Tag.objects.filter(
+                entry__context='recipe', entry__deleted_at__isnull=True
+            )
+            .exclude(tag_name__in=META_TAGS)
+            .values('tag_name')
+            .annotate(cnt=Count('id'))
+            .order_by('-cnt')
+        )
+        tags = sorted([(t['tag_name'], t['cnt']) for t in tag_counts], key=lambda x: x[0].lower())
+        return render(request, 'tjai_app/entry_list_recipe.html', {
+            'title': f'={context_name}',
+            'entries': _entries_for_list(entries),
+            'tags': tags,
         })
 
     return render(request, 'tjai_app/entry_list.html', {

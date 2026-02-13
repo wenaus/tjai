@@ -28,6 +28,7 @@ urlpatterns = [
     path("api/dashboard/status", views.dashboard_status, name="dashboard_status"),
     path("api/dashboard/search", views.dashboard_search, name="dashboard_search"),
     path("api/dashboard/named", views.dashboard_named, name="dashboard_named"),
+    path("api/entry/<uuid:entry_id>/save", views.api_entry_save, name="api_entry_save"),
     path("entry/<path:entry_id>/", views.entry_detail, name="entry_detail"),
     path("context/<str:context_name>/", views.context_entries, name="context_entries"),
     path("poetry/author/<path:author_name>/", views.poetry_author_entries, name="poetry_author_entries"),
