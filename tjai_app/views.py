@@ -579,11 +579,16 @@ def dashboard_status(request):
     work_sessions.reverse()  # Oldest first for display
 
     # All entries (excluding archived), most recent first
-    recent = Entry.objects.filter(
+    DASHBOARD_PAGE = 1000
+    offset = int(request.GET.get('offset', 0))
+
+    base_qs = Entry.objects.filter(
         deleted_at__isnull=True,
     ).exclude(
         status='archive'
-    ).order_by('-timestamp_modified')[:1000]
+    ).order_by('-timestamp_modified')
+
+    recent = base_qs[offset:offset + DASHBOARD_PAGE]
 
     # Batch fetch tags for all entries
     entry_ids = [e.id for e in recent]
@@ -610,6 +615,15 @@ def dashboard_status(request):
             'nickname': data.get('nickname') if data else None,
             'event_date': data.get('event_date') if data else None,
             'tags': missing_tags,
+        })
+
+    has_more = len(recent_entries) == DASHBOARD_PAGE
+
+    # If loading more entries (offset > 0), return just entries
+    if offset > 0:
+        return JsonResponse({
+            'recent_entries': recent_entries,
+            'has_more': has_more,
         })
 
     # Get timezone from SysConfig, default to America/New_York
@@ -656,6 +670,7 @@ def dashboard_status(request):
         'clock': clock_data,
         'work_sessions': work_sessions,
         'recent_entries': recent_entries,
+        'has_more': has_more,
         'timezone': timezone_name,
         'contexts': contexts,
         'all_tags': all_tags,
