@@ -4,6 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>tjai - {{ title }}</title>
+    <script>
+        (function() {
+            var key = 'scroll_' + location.pathname + location.search;
+            var saved = sessionStorage.getItem(key);
+            if (saved) {
+                var nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+                if (nav && nav.type === 'back_forward') {
+                    document.documentElement.style.visibility = 'hidden';
+                    window.addEventListener('DOMContentLoaded', function() {
+                        window.scrollTo(0, parseInt(saved));
+                        document.documentElement.style.visibility = '';
+                    });
+                }
+            }
+            window.addEventListener('beforeunload', function() {
+                sessionStorage.setItem(key, window.scrollY);
+            });
+        })();
+    </script>
     <style>
         body {
             font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
@@ -15,6 +34,50 @@
             margin: 0 auto;
         }
         h1 { color: #d8a070; font-size: 16px; margin-bottom: 16px; }
+        .tag-bar {
+            margin-bottom: 16px;
+            line-height: 2.2;
+            font-size: 12px;
+        }
+        .tag-chip {
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: #9ccc65;
+            white-space: nowrap;
+            display: inline-block;
+        }
+        .tag-chip:hover { background: #333; }
+        .tag-chip.active { background: #9ccc65; color: #1a1a1a; }
+        .tag-chip.available { outline: 1px solid #9ccc65; }
+        .tag-chip .count { color: #8a8a8a; font-size: 11px; }
+        .tag-chip.active .count { color: #555; }
+        .clear-btn {
+            background: #444;
+            color: #e0e0e0;
+            border: none;
+            padding: 2px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+            margin-left: 8px;
+            display: none;
+        }
+        .ctx-chip {
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: #ce93d8;
+            white-space: nowrap;
+            display: inline-block;
+        }
+        .ctx-chip:hover { background: #333; }
+        .ctx-chip.active { background: #ce93d8; color: #1a1a1a; }
+        .ctx-chip.available { outline: 1px solid #ce93d8; }
+        .ctx-chip .count { color: #8a8a8a; font-size: 11px; }
+        .ctx-chip.active .count { color: #555; }
+        .clear-btn:hover { background: #666; }
         .entry { margin: 6px 0; line-height: 1.4; }
         .entry-num { color: #daa520; }
         .timestamp { color: #8a8a8a; }
@@ -22,44 +85,154 @@
         .context { color: #ce93d8; }
         .content { color: #e0e0e0; }
         .lines { color: #daa520; }
-        .tag { color: #9ccc65; }
+        .tag { color: #9ccc65; cursor: pointer; }
+        .tag:hover { text-decoration: underline; }
+        .tag.active { background: #9ccc65; color: #1a1a1a; border-radius: 2px; padding: 0 3px; }
         a { color: inherit; text-decoration: none; }
         a:hover { text-decoration: underline; }
         .back { margin-bottom: 12px; }
         .back a { color: #64b5f6; }
+        #countDisplay { color: #8a8a8a; }
     </style>
 </head>
 <body>
     <div class="back"><a href="{% url 'dashboard' %}">&larr; Dashboard</a></div>
-    <h1>{{ title }} ({{ entries|length }} entries)</h1>
+    <h1>{{ title }} <span id="countDisplay">({{ entries|length }} entries)</span></h1>
+    {% if contexts %}
+    <div class="tag-bar" id="context-bar">
+        {% for name, count in contexts %}<span class="ctx-chip" data-ctx="{{ name }}">{{ name }} <span class="count">{{ count }}</span></span> {% endfor %}<button class="clear-btn" id="clearCtxBtn">clear</button>
+    </div>
+    {% endif %}
+    {% if tags %}
+    <div class="tag-bar">
+        {% for name, count in tags %}<span class="tag-chip" data-tag="{{ name }}">{{ name }} <span class="count">{{ count }}</span></span> {% endfor %}<button class="clear-btn" id="clearBtn">clear</button>
+    </div>
+    {% endif %}
     {% for e in entries %}
-    <div class="entry">
+    <div class="entry" data-tags="{{ e.all_tags_csv }}" data-ctx="{{ e.context_id|default:'(none)' }}">
         <a href="{% url 'entry_detail' e.detail_slug %}">
             <span class="entry-num">===</span>
             <span class="timestamp">{{ e.date_display }}</span>
         </a>
         {% if e.context_id %}<span class="context">={{ e.context_id }}</span>{% endif %}
+        {% if e.name %}<span style="color:#c0d8f0;font-weight:bold">@{{ e.name }}</span> {% endif %}
         <a href="{% url 'entry_detail' e.detail_slug %}" class="content-link"><span class="content" data-content="{{ e.first_line }}"></span></a>
         {% if e.line_count %}<span class="lines">[{{ e.line_count }} lines]</span>{% endif %}
-        {% for t in e.display_tags %}<span class="tag">:{{ t }}</span> {% endfor %}
+        {% for t in e.display_tags %}<span class="tag" data-tag="{{ t }}">:{{ t }}</span> {% endfor %}
     </div>
     {% empty %}
     <p>No entries found.</p>
     {% endfor %}
     <script>
-        // Save scroll position before navigating away
-        var scrollKey = 'scroll_' + location.pathname;
-        window.addEventListener('beforeunload', () => {
-            sessionStorage.setItem(scrollKey, window.scrollY);
-        });
-        var saved = sessionStorage.getItem(scrollKey);
-        if (saved) {
-            var nav = (performance.getEntriesByType && performance.getEntriesByType('navigation')[0]);
-            if (nav && nav.type === 'back_forward') {
-                window.scrollTo(0, parseInt(saved));
-            }
+        // Read initial filters from URL
+        var params = new URLSearchParams(location.search);
+        var activeTags = new Set(params.getAll('tag'));
+        var activeCtx = new Set(params.getAll('ctx'));
+        var allEntries = document.querySelectorAll('.entry[data-tags]');
+        var allChips = document.querySelectorAll('.tag-chip[data-tag]');
+        var allCtxChips = document.querySelectorAll('.ctx-chip[data-ctx]');
+        var clearBtn = document.getElementById('clearBtn');
+        var clearCtxBtn = document.getElementById('clearCtxBtn');
+        var countDisplay = document.getElementById('countDisplay');
+        var totalCount = allEntries.length;
+
+        function updateURL() {
+            var p = new URLSearchParams();
+            activeCtx.forEach(c => p.append('ctx', c));
+            activeTags.forEach(t => p.append('tag', t));
+            var qs = p.toString();
+            history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
         }
 
+        function toggleTag(tag) {
+            if (activeTags.has(tag)) activeTags.delete(tag);
+            else activeTags.add(tag);
+            updateURL();
+            applyFilter();
+        }
+
+        function toggleCtx(ctx) {
+            if (activeCtx.has(ctx)) activeCtx.delete(ctx);
+            else activeCtx.add(ctx);
+            updateURL();
+            applyFilter();
+        }
+
+        function applyFilter() {
+            var hasFilters = activeTags.size > 0 || activeCtx.size > 0;
+            // Update tag chips
+            allChips.forEach(chip => {
+                chip.classList.toggle('active', activeTags.has(chip.dataset.tag));
+            });
+            // Update context chips
+            allCtxChips.forEach(chip => {
+                chip.classList.toggle('active', activeCtx.has(chip.dataset.ctx));
+            });
+            // Update inline tags
+            document.querySelectorAll('.entry .tag[data-tag]').forEach(t => {
+                t.classList.toggle('active', activeTags.has(t.dataset.tag));
+            });
+            // Show/hide entries (context = OR, tags = AND)
+            var shown = 0;
+            if (!hasFilters) {
+                allEntries.forEach(el => { el.style.display = ''; });
+                shown = totalCount;
+            } else {
+                allEntries.forEach(el => {
+                    var ctxMatch = activeCtx.size === 0 || activeCtx.has(el.dataset.ctx);
+                    var tagMatch = true;
+                    if (activeTags.size > 0) {
+                        var entryTags = el.dataset.tags ? el.dataset.tags.split(',') : [];
+                        activeTags.forEach(t => { if (entryTags.indexOf(t) === -1) tagMatch = false; });
+                    }
+                    el.style.display = (ctxMatch && tagMatch) ? '' : 'none';
+                    if (ctxMatch && tagMatch) shown++;
+                });
+            }
+            // Compute available tags/contexts from visible entries
+            var availableTags = new Set();
+            var availableCtx = new Set();
+            if (hasFilters) {
+                allEntries.forEach(el => {
+                    if (el.style.display !== 'none') {
+                        (el.dataset.tags || '').split(',').forEach(t => { if (t) availableTags.add(t); });
+                        availableCtx.add(el.dataset.ctx);
+                    }
+                });
+            }
+            allChips.forEach(chip => {
+                chip.classList.toggle('available', hasFilters && !activeTags.has(chip.dataset.tag) && availableTags.has(chip.dataset.tag));
+            });
+            allCtxChips.forEach(chip => {
+                chip.classList.toggle('available', hasFilters && !activeCtx.has(chip.dataset.ctx) && availableCtx.has(chip.dataset.ctx));
+            });
+            // Update count and clear buttons
+            countDisplay.textContent = hasFilters
+                ? '(' + shown + ' of ' + totalCount + ')'
+                : '(' + totalCount + ' entries)';
+            if (clearBtn) clearBtn.style.display = activeTags.size > 0 ? 'inline' : 'none';
+            if (clearCtxBtn) clearCtxBtn.style.display = activeCtx.size > 0 ? 'inline' : 'none';
+        }
+
+        // Tag chip clicks
+        allChips.forEach(chip => {
+            chip.addEventListener('click', () => toggleTag(chip.dataset.tag));
+        });
+        // Context chip clicks
+        allCtxChips.forEach(chip => {
+            chip.addEventListener('click', () => toggleCtx(chip.dataset.ctx));
+        });
+        // Inline tag clicks
+        document.querySelectorAll('.entry .tag[data-tag]').forEach(t => {
+            t.addEventListener('click', e => { e.preventDefault(); toggleTag(t.dataset.tag); });
+        });
+        // Clear buttons
+        if (clearBtn) clearBtn.addEventListener('click', () => { activeTags.clear(); updateURL(); applyFilter(); });
+        if (clearCtxBtn) clearCtxBtn.addEventListener('click', () => { activeCtx.clear(); updateURL(); applyFilter(); });
+        // Apply on load if URL has filters
+        if (activeTags.size > 0 || activeCtx.size > 0) applyFilter();
+
+        // Linkify content
         document.querySelectorAll('.content[data-content]').forEach(el => {
             var content = el.dataset.content;
             var hasUrl = /https?:\/\//.test(content);
@@ -68,7 +241,6 @@
                     '<a href="$2" target="_blank" style="color:#64b5f6">$1</a>');
                 content = content.replace(/(^|[^"'])(https?:\/\/[^\s<]+)/g,
                     '$1<a href="$2" target="_blank" style="color:#64b5f6">$2</a>');
-                // Move linkified content out of the wrapping link
                 var wrapper = el.closest('a.content-link');
                 if (wrapper) {
                     var span = document.createElement('span');

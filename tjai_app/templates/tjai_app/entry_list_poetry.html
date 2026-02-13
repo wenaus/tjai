@@ -52,7 +52,6 @@
             <span class="content">{{ e.first_line }}</span>
             {% if e.author %}<span class="author"> — {{ e.author }}</span>{% endif %}
         </a>
-        {% if e.line_count %}<span class="lines">[{{ e.line_count }} lines]</span>{% endif %}
         {% for t in e.display_tags %}<span class="tag">:{{ t }}</span> {% endfor %}
     </div>
     {% empty %}

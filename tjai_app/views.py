@@ -848,6 +848,30 @@ def _entries_for_list(entries):
     return result
 
 
+def _context_counts_for_entries(entries):
+    """Compute (context_name, count) pairs for a set of entries."""
+    from collections import Counter
+    counter = Counter()
+    for e in entries:
+        counter[e.context_id or ''] += 1
+    result = []
+    for ctx, cnt in sorted(counter.items(), key=lambda x: (x[0] or '') .lower()):
+        result.append((ctx if ctx else '(none)', cnt))
+    return result
+
+
+def _tag_counts_for_entries(entries, exclude_tags=None):
+    """Compute (tag_name, count) pairs for a set of entries."""
+    entry_ids = [e.id for e in entries]
+    if not entry_ids:
+        return []
+    qs = Tag.objects.filter(entry_id__in=entry_ids)
+    if exclude_tags:
+        qs = qs.exclude(tag_name__in=exclude_tags)
+    tag_counts = qs.values('tag_name').annotate(cnt=Count('id'))
+    return sorted([(t['tag_name'], t['cnt']) for t in tag_counts], key=lambda x: x[0].lower())
+
+
 @login_required
 def context_entries(request, context_name):
     """Show all entries for a context."""
@@ -869,28 +893,14 @@ def context_entries(request, context_name):
             'authors': authors,
         })
 
-    if context_name == 'recipe':
-        META_TAGS = {'tjweb', 'dynalist', 'chrome', 'test', 'fave', 'cool', 'readme'}
-        # Get tag counts for all recipe entries
-        tag_counts = (
-            Tag.objects.filter(
-                entry__context='recipe', entry__deleted_at__isnull=True
-            )
-            .exclude(tag_name__in=META_TAGS)
-            .values('tag_name')
-            .annotate(cnt=Count('id'))
-            .order_by('-cnt')
-        )
-        tags = sorted([(t['tag_name'], t['cnt']) for t in tag_counts], key=lambda x: x[0].lower())
-        return render(request, 'tjai_app/entry_list_recipe.html', {
-            'title': f'={context_name}',
-            'entries': _entries_for_list(entries),
-            'tags': tags,
-        })
+    META_TAGS = {'tjweb', 'dynalist', 'chrome', 'test', 'fave', 'cool', 'readme'}
+    exclude = META_TAGS if context_name == 'recipe' else None
+    tags = _tag_counts_for_entries(entries, exclude_tags=exclude)
 
     return render(request, 'tjai_app/entry_list.html', {
         'title': f'={context_name}',
         'entries': _entries_for_list(entries),
+        'tags': tags,
     })
 
 
@@ -925,9 +935,13 @@ def tag_entries(request, tag_name):
             id__in=entry_ids, deleted_at__isnull=True
         ).order_by('-timestamp_modified')
         title = f':{tag_name}'
+    tags = _tag_counts_for_entries(entries)
+    contexts = _context_counts_for_entries(entries)
     return render(request, 'tjai_app/entry_list.html', {
         'title': title,
         'entries': _entries_for_list(entries),
+        'tags': tags,
+        'contexts': contexts,
     })
 
 
@@ -948,9 +962,13 @@ def kind_entries(request, kind_name):
         kind=kind, deleted_at__isnull=True
     ).order_by('-timestamp_modified')
     label = kind_labels.get(kind_name, kind_name)
+    tags = _tag_counts_for_entries(entries)
+    contexts = _context_counts_for_entries(entries)
     return render(request, 'tjai_app/entry_list.html', {
         'title': f'[{kind_name}] {label}',
         'entries': _entries_for_list(entries),
+        'tags': tags,
+        'contexts': contexts,
     })
 
 
