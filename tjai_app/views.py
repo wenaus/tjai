@@ -762,7 +762,10 @@ def entry_detail(request, entry_id):
     tags = list(Tag.objects.filter(entry_id=entry.id).values_list('tag_name', flat=True))
     lines = [l for l in entry.content.split('\n') if l.strip()]
     data = entry.data if isinstance(entry.data, dict) else None
-    content_html = markdown.markdown(entry.content, extensions=['nl2br'])
+    # Body content excludes first line (shown in summary header)
+    body_lines = entry.content.split('\n')
+    body_text = '\n'.join(body_lines[1:]).strip() if len(body_lines) > 1 else ''
+    content_html = markdown.markdown(body_text, extensions=['nl2br']) if body_text else ''
     # Linkify bare URLs not already in anchor tags
     import re
     content_html = re.sub(
@@ -809,7 +812,9 @@ def api_entry_save(request, entry_id):
         entry.name = data['name'] or None  # empty string → None
     entry.timestamp_modified = time.time()
     entry.save()
-    return JsonResponse({'ok': True})
+    data_dict = entry.data if isinstance(entry.data, dict) else None
+    slug = (data_dict.get('nickname') if data_dict else None) or entry.name or str(entry.id)
+    return JsonResponse({'ok': True, 'slug': slug})
 
 
 def _entries_for_list(entries):

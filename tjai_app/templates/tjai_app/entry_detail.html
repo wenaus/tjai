@@ -60,6 +60,8 @@
         .field-row input:focus { outline: 1px solid #64b5f6; border-color: #64b5f6; }
         .delete-link { color: #cc4444; cursor: pointer; font-size: 12px; }
         .delete-link:hover { text-decoration: underline; }
+        .CodeMirror-selected { background: #264f78 !important; }
+        .CodeMirror-focused .CodeMirror-selected { background: #264f78 !important; }
     </style>
 </head>
 <body>
@@ -82,15 +84,17 @@
             <input id="nameField" type="text" value="{{ entry.name|default:'' }}" placeholder="(none)">
         </div>
         <textarea id="editor">{{ entry.content }}</textarea>
-        <div class="edit-toolbar">
-            <button class="toolbar-btn save-btn" id="saveBtn">save</button>
-            <button class="toolbar-btn" id="cancelBtn">cancel</button>
-            <span class="status" id="saveStatus" style="display:none">saved</span>
+        <div class="edit-toolbar" style="display:flex; align-items:center;">
+            <span style="margin-left:auto">
+                <button class="toolbar-btn save-btn" id="saveBtn">save</button>
+                <button class="toolbar-btn" id="cancelBtn">cancel</button>
+                <span class="status" id="saveStatus" style="display:none">saved</span>
+            </span>
         </div>
     </div>
-    <div class="meta">
-        Lines: {{ line_count }}
-        <span style="float:right"><span class="delete-link" id="deleteBtn">delete</span></span>
+    <div class="meta" style="display:flex; align-items:center;">
+        <span class="delete-link" id="deleteBtn">delete</span>
+        <span style="margin-left:auto">Lines: {{ line_count }}</span>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/mode/markdown/markdown.min.js"></script>
@@ -152,7 +156,7 @@
                     var st = document.getElementById('saveStatus');
                     st.style.display = 'inline';
                     setTimeout(function() { st.style.display = 'none'; }, 2000);
-                    location.reload();
+                    location.href = '/tjai/entry/' + encodeURIComponent(data.slug) + '/';
                 } else {
                     alert('Save failed: ' + (data.error || 'unknown'));
                 }

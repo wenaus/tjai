@@ -117,11 +117,9 @@
             text-decoration: underline;
         }
         .refresh-indicator {
-            position: fixed;
-            top: 8px;
-            right: 8px;
             color: #999;
             font-size: 11px;
+            margin-left: auto;
         }
         .now-marker {
             color: #ef5350;
@@ -162,11 +160,12 @@
             </div>
         </div>
         <div class="panel panel-right" id="status-panel">
-            <div class="panel-header">Status</div>
+            <div class="panel-header" style="display:flex; align-items:center;">Status<span class="refresh-indicator"><span id="refresh-indicator"></span> <a href="{% url 'logout' %}" style="color:#999;margin-left:12px">Logout</a></span></div>
             <div id="status-fixed">Loading...</div>
             <div id="entries-header" style="display:flex; align-items:center; gap:12px; margin-top:16px; margin-bottom:8px; border-top:1px solid #333; padding-top:12px; flex-shrink:0;">
                 <span id="entries-label" style="color: #d8a070;">Entries <span style="color:#8a8a8a">with mod time</span></span>
                 <input type="text" id="entry-search" placeholder="Search..." style="background:#2a2a2a; color:#e0e0e0; border:1px solid #555; padding:2px 6px; font-family:inherit; font-size:inherit; width:180px; border-radius:3px;">
+                <span id="search-clear" style="display:none; cursor:pointer; color:#999; font-size:14px;" title="Clear search (Esc)">&times;</span>
             </div>
             <div id="recent-entries">
                 <div id="entries-list"></div>
@@ -174,7 +173,6 @@
             </div>
         </div>
     </div>
-    <div class="refresh-indicator"><span id="refresh-indicator"></span> <a href="{% url 'logout' %}" style="color:#999;margin-left:12px">Logout</a></div>
 
     <script>
         function formatTime(timestamp) {
@@ -640,17 +638,31 @@
             updateRefreshDisplay();
         }
 
-        // Search on Enter key
-        document.getElementById('entry-search').addEventListener('keydown', function(e) {
+        // Search on Enter, Escape to clear
+        const searchInput = document.getElementById('entry-search');
+        const searchClear = document.getElementById('search-clear');
+        searchInput.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
                 const q = this.value.trim();
                 if (q) {
                     searchEntries(q);
                 } else {
-                    // Empty search — force refresh to restore normal listing
                     refresh();
                 }
+            } else if (e.key === 'Escape') {
+                this.value = '';
+                searchClear.style.display = 'none';
+                refresh();
             }
+        });
+        searchInput.addEventListener('input', function() {
+            searchClear.style.display = this.value ? 'inline' : 'none';
+        });
+        searchClear.addEventListener('click', function() {
+            searchInput.value = '';
+            searchClear.style.display = 'none';
+            searchInput.focus();
+            refresh();
         });
 
         // Initial load
