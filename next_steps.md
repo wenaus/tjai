@@ -1,5 +1,158 @@
 # Next Steps
 
+## Always-On Intellectual Agent
+
+Transform tjai from a reactive knowledge base into a proactive thinking system that works while you're away, synthesizing your knowledge, finding deep connections, and bringing world awareness — then presenting the results when you return.
+
+### The Vision
+
+tjai step one was memory and knowledge base — done. Step two is mind expansion: a system that uses your structured knowledge (memories, bookmarks, poems, recipes, quotes, todos, profile) plus real-time world awareness to generate insight autonomously. Not a butler that does tasks (OpenClaw's model), but an intellect extension that thinks 24x7.
+
+When you come back after hours away, tjai should have amazing things to meld into your actual brain.
+
+### Architecture
+
+The core insight: **`claude -p` invoked from cron uses your subscription, not API credits.** Claude Code has MCP tools (tjai read/write) and web search built in. This is the entire engine.
+
+```
+cron (every N minutes)
+  → claude -p "reflection prompt" --allowedTools "mcp__tjai__*,WebSearch,WebFetch"
+    → reads tjai entries via MCP (memories, bookmarks, recent activity)
+    → searches the web for developments relevant to your interests
+    → thinks — finds connections, generates insights, forms questions
+    → writes reflections back to tjai via MCP create_entry
+  → simple Python script pushes new reflections to Telegram
+    → each item gets inline keyboard thumbs up/down
+    → feedback stored, used to calibrate future reflections
+```
+
+No API costs. Subscription-covered. All output persists in the distributed REST+MCP-served database — not local JSON files.
+
+### Context from OpenClaw and the Zeitgeist
+
+OpenClaw (Peter Steinberger, 180K GitHub stars, Feb 2026) popularized the **heartbeat pattern**: a daemon that wakes every 30 minutes, reviews a checklist, decides whether to act or stay silent. Combined with cron and messaging integrations, it creates a genuinely proactive agent. ChatGPT Pulse ($200/month) and Google CC do overnight research → morning briefings. Letta/MemGPT leads on memory architecture with git-based versioning.
+
+Key differences from OpenClaw: OpenClaw is a **doing** system (send messages, browse web, run commands) with massive security surface ($560 API runaway, 341 malicious community skills, one-click RCE bugs). tjai's always-on features are a **thinking** system — no filesystem access, no command execution, no acting on your behalf. Closed security surface, open intellectual surface.
+
+tjai's advantage over all of them: **structured, typed, context-organized personal knowledge** — not just chat history. Poems, recipes, bookmarks, todos, profile facts, AI guidance, calendar events. The reflection agent reasons across types and contexts, which conversation-history-based systems cannot do.
+
+### Agent 1: Reflection Agent (the core)
+
+Runs every few hours via cron. Selects a "seed" — a recent entry, a random older one, or a combination. Pulls related entries by context, tags, and (eventually) semantic similarity. Feeds them to Claude with a prompt:
+
+> "Given everything you know about this person (profile, interests, knowledge base), what's interesting here? What patterns do you see? What questions does this raise? What connections to the wider world?"
+
+Stores output as tjai entries (kind=memory, tag=reflection). Over time, the knowledge base grows not just from what the user puts in, but from what the system thinks about what the user put in.
+
+### Agent 2: Deep Connection Finder (the gem mine)
+
+Background batch: take each recent entry, find semantically similar entries across all contexts. Feed pairs to Claude:
+
+> "These are from different parts of this person's life. Is there a meaningful connection?"
+
+Most results will be noise. The hits are gold: "Your bookmark about streaming workflow orchestration at ePIC has a structural parallel to the Gary Snyder watershed poem you saved — both are about how distributed systems achieve coherence without central control."
+
+This is where the 20x subscription token budget goes productively — paying for a system to read your own knowledge base more deeply than you have time to.
+
+Requires adding embeddings to tjai entries for semantic similarity search. SQLite or Postgres vector extension, computed on entry creation/modification.
+
+### Agent 3: Morning Briefing (with feedback loop)
+
+Two layers:
+- **Practical**: today's calendar, overdue todos, time-sensitive items
+- **Intellectual**: 2-3 reflections or connections generated overnight, plus world developments relevant to your interests and recent activity
+
+Every item gets Telegram inline keyboard thumbs up/down. Feedback is stored and used to tune future output — the self-learning loop. Not self-learning in the OpenClaw sense (writing its own skills), but calibrating what kinds of thinking are worth your attention.
+
+The briefing is not just internal rumination — it brings up-to-the-hour world awareness to the intellectual enhancement via web search during the reflection runs.
+
+### Agent 4: Question Generator (most ambitious)
+
+Instead of telling you connections, the system asks questions derived from your knowledge base:
+
+> "You've noted three things about distributed computing resilience and two poems about impermanence. Is there a connection you haven't articulated?"
+
+Not "what do you want to do today" but provocations seeded from your own intellectual life.
+
+### MCP Heartbeat Tool: The Key Architectural Insight
+
+A persistent `claude -p` daemon is impractical (can't sleep between tool calls, MCP timeouts, context fills up). But the invocation can be made lightweight and dynamic by putting the intelligence in a new MCP tool rather than in the prompt.
+
+**The pattern:**
+
+```
+Every 15 min (cron) or on-demand (script/webhook trigger):
+  → claude -p "Call the tjai heartbeat tool. Follow its instructions."
+    → MCP heartbeat() returns dynamic, context-aware instructions
+    → Claude follows them: reads entries, searches web, reflects, writes back
+    → stdout captured to rolling text file
+    → Session ends
+```
+
+The prompt is static and tiny. All dynamism lives in the **`heartbeat()` MCP endpoint** — a new tjai MCP tool that:
+
+- Tracks state: last run time, what's been reflected on, accumulated feedback
+- Checks what's new since last heartbeat (new entries, bookmarks, dialog)
+- Checks user feedback patterns (thumbs up/down on previous reflections)
+- Assembles a context-aware instruction set for Claude to follow
+- Varies the task: sometimes reflect, sometimes research, sometimes generate questions
+- Adapts strategy based on what worked (more cross-domain connections, fewer todo nudges)
+
+This is better than a hardcoded prompt because the MCP tool learns and adapts. The `claude -p` invocation is a standardized, stateless wrapper. The heartbeat tool is the brain.
+
+**Triggering:** Cron for periodic runs, but also invocable by external events — a new high-priority entry, a Telegram command ("think about this"), a webhook. Same `claude -p` command, different instructions from the heartbeat tool based on what triggered it and current state.
+
+**Output persistence:** stdout from each run is appended to a rolling text file. A simple script tails for new reflections and pushes to Telegram with inline keyboard feedback. The text file also serves as an audit trail and debugging aid.
+
+**Security surface:** Virtually non-existent beyond the existing attack surface (EC2 machine, Telegram bot token, MCP endpoint authentication). No filesystem access (restrict `--allowedTools` to MCP + web search), no command execution, no messaging on behalf of user, no public-facing agent, no community skill marketplace. The system reads/writes its own authenticated database and pushes to its own Telegram account.
+
+### Implementation Plan
+
+**Phase 1: Heartbeat prototype**
+- New `heartbeat()` MCP endpoint in tjai server
+- Heartbeat state tracking (last run, entries processed, feedback scores)
+- Cron job invoking `claude -p` with static heartbeat prompt and tjai MCP tools
+- Heartbeat tool returns dynamic instructions based on current state
+- Claude writes reflection entries back to tjai (tag=reflection)
+- stdout captured to rolling log file
+- Simple Telegram push of new reflections
+- Inline keyboard thumbs up/down on each item
+- Feedback stored as tjai entries or entry metadata
+
+**Phase 2: Embeddings and semantic search**
+- Add vector embeddings to tjai entries (compute on create/modify)
+- Semantic similarity queries for the deep connection finder
+- Background batch: embed recent entries, find cross-context connections
+
+**Phase 3: Dialog capture** ✓ DONE
+- Implemented: api/dialog endpoint, Claude Code hooks (load.py, record.py, SYSPROMPT.md)
+- All Claude Code conversations recorded into tjai via REST API
+- Reflection daemon can now incorporate dialog history
+
+**Phase 4: Feedback-driven calibration**
+- Analyze thumbs up/down patterns to tune reflection prompts
+- Learn which connection types, topics, and depth levels the user values
+- Adjust seed selection and prompt framing based on accumulated feedback
+
+### Dependencies on Existing Infrastructure
+
+- tjai MCP server: working (read/write entries)
+- Telegram bot: working (push messages, inline keyboards)
+- Claude Code CLI: working (`claude -p` with MCP tools)
+- 20x Claude subscription: provides token budget
+- cron: available on server
+- REST API: working (for dialog capture hooks)
+- Web search in Claude Code: working
+
+### Cost Model
+
+All LLM inference is subscription-covered via `claude -p`. The only costs are:
+- Server compute for cron jobs and Telegram pushes (negligible)
+- Storage for reflection entries and embeddings (negligible in SQLite/Postgres)
+- The user's existing 20x Claude subscription (already paid, massively underutilized)
+
+---
+
 ## Location-Aware Personal Guide
 
 A location-aware system that combines GPS, the LLM, web search, and tjai's knowledge of the user to provide contextual place recommendations and build a personal places database through natural conversation.

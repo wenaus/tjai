@@ -1113,6 +1113,93 @@ def api_add_journal(request):
 
 
 @csrf_exempt
+@require_http_methods(["GET", "POST"])
+def api_dialog(request):
+    """Record and retrieve Claude Code dialog turns.
+
+    GET: Return recent dialog entries (query param: turns, default 20).
+    POST: Record a dialog turn.
+
+    Requires Bearer token matching SysConfig 'gmail_addon_api_key'.
+    """
+    auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+    if not auth_header.startswith('Bearer '):
+        return JsonResponse({"error": "Authorization required"}, status=401)
+    token = auth_header[7:]
+
+    try:
+        api_key = SysConfig.objects.get(key='gmail_addon_api_key').value
+    except SysConfig.DoesNotExist:
+        return JsonResponse({"error": "API key not configured"}, status=503)
+
+    if token != api_key:
+        return JsonResponse({"error": "Invalid API key"}, status=403)
+
+    if request.method == "GET":
+        turns = int(request.GET.get("turns", 20))
+        entry_ids = Tag.objects.filter(
+            tag_name='ccdialog'
+        ).values_list('entry_id', flat=True)
+        entries = list(
+            Entry.objects.filter(
+                id__in=entry_ids,
+                deleted_at__isnull=True,
+            ).order_by('-timestamp_created')[:turns]
+        )
+        entries.reverse()
+        result = []
+        for e in entries:
+            data = e.data if isinstance(e.data, dict) else {}
+            result.append({
+                "id": e.id,
+                "content": e.content[:2000],
+                "role": data.get("role", "unknown"),
+                "session_id": data.get("session_id"),
+                "project_path": data.get("project_path"),
+                "hostname": data.get("hostname"),
+                "timestamp": e.timestamp_created,
+            })
+        return JsonResponse({"status": "ok", "entries": result})
+
+    # POST
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    content = data.get("content", "").strip()
+    role = data.get("role", "").strip()
+
+    if not content:
+        return JsonResponse({"error": "content is required"}, status=400)
+    if role not in ("user", "assistant"):
+        return JsonResponse({"error": "role must be 'user' or 'assistant'"}, status=400)
+
+    if role == "assistant" and len(content) > 4000:
+        content = content[:4000]
+
+    now = time.time()
+    entry = Entry.objects.create(
+        id=str(uuid.uuid4()),
+        content=content,
+        kind='memory',
+        context_id='claude-code',
+        timestamp_created=now,
+        timestamp_modified=now,
+        is_dirty=0,
+        data={
+            "role": role,
+            "session_id": data.get("session_id"),
+            "project_path": data.get("project_path"),
+            "hostname": data.get("hostname"),
+        },
+    )
+    Tag.objects.create(tag_name='ccdialog', entry=entry)
+
+    return JsonResponse({"status": "ok", "entry_id": entry.id})
+
+
+@csrf_exempt
 @require_http_methods(["POST"])
 def api_bulk_import(request):
     """Bulk import bookmarks from external sources.

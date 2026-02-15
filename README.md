@@ -249,6 +249,7 @@ python manage.py createsuperuser
 - `/tjai/api/bulk-import` - Bulk import bookmarks (Bearer token auth)
 - `/tjai/api/add-bookmark` - Single bookmark from Chrome extension (Bearer token auth)
 - `/tjai/api/add-journal` - Journal entry from Gmail add-on (Bearer token auth)
+- `/tjai/api/dialog` - Claude Code dialog turns GET/POST (Bearer token auth)
 - `/tjai/api/command` - Server commands (sysconfig)
 - `/tjai/mcp/` - MCP (Model Context Protocol) server for AI assistants
 
@@ -330,6 +331,54 @@ The settings file configures:
 - Status line display
 
 The status line shows model, cost, context usage, session duration, and working directory.
+
+### Claude Code Cross-Session Dialog Memory
+
+Every Claude Code conversation is recorded into tjai so that new sessions on any machine can load recent dialog context. This gives Claude continuity across sessions without manual copy-paste.
+
+**How it works:**
+
+```
+[Session starts] → SessionStart hook → load.py
+  → HTTP GET /api/dialog → fetches recent dialog turns
+  → Prints SYSPROMPT.md + formatted dialog to stdout → injected into Claude context
+
+[User submits prompt] → UserPromptSubmit hook → record.py (async)
+  → HTTP POST /api/dialog → creates tjai entry with role='user'
+
+[Claude finishes] → Stop hook → record.py (async)
+  → Extracts last assistant text from JSONL transcript
+  → HTTP POST /api/dialog → creates tjai entry with role='assistant'
+```
+
+Dialog entries are stored as: `kind='memory'`, `context='claude-code'`, `tag='ccdialog'`, `is_dirty=0` (server-only, not synced to local clients). Uses `Entry.objects.create()` directly, bypassing the 60s dedup in services.py.
+
+**Hook scripts** are in `computers/common/claude-hooks/`:
+- `load.py` — SessionStart hook (synchronous). Fetches dialog, prints SYSPROMPT.md + history to stdout.
+- `record.py` — UserPromptSubmit + Stop hook (async). Records prompts and responses.
+- `SYSPROMPT.md` — Static context injected at session start.
+
+**Server endpoint:** `api/dialog` (GET + POST, Bearer token auth — same key as Chrome extension/Gmail add-on)
+
+**Configuration:**
+
+Hook paths in `claude-settings.json` reference `~/.claude/hooks/`, which must be symlinked:
+
+```bash
+ln -s ~/github/tjrepo/computers/common/claude-hooks ~/.claude/hooks
+```
+
+Environment variables (add to `~/.env` or `~/.bashrc`):
+
+```bash
+export TJAI_API_KEY="$TJAI_GMAIL_ADDON_API_KEY"   # Bearer token
+export TJAI_DIALOG_TURNS=10                         # turns to load (0=disabled)
+# export TJAI_API_URL=https://etaverse.com/tjai    # default, override if needed
+```
+
+**Activation states:** If `TJAI_DIALOG_TURNS` is unset, load.py prints a notice inviting the user to activate it. If set to `0`, it tells you it's disabled. In both cases, no API calls are made and record.py does nothing. If Claude Code won't start due to hook issues, `export TJAI_DIALOG_TURNS=0` bypasses all network activity.
+
+**Error handling:** All errors print to stderr (visible in `claude --verbose`). Hooks always exit 0 so they never block the session. All HTTP calls have a 5-second timeout. Assistant responses are truncated at 4000 chars on record, 2000 chars on display.
 
 ### Claude.ai Integration
 
