@@ -157,43 +157,45 @@ function onGmailMessage(e) {
   try {
     var messageId = e.gmail.messageId;
     var message = GmailApp.getMessageById(messageId);
-    var attachments = message.getAttachments();
+    var thread = message.getThread();
+    var messages = thread.getMessages();
 
-    diag.push('Attachments: ' + attachments.length);
-    for (var a = 0; a < attachments.length; a++) {
-      diag.push('  [' + a + '] ' + attachments[a].getName() + ' (' + attachments[a].getContentType() + ')');
-    }
+    diag.push('Thread messages: ' + messages.length);
 
-    var icsAttachments = attachments.filter(function(att) {
-      return att.getName().toLowerCase().endsWith('.ics') ||
-             att.getContentType().indexOf('text/calendar') !== -1;
-    });
-    diag.push('ICS attachments: ' + icsAttachments.length);
-
+    // Search backwards (most recent first) for a message with ICS data
     var icsTexts = [];
-    if (icsAttachments.length > 0) {
-      for (var i = 0; i < icsAttachments.length; i++) {
-        icsTexts.push(icsAttachments[i].getDataAsString());
+    for (var m = messages.length - 1; m >= 0; m--) {
+      var msg = messages[m];
+      var attachments = msg.getAttachments();
+      var icsAttachments = attachments.filter(function(att) {
+        return att.getName().toLowerCase().endsWith('.ics') ||
+               att.getContentType().indexOf('text/calendar') !== -1;
+      });
+
+      if (icsAttachments.length > 0) {
+        diag.push('ICS found in msg[' + m + '] via attachment (' + icsAttachments.length + ')');
+        for (var i = 0; i < icsAttachments.length; i++) {
+          icsTexts.push(icsAttachments[i].getDataAsString());
+        }
+        break;
       }
-    } else {
-      var rawContent = message.getRawContent();
-      diag.push('Raw MIME length: ' + rawContent.length);
-      var vcalIdx = rawContent.indexOf('BEGIN:VCALENDAR');
-      diag.push('VCALENDAR at index: ' + vcalIdx);
-      if (vcalIdx !== -1) {
-        diag.push('Context: ...' + rawContent.substring(Math.max(0, vcalIdx - 100), vcalIdx + 50) + '...');
-      }
+
+      var rawContent = msg.getRawContent();
       var icsFromRaw = extractICSFromRaw_(rawContent);
-      diag.push('extractICSFromRaw: ' + (icsFromRaw ? icsFromRaw.length + ' chars' : 'null'));
-      if (icsFromRaw) icsTexts.push(icsFromRaw);
+      if (icsFromRaw) {
+        diag.push('ICS found in msg[' + m + '] via raw MIME (' + icsFromRaw.length + ' chars)');
+        icsTexts.push(icsFromRaw);
+        break;
+      }
     }
 
     diag.push('ICS texts: ' + icsTexts.length);
     if (icsTexts.length === 0) {
+      diag.push('No ICS found in any thread message');
       return [buildDiagCard_(diag)];
     }
 
-    var gmailUrl = message.getThread().getPermalink();
+    var gmailUrl = thread.getPermalink();
     var cards = [];
     for (var i = 0; i < icsTexts.length; i++) {
       var events = parseICS_(icsTexts[i]);
