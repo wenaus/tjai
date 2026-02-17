@@ -127,33 +127,92 @@ function extractZoomUrl_(text) {
 
 
 /**
+ * Extract ICS text from raw MIME content.
+ * Google Calendar sends invites as inline text/calendar MIME parts
+ * that GmailApp.getAttachments() does not return.
+ */
+function extractICSFromRaw_(rawContent) {
+  var match = rawContent.match(/BEGIN:VCALENDAR[\s\S]*?END:VCALENDAR/);
+  return match ? match[0] : null;
+}
+
+
+/**
  * Contextual trigger: called when user opens an email.
  */
+function buildDiagCard_(info) {
+  var section = CardService.newCardSection();
+  for (var i = 0; i < info.length; i++) {
+    section.addWidget(CardService.newDecoratedText().setText(info[i]));
+  }
+  return CardService.newCardBuilder()
+    .setHeader(CardService.newCardHeader().setTitle('tjai diag'))
+    .addSection(section)
+    .build();
+}
+
+
 function onGmailMessage(e) {
-  var messageId = e.gmail.messageId;
-  var message = GmailApp.getMessageById(messageId);
-  var attachments = message.getAttachments();
+  var diag = [];
+  try {
+    var messageId = e.gmail.messageId;
+    var message = GmailApp.getMessageById(messageId);
+    var attachments = message.getAttachments();
 
-  var icsAttachments = attachments.filter(function(att) {
-    return att.getName().toLowerCase().endsWith('.ics') ||
-           att.getContentType().indexOf('text/calendar') !== -1;
-  });
-
-  if (icsAttachments.length === 0) {
-    return null;
-  }
-
-  var gmailUrl = message.getThread().getPermalink();
-  var cards = [];
-  for (var i = 0; i < icsAttachments.length; i++) {
-    var icsText = icsAttachments[i].getDataAsString();
-    var events = parseICS_(icsText);
-    for (var j = 0; j < events.length; j++) {
-      cards.push(buildEventCard_(events[j], gmailUrl));
+    diag.push('Attachments: ' + attachments.length);
+    for (var a = 0; a < attachments.length; a++) {
+      diag.push('  [' + a + '] ' + attachments[a].getName() + ' (' + attachments[a].getContentType() + ')');
     }
-  }
 
-  return cards;
+    var icsAttachments = attachments.filter(function(att) {
+      return att.getName().toLowerCase().endsWith('.ics') ||
+             att.getContentType().indexOf('text/calendar') !== -1;
+    });
+    diag.push('ICS attachments: ' + icsAttachments.length);
+
+    var icsTexts = [];
+    if (icsAttachments.length > 0) {
+      for (var i = 0; i < icsAttachments.length; i++) {
+        icsTexts.push(icsAttachments[i].getDataAsString());
+      }
+    } else {
+      var rawContent = message.getRawContent();
+      diag.push('Raw MIME length: ' + rawContent.length);
+      var vcalIdx = rawContent.indexOf('BEGIN:VCALENDAR');
+      diag.push('VCALENDAR at index: ' + vcalIdx);
+      if (vcalIdx !== -1) {
+        diag.push('Context: ...' + rawContent.substring(Math.max(0, vcalIdx - 100), vcalIdx + 50) + '...');
+      }
+      var icsFromRaw = extractICSFromRaw_(rawContent);
+      diag.push('extractICSFromRaw: ' + (icsFromRaw ? icsFromRaw.length + ' chars' : 'null'));
+      if (icsFromRaw) icsTexts.push(icsFromRaw);
+    }
+
+    diag.push('ICS texts: ' + icsTexts.length);
+    if (icsTexts.length === 0) {
+      return [buildDiagCard_(diag)];
+    }
+
+    var gmailUrl = message.getThread().getPermalink();
+    var cards = [];
+    for (var i = 0; i < icsTexts.length; i++) {
+      var events = parseICS_(icsTexts[i]);
+      diag.push('Events from ICS[' + i + ']: ' + events.length);
+      for (var j = 0; j < events.length; j++) {
+        cards.push(buildEventCard_(events[j], gmailUrl));
+      }
+    }
+
+    if (cards.length === 0) {
+      diag.push('parseICS returned 0 events');
+      return [buildDiagCard_(diag)];
+    }
+
+    return cards;
+  } catch (err) {
+    diag.push('ERROR: ' + err.message);
+    return [buildDiagCard_(diag)];
+  }
 }
 
 
@@ -480,13 +539,13 @@ function addToTjai(e) {
 
 
 /**
- * Utility: set API key in user properties.
- * Run once from the Apps Script editor: Run > setApiKey
+ * Utility: set API key in user properties. Already done, key is stored.
+ * Only needed again if user properties are cleared.
+ * Key source: tjai SysConfig DB (key='gmail_addon_api_key')
+ * or ~/.env TJAI_GMAIL_ADDON_API_KEY.
  */
-function setApiKey() {
-  PropertiesService.getUserProperties().setProperty(
-    'TJAI_API_KEY',
-    'REPLACE_WITH_ACTUAL_KEY'
-  );
+function setApiKey(key) {
+  if (!key) throw new Error('Usage: setApiKey("your-key-here")');
+  PropertiesService.getUserProperties().setProperty('TJAI_API_KEY', key);
   Logger.log('API key set.');
 }
