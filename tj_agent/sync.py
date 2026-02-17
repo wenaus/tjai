@@ -311,12 +311,13 @@ def pull_updates() -> int:
         else:
             break
 
-    # Update last sync time only after all batches complete
-    server_time = response.get("server_time", time.time())
-    set_last_sync_time(server_time)
-
     if total_count:
+        # Only advance last_sync_time when entries were actually received
+        server_time = response.get("server_time", time.time())
+        set_last_sync_time(server_time)
         logger.info(f"Pulled {total_count} entries in {batch_num} batch(es)")
+    else:
+        logger.info("Pulled 0 entries")
     write_status(last_pull=time.time())
 
     return total_count, sysconfig
