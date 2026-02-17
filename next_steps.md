@@ -109,6 +109,22 @@ Overnight, review the day's captured dialog (Phase 3) in the context of recent d
 
 **Builds on:** Phase 3 dialog capture (already done), relations model (for linking synthesis outputs to the conversations that produced them), research queue (for spawning investigation items).
 
+### Agent 7: Telegram Triage (the inbox processor)
+
+Quick Telegram messages are raw intent — typed fast, no structure, no metadata. The user fires off "look into k8s operator patterns" or "remember to email jose about the beam test" and moves on. These land in =tgbot as unstructured memories. Left alone, they're write-only — captured but never acted on.
+
+**What it does:**
+- Scans recent =tgbot entries (memories created via memo command or saved from conversation)
+- Classifies each: is this a todo? A research item? A watch-list item? Just a note that's fine as-is?
+- **Todos**: creates a proper `kind=todo` entry with clear subject, appropriate context, tags. Marks the original =tgbot entry as processed (tag `:triaged`)
+- **Tagging**: adds appropriate tags to entries — `:watch` for things to keep an eye on, `:research` for the research queue, `:idea` for nascent concepts, `:followup` for things needing action. Tagging is lightweight and additive — no entry restructuring needed, just metadata enrichment
+- **Research**: entries tagged `:research` get picked up by the research queue (Agent 5)
+- **Context assignment**: moves entries to their proper context when obvious (a message about ePIC → =swf, about the bot → =tjai)
+
+**Why this matters:** The phone is the capture device. You're walking, commuting, half-awake. The barrier to entry must be zero — just type or speak. But zero-friction capture without triage is a junk drawer. This agent turns the junk drawer into a filing system, overnight, without the user ever having to go back and organize.
+
+**Builds on:** =tgbot context entries, @watch named entry, todo system, research queue (Agent 5).
+
 ### MCP Heartbeat Tool: The Key Architectural Insight
 
 A persistent `claude -p` daemon is impractical (can't sleep between tool calls, MCP timeouts, context fills up). But the invocation can be made lightweight and dynamic by putting the intelligence in a new MCP tool rather than in the prompt.
