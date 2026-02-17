@@ -54,6 +54,8 @@ Most results will be noise. The hits are gold: "Your bookmark about streaming wo
 
 This is where the 20x subscription token budget goes productively — paying for a system to read your own knowledge base more deeply than you have time to.
 
+**With the relations model (see below), Agent 2 doesn't just report connections — it creates them.** Each discovered connection becomes a first-class edge in the knowledge graph: a relation with type and description capturing the insight. Over months of overnight runs, isolated entries weave into a connected structure. The brain graph builds itself while you sleep.
+
 Requires adding embeddings to tjai entries for semantic similarity search. SQLite or Postgres vector extension, computed on entry creation/modification.
 
 ### Agent 3: Morning Briefing (with feedback loop)
@@ -151,6 +153,37 @@ This is better than a hardcoded prompt because the MCP tool learns and adapts. T
 - Analyze thumbs up/down patterns to tune reflection prompts
 - Learn which connection types, topics, and depth levels the user values
 - Adjust seed selection and prompt framing based on accumulated feedback
+
+### Entry Relations (E-R Model)
+
+tjai entries are currently isolated — no links between them. Adding relations transforms the knowledge base from a flat collection into a connected graph.
+
+**Relations table:** `entry_id, related_id, relation_type, description`
+
+Four columns. The description is essential — it captures the *why* of a relation, especially when discovered by AI. "Both describe distributed systems achieving coherence without central control" is the value, not just "related."
+
+**Relation types** emerge from use rather than being predefined. Early examples:
+- `parent` — vision → its todos, or any hierarchical grouping
+- `related` — cross-references between entries
+- `references` — a memory discussing a bookmark's content
+- `prompted_by` — a research item linked to the entries that raised the question
+- `discovered` — AI-found connection (Agent 2), description carries the insight
+
+**MCP tools:** `relate_entries(id1, id2, type, description)`, `get_related(entry_id)`. Relations appear in entry responses. Queries can traverse the graph.
+
+**dkbapp precedent:** The predecessor project was built on an E-R model — entities connected to entities, places in neighborhoods, things linked to the people who recommended them. Relations were essential to how the knowledge base was actually used. Their absence from tjai is a gap worth closing.
+
+### Vision and Todo Structure
+
+Project planning moves from next_steps.md (a file) to tjai (a database) for priorities, status tracking, distributed visibility, and evolution tracking.
+
+- **`:vision` tagged todos** — the big items ("Always-On Intellectual Agent", "Location-Aware Personal Guide"). Rich content carrying the design narrative. These are the user's, not the AI's.
+- **Plain todos** — work items linked to their parent vision via a `parent` relation. These are increasingly the AI's to generate and work through autonomously.
+- **Design docs** stay in files — next_steps.md is a working scratchpad, docs/ is the settled reference. Vision todos are the *tracking layer*, not a replacement for documentation.
+
+**Evolution tracking:** `get_todos(context="tjai", status="done")` gives the project's arc over time. Git history tells you what code changed; tjai tells you what was envisioned, when priorities shifted, when things completed. Searchable, sortable, filterable — no git mining required.
+
+**Status flow:** Todos move active → done as work completes. A vision moves to done when the user decides the work is complete, not automatically. Done visions with their rich content become the historical record.
 
 ### Dependencies on Existing Infrastructure
 
