@@ -125,6 +125,27 @@
             color: #ef5350;
             font-weight: bold;
         }
+        .ctx-toggle {
+            cursor: pointer;
+            color: #ef5350;
+            font-size: 12px;
+            margin-left: 1px;
+            font-weight: bold;
+        }
+        .ctx-toggle:hover { opacity: 0.7; }
+        .ctx-toggle.included { color: #9ccc65; }
+        .filter-clear {
+            background: #444;
+            color: #e0e0e0;
+            border: none;
+            padding: 2px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+            display: none;
+        }
+        .filter-clear:hover { background: #666; }
         /* Dark mode scrollbars */
         ::-webkit-scrollbar {
             width: 8px;
@@ -166,6 +187,7 @@
                 <span id="entries-label" style="color: #d8a070;">Entries <span style="color:#8a8a8a">with mod time</span></span>
                 <input type="text" id="entry-search" placeholder="Search..." style="background:#2a2a2a; color:#e0e0e0; border:1px solid #555; padding:2px 6px; font-family:inherit; font-size:inherit; width:180px; border-radius:3px;">
                 <span id="search-clear" style="display:none; cursor:pointer; color:#999; font-size:14px;" title="Clear search (Esc)">&times;</span>
+                <button id="filter-clear" class="filter-clear" title="Clear all filters">clear</button>
             </div>
             <div id="recent-entries">
                 <div id="entries-list"></div>
@@ -448,7 +470,7 @@
                     line += ` <span style="color:#9ccc65">${tagStr}</span>`;
                 }
 
-                html += `<div class="entry" style="margin-left:0">${line}</div>`;
+                html += `<div class="entry" style="margin-left:0" data-context="${entry.context || ''}">${line}</div>`;
             }
             return html;
         }
@@ -458,6 +480,7 @@
         let hasMoreEntries = false;
         let loadingMore = false;
         let isSearchActive = false;
+        let excludedContexts = new Set();
 
         async function loadMoreEntries() {
             if (loadingMore || !hasMoreEntries || isSearchActive) return;
@@ -469,6 +492,7 @@
                 const data = await resp.json();
                 const newHtml = renderEntries(data.recent_entries || [], dashboardTimezone);
                 document.getElementById('entries-list').insertAdjacentHTML('beforeend', newHtml);
+                if (excludedContexts.size > 0) applyContextFilter();
                 loadedEntryCount += (data.recent_entries || []).length;
                 hasMoreEntries = data.has_more;
                 document.getElementById('entries-label').innerHTML =
@@ -516,12 +540,17 @@
             }
             html += '</div>';
 
-            // Contexts
+            // Contexts with anti-select toggles
             if (data.contexts && data.contexts.length > 0) {
-                const ctxLinks = data.contexts.map(c =>
-                    `<a href="/tjai/context/${c}/" style="color:#ce93d8;text-decoration:none">${c}</a>`
-                ).join(', ');
-                html += `<div class="status-line">Contexts: ${ctxLinks}</div>`;
+                const ctxChips = data.contexts.map(c => {
+                    const excl = excludedContexts.has(c);
+                    const nameColor = excl ? '#666' : '#ce93d8';
+                    const toggleCls = excl ? 'ctx-toggle included' : 'ctx-toggle';
+                    const toggleChar = excl ? '+' : '\u2212';
+                    const toggleTitle = (excl ? 'Include ' : 'Exclude ') + c;
+                    return `<span style="white-space:nowrap"><a href="/tjai/context/${c}/" style="color:${nameColor};text-decoration:none">${c}</a><span class="${toggleCls}" data-ctx="${c}" title="${toggleTitle}">${toggleChar}</span></span>`;
+                }).join(' ');
+                html += `<div class="status-line">Contexts: ${ctxChips}</div>`;
             }
 
             // Tags
@@ -600,6 +629,7 @@
                     `Entries <span style="color:#8a8a8a">with mod time (${loadedEntryCount}${hasMoreEntries ? '+' : ''})</span>`;
                 document.getElementById('entries-list').innerHTML = renderEntries(entries, dashboardTimezone);
             }
+            if (excludedContexts.size > 0) applyContextFilter();
         }
 
         function getWeekNumber(d) {
@@ -637,6 +667,57 @@
             updateRefreshIndicator();
             updateRefreshDisplay();
         }
+
+        // Context exclusion filtering
+        function applyContextFilter() {
+            const entries = document.querySelectorAll('#entries-list .entry');
+            let shown = 0;
+            entries.forEach(el => {
+                if (excludedContexts.size > 0 && excludedContexts.has(el.dataset.context)) {
+                    el.style.display = 'none';
+                } else {
+                    el.style.display = '';
+                    shown++;
+                }
+            });
+            document.getElementById('filter-clear').style.display = excludedContexts.size > 0 ? 'inline' : 'none';
+            if (excludedContexts.size > 0 && !isSearchActive) {
+                document.getElementById('entries-label').innerHTML =
+                    `Entries <span style="color:#8a8a8a">with mod time (${shown} shown, ${excludedContexts.size} excluded)</span>`;
+            }
+        }
+
+        // Event delegation for context toggle clicks
+        document.getElementById('status-fixed').addEventListener('click', function(e) {
+            const toggle = e.target.closest('.ctx-toggle');
+            if (toggle) {
+                e.preventDefault();
+                e.stopPropagation();
+                const ctx = toggle.dataset.ctx;
+                if (excludedContexts.has(ctx)) excludedContexts.delete(ctx);
+                else excludedContexts.add(ctx);
+                const excl = excludedContexts.has(ctx);
+                toggle.textContent = excl ? '+' : '\u2212';
+                toggle.className = 'ctx-toggle' + (excl ? ' included' : '');
+                toggle.title = (excl ? 'Include ' : 'Exclude ') + ctx;
+                const nameEl = toggle.previousElementSibling;
+                if (nameEl) nameEl.style.color = excl ? '#666' : '#ce93d8';
+                applyContextFilter();
+            }
+        });
+
+        // Filter clear button
+        document.getElementById('filter-clear').addEventListener('click', function() {
+            excludedContexts.clear();
+            document.querySelectorAll('.ctx-toggle').forEach(el => {
+                el.textContent = '\u2212';
+                el.className = 'ctx-toggle';
+                el.title = 'Exclude ' + el.dataset.ctx;
+                const nameEl = el.previousElementSibling;
+                if (nameEl) nameEl.style.color = '#ce93d8';
+            });
+            applyContextFilter();
+        });
 
         // Search on Enter, Escape to clear
         const searchInput = document.getElementById('entry-search');
