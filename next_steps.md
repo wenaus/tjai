@@ -94,6 +94,21 @@ The problem it solves: in real-time conversation, the AI gives reflexive, shallo
 
 **Relationship to bookmarks:** Bookmarks are "read later" (passive). Research items are "understand later" (active) — they come back with results. Both acknowledge that the moment of encounter isn't the right moment for depth.
 
+### Agent 6: Dialog Synthesis (the integrator)
+
+Overnight, review the day's captured dialog (Phase 3) in the context of recent days. Not summarizing — synthesizing. A conversation has a trajectory that's often invisible in the moment. A session that starts with a bug fix and ends with an architectural insight has a through-line the participants may not have articulated.
+
+**What it produces:**
+- **Meta-patterns**: "This week's sessions have been about moving tjai from flat storage to a self-organizing knowledge system"
+- **Open questions**: implications raised but not discussed, tensions between ideas, unstated assumptions
+- **New entries**: research items spawned from things mentioned but not explored, todos for follow-up work, relations between today's discussion and previous entries
+- **Vision updates**: when dialog advances or reshapes a vision item, flag it
+- **State of the art research**: proactive web search on the day's technical topics — who's doing what, what tools and patterns are emerging, what's changed recently. Hyperfocused overnight tech news, filtered through the day's actual work rather than generic feeds. AI moves at lightning speed; if we discussed knowledge graphs today, by morning the system has surveyed the current landscape and brought back what's relevant.
+
+**Why this is different from Agent 1 (Reflection):** Reflection reasons about individual entries — a bookmark, a memory, a poem. Dialog synthesis reasons about the *flow of thought* across a conversation or sequence of conversations. It sees the trajectory, not just the points. And it looks outward — using dialog topics as search seeds to bring back current developments from the wider world.
+
+**Builds on:** Phase 3 dialog capture (already done), relations model (for linking synthesis outputs to the conversations that produced them), research queue (for spawning investigation items).
+
 ### MCP Heartbeat Tool: The Key Architectural Insight
 
 A persistent `claude -p` daemon is impractical (can't sleep between tool calls, MCP timeouts, context fills up). But the invocation can be made lightweight and dynamic by putting the intelligence in a new MCP tool rather than in the prompt.
