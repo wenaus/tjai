@@ -7,6 +7,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
+from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
@@ -1260,3 +1261,154 @@ def api_bulk_import(request):
     )
 
     return JsonResponse(results)
+
+
+# --- Telegram Mini App ---
+
+@xframe_options_exempt
+def miniapp(request):
+    """Serve the Telegram Mini App."""
+    return render(request, 'tjai_app/miniapp.html')
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def tg_auth(request):
+    """Validate Telegram initData and create a Django session."""
+    import hashlib
+    import hmac
+    import urllib.parse
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    init_data = data.get("initData", "")
+    if not init_data:
+        return JsonResponse({"error": "initData required"}, status=400)
+
+    bot_token = django_settings.TELEGRAM_BOT_TOKEN
+    if not bot_token:
+        return JsonResponse({"error": "Bot token not configured"}, status=503)
+
+    # Parse initData into key-value pairs
+    params = dict(urllib.parse.parse_qsl(init_data, keep_blank_values=True))
+    received_hash = params.pop("hash", "")
+    if not received_hash:
+        return JsonResponse({"error": "Missing hash"}, status=400)
+
+    # Build data-check-string: sorted key=value pairs joined by \n
+    data_check_string = "\n".join(
+        f"{k}={v}" for k, v in sorted(params.items())
+    )
+
+    # HMAC validation per Telegram docs
+    secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
+    computed_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+
+    if not hmac.compare_digest(computed_hash, received_hash):
+        return JsonResponse({"error": "Invalid hash"}, status=403)
+
+    # Check auth_date is recent (within 1 hour)
+    auth_date = int(params.get("auth_date", 0))
+    if abs(time.time() - auth_date) > 3600:
+        return JsonResponse({"error": "Auth data expired"}, status=403)
+
+    # Verify user ID matches configured owner
+    try:
+        user_data = json.loads(params.get("user", "{}"))
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid user data"}, status=400)
+
+    tg_user_id = str(user_data.get("id", ""))
+    allowed_id = django_settings.TELEGRAM_USER_ID
+    if not allowed_id or tg_user_id != allowed_id:
+        return JsonResponse({"error": "Unauthorized user"}, status=403)
+
+    # Create Django session for the admin user
+    from django.contrib.auth.models import User
+    user = User.objects.filter(is_superuser=True).first()
+    if not user:
+        return JsonResponse({"error": "No admin user"}, status=500)
+
+    login(request, user)
+    return JsonResponse({"status": "ok", "user": user_data.get("first_name", "")})
+
+
+@login_required
+def api_contexts_list(request):
+    """Return contexts with entry counts as JSON."""
+    from django.db.models import Count, Q
+    contexts = (
+        Context.objects
+        .annotate(entry_count=Count(
+            'entry',
+            filter=Q(entry__deleted_at__isnull=True)
+        ))
+        .filter(entry_count__gt=0)
+        .order_by('name')
+    )
+    result = [
+        {"name": c.name, "title": c.title, "count": c.entry_count}
+        for c in contexts
+    ]
+    return JsonResponse({"contexts": result})
+
+
+@login_required
+def api_context_entries(request, context_name):
+    """Return entries for a context as JSON."""
+    entries = Entry.objects.filter(
+        context_id=context_name,
+        deleted_at__isnull=True,
+    ).exclude(status='archive').order_by('-timestamp_modified')[:200]
+
+    entry_ids = [e.id for e in entries]
+    tags_by_entry = {}
+    for t in Tag.objects.filter(entry_id__in=entry_ids):
+        tags_by_entry.setdefault(t.entry_id, []).append(t.tag_name)
+
+    result = []
+    for e in entries:
+        lines = e.content.split('\n')
+        line_count = len([l for l in lines if l.strip()])
+        entry_tags = tags_by_entry.get(e.id, [])
+        missing_tags = [t for t in entry_tags if f':{t}' not in e.content]
+        data = e.data if isinstance(e.data, dict) else None
+        result.append({
+            'id': str(e.id),
+            'content': lines[0],
+            'kind': e.kind,
+            'context': e.context_id,
+            'timestamp': e.timestamp_modified,
+            'line_count': line_count if line_count > 1 else None,
+            'name': e.name,
+            'nickname': data.get('nickname') if data else None,
+            'event_date': data.get('event_date') if data else None,
+            'tags': missing_tags,
+        })
+
+    return JsonResponse({'entries': result})
+
+
+@login_required
+def api_entry_content(request, entry_id):
+    """Return full entry content as JSON."""
+    entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
+    if not entry:
+        return JsonResponse({'error': 'Not found'}, status=404)
+
+    tags = list(Tag.objects.filter(entry_id=entry.id).values_list('tag_name', flat=True))
+    data = entry.data if isinstance(entry.data, dict) else None
+
+    return JsonResponse({
+        'id': str(entry.id),
+        'content': entry.content,
+        'kind': entry.kind,
+        'context': entry.context_id,
+        'name': entry.name,
+        'timestamp': entry.timestamp_modified,
+        'tags': tags,
+        'event_date': data.get('event_date') if data else None,
+    })

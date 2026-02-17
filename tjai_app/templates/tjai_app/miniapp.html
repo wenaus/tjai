@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>tjai</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg: var(--tg-theme-bg-color, #1a1a1a);
+            --fg: var(--tg-theme-text-color, #e0e0e0);
+            --hint: var(--tg-theme-hint-color, #8a8a8a);
+            --link: var(--tg-theme-link-color, #64b5f6);
+            --btn-bg: var(--tg-theme-button-color, #5288c1);
+            --btn-fg: var(--tg-theme-button-text-color, #fff);
+            --secondary-bg: var(--tg-theme-secondary-bg-color, #232323);
+            --accent: #d8a070;
+            --green: #9ccc65;
+            --purple: #ce93d8;
+            --safe-top: env(safe-area-inset-top, 0px);
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        a { color: var(--link); }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 15px;
+            background: var(--bg);
+            color: var(--fg);
+            -webkit-text-size-adjust: 100%;
+            overflow-x: hidden;
+        }
+        .tabs {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: flex;
+            background: var(--secondary-bg);
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            padding-top: var(--safe-top);
+        }
+        .tab {
+            flex: 1;
+            padding: 12px 4px;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--hint);
+            border: none;
+            background: none;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: color 0.15s, border-color 0.15s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .tab.active {
+            color: var(--link);
+            border-bottom-color: var(--link);
+        }
+        .panel {
+            display: none;
+            padding: 12px 12px calc(12px + var(--safe-bottom));
+            min-height: calc(100vh - 50px);
+        }
+        .panel.active { display: block; }
+        .loading {
+            text-align: center;
+            color: var(--hint);
+            padding: 40px 0;
+        }
+        .error-msg {
+            text-align: center;
+            color: #ef5350;
+            padding: 40px 0;
+        }
+
+        /* Calendar */
+        #panel-cal { font-size: 18px; }
+        .day-header {
+            color: var(--accent);
+            font-weight: 600;
+            margin-top: 16px;
+            padding: 4px 0;
+            font-size: 17px;
+        }
+        .day-header:first-child { margin-top: 4px; }
+        .day-today { color: var(--green); }
+        .week-header {
+            color: var(--hint);
+            font-size: 12px;
+            margin-top: 20px;
+            margin-bottom: 4px;
+        }
+        .cal-entry {
+            padding: 6px 0 6px 12px;
+            line-height: 1.4;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+        }
+        .cal-time {
+            color: var(--accent);
+            min-width: 48px;
+            flex-shrink: 0;
+        }
+        .cal-content { flex: 1; }
+        .past-event { opacity: 0.5; }
+        .past-event a { color: #90caf9; }
+        .today-marker {
+            background: rgba(100,181,246,0.08);
+            border-left: 3px solid var(--link);
+            padding-left: 9px;
+        }
+
+        /* Named entries */
+        .named-entry {
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            min-height: 44px;
+        }
+        .named-name {
+            color: #c0d8f0;
+            font-weight: 600;
+        }
+        .named-context {
+            color: var(--purple);
+            font-size: 13px;
+        }
+        .named-content {
+            color: var(--hint);
+            font-size: 13px;
+            margin-top: 2px;
+        }
+
+        /* Contexts */
+        .context-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            min-height: 44px;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .context-item:active { background: rgba(255,255,255,0.04); }
+        .context-name {
+            flex: 1;
+            color: var(--purple);
+            font-weight: 600;
+        }
+        .context-count {
+            color: var(--hint);
+            font-size: 13px;
+        }
+        .context-back {
+            display: flex;
+            align-items: center;
+            padding: 10px 0 14px;
+            color: var(--link);
+            font-weight: 600;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .context-back::before {
+            content: "\2190";
+            margin-right: 6px;
+        }
+        .context-title {
+            color: var(--purple);
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 12px;
+        }
+
+        /* Entry list (shared for context entries and search) */
+        .entry-item {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            min-height: 44px;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .entry-item:active { background: rgba(255,255,255,0.04); }
+        .entry-first-line { line-height: 1.4; }
+        .entry-meta {
+            font-size: 12px;
+            color: var(--hint);
+            margin-top: 2px;
+        }
+        .entry-kind {
+            color: var(--accent);
+        }
+        .entry-tag {
+            color: var(--green);
+        }
+        .entry-name-badge {
+            color: #c0d8f0;
+            font-weight: 600;
+        }
+        .entry-lines {
+            color: var(--hint);
+        }
+
+        /* Expanded content */
+        .entry-expanded {
+            padding: 8px 12px;
+            margin: 4px 0 8px;
+            background: var(--secondary-bg);
+            border-radius: 8px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .entry-expanded a { color: var(--link); }
+
+        /* Search */
+        .search-box {
+            position: sticky;
+            top: 48px;
+            z-index: 90;
+            padding: 8px 0 12px;
+            background: var(--bg);
+        }
+        .search-input {
+            width: 100%;
+            padding: 10px 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: var(--secondary-bg);
+            color: var(--fg);
+            font-size: 15px;
+            outline: none;
+        }
+        .search-input::placeholder { color: var(--hint); }
+        .search-input:focus { border-color: var(--link); }
+    </style>
+</head>
+<body>
+    <div class="tabs">
+        <button class="tab active" data-tab="cal">Calendar</button>
+        <button class="tab" data-tab="named">Named</button>
+        <button class="tab" data-tab="ctx">Contexts</button>
+        <button class="tab" data-tab="search">Search</button>
+    </div>
+
+    <div id="panel-cal" class="panel active">
+        <div class="loading">Loading...</div>
+    </div>
+    <div id="panel-named" class="panel">
+        <div class="loading">Loading...</div>
+    </div>
+    <div id="panel-ctx" class="panel">
+        <div class="loading">Loading...</div>
+    </div>
+    <div id="panel-search" class="panel">
+        <div class="search-box">
+            <input type="search" class="search-input" id="search-input" placeholder="Search entries..." enterkeyhint="search">
+        </div>
+        <div id="search-results"></div>
+    </div>
+
+    <script>
+    const tg = window.Telegram?.WebApp;
+    let authenticated = false;
+    const loaded = {};  // track which tabs have loaded
+    let ctxLevel = 'list';  // 'list' or 'entries'
+
+    // --- Init ---
+    async function init() {
+        if (tg) {
+            tg.ready();
+            tg.expand();
+            tg.enableClosingConfirmation?.();
+        }
+
+        // Authenticate
+        const initData = tg?.initData || '';
+        if (initData) {
+            try {
+                const resp = await fetch('/tjai/api/tg-auth', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({initData})
+                });
+                const data = await resp.json();
+                if (data.status === 'ok') {
+                    authenticated = true;
+                } else {
+                    showError('panel-cal', 'Auth failed: ' + (data.error || 'unknown'));
+                    return;
+                }
+            } catch (e) {
+                showError('panel-cal', 'Auth error: ' + e.message);
+                return;
+            }
+        }
+        // If no initData (testing in browser), assume session cookie exists
+
+        // Load default tab
+        loadTab('cal');
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+        });
+
+        // Search
+        document.getElementById('search-input').addEventListener('keydown', e => {
+            if (e.key === 'Enter') doSearch();
+        });
+
+        // Telegram BackButton
+        if (tg?.BackButton) {
+            tg.BackButton.onClick(() => {
+                if (ctxLevel === 'entries') {
+                    ctxLevel = 'list';
+                    tg.BackButton.hide();
+                    loadContextList();
+                }
+            });
+        }
+    }
+
+    function switchTab(id) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === id));
+        document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + id));
+
+        if (tg?.BackButton) {
+            if (id === 'ctx' && ctxLevel === 'entries') {
+                tg.BackButton.show();
+            } else {
+                tg.BackButton.hide();
+            }
+        }
+
+        if (id === 'search') {
+            setTimeout(() => document.getElementById('search-input').focus(), 100);
+        }
+
+        loadTab(id);
+    }
+
+    function loadTab(id) {
+        if (loaded[id]) return;
+        loaded[id] = true;
+        if (id === 'cal') loadCalendar();
+        else if (id === 'named') loadNamed();
+        else if (id === 'ctx') loadContextList();
+    }
+
+    function showError(panelId, msg) {
+        document.getElementById(panelId).innerHTML = `<div class="error-msg">${escapeHtml(msg)}</div>`;
+    }
+
+    // --- Helpers ---
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function linkifyContent(content) {
+        // Markdown links [title](url)
+        content = content.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,
+            '<a href="$2" target="_blank" rel="noopener">$1</a>');
+        // Bare URLs
+        content = content.replace(/(^|[^"'])(https?:\/\/[^\s<]+)/g,
+            '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
+        // :tags
+        content = content.replace(/(:[a-zA-Z][a-zA-Z0-9_-]*)/g,
+            '<span class="entry-tag">$1</span>');
+        return content;
+    }
+
+    function formatTimestamp(ts) {
+        const d = new Date(ts * 1000);
+        const mon = d.getMonth() + 1;
+        const day = d.getDate();
+        const h = d.getHours();
+        const m = String(d.getMinutes()).padStart(2, '0');
+        return `${mon}/${day} ${h}:${m}`;
+    }
+
+    async function toggleExpand(el, entryId) {
+        const existing = el.querySelector('.entry-expanded');
+        if (existing) {
+            existing.remove();
+            return;
+        }
+        try {
+            const resp = await fetch(`/tjai/api/entry/${entryId}/content`);
+            if (!resp.ok) return;
+            const data = await resp.json();
+            const div = document.createElement('div');
+            div.className = 'entry-expanded';
+            div.innerHTML = linkifyContent(escapeHtml(data.content));
+            el.appendChild(div);
+        } catch (e) {
+            // silently ignore
+        }
+    }
+
+    // --- Calendar ---
+    async function loadCalendar() {
+        const panel = document.getElementById('panel-cal');
+        try {
+            const resp = await fetch('/tjai/api/dashboard/calendar');
+            const data = await resp.json();
+            renderCalendar(panel, data);
+        } catch (e) {
+            showError('panel-cal', 'Failed to load calendar');
+        }
+    }
+
+    function renderCalendar(panel, data) {
+        const now = data.server_time || (Date.now() / 1000);
+        const todayKey = data.today_date;
+        let entries = data.entries.slice();
+
+        // Inject today placeholder if missing
+        if (todayKey && !entries.some(e => e.date_key === todayKey)) {
+            const y = todayKey.slice(0,4), m = parseInt(todayKey.slice(4,6))-1, d = parseInt(todayKey.slice(6,8));
+            const dt = new Date(y, m, d);
+            const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            entries.push({
+                id: '__placeholder__', content: '', event_date: now,
+                date_key: todayKey,
+                date_display: `${days[dt.getDay()]} ${months[dt.getMonth()]} ${String(d).padStart(2,'0')}`,
+                time_display: null, week_num: 0, week_start_key: '0',
+                context: null, data: {_placeholder: true}
+            });
+            entries.sort((a, b) => a.event_date - b.event_date);
+        }
+
+        let html = '';
+        let lastWeek = '', lastDay = '';
+        let todayAnchor = false;
+
+        for (const entry of entries) {
+            // Week header
+            if (entry.week_start_key !== lastWeek) {
+                lastWeek = entry.week_start_key;
+                html += `<div class="week-header">Week ${entry.week_num}</div>`;
+            }
+
+            // Day header
+            if (entry.date_key !== lastDay) {
+                lastDay = entry.date_key;
+                const isToday = entry.date_key === todayKey;
+                if (isToday && !todayAnchor) {
+                    html += `<div id="today-anchor"></div>`;
+                    todayAnchor = true;
+                }
+                html += `<div class="day-header${isToday ? ' day-today' : ''}">${escapeHtml(entry.date_display)}</div>`;
+            }
+
+            if (entry.data?._placeholder) continue;
+
+            const isPast = entry.event_date < now && !entry.data?.clock;
+            const isToday = entry.date_key === todayKey;
+            let cls = 'cal-entry';
+            if (isPast) cls += ' past-event';
+            if (isToday) cls += ' today-marker';
+
+            const timeStr = entry.time_display || '';
+            const content = linkifyContent(escapeHtml(entry.content));
+            const ctx = entry.context ? ` <span class="named-context">=${entry.context}</span>` : '';
+
+            html += `<div class="${cls}" onclick="toggleExpand(this,'${entry.id}')">`;
+            html += `<span class="cal-time">${escapeHtml(timeStr)}</span>`;
+            html += `<span class="cal-content">${content}${ctx}</span>`;
+            html += `</div>`;
+        }
+
+        panel.innerHTML = html || '<div class="loading">No events</div>';
+
+        // Scroll to today
+        requestAnimationFrame(() => {
+            const anchor = document.getElementById('today-anchor');
+            if (anchor) anchor.scrollIntoView({block: 'start'});
+        });
+    }
+
+    // --- Named ---
+    async function loadNamed() {
+        const panel = document.getElementById('panel-named');
+        try {
+            const resp = await fetch('/tjai/api/dashboard/named');
+            const data = await resp.json();
+            renderNamed(panel, data);
+        } catch (e) {
+            showError('panel-named', 'Failed to load named entries');
+        }
+    }
+
+    function renderNamed(panel, data) {
+        let html = '';
+        for (const entry of data.entries) {
+            const ctx = entry.context ? ` <span class="named-context">=${entry.context}</span>` : '';
+            const lines = entry.line_count > 1 ? ` <span class="entry-lines">[${entry.line_count}]</span>` : '';
+            html += `<div class="named-entry" onclick="toggleExpand(this,'${entry.id}')">`;
+            html += `<span class="named-name">@${escapeHtml(entry.name)}</span>${ctx}${lines}`;
+            html += `<div class="named-content">${linkifyContent(escapeHtml(entry.content))}</div>`;
+            html += `</div>`;
+        }
+        panel.innerHTML = html || '<div class="loading">No named entries</div>';
+    }
+
+    // --- Contexts ---
+    async function loadContextList() {
+        const panel = document.getElementById('panel-ctx');
+        panel.innerHTML = '<div class="loading">Loading...</div>';
+        try {
+            const resp = await fetch('/tjai/api/contexts');
+            const data = await resp.json();
+            renderContextList(panel, data);
+        } catch (e) {
+            showError('panel-ctx', 'Failed to load contexts');
+        }
+    }
+
+    function renderContextList(panel, data) {
+        let html = '';
+        for (const ctx of data.contexts) {
+            html += `<div class="context-item" onclick="loadContextEntries('${escapeHtml(ctx.name)}')">`;
+            html += `<span class="context-name">=${escapeHtml(ctx.name)}</span>`;
+            html += `<span class="context-count">${ctx.count}</span>`;
+            html += `</div>`;
+        }
+        panel.innerHTML = html || '<div class="loading">No contexts</div>';
+    }
+
+    async function loadContextEntries(name) {
+        ctxLevel = 'entries';
+        if (tg?.BackButton) tg.BackButton.show();
+
+        const panel = document.getElementById('panel-ctx');
+        panel.innerHTML = '<div class="loading">Loading...</div>';
+
+        try {
+            const resp = await fetch(`/tjai/api/context/${encodeURIComponent(name)}/entries`);
+            const data = await resp.json();
+
+            let html = `<div class="context-back" onclick="backToContexts()">Contexts</div>`;
+            html += `<div class="context-title">=${escapeHtml(name)}</div>`;
+            html += renderEntryList(data.entries);
+            panel.innerHTML = html;
+        } catch (e) {
+            showError('panel-ctx', 'Failed to load entries');
+        }
+    }
+
+    function backToContexts() {
+        ctxLevel = 'list';
+        if (tg?.BackButton) tg.BackButton.hide();
+        loaded['ctx'] = false;
+        loadTab('ctx');
+        loaded['ctx'] = true;
+    }
+
+    // --- Search ---
+    async function doSearch() {
+        const q = document.getElementById('search-input').value.trim();
+        if (!q) return;
+
+        const results = document.getElementById('search-results');
+        results.innerHTML = '<div class="loading">Searching...</div>';
+
+        try {
+            const resp = await fetch(`/tjai/api/dashboard/search?q=${encodeURIComponent(q)}`);
+            const data = await resp.json();
+            results.innerHTML = renderEntryList(data.entries);
+            if (!data.entries.length) {
+                results.innerHTML = '<div class="loading">No results</div>';
+            }
+        } catch (e) {
+            results.innerHTML = '<div class="error-msg">Search failed</div>';
+        }
+    }
+
+    // --- Shared entry rendering ---
+    function renderEntryList(entries) {
+        let html = '';
+        for (const e of entries) {
+            const kind = e.kind !== 'memory' ? `<span class="entry-kind">[${e.kind}]</span> ` : '';
+            const name = e.name ? `<span class="entry-name-badge">@${escapeHtml(e.name)}</span> ` : '';
+            const ctx = e.context ? `<span class="named-context">=${e.context}</span> ` : '';
+            const lines = e.line_count > 1 ? `<span class="entry-lines">[${e.line_count}]</span> ` : '';
+            const tags = (e.tags || []).map(t => `<span class="entry-tag">:${escapeHtml(t)}</span>`).join(' ');
+            const content = linkifyContent(escapeHtml(e.content));
+
+            html += `<div class="entry-item" onclick="toggleExpand(this,'${e.id}')">`;
+            html += `<div class="entry-first-line">${name}${content}</div>`;
+            html += `<div class="entry-meta">${kind}${ctx}${lines}${tags ? tags + ' ' : ''}${formatTimestamp(e.timestamp)}</div>`;
+            html += `</div>`;
+        }
+        return html;
+    }
+
+    // Go
+    init();
+    </script>
+</body>
+</html>

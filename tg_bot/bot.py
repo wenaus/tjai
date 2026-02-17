@@ -787,11 +787,26 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await msg.reply_text(f"Error: {e}")
 
 
+async def _post_init(application: Application):
+    """Set the menu button to open the Mini App."""
+    from telegram import MenuButtonWebApp, WebAppInfo
+    try:
+        await application.bot.set_chat_menu_button(
+            menu_button=MenuButtonWebApp(
+                text="tjai",
+                web_app=WebAppInfo(url="https://etaverse.com/tjai/m/")
+            )
+        )
+        logger.info("Menu button set to Mini App")
+    except Exception as e:
+        logger.error(f"Failed to set menu button: {e}")
+
+
 def create_application() -> Application:
     """Create and configure the Telegram application."""
     Config.validate()
 
-    application = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
+    application = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).post_init(_post_init).build()
 
     # Add handlers
     application.add_handler(CommandHandler("start", start_command))

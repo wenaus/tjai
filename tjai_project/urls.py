@@ -35,4 +35,10 @@ urlpatterns = [
     path("poetry/author/<path:author_name>/", views.poetry_author_entries, name="poetry_author_entries"),
     path("tag/<str:tag_name>/", views.tag_entries, name="tag_entries"),
     path("kind/<str:kind_name>/", views.kind_entries, name="kind_entries"),
+    # Telegram Mini App
+    path("m/", views.miniapp, name="miniapp"),
+    path("api/tg-auth", views.tg_auth, name="tg_auth"),
+    path("api/contexts", views.api_contexts_list, name="api_contexts_list"),
+    path("api/context/<str:context_name>/entries", views.api_context_entries, name="api_context_entries"),
+    path("api/entry/<uuid:entry_id>/content", views.api_entry_content, name="api_entry_content"),
 ]
