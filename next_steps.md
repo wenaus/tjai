@@ -74,6 +74,24 @@ Instead of telling you connections, the system asks questions derived from your 
 
 Not "what do you want to do today" but provocations seeded from your own intellectual life.
 
+### Agent 5: Research Queue (user-initiated depth)
+
+The other agents are system-initiated — the system decides what to think about. The research queue inverts this: the user encounters a topic that deserves real investigation and defers it to a process that can actually do the work.
+
+The problem it solves: in real-time conversation, the AI gives reflexive, shallow, confident-sounding answers. Some questions deserve actual research — multiple sources, cross-referencing, cited evidence, explicit unknowns. The research queue is the mechanism for "Computer, perform an analysis" — and the computer actually performs the analysis.
+
+**Flow:**
+1. User says "add to research queue" (or `tj do :research "topic"`)
+2. Creates a todo tagged `:research`, status active
+3. Heartbeat picks up pending research items
+4. Claude is invoked with a **research-specific system prompt** — think deeply, search thoroughly, use multiple sources, cite evidence, state what can't be determined. This framing is what enforces quality — it's a different mode of operation from conversational chat.
+5. Results written back to the **same entry** (content replaced with findings), status set to `done`
+6. Completed research items appear in the next status report
+
+**Why this works:** The AI has real competence behind a veneer of reflexive laziness. Given explicit direction — "this is a research task" — the output quality is categorically different. The research prompt framing enforces that discipline systematically, rather than hoping the AI happens to try hard enough in the moment.
+
+**Relationship to bookmarks:** Bookmarks are "read later" (passive). Research items are "understand later" (active) — they come back with results. Both acknowledge that the moment of encounter isn't the right moment for depth.
+
 ### MCP Heartbeat Tool: The Key Architectural Insight
 
 A persistent `claude -p` daemon is impractical (can't sleep between tool calls, MCP timeouts, context fills up). But the invocation can be made lightweight and dynamic by putting the intelligence in a new MCP tool rather than in the prompt.
@@ -95,7 +113,7 @@ The prompt is static and tiny. All dynamism lives in the **`heartbeat()` MCP end
 - Checks what's new since last heartbeat (new entries, bookmarks, dialog)
 - Checks user feedback patterns (thumbs up/down on previous reflections)
 - Assembles a context-aware instruction set for Claude to follow
-- Varies the task: sometimes reflect, sometimes research, sometimes generate questions
+- Varies the task: sometimes reflect, sometimes research, sometimes generate questions, sometimes process the research queue
 - Adapts strategy based on what worked (more cross-domain connections, fewer todo nudges)
 
 This is better than a hardcoded prompt because the MCP tool learns and adapts. The `claude -p` invocation is a standardized, stateless wrapper. The heartbeat tool is the brain.
