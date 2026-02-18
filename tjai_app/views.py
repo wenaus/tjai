@@ -615,6 +615,7 @@ def dashboard_status(request):
             'name': e.name,
             'nickname': data.get('nickname') if data else None,
             'event_date': data.get('event_date') if data else None,
+            'hostname': data.get('hostname') if data else None,
             'tags': missing_tags,
         })
 
@@ -836,6 +837,7 @@ def _entries_for_list(entries):
         e.display_tags = [t for t in entry_tags if f':{t}' not in e.first_line]
         data = e.data if isinstance(e.data, dict) else None
         e.author = data.get('author') if data else None
+        e.hostname = data.get('hostname') if data else None
         e.detail_slug = (data.get('nickname') if data else None) or e.name or str(e.id)
         # Convert float timestamp to datetime for template formatting
         e.modified_dt = datetime.fromtimestamp(e.timestamp_modified)
@@ -871,6 +873,18 @@ def _tag_counts_for_entries(entries, exclude_tags=None):
         qs = qs.exclude(tag_name__in=exclude_tags)
     tag_counts = qs.values('tag_name').annotate(cnt=Count('id'))
     return sorted([(t['tag_name'], t['cnt']) for t in tag_counts], key=lambda x: x[0].lower())
+
+
+def _machine_counts_for_entries(entries):
+    """Compute (hostname, count) pairs for entries with hostname in data."""
+    from collections import Counter
+    counter = Counter()
+    for e in entries:
+        data = e.data if isinstance(e.data, dict) else None
+        hostname = data.get('hostname') if data else None
+        if hostname:
+            counter[hostname] += 1
+    return sorted(counter.items(), key=lambda x: x[0].lower())
 
 
 @login_required
@@ -938,11 +952,13 @@ def tag_entries(request, tag_name):
         title = f':{tag_name}'
     tags = _tag_counts_for_entries(entries)
     contexts = _context_counts_for_entries(entries)
+    machines = _machine_counts_for_entries(entries)
     return render(request, 'tjai_app/entry_list.html', {
         'title': title,
         'entries': _entries_for_list(entries),
         'tags': tags,
         'contexts': contexts,
+        'machines': machines,
     })
 
 

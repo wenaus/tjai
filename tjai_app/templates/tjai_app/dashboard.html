@@ -143,9 +143,9 @@
             cursor: pointer;
             font-family: inherit;
             font-size: 12px;
-            display: none;
         }
         .filter-clear:hover { background: #666; }
+        .machine-link.active { background: #64b5f6; color: #1a1a1a !important; padding: 1px 4px; border-radius: 3px; }
         /* Dark mode scrollbars */
         ::-webkit-scrollbar {
             width: 8px;
@@ -470,7 +470,7 @@
                     line += ` <span style="color:#9ccc65">${tagStr}</span>`;
                 }
 
-                html += `<div class="entry" style="margin-left:0" data-context="${entry.context || ''}">${line}</div>`;
+                html += `<div class="entry" style="margin-left:0" data-context="${entry.context || ''}" data-machine="${entry.hostname || ''}">${line}</div>`;
             }
             return html;
         }
@@ -481,6 +481,7 @@
         let loadingMore = false;
         let isSearchActive = false;
         let excludedContexts = new Set();
+        let activeMachine = null;
 
         async function loadMoreEntries() {
             if (loadingMore || !hasMoreEntries || isSearchActive) return;
@@ -492,7 +493,7 @@
                 const data = await resp.json();
                 const newHtml = renderEntries(data.recent_entries || [], dashboardTimezone);
                 document.getElementById('entries-list').insertAdjacentHTML('beforeend', newHtml);
-                if (excludedContexts.size > 0) applyContextFilter();
+                if (excludedContexts.size > 0 || activeMachine) applyEntryFilters();
                 loadedEntryCount += (data.recent_entries || []).length;
                 hasMoreEntries = data.has_more;
                 document.getElementById('entries-label').innerHTML =
@@ -582,12 +583,14 @@
             // Machines
             if (data.machines && data.machines.length > 0) {
                 const machineStrs = data.machines.slice().sort().map(m => {
+                    const activeClass = activeMachine === m ? ' active' : '';
+                    let mLink = `<a href="#" class="machine-link${activeClass}" data-machine="${m}" style="color:#64b5f6;text-decoration:none">${m}</a>`;
                     if (data.oldest_sync && data.oldest_sync.machine === m) {
                         const age = data.oldest_sync.age_min;
                         const ageStr = age < 60 ? `${age}m` : `${Math.floor(age/60)}h${age%60}m`;
-                        return `${m} <span style="color:#888">(${ageStr})</span>`;
+                        mLink += ` <span style="color:#888">(${ageStr})</span>`;
                     }
-                    return m;
+                    return mLink;
                 });
                 html += `<div class="status-line">Machines: ${machineStrs.join(', ')}</div>`;
             }
@@ -629,7 +632,7 @@
                     `Entries <span style="color:#8a8a8a">with mod time (${loadedEntryCount}${hasMoreEntries ? '+' : ''})</span>`;
                 document.getElementById('entries-list').innerHTML = renderEntries(entries, dashboardTimezone);
             }
-            if (excludedContexts.size > 0) applyContextFilter();
+            if (excludedContexts.size > 0 || activeMachine) applyEntryFilters();
         }
 
         function getWeekNumber(d) {
@@ -668,27 +671,47 @@
             updateRefreshDisplay();
         }
 
-        // Context exclusion filtering
-        function applyContextFilter() {
+        // Unified entry filtering (context exclusions + machine filter)
+        function applyEntryFilters() {
             const entries = document.querySelectorAll('#entries-list .entry');
             let shown = 0;
+            let total = entries.length;
             entries.forEach(el => {
-                if (excludedContexts.size > 0 && excludedContexts.has(el.dataset.context)) {
-                    el.style.display = 'none';
-                } else {
-                    el.style.display = '';
-                    shown++;
-                }
+                let visible = true;
+                if (excludedContexts.size > 0 && excludedContexts.has(el.dataset.context)) visible = false;
+                if (activeMachine && el.dataset.machine !== activeMachine) visible = false;
+                el.style.display = visible ? '' : 'none';
+                if (visible) shown++;
             });
-            document.getElementById('filter-clear').style.display = excludedContexts.size > 0 ? 'inline' : 'none';
-            if (excludedContexts.size > 0 && !isSearchActive) {
+            const hasFilters = excludedContexts.size > 0 || activeMachine;
+            if (hasFilters && !isSearchActive) {
+                let filterDesc = [];
+                if (activeMachine) filterDesc.push(`machine=${activeMachine}`);
+                if (excludedContexts.size > 0) filterDesc.push(`${excludedContexts.size} ctx excluded`);
                 document.getElementById('entries-label').innerHTML =
-                    `Entries <span style="color:#8a8a8a">with mod time (${shown} shown, ${excludedContexts.size} excluded)</span>`;
+                    `Entries <span style="color:#8a8a8a">with mod time (${shown} of ${total}, ${filterDesc.join(', ')})</span>`;
             }
         }
 
-        // Event delegation for context toggle clicks
+        // Event delegation for context toggle and machine link clicks
         document.getElementById('status-fixed').addEventListener('click', function(e) {
+            // Machine link clicks
+            const machineLink = e.target.closest('.machine-link');
+            if (machineLink) {
+                e.preventDefault();
+                const machine = machineLink.dataset.machine;
+                if (activeMachine === machine) {
+                    activeMachine = null;
+                } else {
+                    activeMachine = machine;
+                }
+                document.querySelectorAll('.machine-link').forEach(el => {
+                    el.classList.toggle('active', activeMachine === el.dataset.machine);
+                });
+                applyEntryFilters();
+                return;
+            }
+            // Context toggle clicks
             const toggle = e.target.closest('.ctx-toggle');
             if (toggle) {
                 e.preventDefault();
@@ -702,12 +725,20 @@
                 toggle.title = (excl ? 'Include ' : 'Exclude ') + ctx;
                 const nameEl = toggle.previousElementSibling;
                 if (nameEl) nameEl.style.color = excl ? '#666' : '#ce93d8';
-                applyContextFilter();
+                applyEntryFilters();
             }
         });
 
-        // Filter clear button
+        // Filter clear button - clears everything: search, context filters, machine filters
         document.getElementById('filter-clear').addEventListener('click', function() {
+            // Clear search
+            const searchInput = document.getElementById('entry-search');
+            const searchClear = document.getElementById('search-clear');
+            if (searchInput.value) {
+                searchInput.value = '';
+                searchClear.style.display = 'none';
+            }
+            // Clear context filters
             excludedContexts.clear();
             document.querySelectorAll('.ctx-toggle').forEach(el => {
                 el.textContent = '\u2212';
@@ -716,7 +747,11 @@
                 const nameEl = el.previousElementSibling;
                 if (nameEl) nameEl.style.color = '#ce93d8';
             });
-            applyContextFilter();
+            // Clear machine filter
+            activeMachine = null;
+            document.querySelectorAll('.machine-link.active').forEach(el => el.classList.remove('active'));
+            // Refresh
+            refresh();
         });
 
         // Search on Enter, Escape to clear
