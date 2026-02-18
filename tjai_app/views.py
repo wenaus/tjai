@@ -1153,7 +1153,7 @@ def api_dialog(request):
             data = e.data if isinstance(e.data, dict) else {}
             result.append({
                 "id": e.id,
-                "content": e.content[:2000],
+                "content": e.content[:2000] + (f"\n[truncated — full entry: {e.id}]" if len(e.content) > 2000 else ""),
                 "role": data.get("role", "unknown"),
                 "session_id": data.get("session_id"),
                 "project_path": data.get("project_path"),
@@ -1175,9 +1175,6 @@ def api_dialog(request):
         return JsonResponse({"error": "content is required"}, status=400)
     if role not in ("user", "assistant"):
         return JsonResponse({"error": "role must be 'user' or 'assistant'"}, status=400)
-
-    if role == "assistant" and len(content) > 4000:
-        content = content[:4000]
 
     now = time.time()
     entry = Entry.objects.create(
