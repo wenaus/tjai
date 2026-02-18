@@ -368,13 +368,21 @@ Hook paths in `claude-settings.json` reference `~/.claude/hooks/`, which must be
 ln -s ~/github/tjrepo/computers/common/claude-hooks ~/.claude/hooks
 ```
 
-Environment variables (add to `~/.env` or `~/.bashrc`):
+Environment variables required by the hooks:
 
 ```bash
 export TJAI_API_KEY="$TJAI_GMAIL_ADDON_API_KEY"   # Bearer token
 export TJAI_DIALOG_TURNS=10                         # turns to load (0=disabled)
 # export TJAI_API_URL=https://etaverse.com/tjai    # default, override if needed
 ```
+
+The full laptop environment — including `TJAI_GMAIL_ADDON_API_KEY` and all other personal keys — is committed to `computers/laptop/config-files/.env`. On a new Mac, symlink it:
+
+```bash
+ln -s ~/github/tjrepo/computers/laptop/config-files/.env ~/.env
+```
+
+Ensure `~/.bash_profile` sources `~/.env` (e.g. `source ~/.env`). This provides all hook vars automatically.
 
 **Activation states:** If `TJAI_DIALOG_TURNS` is unset, load.py prints a notice inviting the user to activate it. If set to `0`, it tells you it's disabled. In both cases, no API calls are made and record.py does nothing. If Claude Code won't start due to hook issues, `export TJAI_DIALOG_TURNS=0` bypasses all network activity.
 
