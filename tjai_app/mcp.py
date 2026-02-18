@@ -11,7 +11,7 @@ Available tools:
     list_contexts     - List all projects/topics for organizing entries
     create_entry      - Add new entries (memories, todos, journal, profile, ai, bookmark)
     get_todos         - Retrieve todo items with filtering options
-    get_memories      - Get memory entries (general notes)
+    get_memories      - Get memory entries. Call unfiltered to see general activity
     get_bookmarks     - Get saved bookmark entries (URLs)
     search_entries    - Full-text search across all entries
     get_entry         - Get a single entry by ID
@@ -227,7 +227,12 @@ async def get_memories(
     Get memory entries - general notes and information.
 
     Memories are the default entry type for storing facts, notes, and
-    information the user wants to remember.
+    information the user wants to remember. Dialog turns are also memories.
+
+    IMPORTANT: To review recent activity, call get_memories(limit=20) with
+    NO filters first. Do not add context, date, or other filters unless the
+    user specifically asks for them. Unfiltered recent memories show what has
+    actually been happening — filtering defeats that purpose.
 
     Args:
         context: Filter to memories in this context/project.
