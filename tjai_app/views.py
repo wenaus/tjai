@@ -583,11 +583,29 @@ def dashboard_status(request):
     DASHBOARD_PAGE = 1000
     offset = int(request.GET.get('offset', 0))
 
+    # Server-side filters (applied to DB query before pagination)
+    filter_tag = request.GET.get('tag')
+    filter_kind = request.GET.get('kind')
+    filter_context = request.GET.get('context')
+    filter_machine = request.GET.get('machine')
+
     base_qs = Entry.objects.filter(
         deleted_at__isnull=True,
     ).exclude(
         status='archive'
-    ).order_by('-timestamp_modified')
+    )
+
+    if filter_kind:
+        base_qs = base_qs.filter(kind=filter_kind)
+    if filter_context:
+        base_qs = base_qs.filter(context_id=filter_context)
+    if filter_tag:
+        tagged_ids = Tag.objects.filter(tag_name=filter_tag).values_list('entry_id', flat=True)
+        base_qs = base_qs.filter(id__in=tagged_ids)
+    if filter_machine:
+        base_qs = base_qs.filter(data__hostname=filter_machine)
+
+    base_qs = base_qs.order_by('-timestamp_modified')
 
     recent = base_qs[offset:offset + DASHBOARD_PAGE]
 
@@ -617,15 +635,18 @@ def dashboard_status(request):
             'event_date': data.get('event_date') if data else None,
             'hostname': data.get('hostname') if data else None,
             'tags': missing_tags,
+            'all_tags': entry_tags,
         })
 
     has_more = len(recent_entries) == DASHBOARD_PAGE
+    total_count = base_qs.count() if has_more else offset + len(recent_entries)
 
     # If loading more entries (offset > 0), return just entries
     if offset > 0:
         return JsonResponse({
             'recent_entries': recent_entries,
             'has_more': has_more,
+            'total_count': total_count,
         })
 
     # Get timezone from SysConfig, default to America/New_York
@@ -673,6 +694,7 @@ def dashboard_status(request):
         'work_sessions': work_sessions,
         'recent_entries': recent_entries,
         'has_more': has_more,
+        'total_count': total_count,
         'timezone': timezone_name,
         'contexts': contexts,
         'all_tags': all_tags,
@@ -719,7 +741,9 @@ def dashboard_search(request):
             'name': e.name,
             'nickname': data.get('nickname') if data else None,
             'event_date': data.get('event_date') if data else None,
+            'hostname': data.get('hostname') if data else None,
             'tags': missing_tags,
+            'all_tags': entry_tags,
         })
 
     return JsonResponse({'entries': result})

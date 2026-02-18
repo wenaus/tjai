@@ -125,15 +125,6 @@
             color: #ef5350;
             font-weight: bold;
         }
-        .ctx-toggle {
-            cursor: pointer;
-            color: #ef5350;
-            font-size: 12px;
-            margin-left: 1px;
-            font-weight: bold;
-        }
-        .ctx-toggle:hover { opacity: 0.7; }
-        .ctx-toggle.included { color: #9ccc65; }
         .filter-clear {
             background: #444;
             color: #e0e0e0;
@@ -146,6 +137,9 @@
         }
         .filter-clear:hover { background: #666; }
         .machine-link.active { background: #64b5f6; color: #1a1a1a !important; padding: 1px 4px; border-radius: 3px; }
+        .tag-link.active { background: #9ccc65; color: #1a1a1a !important; padding: 1px 4px; border-radius: 3px; }
+        .kind-link.active { background: #daa520; color: #1a1a1a !important; padding: 1px 4px; border-radius: 3px; }
+        .context-link.active { background: #ce93d8; color: #1a1a1a !important; padding: 1px 4px; border-radius: 3px; }
         /* Dark mode scrollbars */
         ::-webkit-scrollbar {
             width: 8px;
@@ -470,18 +464,37 @@
                     line += ` <span style="color:#9ccc65">${tagStr}</span>`;
                 }
 
-                html += `<div class="entry" style="margin-left:0" data-context="${entry.context || ''}" data-machine="${entry.hostname || ''}">${line}</div>`;
+                html += `<div class="entry" style="margin-left:0" data-context="${entry.context || ''}" data-machine="${entry.hostname || ''}" data-kind="${entry.kind || ''}" data-tags="${(entry.all_tags || entry.tags || []).join(',')}">${line}</div>`;
             }
             return html;
         }
 
         let dashboardTimezone = 'America/New_York';
         let loadedEntryCount = 0;
+        let totalEntryCount = 0;
         let hasMoreEntries = false;
         let loadingMore = false;
         let isSearchActive = false;
-        let excludedContexts = new Set();
         let activeMachine = null;
+        let activeTag = null;
+        let activeKind = null;
+        let activeContext = null;
+        let isFilterActive = false;
+
+        function entriesLabel() {
+            const prefix = isFilterActive ? 'filtered' : 'with mod time';
+            const countStr = hasMoreEntries ? `${loadedEntryCount} of ${totalEntryCount}` : `${loadedEntryCount}`;
+            return `Entries <span style="color:#8a8a8a">${prefix} (${countStr})</span>`;
+        }
+
+        function buildFilterParams() {
+            const params = [];
+            if (activeTag) params.push(`tag=${encodeURIComponent(activeTag)}`);
+            if (activeKind) params.push(`kind=${encodeURIComponent(activeKind)}`);
+            if (activeContext) params.push(`context=${encodeURIComponent(activeContext)}`);
+            if (activeMachine) params.push(`machine=${encodeURIComponent(activeMachine)}`);
+            return params;
+        }
 
         async function loadMoreEntries() {
             if (loadingMore || !hasMoreEntries || isSearchActive) return;
@@ -489,15 +502,15 @@
             const indicator = document.getElementById('load-more-indicator');
             if (indicator) indicator.style.display = 'block';
             try {
-                const resp = await fetch(`/tjai/api/dashboard/status?offset=${loadedEntryCount}`);
+                const params = [`offset=${loadedEntryCount}`, ...buildFilterParams()];
+                const resp = await fetch(`/tjai/api/dashboard/status?${params.join('&')}`);
                 const data = await resp.json();
                 const newHtml = renderEntries(data.recent_entries || [], dashboardTimezone);
                 document.getElementById('entries-list').insertAdjacentHTML('beforeend', newHtml);
-                if (excludedContexts.size > 0 || activeMachine) applyEntryFilters();
                 loadedEntryCount += (data.recent_entries || []).length;
                 hasMoreEntries = data.has_more;
-                document.getElementById('entries-label').innerHTML =
-                    `Entries <span style="color:#8a8a8a">with mod time (${loadedEntryCount}${hasMoreEntries ? '+' : ''})</span>`;
+                if (data.total_count) totalEntryCount = data.total_count;
+                document.getElementById('entries-label').innerHTML = entriesLabel();
             } catch (err) {
                 console.error('Load more failed:', err);
             } finally {
@@ -526,6 +539,29 @@
             }
         }
 
+        async function fetchFilteredEntries() {
+            const params = buildFilterParams();
+            isFilterActive = params.length > 0;
+            if (!isFilterActive) {
+                // No filters — do a full refresh to restore normal entries
+                refresh();
+                return;
+            }
+            try {
+                const resp = await fetch(`/tjai/api/dashboard/status?${params.join('&')}`);
+                const data = await resp.json();
+                dashboardTimezone = data.timezone || dashboardTimezone;
+                const entries = data.recent_entries || [];
+                loadedEntryCount = entries.length;
+                hasMoreEntries = data.has_more;
+                totalEntryCount = data.total_count || entries.length;
+                document.getElementById('entries-label').innerHTML = entriesLabel();
+                document.getElementById('entries-list').innerHTML = renderEntries(entries, dashboardTimezone);
+            } catch (err) {
+                console.error('Filter fetch failed:', err);
+            }
+        }
+
         function renderStatus(data) {
             let html = '';
 
@@ -541,41 +577,43 @@
             }
             html += '</div>';
 
-            // Contexts with anti-select toggles
+            // Contexts — clickable in-dash filters (poetry/recipe link to custom pages)
             if (data.contexts && data.contexts.length > 0) {
+                const customPages = ['poetry', 'recipe'];
                 const ctxChips = data.contexts.map(c => {
-                    const excl = excludedContexts.has(c);
-                    const nameColor = excl ? '#666' : '#ce93d8';
-                    const toggleCls = excl ? 'ctx-toggle included' : 'ctx-toggle';
-                    const toggleChar = excl ? '+' : '\u2212';
-                    const toggleTitle = (excl ? 'Include ' : 'Exclude ') + c;
-                    return `<span style="white-space:nowrap"><a href="/tjai/context/${c}/" style="color:${nameColor};text-decoration:none">${c}</a><span class="${toggleCls}" data-ctx="${c}" title="${toggleTitle}">${toggleChar}</span></span>`;
+                    if (customPages.includes(c)) {
+                        return `<a href="/tjai/context/${c}/" style="color:#ce93d8;text-decoration:none">${c}</a>`;
+                    }
+                    const activeClass = activeContext === c ? ' active' : '';
+                    return `<a href="#" class="context-link${activeClass}" data-context="${c}" style="color:#ce93d8;text-decoration:none">${c}</a>`;
                 }).join(' ');
                 html += `<div class="status-line">Contexts: ${ctxChips}</div>`;
             }
 
             // Tags
             if (data.all_tags && data.all_tags.length > 0) {
-                const tagLinks = data.all_tags.map(t =>
-                    `<a href="/tjai/tag/${t}/" style="color:#9ccc65;text-decoration:none">${t}</a>`
-                ).join(', ');
+                const tagLinks = data.all_tags.map(t => {
+                    const activeClass = activeTag === t ? ' active' : '';
+                    return `<a href="#" class="tag-link${activeClass}" data-tag="${t}" style="color:#9ccc65;text-decoration:none">${t}</a>`;
+                }).join(', ');
                 html += `<div class="status-line">Tags: ${tagLinks}, <a href="/tjai/tag/_none/" style="color:#888;text-decoration:none">(none)</a></div>`;
             }
 
             // Entry types
             const types = [
-                ['ai', 'AI guidance'], ['b', 'bookmark'], ['do', 'todo'],
-                ['j', 'journal'], ['m', 'memory'], ['p', 'profile']
+                ['ai', 'ai', 'AI guidance'], ['b', 'bookmark', 'bookmark'], ['do', 'todo', 'todo'],
+                ['j', 'journal', 'journal'], ['m', 'memory', 'memory'], ['p', 'profile', 'profile']
             ];
-            const typeLinks = types.map(([abbr, label]) =>
-                `<a href="/tjai/kind/${abbr}/" style="color:#daa520;text-decoration:none">[${abbr}]=${label}</a>`
-            ).join(' ');
+            const typeLinks = types.map(([abbr, kind, label]) => {
+                const activeClass = activeKind === kind ? ' active' : '';
+                return `<a href="#" class="kind-link${activeClass}" data-kind="${kind}" style="color:#daa520;text-decoration:none">[${abbr}]=${label}</a>`;
+            }).join(' ');
             html += `<div class="status-line">Types: ${typeLinks}</div>`;
 
             // Open todos
             if (data.open_todos && data.open_todos.length > 0) {
                 const todoStr = data.open_todos.map(t =>
-                    `${t.count} <span class="context">${t.context ? t.context : '(none)'}</span>`
+                    `<a href="#" class="todo-link" style="color:inherit;text-decoration:none">${t.count} <span class="context">${t.context ? t.context : '(none)'}</span></a>`
                 ).join(' ');
                 html += `<div class="status-line">Todos: ${todoStr}</div>`;
             }
@@ -621,18 +659,17 @@
 
             document.getElementById('status-fixed').innerHTML = html;
 
-            // Entries (tj l format) - skip if search is active
+            // Entries (tj l format) - skip if search or server-side filter is active
             dashboardTimezone = data.timezone || 'America/New_York';
-            if (!document.getElementById('entry-search').value.trim()) {
+            if (!document.getElementById('entry-search').value.trim() && !isFilterActive) {
                 isSearchActive = false;
                 const entries = data.recent_entries || [];
                 loadedEntryCount = entries.length;
                 hasMoreEntries = data.has_more;
-                document.getElementById('entries-label').innerHTML =
-                    `Entries <span style="color:#8a8a8a">with mod time (${loadedEntryCount}${hasMoreEntries ? '+' : ''})</span>`;
+                totalEntryCount = data.total_count || entries.length;
+                document.getElementById('entries-label').innerHTML = entriesLabel();
                 document.getElementById('entries-list').innerHTML = renderEntries(entries, dashboardTimezone);
             }
-            if (excludedContexts.size > 0 || activeMachine) applyEntryFilters();
         }
 
         function getWeekNumber(d) {
@@ -671,65 +708,46 @@
             updateRefreshDisplay();
         }
 
-        // Unified entry filtering (context exclusions + machine filter)
-        function applyEntryFilters() {
-            const entries = document.querySelectorAll('#entries-list .entry');
-            let shown = 0;
-            let total = entries.length;
-            entries.forEach(el => {
-                let visible = true;
-                if (excludedContexts.size > 0 && excludedContexts.has(el.dataset.context)) visible = false;
-                if (activeMachine && el.dataset.machine !== activeMachine) visible = false;
-                el.style.display = visible ? '' : 'none';
-                if (visible) shown++;
+        // Helper to toggle a filter and update active class on its link group
+        function toggleFilter(varName, value, linkClass) {
+            if (varName === 'machine') activeMachine = activeMachine === value ? null : value;
+            else if (varName === 'tag') activeTag = activeTag === value ? null : value;
+            else if (varName === 'kind') activeKind = activeKind === value ? null : value;
+            else if (varName === 'context') activeContext = activeContext === value ? null : value;
+            const current = varName === 'machine' ? activeMachine : varName === 'tag' ? activeTag : varName === 'kind' ? activeKind : activeContext;
+            document.querySelectorAll(`.${linkClass}`).forEach(el => {
+                el.classList.toggle('active', el.dataset[varName] === current);
             });
-            const hasFilters = excludedContexts.size > 0 || activeMachine;
-            if (hasFilters && !isSearchActive) {
-                let filterDesc = [];
-                if (activeMachine) filterDesc.push(`machine=${activeMachine}`);
-                if (excludedContexts.size > 0) filterDesc.push(`${excludedContexts.size} ctx excluded`);
-                document.getElementById('entries-label').innerHTML =
-                    `Entries <span style="color:#8a8a8a">with mod time (${shown} of ${total}, ${filterDesc.join(', ')})</span>`;
-            }
+            fetchFilteredEntries();
         }
 
-        // Event delegation for context toggle and machine link clicks
+        // Event delegation for all filter clicks
         document.getElementById('status-fixed').addEventListener('click', function(e) {
-            // Machine link clicks
             const machineLink = e.target.closest('.machine-link');
-            if (machineLink) {
+            if (machineLink) { e.preventDefault(); toggleFilter('machine', machineLink.dataset.machine, 'machine-link'); return; }
+
+            const tagLink = e.target.closest('.tag-link');
+            if (tagLink) { e.preventDefault(); toggleFilter('tag', tagLink.dataset.tag, 'tag-link'); return; }
+
+            const kindLink = e.target.closest('.kind-link');
+            if (kindLink) { e.preventDefault(); toggleFilter('kind', kindLink.dataset.kind, 'kind-link'); return; }
+
+            const todoLink = e.target.closest('.todo-link');
+            if (todoLink) {
                 e.preventDefault();
-                const machine = machineLink.dataset.machine;
-                if (activeMachine === machine) {
-                    activeMachine = null;
-                } else {
-                    activeMachine = machine;
-                }
-                document.querySelectorAll('.machine-link').forEach(el => {
-                    el.classList.toggle('active', activeMachine === el.dataset.machine);
+                activeKind = activeKind === 'todo' ? null : 'todo';
+                document.querySelectorAll('.kind-link').forEach(el => {
+                    el.classList.toggle('active', activeKind === el.dataset.kind);
                 });
-                applyEntryFilters();
+                fetchFilteredEntries();
                 return;
             }
-            // Context toggle clicks
-            const toggle = e.target.closest('.ctx-toggle');
-            if (toggle) {
-                e.preventDefault();
-                e.stopPropagation();
-                const ctx = toggle.dataset.ctx;
-                if (excludedContexts.has(ctx)) excludedContexts.delete(ctx);
-                else excludedContexts.add(ctx);
-                const excl = excludedContexts.has(ctx);
-                toggle.textContent = excl ? '+' : '\u2212';
-                toggle.className = 'ctx-toggle' + (excl ? ' included' : '');
-                toggle.title = (excl ? 'Include ' : 'Exclude ') + ctx;
-                const nameEl = toggle.previousElementSibling;
-                if (nameEl) nameEl.style.color = excl ? '#666' : '#ce93d8';
-                applyEntryFilters();
-            }
+
+            const ctxLink = e.target.closest('.context-link');
+            if (ctxLink) { e.preventDefault(); toggleFilter('context', ctxLink.dataset.context, 'context-link'); return; }
         });
 
-        // Filter clear button - clears everything: search, context filters, machine filters
+        // Filter clear button - clears everything: search, all filters
         document.getElementById('filter-clear').addEventListener('click', function() {
             // Clear search
             const searchInput = document.getElementById('entry-search');
@@ -738,21 +756,26 @@
                 searchInput.value = '';
                 searchClear.style.display = 'none';
             }
-            // Clear context filters
-            excludedContexts.clear();
-            document.querySelectorAll('.ctx-toggle').forEach(el => {
-                el.textContent = '\u2212';
-                el.className = 'ctx-toggle';
-                el.title = 'Exclude ' + el.dataset.ctx;
-                const nameEl = el.previousElementSibling;
-                if (nameEl) nameEl.style.color = '#ce93d8';
-            });
-            // Clear machine filter
+            // Clear all filters
             activeMachine = null;
-            document.querySelectorAll('.machine-link.active').forEach(el => el.classList.remove('active'));
+            activeTag = null;
+            activeKind = null;
+            activeContext = null;
+            isFilterActive = false;
+            document.querySelectorAll('.machine-link.active, .tag-link.active, .kind-link.active, .context-link.active').forEach(el => el.classList.remove('active'));
             // Refresh
             refresh();
         });
+
+        // Restore entries after search clears (re-apply filters if active)
+        function restoreFromSearch() {
+            isSearchActive = false;
+            if (isFilterActive) {
+                fetchFilteredEntries();
+            } else {
+                refresh();
+            }
+        }
 
         // Search on Enter, Escape to clear
         const searchInput = document.getElementById('entry-search');
@@ -763,12 +786,12 @@
                 if (q) {
                     searchEntries(q);
                 } else {
-                    refresh();
+                    restoreFromSearch();
                 }
             } else if (e.key === 'Escape') {
                 this.value = '';
                 searchClear.style.display = 'none';
-                refresh();
+                restoreFromSearch();
             }
         });
         searchInput.addEventListener('input', function() {
@@ -778,7 +801,7 @@
             searchInput.value = '';
             searchClear.style.display = 'none';
             searchInput.focus();
-            refresh();
+            restoreFromSearch();
         });
 
         // Initial load
