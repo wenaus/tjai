@@ -1090,11 +1090,12 @@ def api_add_bookmark(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_add_journal(request):
-    """Create a journal entry from an external source (Gmail Add-on).
+    """Create a journal entry from an external source (Gmail Add-on, Chrome extension).
 
     Requires Bearer token matching SysConfig 'gmail_addon_api_key'.
 
-    Request body: {title, event_timestamp, location (optional)}
+    Request body: {title, event_timestamp, location, zoom_url, gmail_url,
+                   indico_url, source (default: "gmail")}
     """
     auth_header = request.META.get('HTTP_AUTHORIZATION', '')
     if not auth_header.startswith('Bearer '):
@@ -1118,7 +1119,9 @@ def api_add_journal(request):
     event_timestamp = data.get("event_timestamp")
     zoom_url = data.get("zoom_url", "").strip()
     gmail_url = data.get("gmail_url", "").strip()
+    indico_url = data.get("indico_url", "").strip()
     location = data.get("location", "").strip()
+    source = data.get("source", "gmail").strip()
 
     if not title:
         return JsonResponse({"error": "title is required"}, status=400)
@@ -1129,9 +1132,11 @@ def api_add_journal(request):
     if location:
         parts.append(f"@ {location}")
     if zoom_url:
-        parts.append(f"[Zoom]({zoom_url})")
+        parts.append(f"[zoom]({zoom_url})")
     if gmail_url:
-        parts.append(f"[Gmail]({gmail_url})")
+        parts.append(f"[gmail]({gmail_url})")
+    if indico_url:
+        parts.append(f"[indico]({indico_url})")
     content = " ".join(parts)
 
     now = time.time()
@@ -1144,7 +1149,7 @@ def api_add_journal(request):
         timestamp_modified=now,
         is_dirty=1,
     )
-    Tag.objects.create(tag_name='gmail', entry=entry)
+    Tag.objects.create(tag_name=source, entry=entry)
 
     return JsonResponse({
         "status": "ok",
