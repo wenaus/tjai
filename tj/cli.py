@@ -289,6 +289,12 @@ def create_parser() -> argparse.ArgumentParser:
     p_break.add_argument('duration', help="Break duration (e.g., '30' for minutes, '1h' for hours)")
     p_break.set_defaults(func=handle_clock_break)
 
+    # AI Agent
+    from tj.commands.ai_agent import handle_ai_agent
+    p_ai_agent = subparsers.add_parser('agent', help="Launch a guided Claude agent with a prompt.")
+    p_ai_agent.add_argument('input', nargs='*', help="[=context] prompt")
+    p_ai_agent.set_defaults(func=handle_ai_agent)
+
     # Help
     p_help = subparsers.add_parser('h', help="Show this help message.", add_help=False)
     p_help.set_defaults(func=handle_help)
