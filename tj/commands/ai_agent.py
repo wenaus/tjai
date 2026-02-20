@@ -1,4 +1,16 @@
-"""AI Agent command - launch a controlled Claude instance with mandatory guidance."""
+"""AI Agent command - launch a DETACHED Claude instance with mandatory guidance.
+
+tj agent is for standalone autonomous tasks that do NOT feed results back to the
+caller's session: cron jobs, periodic reflection, async analysis, briefings.
+Results are written to a tjai entry, not returned to the invoking process.
+
+DO NOT use tj agent for research that informs the current conversation or session.
+For that, use Claude Code's internal Task tool subagents, which return results
+directly into the session context where they can inform next steps.
+
+tj agent = fire-and-forget, reports to tjai entry
+Task subagent = in-session, feeds back into current context
+"""
 
 import os
 import shutil
@@ -33,7 +45,14 @@ def _append_to_entry(entry_id: str, text: str) -> None:
 
 
 def handle_ai_agent(args) -> None:
-    """Handle 'tj agent' command.
+    """Handle 'tj agent' command — launch a detached, autonomous Claude instance.
+
+    This is for fire-and-forget tasks that need project context (MCP, AI guidance)
+    but do NOT need to feed results back into the current session. The agent writes
+    its output to a tjai entry. Use cases: cron jobs, periodic reflection, briefings.
+
+    NOT for research that informs the current conversation — use internal Task
+    tool subagents for that.
 
     Usage:
         tj agent <prompt>           - launch agent with universal guidance
