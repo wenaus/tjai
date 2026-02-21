@@ -239,24 +239,11 @@ def get_calendar(start_date=None, end_date=None, context=None, days=None):
         except ValueError:
             continue  # e.g. Feb 29 in non-leap year
 
-        # Compute origin year for age display
-        origin_year = None
-        if entry.data and isinstance(entry.data, dict):
-            event_date_ts = entry.data.get('event_date')
-            if event_date_ts and isinstance(event_date_ts, (int, float)):
-                origin_dt = datetime.fromtimestamp(event_date_ts, tz=tz)
-                origin_year = origin_dt.year
-
-        title = entry.content
-        if origin_year and origin_year != now_dt.year:
-            years_ago = now_dt.year - origin_year
-            title = f"{entry.content} ({years_ago})"
-
         result = {
             'date': projected_dt.strftime('%Y-%m-%d'),
             'day': projected_dt.strftime('%a'),
             'time': '00:00',
-            'title': title,
+            'title': entry.content,
             'annual': True,
         }
         results.append(result)

@@ -506,19 +506,9 @@ def dashboard_calendar(request):
         week_start = projected_dt - timedelta(days=projected_dt.weekday())
         week_start_key = week_start.strftime('%Y%m%d')
 
-        # Compute age from origin year
-        content = entry.content
-        if entry.data and isinstance(entry.data, dict):
-            origin_ts = entry.data.get('event_date')
-            if origin_ts and isinstance(origin_ts, (int, float)):
-                origin_dt = datetime.fromtimestamp(origin_ts, tz=tz) if tz else datetime.fromtimestamp(origin_ts)
-                if origin_dt.year != now_dt.year:
-                    years_ago = now_dt.year - origin_dt.year
-                    content = f"{entry.content} ({years_ago})"
-
         result.append({
             'id': str(entry.id),
-            'content': content,
+            'content': entry.content,
             'event_date': projected_dt.timestamp(),
             'date_key': date_key,
             'date_display': date_display,
@@ -528,6 +518,8 @@ def dashboard_calendar(request):
             'context': entry.context_id,
             'data': {'annual': True},
         })
+
+    result.sort(key=lambda r: r['event_date'])
 
     return JsonResponse({
         'entries': result,

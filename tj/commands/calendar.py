@@ -221,12 +221,6 @@ def handle_calendar_view(args) -> None:
             if entry.data is None:
                 entry.data = {}
             entry.data['annual'] = True
-            # Add age info from origin year
-            if entry.data.get('event_date'):
-                origin_dt = datetime.fromtimestamp(entry.data['event_date'])
-                if origin_dt.year != today_tz.year:
-                    years_ago = today_tz.year - origin_dt.year
-                    entry.content = f"{entry.content} ({years_ago})"
             entries_by_date[date_key].append((projected_ts, projected_dt, entry))
 
         # Ensure today is always shown if it's in the timeframe
