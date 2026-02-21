@@ -366,7 +366,7 @@ def handle_calendar_view(args) -> None:
 
             # Print day header for multi-day views
             if is_multi_day:
-                day_name = event_dt_for_display.strftime('%a %b %d')
+                day_name = event_dt_for_display.strftime('%a %b %-d')
                 if is_today:
                     from tj.colors import BOLD, RESET, RED
                     current_time = now_dt.strftime('%H:%M')

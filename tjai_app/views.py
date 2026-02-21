@@ -463,7 +463,7 @@ def dashboard_calendar(request):
 
             # Pre-format all date/time strings server-side
             date_key = event_dt.strftime('%Y%m%d')
-            date_display = event_dt.strftime('%a %b %d')  # "Mon Feb 09"
+            date_display = event_dt.strftime('%a %b %-d')
             time_display = event_dt.strftime('%H:%M') if (event_dt.hour or event_dt.minute) else None
             week_num = event_dt.isocalendar()[1]
             week_start = event_dt - timedelta(days=event_dt.weekday())
@@ -501,7 +501,7 @@ def dashboard_calendar(request):
         except ValueError:
             continue
         date_key = projected_dt.strftime('%Y%m%d')
-        date_display = projected_dt.strftime('%a %b %d')
+        date_display = projected_dt.strftime('%a %b %-d')
         week_num = projected_dt.isocalendar()[1]
         week_start = projected_dt - timedelta(days=projected_dt.weekday())
         week_start_key = week_start.strftime('%Y%m%d')
