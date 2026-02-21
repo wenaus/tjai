@@ -193,6 +193,12 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
         if links:
             data['links'] = links
         
+        # Compute mmdd for annual events
+        entry_mmdd = None
+        if 'annual' in tags and event_date:
+            event_dt = datetime.fromtimestamp(event_date)
+            entry_mmdd = event_dt.month * 100 + event_dt.day
+
         # Create entry object
         entry = Entry(
             id=entry_id,
@@ -205,7 +211,8 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
             name=entry_name,
             priority=entry_priority,
             status=entry_status,
-            data=data if data else None
+            data=data if data else None,
+            mmdd=entry_mmdd,
         )
         
         # Save entry

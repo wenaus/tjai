@@ -34,6 +34,7 @@ class Entry(models.Model):
     priority = models.IntegerField(null=True, blank=True)
     status = models.CharField(max_length=50, null=True, blank=True)
     data = models.JSONField(null=True, blank=True)  # Extensible metadata
+    mmdd = models.IntegerField(null=True, blank=True, db_index=True)  # Annual event month-day (e.g. 315 = March 15)
 
     class Meta:
         db_table = 'entries'

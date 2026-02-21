@@ -107,6 +107,7 @@ def init_db() -> None:
             priority INTEGER, -- Priority level (1-5 typical, unrestricted)
             status TEXT, -- Workflow status (done, blocked, waiting, etc.)
             data JSON, -- Extensible data: event_date, links, metadata, etc.
+            mmdd INTEGER, -- Annual event month-day (e.g. 315 = March 15)
             FOREIGN KEY (parent_id) REFERENCES entries (id)
         );
         """)
@@ -175,6 +176,13 @@ def init_db() -> None:
         CREATE UNIQUE INDEX IF NOT EXISTS idx_entries_context_name
         ON entries(context, name) WHERE name IS NOT NULL
         """)
+
+        # Add mmdd column to existing databases
+        try:
+            cursor.execute("ALTER TABLE entries ADD COLUMN mmdd INTEGER")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_entries_mmdd ON entries(mmdd)")
 
         conn.commit()
     except sqlite3.Error as e:

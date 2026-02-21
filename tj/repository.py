@@ -21,6 +21,7 @@ class Entry:
     priority: Optional[int] = None
     status: Optional[str] = None
     data: Optional[Dict[str, Any]] = None
+    mmdd: Optional[int] = None
 
 
 @dataclass

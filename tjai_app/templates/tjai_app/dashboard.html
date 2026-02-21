@@ -100,6 +100,9 @@
         .clock-stop {
             color: #5d8a3e;
         }
+        .entry-annual {
+            color: #d47ab0;
+        }
         .context {
             color: #ce93d8;
         }
@@ -354,8 +357,10 @@
 
                 // Entry
                 const clockType = entry.data?.clock;
+                const isAnnual = entry.data?.annual;
                 let contentClass = 'entry-content';
-                if (clockType === 'start') contentClass = 'clock-start';
+                if (isAnnual) contentClass = 'entry-annual';
+                else if (clockType === 'start') contentClass = 'clock-start';
                 else if (clockType === 'stop') contentClass = 'clock-stop';
 
                 // Use server-provided time_display

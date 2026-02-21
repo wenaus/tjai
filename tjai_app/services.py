@@ -14,6 +14,8 @@ from django.db import models
 from django.db.models import Count
 from django.utils import timezone
 
+from django.db.models import Q
+
 from .models import Entry, Context, Tag, SysConfig
 from .tagger import tag_bookmark
 from tj.commands.journal import parse_time
@@ -138,6 +140,27 @@ def _apply_date_filter(qs, start_date, end_date):
     return qs, None
 
 
+def _query_annual_events(start_dt, end_dt, today_mmdd):
+    """Query annual entries matching date range, respecting priority rules.
+
+    p=1: show for any date in range. p=2+/None: show only for today.
+    Returns queryset of Entry objects.
+    """
+    start_mmdd = start_dt.month * 100 + start_dt.day
+    end_mmdd = end_dt.month * 100 + end_dt.day
+
+    if start_mmdd <= end_mmdd:
+        range_q = Q(mmdd__gte=start_mmdd, mmdd__lte=end_mmdd, priority=1)
+    else:
+        range_q = (Q(mmdd__gte=start_mmdd, priority=1) | Q(mmdd__lte=end_mmdd, priority=1))
+
+    q = range_q | Q(mmdd=today_mmdd)
+
+    return Entry.objects.filter(
+        q, kind='journal', deleted_at__isnull=True, mmdd__isnull=False
+    ).select_related('context').prefetch_related('tags')
+
+
 # --- Service functions ---
 
 def get_calendar(start_date=None, end_date=None, context=None, days=None):
@@ -163,6 +186,7 @@ def get_calendar(start_date=None, end_date=None, context=None, days=None):
     qs = Entry.objects.filter(
         kind='journal',
         deleted_at__isnull=True,
+        mmdd__isnull=True,  # Exclude annual entries (handled separately)
     ).select_related('context').prefetch_related('tags')
 
     if context:
@@ -197,6 +221,45 @@ def get_calendar(start_date=None, end_date=None, context=None, days=None):
             if url:
                 result['url'] = url
             results.append(result)
+
+    # Inject annual events
+    now_dt = datetime.now(tz)
+    today_mmdd = now_dt.month * 100 + now_dt.day
+    annual_entries = _query_annual_events(start, end, today_mmdd)
+    # Track IDs already in results to avoid duplicates
+    seen_ids = {r.get('id') for r in results if 'id' in r}
+    for entry in annual_entries:
+        if entry.id in seen_ids:
+            continue
+        # Project annual event into current year's date
+        annual_month = entry.mmdd // 100
+        annual_day = entry.mmdd % 100
+        try:
+            projected_dt = now_dt.replace(month=annual_month, day=annual_day, hour=0, minute=0, second=0, microsecond=0)
+        except ValueError:
+            continue  # e.g. Feb 29 in non-leap year
+
+        # Compute origin year for age display
+        origin_year = None
+        if entry.data and isinstance(entry.data, dict):
+            event_date_ts = entry.data.get('event_date')
+            if event_date_ts and isinstance(event_date_ts, (int, float)):
+                origin_dt = datetime.fromtimestamp(event_date_ts, tz=tz)
+                origin_year = origin_dt.year
+
+        title = entry.content
+        if origin_year and origin_year != now_dt.year:
+            years_ago = now_dt.year - origin_year
+            title = f"{entry.content} ({years_ago})"
+
+        result = {
+            'date': projected_dt.strftime('%Y-%m-%d'),
+            'day': projected_dt.strftime('%a'),
+            'time': '00:00',
+            'title': title,
+            'annual': True,
+        }
+        results.append(result)
 
     results.sort(key=lambda x: (x['date'], x['time']))
     return results
@@ -312,6 +375,12 @@ def create_entry(content, kind="memory", context=None, name=None, tags=None,
     if not data:
         data = None
 
+    # Compute mmdd for annual events
+    entry_mmdd = None
+    if tags and 'annual' in tags and data and 'event_date' in data:
+        event_dt = datetime.fromtimestamp(data['event_date'])
+        entry_mmdd = event_dt.month * 100 + event_dt.day
+
     entry = Entry.objects.create(
         id=str(uuid.uuid4()),
         content=actual_content,
@@ -324,6 +393,7 @@ def create_entry(content, kind="memory", context=None, name=None, tags=None,
         timestamp_created=now,
         timestamp_modified=now,
         is_dirty=1,
+        mmdd=entry_mmdd,
     )
 
     if tags:

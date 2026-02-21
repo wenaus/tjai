@@ -169,9 +169,11 @@ def handle_calendar_view(args) -> None:
         from tj.commands.common import get_safe_exclude_tags
         all_calendar = repository.query_entries(kind='journal', exclude_tags=get_safe_exclude_tags())
 
-        # Filter by event_date within timeframe and group by date
+        # Filter by event_date within timeframe and group by date (skip annual, handled below)
         entries_by_date = {}
         for entry in all_calendar:
+            if entry.mmdd is not None:
+                continue  # Annual entries injected separately
             if entry.data and 'event_date' in entry.data:
                 event_ts = entry.data['event_date']
                 if start_ts <= event_ts < end_ts:
@@ -185,6 +187,47 @@ def handle_calendar_view(args) -> None:
                     if date_key not in entries_by_date:
                         entries_by_date[date_key] = []
                     entries_by_date[date_key].append((event_ts, event_dt, entry))
+
+        # Inject annual events
+        today_tz = datetime.now(tz) if tz else datetime.now()
+        today_mmdd = today_tz.month * 100 + today_tz.day
+        annual_entries = repository.query_entries(kind='journal', tag='annual')
+        seen_ids = set()
+        for date_entries in entries_by_date.values():
+            for _, _, entry in date_entries:
+                seen_ids.add(entry.id)
+        for entry in annual_entries:
+            if entry.id in seen_ids or entry.mmdd is None:
+                continue
+            # Priority display rules: p=1 shows in full range, p=2+/None only today
+            if entry.priority != 1 and entry.mmdd != today_mmdd:
+                continue
+            annual_month = entry.mmdd // 100
+            annual_day = entry.mmdd % 100
+            try:
+                if tz:
+                    projected_dt = today_tz.replace(month=annual_month, day=annual_day, hour=0, minute=0, second=0, microsecond=0)
+                else:
+                    projected_dt = datetime.now().replace(month=annual_month, day=annual_day, hour=0, minute=0, second=0, microsecond=0)
+            except ValueError:
+                continue
+            projected_ts = projected_dt.timestamp()
+            if not (start_ts <= projected_ts < end_ts):
+                continue
+            date_key = projected_dt.strftime('%Y%m%d')
+            if date_key not in entries_by_date:
+                entries_by_date[date_key] = []
+            # Mark annual entries with a data flag for styling
+            if entry.data is None:
+                entry.data = {}
+            entry.data['annual'] = True
+            # Add age info from origin year
+            if entry.data.get('event_date'):
+                origin_dt = datetime.fromtimestamp(entry.data['event_date'])
+                if origin_dt.year != today_tz.year:
+                    years_ago = today_tz.year - origin_dt.year
+                    entry.content = f"{entry.content} ({years_ago})"
+            entries_by_date[date_key].append((projected_ts, projected_dt, entry))
 
         # Ensure today is always shown if it's in the timeframe
         if tz:
@@ -375,6 +418,9 @@ def handle_calendar_view(args) -> None:
                         display_text = f"{clock_color}{title}{RESET}\n{desc_text}"
                     else:
                         display_text = f"{clock_color}{title}{RESET}"
+                elif entry.data and entry.data.get('annual'):
+                    from tj.colors import LIGHT_PINK_PURPLE, RESET
+                    display_text = f"{LIGHT_PINK_PURPLE}{content}{RESET}"
                 else:
                     # Colorize content (converts markdown links to clickable terminal links)
                     display_text = colorize_content(content)

@@ -12,6 +12,7 @@ LIGHT_GOLD = '\033[38;5;221m'  # Light gold for kind brackets
 BRIGHT_YELLOW = '\033[38;5;226m'  # Bright yellow for entry numbers
 RED = '\033[38;5;203m'  # Red for next upcoming event countdown
 LIGHT_BROWN = '\033[38;5;180m'  # Light brown for code quotes
+LIGHT_PINK_PURPLE = '\033[38;5;176m'  # Light pink-purple for annual events
 # Priority colors (bright green to faded green)
 PRIORITY_1 = '\033[38;5;82m'   # Bright lime
 PRIORITY_2 = '\033[38;5;118m'  # Bright green

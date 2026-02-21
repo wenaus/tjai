@@ -236,13 +236,14 @@ def _merge_batch(cursor, response) -> int:
             """
             INSERT OR REPLACE INTO entries
             (id, parent_id, content, kind, timestamp_created, timestamp_modified,
-             context, is_dirty, deleted_at, name, priority, status, data)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+             context, is_dirty, deleted_at, name, priority, status, data, mmdd)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
             """,
             (entry["id"], entry.get("parent_id"), entry["content"], entry["kind"],
              entry["timestamp_created"], entry["timestamp_modified"],
              entry.get("context"), entry.get("deleted_at"), entry.get("name"),
-             entry.get("priority"), entry.get("status"), data_str)
+             entry.get("priority"), entry.get("status"), data_str,
+             entry.get("mmdd"))
         )
         count += 1
 

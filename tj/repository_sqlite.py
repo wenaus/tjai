@@ -67,7 +67,8 @@ class SQLiteRepository(EntryRepository):
             name=row['name'],
             priority=row['priority'],
             status=row['status'],
-            data=decode_entry_data(row['data'])
+            data=decode_entry_data(row['data']),
+            mmdd=row['mmdd'] if 'mmdd' in row.keys() else None,
         )
 
     def create_entry(self, entry: Entry) -> str:
@@ -78,14 +79,15 @@ class SQLiteRepository(EntryRepository):
 
             cursor.execute("""
                 INSERT INTO entries (id, parent_id, content, kind, timestamp_created,
-                                   timestamp_modified, context, is_dirty, name, priority, status, data)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                   timestamp_modified, context, is_dirty, name, priority, status, data, mmdd)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 entry.id, entry.parent_id, entry.content, entry.kind,
                 entry.timestamp_created, entry.timestamp_modified,
                 entry.context, 1 if entry.is_dirty else 0,
                 entry.name, entry.priority, entry.status,
-                json.dumps(entry.data) if entry.data else None
+                json.dumps(entry.data) if entry.data else None,
+                entry.mmdd,
             ))
 
             conn.commit()
@@ -102,7 +104,7 @@ class SQLiteRepository(EntryRepository):
             
             cursor.execute("""
                 SELECT id, parent_id, content, kind, timestamp_created,
-                       timestamp_modified, context, is_dirty, name, priority, status, data
+                       timestamp_modified, context, is_dirty, name, priority, status, data, mmdd
                 FROM entries WHERE id = ?
             """, (entry_id,))
 
@@ -126,7 +128,7 @@ class SQLiteRepository(EntryRepository):
 
             cursor.execute("""
                 SELECT id, parent_id, content, kind, timestamp_created,
-                       timestamp_modified, context, is_dirty, name, priority, status, data
+                       timestamp_modified, context, is_dirty, name, priority, status, data, mmdd
                 FROM entries
                 WHERE name = ? COLLATE NOCASE AND deleted_at IS NULL
                 ORDER BY timestamp_modified DESC
@@ -151,7 +153,7 @@ class SQLiteRepository(EntryRepository):
                 # Search globally, ignoring context
                 cursor.execute("""
                     SELECT id, parent_id, content, kind, timestamp_created,
-                           timestamp_modified, context, is_dirty, name, priority, status, data
+                           timestamp_modified, context, is_dirty, name, priority, status, data, mmdd
                     FROM entries
                     WHERE name = ? COLLATE NOCASE AND deleted_at IS NULL
                 """, (name,))
@@ -159,7 +161,7 @@ class SQLiteRepository(EntryRepository):
                 # Search within specific context
                 cursor.execute("""
                     SELECT id, parent_id, content, kind, timestamp_created,
-                           timestamp_modified, context, is_dirty, name, priority, status, data
+                           timestamp_modified, context, is_dirty, name, priority, status, data, mmdd
                     FROM entries
                     WHERE name = ? COLLATE NOCASE AND context IS ? AND deleted_at IS NULL
                 """, (name, context))
@@ -300,7 +302,7 @@ class SQLiteRepository(EntryRepository):
             where_clause = " AND ".join(conditions)
             query = f"""
                 SELECT id, parent_id, content, kind, timestamp_created,
-                       timestamp_modified, context, is_dirty, name, priority, status, data
+                       timestamp_modified, context, is_dirty, name, priority, status, data, mmdd
                 FROM entries
                 WHERE {where_clause}
                 ORDER BY timestamp_created DESC

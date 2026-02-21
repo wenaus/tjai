@@ -129,6 +129,7 @@ def sync_push(request):
                 "priority": entry.get("priority"),
                 "status": entry.get("status"),
                 "data": entry_data,
+                "mmdd": entry.get("mmdd"),
             }
         )
         counts["entries"] += 1
@@ -242,7 +243,7 @@ def sync_pull(request):
         .values(
             "id", "parent_id", "content", "kind", "timestamp_created",
             "timestamp_modified", "context_id", "deleted_at", "name",
-            "priority", "status", "data"
+            "priority", "status", "data", "mmdd"
         )[:SYNC_BATCH_SIZE]
     )
     has_more = len(entries) == SYNC_BATCH_SIZE
@@ -433,10 +434,11 @@ def dashboard_calendar(request):
     start_ts = monday_of_prev_week.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
     end_ts = now + (60 * 24 * 60 * 60)
 
-    # Query journal entries with event_date in range
+    # Query journal entries with event_date in range (exclude annual, handled separately)
     entries = Entry.objects.filter(
         deleted_at__isnull=True,
         kind='journal',
+        mmdd__isnull=True,
         data__event_date__gte=start_ts,
         data__event_date__lt=end_ts,
     ).order_by('data__event_date')
@@ -479,6 +481,53 @@ def dashboard_calendar(request):
                 'context': entry.context_id,
                 'data': data,
             })
+
+    # Inject annual events
+    from .services import _query_annual_events
+    start_dt = monday_of_prev_week.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_dt = datetime.fromtimestamp(end_ts, tz=tz) if tz else datetime.fromtimestamp(end_ts)
+    today_mmdd = now_dt.month * 100 + now_dt.day
+    seen_ids = {r['id'] for r in result}
+    for entry in _query_annual_events(start_dt, end_dt, today_mmdd):
+        if str(entry.id) in seen_ids:
+            continue
+        annual_month = entry.mmdd // 100
+        annual_day = entry.mmdd % 100
+        try:
+            if tz:
+                projected_dt = now_dt.replace(month=annual_month, day=annual_day, hour=0, minute=0, second=0, microsecond=0)
+            else:
+                projected_dt = datetime.now().replace(month=annual_month, day=annual_day, hour=0, minute=0, second=0, microsecond=0)
+        except ValueError:
+            continue
+        date_key = projected_dt.strftime('%Y%m%d')
+        date_display = projected_dt.strftime('%a %b %d')
+        week_num = projected_dt.isocalendar()[1]
+        week_start = projected_dt - timedelta(days=projected_dt.weekday())
+        week_start_key = week_start.strftime('%Y%m%d')
+
+        # Compute age from origin year
+        content = entry.content
+        if entry.data and isinstance(entry.data, dict):
+            origin_ts = entry.data.get('event_date')
+            if origin_ts and isinstance(origin_ts, (int, float)):
+                origin_dt = datetime.fromtimestamp(origin_ts, tz=tz) if tz else datetime.fromtimestamp(origin_ts)
+                if origin_dt.year != now_dt.year:
+                    years_ago = now_dt.year - origin_dt.year
+                    content = f"{entry.content} ({years_ago})"
+
+        result.append({
+            'id': str(entry.id),
+            'content': content,
+            'event_date': projected_dt.timestamp(),
+            'date_key': date_key,
+            'date_display': date_display,
+            'time_display': None,
+            'week_num': week_num,
+            'week_start_key': week_start_key,
+            'context': entry.context_id,
+            'data': {'annual': True},
+        })
 
     return JsonResponse({
         'entries': result,
