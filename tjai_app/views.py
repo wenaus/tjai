@@ -410,7 +410,9 @@ def logout_view(request):
 @login_required
 def dashboard(request):
     """Render the dashboard HTML page."""
-    return render(request, 'tjai_app/dashboard.html')
+    return render(request, 'tjai_app/dashboard.html', {
+        'is_archive': request.GET.get('status') == 'archive',
+    })
 
 
 @login_required
@@ -635,13 +637,16 @@ def dashboard_status(request):
     filter_kind = request.GET.get('kind')
     filter_context = request.GET.get('context')
     filter_machine = request.GET.get('machine')
+    filter_status = request.GET.get('status')
     exclude_contexts = [c for c in request.GET.get('exclude_context', '').split(',') if c]
 
     base_qs = Entry.objects.filter(
         deleted_at__isnull=True,
-    ).exclude(
-        status='archive'
     )
+    if filter_status:
+        base_qs = base_qs.filter(status=filter_status)
+    else:
+        base_qs = base_qs.exclude(status='archive')
 
     if filter_kind:
         base_qs = base_qs.filter(kind=filter_kind)
@@ -1648,6 +1653,203 @@ def api_entry_content(request, entry_id):
         'tags': tags,
         'event_date': data.get('event_date') if data else None,
     })
+
+
+@login_required
+def picks(request):
+    """Render the picks triage page."""
+    return render(request, 'tjai_app/picks.html')
+
+
+@login_required
+def api_picks_data(request):
+    """Return picks grouped by run as JSON."""
+    entries = Entry.objects.filter(
+        kind='bookmark',
+        context__name='picks',
+        deleted_at__isnull=True,
+    ).exclude(
+        tags__tag_name='source',
+    ).order_by('-timestamp_created')
+
+    runs = {}
+    for e in entries:
+        data = e.data if isinstance(e.data, dict) else {}
+        run_key = data.get('run', 'unknown')
+        if run_key not in runs:
+            runs[run_key] = []
+        # Parse markdown link: [Title](url)
+        content = e.content or ''
+        title = content
+        url = ''
+        if content.startswith('[') and '](' in content:
+            title = content[1:content.index('](')]
+            url = content[content.index('](') + 2:].rstrip(')')
+        runs[run_key].append({
+            'id': e.id,
+            'title': title,
+            'url': url,
+            'source': data.get('source', ''),
+            'precis': data.get('precis', ''),
+            'rationale': data.get('rationale', ''),
+            'thumbs': data.get('thumbs'),
+            'kept': data.get('kept', False),
+            'archived': data.get('archived', False),
+            'readme': data.get('readme', False),
+        })
+
+    # Sort runs by key descending (ISO timestamps sort correctly)
+    sorted_runs = []
+    for run_key in sorted(runs.keys(), reverse=True):
+        sorted_runs.append({
+            'run': run_key,
+            'picks': runs[run_key],
+        })
+
+    return JsonResponse({'runs': sorted_runs})
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_picks_update(request):
+    """Update a pick's data field (thumbs, kept, archived)."""
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    entry_id = body.get('entry_id')
+    field = body.get('field')
+    value = body.get('value')
+
+    if not entry_id or field not in ('thumbs', 'kept', 'archived', 'readme'):
+        return JsonResponse({'error': 'entry_id and valid field required'}, status=400)
+
+    entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
+    if not entry:
+        return JsonResponse({'error': 'Entry not found'}, status=404)
+
+    data = entry.data if isinstance(entry.data, dict) else {}
+    data[field] = value
+    entry.data = data
+
+    if field == 'archived' and value:
+        entry.status = 'archive'
+    if field == 'kept' and value:
+        entry.status = None  # kept items should not be archived
+    if field == 'readme':
+        if value:
+            Tag.objects.get_or_create(entry_id=entry_id, tag_name='readme')
+        else:
+            Tag.objects.filter(entry_id=entry_id, tag_name='readme').delete()
+
+    entry.timestamp_modified = time.time()
+    entry.save()
+    return JsonResponse({'ok': True})
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_picks_archive_run(request):
+    """Archive all non-kept picks in a given run."""
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    run_id = body.get('run_id')
+    if not run_id:
+        return JsonResponse({'error': 'run_id required'}, status=400)
+
+    entries = Entry.objects.filter(
+        kind='bookmark',
+        context__name='picks',
+        deleted_at__isnull=True,
+        data__run=run_id,
+    )
+
+    now = time.time()
+    count = 0
+    for entry in entries:
+        data = entry.data if isinstance(entry.data, dict) else {}
+        if data.get('kept'):
+            continue
+        data['archived'] = True
+        entry.data = data
+        entry.status = 'archive'
+        entry.timestamp_modified = now
+        entry.save()
+        count += 1
+
+    return JsonResponse({'ok': True, 'archived': count})
+
+
+@login_required
+def readme_page(request):
+    """Render the ReadMe reading list page."""
+    return render(request, 'tjai_app/readme.html')
+
+
+@login_required
+def api_readme_data(request):
+    """Return all entries tagged :readme, reverse chronological."""
+    readme_tag_ids = Tag.objects.filter(tag_name='readme').values_list('entry_id', flat=True)
+    entries = Entry.objects.filter(
+        id__in=readme_tag_ids,
+        deleted_at__isnull=True,
+    ).order_by('-timestamp_modified')
+
+    entry_ids = [e.id for e in entries]
+    tags_by_entry = {}
+    for t in Tag.objects.filter(entry_id__in=entry_ids):
+        tags_by_entry.setdefault(t.entry_id, []).append(t.tag_name)
+
+    items = []
+    for e in entries:
+        data = e.data if isinstance(e.data, dict) else {}
+        content = e.content or ''
+        title = content
+        url = ''
+        if content.startswith('[') and '](' in content:
+            title = content[1:content.index('](')]
+            url = content[content.index('](') + 2:].rstrip(')')
+        other_tags = [t for t in tags_by_entry.get(e.id, []) if t != 'readme']
+        items.append({
+            'id': e.id,
+            'title': title,
+            'url': url,
+            'source': data.get('source', ''),
+            'precis': data.get('precis', ''),
+            'context': e.context_id,
+            'kind': e.kind,
+            'modified': e.timestamp_modified,
+            'tags': other_tags,
+        })
+
+    return JsonResponse({'items': items})
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_readme_dismiss(request):
+    """Remove :readme tag from an entry (marks it as read)."""
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    entry_id = body.get('entry_id')
+    if not entry_id:
+        return JsonResponse({'error': 'entry_id required'}, status=400)
+
+    deleted = Tag.objects.filter(entry_id=entry_id, tag_name='readme').delete()
+    if deleted[0] == 0:
+        return JsonResponse({'error': 'Tag not found'}, status=404)
+
+    return JsonResponse({'ok': True})
 
 
 @login_required

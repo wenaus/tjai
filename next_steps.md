@@ -7,7 +7,7 @@ Transform tjai from a reactive knowledge base into a proactive thinking system t
 ### ToDo
 
 - AI-informed prioritized RSS reader. Inoreader has my RSS collection. Import it, and curate it overnight. priority unreads. Right now I have almost 4k unread items, accrued over less than a week. I need AI to pick out the important ones, present a priority RSS reader.
-- daily synposis is in. Add daily news from tech and culture. part of it is the rss, but part is seeing what the rss doesn't. And covering things I don't look at because they don't have progressive read, hiding seen items. in particular reddit. reddit highlights in my subscribed areas and interest areas.
+- daily synposis is in. Add daily news from tech and culture. reddit highlights in my subscribed areas and interest areas. (AI Picks system now handles the core tech/science/culture curation — extend synopsis to incorporate picks highlights)
 - research queue. The Star Trek "Computer, perform an analysis" — and the computer actually performs the analysis. Real analysis, not the skimming that AIs reflexively do.
 - dialog management. It is exploding tjai content. Absolutely must keep all of it. But how to manage. Also, synthesising, inferring from it, developing new plans from it.
 - telegram triage. After a road trip day, capture what went into telegram. todos, ideas, research items, etc.

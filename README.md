@@ -240,10 +240,12 @@ python manage.py createsuperuser
 
 ### Endpoints
 
-- `/tjai/` - Dashboard with entry list, filtering by kind/context/tags
+- `/tjai/` - Dashboard with entry list, filtering by kind/context/tags/status
 - `/tjai/login/` - Authentication
 - `/tjai/entry/` - Entry detail view with human-readable data display
 - `/tjai/daily/` - Daily synopsis (Today in History)
+- `/tjai/picks/` - AI-curated news picks triage page
+- `/tjai/readme/` - Reading list (items tagged :readme)
 - `/tjai/system/` - System health monitoring dashboard
 - `/tjai/agent-log/` - Action agent execution log
 - `/tjai/api/health` - Health check
@@ -488,6 +490,62 @@ tj                                  # Shows bot status in CLI
 ```
 
 Entries created via Telegram are tagged with `fromtg` and `fromai`.
+
+### AI Picks (Curated News)
+
+An AI-driven news curation system that researches tech/science/culture sources overnight and presents a triage page for quick review.
+
+**How it works:**
+
+1. An AI agent researches configured sources (The Register, Ars Technica, HN, Nature, CERN, ArXiv, NVIDIA, AWS, GitHub, Reddit, etc.)
+2. Creates ~30 bookmark entries per run in the `picks` context, each with precis and rationale
+3. The Picks page (`/tjai/picks/`) presents them grouped by run for triage
+
+**Sources:** Defined in a tjai entry (`picks-sources`, editable via the Sources link on the Picks page). The agent reads this entry before each run to know where to research.
+
+**Picks page (`/tjai/picks/`):**
+
+- Picks grouped by run, reverse chronological
+- Each pick: title (link to article, opens new tab), source, precis, rationale
+- **Click title** — opens article, marks as viewed/archived (goes grey)
+- **Thumbs up/down** — training signal stored in `data.thumbs` for calibrating future runs
+- **Keep** — marks as lasting value (green accent), protected from Archive All
+- **ReadMe** — adds `:readme` tag, item appears on the ReadMe page
+- **Archive All** (per run) — archives all non-kept items in that run
+- Stats bar shows total/to-review/kept/archived counts
+
+**ReadMe page (`/tjai/readme/`):**
+
+Reading list of items tagged `:readme`. Shows title, mod date, URL, tags, and precis. Click to read opens the article and removes the tag (item disappears). Remove button for manual removal without reading.
+
+**Archive view:**
+
+Menu item links to Dashboard filtered by `status=archive`, providing full Dashboard filter power (context, kind, tag, search) over archived items.
+
+**Data model (pick entry):**
+
+```python
+Entry(
+    kind='bookmark', context='picks',
+    content='[Article Title](https://example.com/article)',
+    data={
+        'run': '2026-02-23T02:00:00',
+        'precis': 'Summary...',
+        'rationale': 'Why this is relevant...',
+        'source': 'theregister.com',
+        'thumbs': None,     # null | 'up' | 'down'
+        'kept': False,
+        'archived': False,
+        'readme': False,
+    }
+)
+```
+
+**Files:**
+
+- `tjai_app/views.py` — `picks`, `api_picks_data`, `api_picks_update`, `api_picks_archive_run`, `readme_page`, `api_readme_data`, `api_readme_dismiss`
+- `tjai_app/templates/tjai_app/picks.html` — Picks triage page
+- `tjai_app/templates/tjai_app/readme.html` — ReadMe reading list page
 
 ### Action Agent
 

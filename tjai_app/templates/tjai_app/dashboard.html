@@ -200,7 +200,7 @@
     </style>
 </head>
 <body>
-    {% with current_page="dashboard" %}{% include "tjai_app/_menu.html" %}{% endwith %}
+    {% if is_archive %}{% with current_page="archive" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% else %}{% with current_page="dashboard" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% endif %}
     <div class="container">
         <div class="panel panel-left" id="calendar-panel">
             <div id="calendar-section">
@@ -526,6 +526,7 @@
         let activeTags = new Set();
         let activeKind = null;
         let activeContext = null;
+        let activeStatus = null;
         let excludedContexts = new Set();
         let isFilterActive = false;
 
@@ -535,6 +536,7 @@
             if (activeKind) params.set('kind', activeKind);
             if (activeContext) params.set('context', activeContext);
             if (activeMachine) params.set('machine', activeMachine);
+            if (activeStatus) params.set('status', activeStatus);
             if (excludedContexts.size > 0) params.set('exclude', [...excludedContexts].sort().join(','));
             const qs = params.toString();
             const url = qs ? `${location.pathname}?${qs}` : location.pathname;
@@ -548,9 +550,10 @@
             activeKind = params.get('kind') || null;
             activeContext = params.get('context') || null;
             activeMachine = params.get('machine') || null;
+            activeStatus = params.get('status') || null;
             const excl = params.get('exclude');
             if (excl) excl.split(',').forEach(c => excludedContexts.add(c));
-            isFilterActive = !!(activeTags.size > 0 || activeKind || activeContext || activeMachine || excludedContexts.size > 0);
+            isFilterActive = !!(activeTags.size > 0 || activeKind || activeContext || activeMachine || activeStatus || excludedContexts.size > 0);
         }
 
         function entriesLabel() {
@@ -565,6 +568,7 @@
             if (activeKind) params.push(`kind=${encodeURIComponent(activeKind)}`);
             if (activeContext) params.push(`context=${encodeURIComponent(activeContext)}`);
             if (activeMachine) params.push(`machine=${encodeURIComponent(activeMachine)}`);
+            if (activeStatus) params.push(`status=${encodeURIComponent(activeStatus)}`);
             if (excludedContexts.size > 0) params.push(`exclude_context=${encodeURIComponent([...excludedContexts].join(','))}`);
             return params;
         }
@@ -879,6 +883,7 @@
             activeTags.clear();
             activeKind = null;
             activeContext = null;
+            activeStatus = null;
             excludedContexts.clear();
             isFilterActive = false;
             document.querySelectorAll('.machine-link.active, .tag-link.active, .kind-link.active, .context-link.active').forEach(el => el.classList.remove('active'));
