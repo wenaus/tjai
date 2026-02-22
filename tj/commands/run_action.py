@@ -61,11 +61,15 @@ def handle_run_action(args):
     print(f"Executing action {entry_id}...")
     result = subprocess.run(
         [sys.executable, str(agent_script), '--run', str(entry_id)],
-        capture_output=False,
+        capture_output=True, text=True,
     )
     if result.returncode != 0:
         print(f"Action failed (exit code {result.returncode})",
               file=sys.stderr)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr, end='')
+    else:
+        print("Done. See /tjai/agent-log/ for details.")
 
 
 def handle_wake_agent(args):

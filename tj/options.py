@@ -21,21 +21,15 @@ _raw_argv = sys.argv.copy()
 _processed_argv: list[str] = [_raw_argv[0]] if _raw_argv else []
 
 # Tokenize compound argument from bash function wrapper
-if len(_raw_argv) >= 2:
-    last_arg = _raw_argv[-1]
-    if last_arg == '':
-        # Empty string from "$*" with no args - skip it
-        pass
-    elif ' ' in last_arg:
-        # Compound command string from bash wrapper - tokenize it
-        # Preserve any flags that came before it
-        for arg in _raw_argv[1:-1]:
-            _processed_argv.append(arg)
+if len(_raw_argv) == 2 and ' ' in _raw_argv[1]:
+    # Bash wrapper passes "$*" as a single string - tokenize it
+    last_arg = _raw_argv[1]
+    if last_arg:
         tokens = shlex.split(last_arg)
         _processed_argv.extend(tokens)
-    else:
-        # Normal args
-        _processed_argv.extend(_raw_argv[1:])
+elif len(_raw_argv) >= 2:
+    # Direct invocation - args are already properly separated
+    _processed_argv.extend(_raw_argv[1:])
 
 # --- Option definitions and parsing ---
 _START_TIME = time.time()
