@@ -463,6 +463,11 @@ def dashboard_calendar(request):
 
             # Pre-format all date/time strings server-side
             date_key = event_dt.strftime('%Y%m%d')
+
+            # Only show today's daily synopsis in calendar
+            entry_id = data.get('entry_id', '')
+            if entry_id.startswith('daily-') and date_key != today_date_str:
+                continue
             date_display = event_dt.strftime('%a %b %-d')
             time_display = event_dt.strftime('%H:%M') if (event_dt.hour or event_dt.minute) else None
             week_num = event_dt.isocalendar()[1]
@@ -822,14 +827,14 @@ def dashboard_named(request):
 
 
 @login_required
-def daily_briefing(request):
-    """Render the daily briefing page."""
-    return render(request, 'tjai_app/daily_briefing.html')
+def daily_synopsis(request):
+    """Render the daily synopsis page."""
+    return render(request, 'tjai_app/daily_synopsis.html')
 
 
 @login_required
-def daily_briefing_data(request):
-    """Return list of daily briefing dates as JSON."""
+def daily_synopsis_data(request):
+    """Return list of daily synopsis dates as JSON."""
     import zoneinfo
 
     daily_tag_ids = Tag.objects.filter(tag_name='daily').values_list('entry_id', flat=True)
@@ -869,8 +874,8 @@ def daily_briefing_data(request):
 
 
 @login_required
-def daily_briefing_content(request):
-    """Return rendered markdown content for a specific daily briefing."""
+def daily_synopsis_content(request):
+    """Return rendered markdown content for a specific daily synopsis."""
     import markdown
     import re
 
@@ -883,7 +888,7 @@ def daily_briefing_content(request):
         deleted_at__isnull=True,
     ).first()
     if not entry:
-        return JsonResponse({'error': 'Briefing not found'}, status=404)
+        return JsonResponse({'error': 'Synopsis not found'}, status=404)
 
     content_html = markdown.markdown(
         entry.content,

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>tjai Daily Briefing</title>
+    <title>tjai Daily Synopsis</title>
     <style>
         * {
             box-sizing: border-box;
@@ -83,68 +83,68 @@
         .date-item.today.selected {
             color: #9ccc65;
         }
-        .briefing-content {
+        .synopsis-content {
             line-height: 1.6;
         }
-        .briefing-content h1 {
+        .synopsis-content h1 {
             color: #d8a070;
             font-size: 18px;
             margin-bottom: 16px;
         }
-        .briefing-content h2 {
+        .synopsis-content h2 {
             color: #d8a070;
             font-size: 15px;
             margin-top: 20px;
             margin-bottom: 8px;
         }
-        .briefing-content h3 {
+        .synopsis-content h3 {
             color: #ce93d8;
             font-size: 14px;
             margin-top: 16px;
             margin-bottom: 6px;
         }
-        .briefing-content p {
+        .synopsis-content p {
             margin-bottom: 8px;
         }
-        .briefing-content ul, .briefing-content ol {
+        .synopsis-content ul, .synopsis-content ol {
             margin-left: 20px;
             margin-bottom: 8px;
         }
-        .briefing-content li {
+        .synopsis-content li {
             margin-bottom: 4px;
         }
-        .briefing-content a {
+        .synopsis-content a {
             color: #64b5f6;
             text-decoration: none;
         }
-        .briefing-content a:hover {
+        .synopsis-content a:hover {
             text-decoration: underline;
         }
-        .briefing-content strong {
+        .synopsis-content strong {
             color: #e8c87a;
         }
-        .briefing-content em {
+        .synopsis-content em {
             color: #ce93d8;
         }
-        .briefing-content code {
+        .synopsis-content code {
             background: #2a2a2a;
             padding: 1px 4px;
             border-radius: 3px;
         }
-        .briefing-content hr {
+        .synopsis-content hr {
             border: none;
             border-top: 1px solid #333;
             margin: 16px 0;
         }
-        .briefing-content table {
+        .synopsis-content table {
             border-collapse: collapse;
             margin-bottom: 12px;
         }
-        .briefing-content th, .briefing-content td {
+        .synopsis-content th, .synopsis-content td {
             border: 1px solid #444;
             padding: 4px 8px;
         }
-        .briefing-content th {
+        .synopsis-content th {
             background: #2a2a2a;
             color: #d8a070;
         }
@@ -190,15 +190,15 @@
     <div id="top-menu">
         <span class="menu-title">tjai</span>
         <a href="{% url 'dashboard' %}">Dashboard</a>
-        <a href="{% url 'daily_briefing' %}" class="active">Briefing</a>
+        <a href="{% url 'daily_synopsis' %}" class="active">Synopsis</a>
         <a href="{% url 'agent_log' %}">Agent Log</a>
     </div>
     <div class="container">
         <div class="panel-left" id="date-list">
             <div class="loading">Loading dates...</div>
         </div>
-        <div class="panel-right" id="briefing-panel">
-            <div class="loading">Select a date to view the briefing.</div>
+        <div class="panel-right" id="synopsis-panel">
+            <div class="loading">Select a date to view the synopsis.</div>
         </div>
     </div>
 
@@ -209,7 +209,7 @@
 
         async function fetchDates() {
             try {
-                const resp = await fetch('/tjai/api/briefing/dates');
+                const resp = await fetch('/tjai/api/synopsis/dates');
                 const data = await resp.json();
                 if (data.error) {
                     document.getElementById('date-list').innerHTML = `<div class="error">${data.error}</div>`;
@@ -219,7 +219,10 @@
                 todayKey = data.today_key || '';
                 renderDateList();
                 if (allDates.length > 0) {
-                    selectDate(allDates[0].entry_id);
+                    const params = new URLSearchParams(window.location.search);
+                    const target = params.get('date') || allDates[0].entry_id;
+                    const found = allDates.find(d => d.entry_id === target);
+                    selectDate(found ? target : allDates[0].entry_id);
                 }
             } catch (e) {
                 document.getElementById('date-list').innerHTML = '<div class="error">Error loading dates</div>';
@@ -231,10 +234,10 @@
             for (const d of allDates) {
                 const isToday = d.date_key === todayKey;
                 const todayClass = isToday ? ' today' : '';
-                const label = isToday ? `${d.date_display} (today)` : d.date_display;
+                const label = d.date_display;
                 html += `<div class="date-item${todayClass}" data-entry-id="${d.entry_id}" data-date-key="${d.date_key}">${label}</div>`;
             }
-            document.getElementById('date-list').innerHTML = html || '<div class="loading">No briefings found.</div>';
+            document.getElementById('date-list').innerHTML = html || '<div class="loading">No synopses found.</div>';
 
             document.querySelectorAll('.date-item').forEach(el => {
                 el.addEventListener('click', function() {
@@ -248,19 +251,19 @@
             document.querySelectorAll('.date-item').forEach(el => {
                 el.classList.toggle('selected', el.dataset.entryId === entryId);
             });
-            document.getElementById('briefing-panel').innerHTML = '<div class="loading">Loading...</div>';
+            document.getElementById('synopsis-panel').innerHTML = '<div class="loading">Loading...</div>';
             try {
-                const resp = await fetch(`/tjai/api/briefing/content?entry_id=${encodeURIComponent(entryId)}`);
+                const resp = await fetch(`/tjai/api/synopsis/content?entry_id=${encodeURIComponent(entryId)}`);
                 const data = await resp.json();
                 if (data.error) {
-                    document.getElementById('briefing-panel').innerHTML = `<div class="error">${data.error}</div>`;
+                    document.getElementById('synopsis-panel').innerHTML = `<div class="error">${data.error}</div>`;
                     return;
                 }
                 const entryLink = `<a class="entry-link" href="/tjai/entry/?entry_id=${encodeURIComponent(entryId)}">[edit]</a>`;
-                document.getElementById('briefing-panel').innerHTML =
-                    `<div class="briefing-content">${data.content_html}</div>${entryLink}`;
+                document.getElementById('synopsis-panel').innerHTML =
+                    `<div class="synopsis-content">${data.content_html}</div>${entryLink}`;
             } catch (e) {
-                document.getElementById('briefing-panel').innerHTML = '<div class="error">Error loading briefing</div>';
+                document.getElementById('synopsis-panel').innerHTML = '<div class="error">Error loading synopsis</div>';
             }
         }
 
