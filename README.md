@@ -486,6 +486,72 @@ tj                                  # Shows bot status in CLI
 
 Entries created via Telegram are tagged with `fromtg` and `fromai`.
 
+### Action Agent
+
+An always-on daemon that executes automated tasks defined as `kind=action` entries. Each action entry carries its full configuration in the `data` JSON field: trigger type, interval, mechanical script, journal entry template, and AI prompt. The daemon checks for due actions, executes them, and sleeps until the next one is due.
+
+**Architecture:**
+
+The action agent separates mechanical work (scripts) from intelligent work (AI). Each action's pipeline runs in sequence: mechanical script -> journal entry creation -> AI dispatch via `tj agent`. The shared execution logic lives in `tjai_app/action_runner.py`, used by the daemon, CLI, and MCP.
+
+```
+supervisord
+  └── action-agent (always-on daemon)
+        ├── main loop: check due → execute → sleep
+        ├── SIGHUP: wake immediately, check all actions
+        ├── SIGTERM: graceful shutdown
+        ├── heartbeat: SysConfig every cycle
+        └── PID: stored in SysConfig for tj wake
+```
+
+**Action entry data schema:**
+
+```json
+{
+  "trigger": "overnight",
+  "interval_hours": 24,
+  "last_run": 1771713613.75,
+  "mechanical_script": "daily_history.py",
+  "ai_prompt": "{guidance}\n\nRead .../MM-DD-complete.md. Curate...",
+  "journal_entry": {
+    "content": "Today in History: {date_str}",
+    "name": ":daily",
+    "tags": "history"
+  }
+}
+```
+
+**CLI commands:**
+
+```bash
+tj l actions          # List all action entries (numbered)
+tj run 1              # Execute action #1 (from last listing)
+tj run daily_history  # Execute by name or content match
+tj wake               # Send SIGHUP to daemon (check all now)
+```
+
+**MCP tool:** `run_action(entry_id)` — executes a specific action immediately.
+
+**Dashboard:** `tj` status view shows action agent status (running/not running, PID, heartbeat age).
+
+**Management:**
+
+```bash
+./deploy/restart_action_agent.sh   # Start/restart via supervisord
+tj wake                             # Wake daemon to check due actions
+tj l actions                        # See what actions exist
+```
+
+**Files:**
+
+- `scripts/action_agent.py` — The daemon (signal handlers, sleep loop, heartbeat)
+- `tjai_app/action_runner.py` — Shared execution logic (mechanical, journal, AI, templates)
+- `tj/commands/run_action.py` — CLI handlers for `tj run` and `tj wake`
+- `deploy/supervisord.conf` — Supervisord configuration
+- `deploy/restart_action_agent.sh` — Convenience restart script
+
+**AI dispatch:** Actions that need intelligence use `tj agent` to launch a detached Claude instance. The agent runs on the Claude subscription (not API credits), has MCP tool access, and writes results back to a tjai tracking entry.
+
 ### Gmail Add-on
 
 A Gmail sidebar add-on that detects calendar invite emails (.ics attachments) and creates tjai journal entries with one click.

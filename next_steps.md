@@ -235,92 +235,38 @@ All LLM inference is subscription-covered via `claude -p`. The only costs are:
 
 ---
 
-## Action Agent (Built Feb 21 2026)
+## Action Agent Next Steps
 
-The first concrete implementation of the always-on agent vision. Separates mechanical work (scripts) from intelligent work (AI via `tj agent`). The action agent orchestrates both.
+The action agent daemon, CLI (`tj run`, `tj wake`, `tj l actions`), and MCP (`run_action`) are built and working. See README.md for documentation. Remaining work:
 
-### What Was Built
+### Agent Lifecycle Monitoring
 
-**`scripts/action_agent.py`** — The orchestrator. Uses Django bootstrap for ORM access. Queries active `kind='action'` entries, evaluates triggers (interval_hours vs last_run), executes in sequence: mechanical script → journal entry creation → AI dispatch via `tj agent`.
+`tj agent` launches detached Claude instances that report results by appending `[RESULT]` to a tracking entry. There is no proper lifecycle tracking — no status field, no PID, no way to distinguish a running agent from a crashed one. The current content-parsing hack (`[RESULT]` in content) is fragile and wrong.
 
-**`scripts/daily_history.py`** — Pure mechanical script. Fetches Wikipedia "on this day" API, writes complete markdown to `data/history/MM-DD-complete.md`. No Django, no AI, no filtering.
+**What's needed:**
+- Agent tracking entries should use the `status` field: `active` on launch, `done` on completion
+- Store the Claude process PID in the entry's `data` field so stale agents can be detected (PID gone = crashed)
+- The agent's system prompt must instruct it to set `status='done'` when it calls `edit_entry` with `[RESULT]`
+- Dashboard (`tj` status view) queries by status field, shows running/completed/crashed agents
+- This is a central piece of the system now — every action that dispatches `tj agent` needs reliable status
 
-**`scripts/bootstrap.py`** — Django ORM bootstrap for standalone scripts. Auto-detects and re-execs with venv python via `os.execv`. Known limitation: breaks `python3 -c` usage because `os.execv` replaces the process and sys.argv doesn't contain the -c code. Needs fixing.
+### Production Deployment
 
-**Action entries** — New `kind='action'` added to `VALID_KINDS` in services.py. Action config lives in the entry's `data` JSON field:
-```json
-{
-  "trigger": "overnight",
-  "interval_hours": 24,
-  "last_run": 1771713613.75,
-  "mechanical_script": "daily_history.py",
-  "ai_prompt": "{guidance}\n\nRead .../MM-DD-complete.md. Curate the best events...",
-  "journal_entry": {
-    "content": "Today in History: {date_str}",
-    "name": ":daily",
-    "tags": "history"
-  }
-}
-```
+- Install `supervisor` in the production venv (`pip install supervisor`)
+- Start supervisord with `deploy/restart_action_agent.sh`
+- Verify daemon survives deploy cycles (`update_from_dev.sh`)
+- Verify auto-restart after crash (`kill -9`)
 
-**MCP `data` field support** — Added `data: dict` parameter to both `create_entry` and `edit_entry` in services.py and mcp.py. In create_entry, merges with internally-generated data (event_date). In edit_entry, merge semantics: set key to null to delete. This enables AI agents to read/write JSON metadata on entries via MCP. PostgreSQL `jsonb` supports querying on nested keys: `Entry.objects.filter(data__entry_id='history-selection-guidance')`.
+### Known Bugs
 
-**AI selection guidance** — tjai `ai` entry (id `c11acbef`, `data.entry_id = "history-selection-guidance"`, context=tjai). Defines what to select (science, technology, arts, cultural firsts) and what to avoid (wars, disasters, violence, routine politics). Quality bar: 10 is max not target. Has a feedback log section for progressive refinement. The action_agent reads this entry's content and injects it into the AI prompt via `{guidance}` template variable.
+- **bootstrap.py breaks `python3 -c`** — The `os.execv` re-exec approach doesn't preserve -c inline code. Needs a fix that detects -c invocation and skips re-exec.
+- **MCP `get_memories` crashes with `start_date` parameter** — Any MCP tool using `parse_date_filter` via `_apply_date_filter` returns "EOF when reading a line". Works standalone, crashes in the WSGI/async layer. Likely `get_timezone_object()` failing in Apache WSGI context. The `tz` parameter was added to `parse_date_filter` to allow callers to pass timezone directly, but the MCP/WSGI root cause is not diagnosed.
 
-**First action entry** — id `0513e2ff`, overnight trigger, 24h interval. Mechanical step fetches Wikipedia. Journal step creates/updates `:daily` entry with short title. AI step dispatches `tj agent` to curate filtered selections and write `data/history/MM-DD-filtered.md`.
+### Future Actions
 
-### Key Design Principles
-
-1. **Mechanical everything possible.** Scripts handle data fetching, file writing, journal entry creation. AI handles only what requires intelligence: selection and curation.
-2. **Use `tj agent` for AI dispatch.** Subscription-based (`claude -p`), not API credits. Fire-and-forget. The agent has filesystem + MCP tool access.
-3. **Stable entry references.** Use `data.entry_id` (descriptive string) for cross-referencing entries, not UUIDs (which change on DB recreation). Django's jsonb querying (`data__entry_id=...`) makes this clean.
-4. **Progressive feedback.** Filtered output entries are numbered so the user can reject by number. Rejections that don't fit existing avoid-categories get added to the guidance entry's feedback log.
-5. **Outputs must be in the user's face.** Build things that surface automatically (calendar entries, startup hooks), not things the user must remember to check.
-
-### Architecture: Always-On, Not Cron
-
-**The action agent is NOT a cron job.** It should be a long-lived process (like the Telegram bot), supervised by systemd. It sleeps, wakes to check for due actions, executes them, sleeps again. The bootstrap is the kernel of this always-on agent.
-
-**Current state:** action_agent.py is run-once-and-exit. It needs a main loop: check due actions → execute → compute next trigger time → sleep → repeat. This is the immediate next step.
-
-The heartbeat MCP tool pattern (described above in the Always-On Intellectual Agent section) is the target architecture. The action agent is the first step toward it.
-
-### What's Working
-
-- `daily_history.py` fetches Wikipedia data, writes complete file ✓
-- `action_agent.py --dry-run` finds due actions, shows what would run ✓
-- `action_agent.py` full run: mechanical → journal entry → AI dispatch ✓
-- `tj agent` receives curated prompt with guidance, writes filtered file ✓
-- `:daily` journal entry created mechanically with short title ✓
-- Filtered selections are numbered for feedback reference ✓
-- MCP `data` field read/write works for both create and edit ✓
-- PostgreSQL jsonb querying on nested keys works ✓
-
-### Outstanding Issues
-
-1. **action_agent.py needs a main loop** — Currently run-once-and-exit. Must become a long-lived process with sleep/wake cycle. Supervised by systemd.
-2. **bootstrap.py breaks `python3 -c`** — The `os.execv` re-exec approach doesn't preserve -c inline code. Needs a fix that detects -c invocation and skips re-exec or handles it differently.
-3. **MCP `get_memories` crashes with `start_date` parameter** — Any call to `get_memories`, `get_bookmarks`, or `search_entries` with a `start_date` parameter returns "EOF when reading a line" (instant connection drop, not timeout). The `parse_date_filter` function works correctly in standalone Python. The `_apply_date_filter` services code handles errors correctly. The crash is somewhere in the MCP/WSGI/async layer — possibly `get_timezone_object()` failing in the Apache WSGI context, or a response serialization issue in `django-mcp-server`. Not diagnosed. The `get_calendar` function works with dates because it uses `_parse_date` (different code path) not `parse_date_filter`.
-4. **AI prompt quality refinement** — First run's event selections included wars, disasters, political violence. Guidance entry now has avoid-categories but hasn't been tested with the updated prompt yet. The `{guidance}` template injection into the AI prompt hasn't been deployed/tested end-to-end with the new guidance.
-5. **Startup hook** — When Claude Code starts, it should check if today's `:daily` exists and present Today in History. Not built yet.
-6. **Telegram push** — Filtered history should be pushed to Telegram for morning reading. Not built yet.
-7. **data/history/ files only exist in production** (`/var/www/tjai/data/history/`), not in the dev repo. They're generated artifacts, not source. This is correct but worth noting.
-8. **The selection-guidance.md file** still exists in dev at `tjai/data/history/selection-guidance.md` — it's redundant now that guidance is in the tjai AI entry. Should be deleted.
-
-### Files
-
-- `scripts/action_agent.py` — The orchestrator (NEW)
-- `scripts/daily_history.py` — Wikipedia fetcher (MODIFIED, stripped to pure mechanical)
-- `scripts/bootstrap.py` — Django ORM bootstrap (EXISTING, has os.execv bug)
-- `tjai_app/services.py` — Added 'action' to VALID_KINDS, `data` param to create/edit
-- `tjai_app/mcp.py` — Added `data` param to create/edit, 'action' to docstrings
-- `tj/date_utils.py` — `parse_date_filter` (EXISTING, works standalone, crashes via MCP)
-
-### tjai Entries
-
-- Action entry: `0513e2ff-b608-4454-a65b-fc3a21b6025d` (kind=action, trigger=overnight)
-- Selection guidance: `c11acbef-3cae-44ae-a164-fbccea9af0cc` (kind=ai, data.entry_id="history-selection-guidance")
-- Feb 22 daily: `5d7ae6eb-c6cf-4f02-8e1b-2baf8ae796b9` (kind=journal, name=:daily)
+- **Startup hook** — When Claude Code starts, check if today's `:daily` journal entry exists and present Today in History.
+- **Telegram push** — Push filtered history to Telegram for morning reading.
+- **More action entries** — Research queue processing, reflection runs, telegram triage.
 
 ---
 
