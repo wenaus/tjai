@@ -198,6 +198,7 @@ def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: 
 
     subprocess.Popen(
         cmd,
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
