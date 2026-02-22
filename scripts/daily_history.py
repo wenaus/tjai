@@ -37,7 +37,7 @@ def format_item(item):
     """Format a single event/birth/death as a markdown line."""
     year = item.get('year', '?')
     text = item.get('text', '').strip()
-    return f"- {year}: {text}"
+    return f"- {text} ({year})"
 
 
 def build_complete(data):
