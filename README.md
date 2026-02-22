@@ -457,6 +457,7 @@ A personal AI assistant via Telegram with full tjai access, voice dialogue, and 
 - **Text chat** with Claude Sonnet, with access to all tjai tools (calendar, todos, memories, bookmarks, search)
 - **Calendar reminders** - background job checks every 5 minutes for upcoming calendar events and sends a Telegram push notification 15 minutes before
 - **Persistent conversation history** - survives bot restarts (stored as tjai entries with tag `tgchat`)
+- **Mini App** - full-featured Telegram WebApp with tabs for Calendar, Picks, ReadMe, Synopsis, RSS, Named entries, Contexts, and Search. Sticky section headers, same triage UX as desktop pages
 - Single-user authentication via Telegram user ID
 
 **Setup:**
@@ -553,11 +554,64 @@ Entry(
 )
 ```
 
+**UI behavior:**
+
+- Sticky run-date headers stay visible while scrolling through picks
+- Fully processed runs with no kept items disappear from view
+- Fully processed runs with kept items show only the kept items (archived items removed)
+- Archive All button appears at both top and bottom of each run
+
 **Files:**
 
 - `tjai_app/views.py` — `picks`, `api_picks_data`, `api_picks_update`, `api_picks_archive_run`, `readme_page`, `api_readme_data`, `api_readme_dismiss`
 - `tjai_app/templates/tjai_app/picks.html` — Picks triage page
 - `tjai_app/templates/tjai_app/readme.html` — ReadMe reading list page
+
+### RSS Reader
+
+An in-app RSS feed reader with source-grouped triage UI matching the Picks page style.
+
+**How it works:**
+
+1. RSS sources are defined in a tjai entry (`rss-sources`, editable via Sources link on the RSS page) with one feed URL per line, grouped by category headers (`## tech`, `## science`, etc.)
+2. `fetch_rss.py` fetches all feeds via `feedparser`, deduplicates by URL, and creates `RssItem` records
+3. The RSS page (`/tjai/rss/`) presents unread items grouped by category and source for triage
+
+**RSS page (`/tjai/rss/`):**
+
+- Items grouped by category, then by source feed
+- Sticky category and source headers stay visible while scrolling
+- Each item: title (link to article), published date, precis (description)
+- **Click title** — opens article, marks as read (goes grey)
+- **ReadMe** — adds to the ReadMe reading list
+- **Mark Read** (per source) — marks all items from that source as read, with green toast confirmation
+- **Mark All Read** (global) — marks everything as read
+- **Fetch Now** — triggers immediate feed fetch
+- **+ Add Source** — modal to add new RSS feed URL with category selection
+
+**Data model:**
+
+Uses `RssItem` Django model (not tjai entries):
+
+```python
+RssItem(
+    guid='unique-feed-item-id',
+    url='https://example.com/article',
+    title='Article Title',
+    source='Feed Name',
+    category='tech',
+    published=datetime,
+    precis='Description...',
+    is_read=False,
+)
+```
+
+**Files:**
+
+- `scripts/fetch_rss.py` — Feed fetcher using `feedparser`
+- `tjai_app/models.py` — `RssItem` model
+- `tjai_app/views.py` — `rss_page`, `api_rss_data`, `api_rss_mark_read`, `api_rss_mark_item_read`, `api_rss_mark_all_read`, `api_rss_fetch`, `api_rss_add_source`, `api_rss_readme`
+- `tjai_app/templates/tjai_app/rss.html` — RSS triage page
 
 ### Action Agent
 
@@ -656,7 +710,7 @@ A real-time system health dashboard at `/tjai/system/` showing server status wit
 
 - **System** — uptime, load, memory, swap, disk usage
 - **PostgreSQL** — connections, cache hit ratio, DB size, tuple activity, top tables
-- **tjai** — entry counts by kind, recent activity, agent status (Action Agent, Telegram Bot, Supervisord), action schedules, sync machines
+- **tjai** — entry counts by kind, recent activity, agent status (Action Agent, Telegram Bot, Supervisord), action schedules with real-time agent execution tracking (running/done/failed with duration and log links), sync machines
 - **Backups** — latest backup date, DB dump size, presence of all expected files (env files, data dir, Apache config). Green if complete and recent, yellow/red if stale or missing files
 - **Dropbox** — running status, auto-restart if down
 - **Processes** — Apache, CloudWatch agent, action agent, supervisord process counts
@@ -670,11 +724,12 @@ A real-time system health dashboard at `/tjai/system/` showing server status wit
 
 **How it works:**
 
-`system_health.py` collects all metrics and writes to SysConfig (`system_health_data` as JSON, `system_health_status` as green/yellow/red). The web page fetches via `/tjai/api/system/data` and renders client-side. "Refresh Now" button requests a fresh collection via the action agent.
+`system_health.py` collects all metrics and writes to SysConfig (`system_health_data` as JSON, `system_health_status` as green/yellow/red). The web page auto-refreshes data on load and renders client-side. Agent execution status is tracked in real-time via SysConfig keys (`agent_{id}_status`, `agent_{id}_launched`, `agent_{id}_completed`, `agent_{id}_tracking`), written by `action_runner.py` at launch and `agent_complete.py` on completion.
 
 **Files:**
 
 - `scripts/system_health.py` — Metric collection and health assessment
+- `scripts/agent_complete.py` — Marks agent execution as completed in SysConfig
 - `tjai_app/templates/tjai_app/system_health.html` — Dashboard UI
 - `tjai_app/views.py` — `system_health` page and API endpoints (`system_data`, `system_refresh`)
 

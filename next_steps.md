@@ -6,17 +6,6 @@ Transform tjai from a reactive knowledge base into a proactive thinking system t
 
 ### ToDo
 
-- **RSS Reader** — in-system RSS reader using `feedparser`, matching Picks UI style. Fresh code, not Inoreader port.
-  - Page: `/tjai/rss/` — triage UI cloned from picks (grouped by fetch run, thumbs/keep/readme/archive)
-  - Fetch script: `scripts/fetch_rss.py` — feedparser-based, loads feeds from `rss-sources` entry, dedup by URL, creates bookmark entries in `rss` context
-  - Data model: same as picks (`kind=bookmark`, `context=rss`, `data={run, source, published, precis, thumbs, kept, archived}`)
-  - 5 views: rss_page, api_rss_data, api_rss_update, api_rss_archive_run, api_rss_fetch
-  - 5 URL routes, RSS menu item between Picks and ReadMe
-  - "Fetch Now" button for manual trigger, action entry for overnight cron
-  - `rss-sources` entry: one feed URL per line (import from Inoreader OPML or manual)
-  - Files: rss.html (new), fetch_rss.py (new), views.py, urls.py, _menu.html, requirements.txt (+feedparser)
-  - Show memory usage on system health history graph (alongside CPU)
-- daily synposis is in. Add daily news from tech and culture. reddit highlights in my subscribed areas and interest areas. (AI Picks system now handles the core tech/science/culture curation — extend synopsis to incorporate picks highlights)
 - research queue. The Star Trek "Computer, perform an analysis" — and the computer actually performs the analysis. Real analysis, not the skimming that AIs reflexively do.
 - dialog management. It is exploding tjai content. Absolutely must keep all of it. But how to manage. Also, synthesising, inferring from it, developing new plans from it.
 - telegram triage. After a road trip day, capture what went into telegram. todos, ideas, research items, etc.
