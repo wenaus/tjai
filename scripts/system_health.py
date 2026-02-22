@@ -252,6 +252,27 @@ def _collect_agents(now):
         'status': 'running' if alive and hb_min and hb_min < 10 else 'stale' if alive else 'down',
     })
 
+    # Research agent — status from sysconfig (subprocess of action agent, no PID)
+    ra_status = SysConfig.objects.filter(
+        key='agent_research-agent_status'
+    ).values_list('value', flat=True).first() or 'idle'
+    ra_launched = SysConfig.objects.filter(
+        key='agent_research-agent_launched'
+    ).values_list('value', flat=True).first()
+    ra_completed = SysConfig.objects.filter(
+        key='agent_research-agent_completed'
+    ).values_list('value', flat=True).first()
+    ra_detail = {}
+    if ra_status == 'running' and ra_launched:
+        ra_detail['running_min'] = round((now - float(ra_launched)) / 60, 1)
+    if ra_completed:
+        ra_detail['completed_min'] = round((now - float(ra_completed)) / 60, 1)
+    agents.append({
+        'name': 'Research Agent',
+        'status': ra_status,
+        **ra_detail,
+    })
+
     # Telegram bot and Supervisord — scan /proc instead of /tmp PID files
     # (Apache's PrivateTmp=yes makes /tmp PID files invisible to subprocesses)
     for name, search_term in [('Telegram Bot', 'tg_bot'), ('Supervisord', 'supervisord')]:

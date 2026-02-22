@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>tjai Research</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 13px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        #top-menu {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 4px 16px;
+            background: #222;
+            border-bottom: 1px solid #333;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+        #top-menu .menu-title { color: #d8a070; font-weight: bold; margin-right: 8px; }
+        #top-menu a { color: #8a8a8a; }
+        #top-menu a:hover { color: #e0e0e0; }
+        .research-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 8px 24px;
+            background: #222;
+            border-bottom: 1px solid #333;
+            flex-shrink: 0;
+            font-size: 12px;
+        }
+        .research-header a { color: #64b5f6; text-decoration: none; }
+        .research-header a:hover { text-decoration: underline; }
+        .research-header .stats { color: #8a8a8a; font-size: 11px; margin-left: auto; }
+        .agent-banner {
+            padding: 8px 24px;
+            font-size: 12px;
+            border-bottom: 1px solid #333;
+            flex-shrink: 0;
+        }
+        .agent-idle { background: #222; color: #8a8a8a; }
+        .agent-running { background: rgba(255, 213, 79, 0.1); color: #ffd54f; }
+        .agent-failed { background: rgba(239, 83, 80, 0.1); color: #ef5350; }
+        .content-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 24px 40px;
+        }
+        .research-item {
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            border-left: 3px solid #333;
+            background: #222;
+            border-radius: 0 3px 3px 0;
+        }
+        .research-item.done { border-left-color: #4caf50; }
+        .research-item.pending { border-left-color: #64b5f6; }
+        .item-header {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            margin-bottom: 4px;
+        }
+        .item-eid {
+            color: #d8a070;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .item-eid a { color: #d8a070; text-decoration: none; }
+        .item-eid a:hover { text-decoration: underline; }
+        .item-status {
+            font-size: 11px;
+            padding: 1px 6px;
+            border-radius: 3px;
+        }
+        .status-pending { background: #1a3a5c; color: #64b5f6; }
+        .status-done { background: #1a3c1a; color: #4caf50; }
+        .item-content {
+            color: #bbb;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        .item-meta {
+            color: #666;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+        .btn-submit {
+            background: #333;
+            color: #64b5f6;
+            border: 1px solid #64b5f6;
+            padding: 2px 10px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 11px;
+            white-space: nowrap;
+        }
+        .btn-submit:hover { background: #1a3a5c; }
+        .btn-submit:disabled {
+            color: #555;
+            border-color: #444;
+            cursor: default;
+            background: #2a2a2a;
+        }
+        .loading { color: #8a8a8a; padding: 20px; }
+        .error { color: #ef5350; padding: 20px; }
+        .empty { color: #8a8a8a; padding: 40px; text-align: center; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1a1a1a; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+        * { scrollbar-width: thin; scrollbar-color: #444 #1a1a1a; }
+    </style>
+</head>
+<body>
+    {% with current_page="research" %}{% include "tjai_app/_menu.html" %}{% endwith %}
+    <div class="research-header">
+        <span id="sysprompt-link"></span>
+        <span class="stats" id="stats"></span>
+    </div>
+    <div class="agent-banner agent-idle" id="agent-banner">Agent: loading...</div>
+    <div class="content-area" id="content">
+        <div class="loading">Loading research queue...</div>
+    </div>
+
+    <script>
+        function esc(s) {
+            if (!s) return '';
+            const el = document.createElement('span');
+            el.textContent = s;
+            return el.innerHTML;
+        }
+
+        function timeAgo(ts) {
+            if (!ts) return '';
+            const sec = Math.floor(Date.now() / 1000 - ts);
+            if (sec < 60) return sec + 's ago';
+            if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
+            if (sec < 86400) return Math.floor(sec / 3600) + 'h ' + Math.floor((sec % 3600) / 60) + 'm ago';
+            return Math.floor(sec / 86400) + 'd ago';
+        }
+
+        function fmtDate(ts) {
+            if (!ts) return '';
+            try {
+                const d = new Date(ts * 1000);
+                return d.toLocaleDateString('en-US', {
+                    month: 'short', day: 'numeric', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                });
+            } catch { return ''; }
+        }
+
+        function entryUrl(uuid) {
+            return '/tjai/entry/?uuid=' + uuid;
+        }
+
+        let agentRunning = false;
+
+        async function fetchData() {
+            try {
+                const resp = await fetch('/tjai/api/research/data');
+                const data = await resp.json();
+                if (data.error) {
+                    document.getElementById('content').innerHTML =
+                        `<div class="error">${esc(data.error)}</div>`;
+                    return;
+                }
+                agentRunning = (data.agent || {}).status === 'running';
+                render(data);
+            } catch (e) {
+                document.getElementById('content').innerHTML =
+                    '<div class="error">Error loading research data</div>';
+            }
+        }
+
+        function render(data) {
+            // Sysprompt link
+            const spEl = document.getElementById('sysprompt-link');
+            if (data.sysprompt_id) {
+                spEl.innerHTML = `<a href="${entryUrl(data.sysprompt_id)}">System Prompt</a>`;
+            } else {
+                spEl.innerHTML = '<span style="color:#666">No system prompt</span>';
+            }
+
+            // Agent status banner
+            const agent = data.agent || {};
+            const banner = document.getElementById('agent-banner');
+            if (agent.status === 'running') {
+                banner.className = 'agent-banner agent-running';
+                const dur = agent.launched ? ' for ' + timeAgo(parseFloat(agent.launched)).replace(' ago', '') : '';
+                const logLink = agent.tracking ? ` <a href="${entryUrl(agent.tracking)}" style="color:#ffd54f">log</a>` : '';
+                banner.innerHTML = `Agent: <strong>running</strong>${dur}${logLink}`;
+            } else if (agent.status === 'failed') {
+                banner.className = 'agent-banner agent-failed';
+                banner.innerHTML = 'Agent: <strong>failed</strong>';
+            } else {
+                banner.className = 'agent-banner agent-idle';
+                let text = 'Agent: idle';
+                if (agent.completed) {
+                    text += ' — last completed ' + timeAgo(parseFloat(agent.completed));
+                }
+                banner.innerHTML = text;
+            }
+
+            // Stats
+            const items = data.items || [];
+            const pending = items.filter(i => i.status === 'pending').length;
+            const done = items.filter(i => i.status === 'done').length;
+            document.getElementById('stats').textContent =
+                `${items.length} topics, ${pending} pending, ${done} completed`;
+
+            // Items
+            if (items.length === 0) {
+                document.getElementById('content').innerHTML =
+                    '<div class="empty">No research topics queued.</div>';
+                return;
+            }
+
+            let html = '';
+            for (const item of items) {
+                const cls = item.status === 'done' ? 'done' : 'pending';
+                const statusCls = item.status === 'done' ? 'status-done' : 'status-pending';
+                const label = item.status === 'done' ? 'done' : 'pending';
+
+                html += `<div class="research-item ${cls}">`;
+                html += '<div class="item-header">';
+                html += `<span class="item-eid"><a href="${entryUrl(item.id)}">${esc(item.entry_id || item.id.substring(0, 8))}</a></span>`;
+                html += `<span class="item-status ${statusCls}">${label}</span>`;
+                if (item.priority) {
+                    html += `<span style="color:#666;font-size:11px">P${item.priority}</span>`;
+                }
+                if (item.status !== 'done') {
+                    const disabled = agentRunning ? ' disabled' : '';
+                    html += `<button class="btn-submit"${disabled} onclick="submitItem('${esc(item.entry_id)}', this)">Submit</button>`;
+                }
+                html += '</div>';
+                html += `<div class="item-content">${esc(item.content)}</div>`;
+                html += `<div class="item-meta">Created ${fmtDate(item.created)} · Modified ${fmtDate(item.modified)}</div>`;
+                html += '</div>';
+            }
+
+            document.getElementById('content').innerHTML = html;
+        }
+
+        function getCsrf() {
+            const c = document.cookie.match(/csrftoken=([^;]+)/);
+            return c ? c[1] : '';
+        }
+
+        async function submitItem(entryId, btn) {
+            if (agentRunning) return;
+            btn.disabled = true;
+            btn.textContent = 'Submitting...';
+            try {
+                const resp = await fetch('/tjai/api/research/run', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                    body: JSON.stringify({entry_id: entryId}),
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    btn.textContent = data.error;
+                    setTimeout(() => { btn.textContent = 'Submit'; btn.disabled = false; }, 3000);
+                    return;
+                }
+                btn.textContent = 'Queued';
+                setTimeout(fetchData, 3000);
+            } catch (e) {
+                btn.textContent = 'Error';
+                setTimeout(() => { btn.textContent = 'Submit'; btn.disabled = false; }, 3000);
+            }
+        }
+
+        fetchData();
+        setInterval(fetchData, 10000);
+    </script>
+</body>
+</html>

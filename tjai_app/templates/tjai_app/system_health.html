@@ -301,11 +301,19 @@
                 if (tj.agents && tj.agents.length > 0) {
                     html += '<div style="margin-top:12px;margin-bottom:4px;color:#8a8a8a;font-size:12px">Agents</div>';
                     for (const ag of tj.agents) {
-                        const statusCls = ag.status === 'running' ? 'metric-value' : ag.status === 'stale' ? 'metric-warn' : 'metric-crit';
-                        const dotColor = ag.status === 'running' ? '#9ccc65' : ag.status === 'stale' ? '#ffd54f' : '#ef5350';
-                        let detail = `PID ${ag.pid || '?'}`;
-                        if (ag.heartbeat_min !== undefined && ag.heartbeat_min !== null) {
-                            detail += `, heartbeat ${ag.heartbeat_min}m ago`;
+                        const isIdle = ag.status === 'idle' || ag.status === 'completed';
+                        const statusCls = ag.status === 'running' ? 'metric-value' : ag.status === 'stale' ? 'metric-warn' : isIdle ? 'metric-value' : 'metric-crit';
+                        const dotColor = ag.status === 'running' ? '#9ccc65' : ag.status === 'stale' ? '#ffd54f' : isIdle ? '#8a8a8a' : '#ef5350';
+                        let detail = '';
+                        if (ag.pid) {
+                            detail = `PID ${ag.pid}`;
+                            if (ag.heartbeat_min !== undefined && ag.heartbeat_min !== null) {
+                                detail += `, heartbeat ${ag.heartbeat_min}m ago`;
+                            }
+                        } else if (ag.running_min !== undefined) {
+                            detail = `running ${ag.running_min}m`;
+                        } else if (ag.completed_min !== undefined) {
+                            detail = `last run ${Math.round(ag.completed_min)}m ago`;
                         }
                         html += `<div class="process-row" style="max-width:500px"><span class="process-name"><span style="color:${dotColor}">&#9679;</span> ${ag.name}</span><span class="${statusCls}">${ag.status} <span style="color:#666;font-weight:normal">${detail}</span></span></div>`;
                     }

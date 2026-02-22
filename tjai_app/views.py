@@ -1668,6 +1668,93 @@ def picks(request):
     return render(request, 'tjai_app/picks.html')
 
 
+# --- Research ---
+
+@login_required
+def research_page(request):
+    """Render the research queue page."""
+    return render(request, 'tjai_app/research.html')
+
+
+@login_required
+def api_research_data(request):
+    """Return research queue entries and agent status as JSON."""
+    research_ids = Tag.objects.filter(
+        tag_name='research'
+    ).values_list('entry_id', flat=True)
+    entries = Entry.objects.filter(
+        id__in=research_ids,
+        kind='memory',
+        deleted_at__isnull=True,
+    ).order_by('-timestamp_modified')
+
+    items = []
+    for e in entries:
+        data = e.data if isinstance(e.data, dict) else {}
+        items.append({
+            'id': str(e.id),
+            'entry_id': data.get('entry_id', ''),
+            'content': e.content,
+            'status': e.status or 'pending',
+            'priority': e.priority,
+            'created': e.timestamp_created,
+            'modified': e.timestamp_modified,
+        })
+
+    # System prompt entry UUID
+    sysprompt = Entry.objects.filter(
+        data__entry_id='research-system-prompt',
+        deleted_at__isnull=True,
+    ).values_list('id', flat=True).first()
+
+    # Agent status from sysconfig
+    agent_keys = {}
+    for sc in SysConfig.objects.filter(key__startswith='agent_research-agent'):
+        agent_keys[sc.key] = sc.value
+
+    agent_status = {
+        'status': agent_keys.get('agent_research-agent_status', 'idle'),
+        'launched': agent_keys.get('agent_research-agent_launched'),
+        'completed': agent_keys.get('agent_research-agent_completed'),
+        'tracking': agent_keys.get('agent_research-agent_tracking'),
+    }
+
+    return JsonResponse({
+        'items': items,
+        'sysprompt_id': str(sysprompt) if sysprompt else None,
+        'agent': agent_status,
+    })
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_research_run(request):
+    """Request research run via sysconfig flag — action agent picks it up."""
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    entry_id = body.get('entry_id')
+    if not entry_id:
+        return JsonResponse({'error': 'entry_id required'}, status=400)
+
+    # Check not already running
+    status = SysConfig.objects.filter(
+        key='agent_research-agent_status'
+    ).values_list('value', flat=True).first()
+    if status == 'running':
+        return JsonResponse({'error': 'Research agent already running'}, status=409)
+
+    now = time.time()
+    SysConfig.objects.update_or_create(
+        key='research_run_requested',
+        defaults={'value': entry_id, 'timestamp_modified': now},
+    )
+    return JsonResponse({'ok': True, 'entry_id': entry_id})
+
+
 @login_required
 def api_picks_data(request):
     """Return picks grouped by run as JSON."""

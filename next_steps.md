@@ -46,6 +46,74 @@ The problem it solves: in real-time conversation, the AI gives reflexive, shallo
 
 **Relationship to bookmarks:** Bookmarks are "read later" (passive). Research items are "understand later" (active) — they come back with results. Both acknowledge that the moment of encounter isn't the right moment for depth.
 
+#### Research Queue — Implementation Plan
+
+**Data Model:**
+- Research items are `kind=memory`, tag `:research`, content = the question
+- They are records of research performed, not tasks — the action system drives execution
+- Status flow: `active` (queued) → `done` (completed)
+- `data.result` — markdown research output (updated incrementally as research progresses)
+- `data.sources` — list of source URLs used
+- `data.submitted` — timestamp when queued
+- `data.completed` — timestamp when research finished
+- No new Django models — uses existing Entry + Tag + SysConfig (for agent tracking)
+
+**Agent Tracking & Mutual Exclusion:**
+- SysConfig keys for the research executor, following the existing agent pattern:
+  - `research_agent_status` — `idle` | `running` | `failed`
+  - `research_agent_started` — timestamp when current run began
+  - `research_agent_entry` — UUID of the entry currently being researched
+  - `research_agent_progress` — free-text progress indicator (e.g. "Searching sources...", "Cross-referencing 4 sources...")
+- The executor **checks `research_agent_status` before starting**. If `running`, it exits immediately (no duplicate runs). Stale detection: if `running` but `research_agent_started` is older than a timeout (e.g. 30 min), treat as failed/stale and allow a new run.
+- On completion: sets status to `idle`, clears entry/progress, writes `research_agent_completed` timestamp.
+- On failure: sets status to `failed` with error info.
+
+**Component 1: Dashboard Page** (`/research/`)
+- Menu entry in `_menu.html` (between ReadMe and Archive)
+- URL route: `path("research/", views.research_page, name="research")`
+- API endpoints:
+  - `GET api/research/data` — returns queued + completed items + current agent status
+  - `POST api/research/submit` — create a new research question (creates memory entry with :research tag)
+- Template: `research.html` — follows picks.html pattern (dark theme, monospace, JS fetch)
+- **UI layout:**
+  - Status banner at top: shows if research is in progress, on what question, for how long, with partial results visible (expandable)
+  - Submit form: text input for new research questions
+  - Queued items: pending questions waiting for execution
+  - Completed items: question + result (expandable/collapsible), sources listed, completion time shown
+- Auto-polls for status updates while research is in progress
+
+**Component 2: System Page Integration**
+- Add a "Research" row to the existing Agents/Actions section on the System page
+- Shows: status (idle/running/failed), current question if running, duration, last completed time
+- Uses the same SysConfig keys — no new infrastructure, just reading existing keys in system_health.py
+
+**Component 3: Research Executor** (`scripts/research_executor.py`)
+- Bootstrap pattern (import bootstrap, Django ORM access)
+- **Startup**: check `research_agent_status` in SysConfig. If `running` and not stale → exit. Otherwise claim the lock (set status=`running`, write start timestamp).
+- Find oldest `active` research entry (kind=memory, tag=:research, status=active)
+- If none found: set status=`idle`, exit
+- For the item: launch `tj agent` with a deep-research prompt
+- The prompt instructs: use web search, check multiple sources, cross-reference findings, cite evidence, flag uncertainties, structure the output with markdown
+- **Progress updates**: the executor updates `research_agent_progress` in SysConfig as it goes (visible on both Research and System pages in real time)
+- Stores result in `entry.data['result']`, sources in `entry.data['sources']`
+- Sets entry `status='done'`, `data['completed'] = timestamp`
+- Clears agent lock: status=`idle`
+- Processes ONE item per run (the action system re-triggers for the next)
+
+**Component 4: Triggering**
+- Action entry (kind=action) that runs `research_executor.py` periodically (e.g. every 15-30 min)
+- Mutual exclusion means frequent triggers are safe — if already running, executor exits immediately
+- "Run Now" button on the Research page triggers the executor via API (same mechanism as System page refresh)
+- Both coexist: periodic polling + manual trigger
+
+**Build order:**
+1. Dashboard page (URL, view, template, API) — shows empty state initially, with submit form
+2. Submit API — creates memory entries with :research tag and status=active
+3. Research executor script with SysConfig-based mutual exclusion
+4. System page integration (add research status to system_health.py metrics)
+5. Action entry to run executor periodically
+6. Test end-to-end: submit → executor picks up → progress visible → result appears
+
 ### Agent 6: Dialog Synthesis (the integrator)
 
 Overnight, review the day's captured dialog (Phase 3) in the context of recent days. Not summarizing — synthesizing. A conversation has a trajectory that's often invisible in the moment. A session that starts with a bug fix and ends with an architectural insight has a through-line the participants may not have articulated.

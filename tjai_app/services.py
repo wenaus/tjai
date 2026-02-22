@@ -388,10 +388,13 @@ def create_entry(content, kind="memory", context=None, name=None, tags=None,
         tag_list = [t.strip() for t in tags.split(',') if t.strip()]
         for tag_name in tag_list:
             Tag.objects.create(tag_name=tag_name, entry=entry)
+    else:
+        tag_list = []
 
     if source_tags:
         for tag_name in source_tags:
-            Tag.objects.create(tag_name=tag_name, entry=entry)
+            if tag_name not in tag_list:
+                Tag.objects.create(tag_name=tag_name, entry=entry)
 
     if kind == 'bookmark':
         tag_bookmark(entry)

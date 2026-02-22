@@ -81,11 +81,15 @@ def sleep_until_next(trigger_filter=None):
         if elapsed >= SYSCONFIG_POLL_INTERVAL:
             last_sysconfig_check = time.time()
             from tjai_app.models import SysConfig
-            req = SysConfig.objects.filter(
-                key='system_health_refresh_requested'
-            ).values_list('value', flat=True).first()
-            if req:
-                wake_requested = True
+            for check_key in ('system_health_refresh_requested',
+                              'research_run_requested'):
+                req = SysConfig.objects.filter(
+                    key=check_key
+                ).values_list('value', flat=True).first()
+                if req:
+                    wake_requested = True
+                    break
+            if wake_requested:
                 break
         time.sleep(1)
 
@@ -110,6 +114,37 @@ def _check_health_refresh():
         health_main()
     except Exception as e:
         logger.error("System health refresh failed: %s", e, exc_info=True)
+
+
+def _check_research_request():
+    """Run research_runner if requested via sysconfig flag."""
+    from tjai_app.models import SysConfig
+    req = SysConfig.objects.filter(key='research_run_requested').first()
+    if not req or not req.value:
+        return
+    entry_id = req.value
+    # Clear the flag first to avoid re-runs
+    req.value = ''
+    req.timestamp_modified = time.time()
+    req.save(update_fields=['value', 'timestamp_modified'])
+    logger.info("Running research (requested): %s", entry_id)
+    try:
+        import subprocess
+        scripts_dir = os.path.dirname(os.path.abspath(__file__))
+        cmd = [sys.executable, os.path.join(scripts_dir, 'research_runner.py')]
+        if entry_id != 'all':
+            cmd += ['--run', entry_id]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.stdout:
+            for line in result.stdout.rstrip().split('\n'):
+                logger.info("  %s", line)
+        if result.returncode != 0:
+            logger.error("research_runner exited %d", result.returncode)
+            if result.stderr:
+                for line in result.stderr.rstrip().split('\n'):
+                    logger.error("  %s", line)
+    except Exception as e:
+        logger.error("Research request failed: %s", e, exc_info=True)
 
 
 def main():
@@ -160,8 +195,9 @@ def main():
     logger.info("Action agent started (PID %d)", pid)
     while not shutdown_requested:
         try:
-            # Check for on-demand system health refresh request
+            # Check for on-demand requests
             _check_health_refresh()
+            _check_research_request()
 
             due = get_due_actions(trigger_filter=args.trigger)
             for action in due:
