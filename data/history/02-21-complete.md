@@ -1,313 +1,231 @@
 # On This Day: Sat Feb 21, 2026
 
 ### Events
-- 1973: After accidentally straying into the airspace of the Israeli-occupied Sinai Peninsula, Libyan Arab Airlines Flight 114 was shot down by two Israeli fighter aircraft, killing 108 of the 113 people on board.
-- 1965: American Black nationalist Malcolm X (pictured) was assassinated while giving a speech in New York City's Audubon Ballroom.
-- 1952: A number of student protesters demanding the establishment of Bengali as an official language were killed by police in Dhaka, East Pakistan.
-- 1929: Nanjing decade: In the first battle of the Warlord Rebellion in northeastern Shandong against the Nationalist government of China, a 24,000-strong rebel force led by Zhang Zongchang was defeated at Zhifu by 7,000 NRA troops.
-- 1919: Bavarian socialist Kurt Eisner, who had organized the German Revolution that overthrew the Wittelsbach monarchy and established Bavaria as a republic, was assassinated.
-- 1866: Lucy Hobbs Taylor (pictured) became the first woman to receive a doctorate from a dental college.
-- 1862: American Civil War: The Confederate Army began an attempt to gain control of the Southwest with a major victory in the Battle of Valverde.
-- 1828: The inaugural issue of the Cherokee Phoenix, the first newspaper in a Native American language, was published.
-- 1746: Jacobite rising of 1745: The siege of Inverness ended with British forces surrendering to the Jacobite army.
-- 1437: King James I of Scotland was murdered at Perth in a failed coup by his uncle and former ally Walter Stewart, Earl of Atholl.
-- 2022: In the prelude to the 2022 Russian invasion of Ukraine Russian President Vladimir Putin declares the Luhansk People's Republic and Donetsk People's Republic as independent from Ukraine, and moves troops into the region. The action is condemned by the United Nations.
-- 2013: At least 17 people are killed and 119 injured following several bombings in the Indian city of Hyderabad.
-- 1995: Steve Fossett lands in Leader, Saskatchewan, Canada becoming the first person to make a solo flight across the Pacific Ocean in a balloon.
-- 1994: Aldrich Ames is arrested by the Federal Bureau of Investigation for selling national secrets to the Soviet Union in Arlington County, Virginia.
-- 1975: Watergate scandal: Former United States Attorney General John N. Mitchell and former White House aides H. R. Haldeman and John Ehrlichman are sentenced to prison.
-- 1974: The last Israeli soldiers leave the west bank of the Suez Canal pursuant to a truce with Egypt.
-- 1973: Over the Sinai Desert, Israeli fighter aircraft shoot down Libyan Arab Airlines Flight 114 jet killing 108 people.
-- 1972: United States President Richard Nixon visits China to normalize Sino-American relations.
-- 1972: The Soviet uncrewed spaceship Luna 20 lands on the Moon.
-- 1971: The Convention on Psychotropic Substances is signed at Vienna.
-- 1958: The CND symbol, aka peace symbol, commissioned by the Direct Action Committee in protest against the Atomic Weapons Research Establishment, is designed and completed by Gerald Holtom.
-- 1952: The British government, under Winston Churchill, abolishes identity cards in the UK to "set the people free".
-- 1952: The Bengali language movement protests occur at the University of Dhaka in East Pakistan (now Bangladesh).
-- 1948: NASCAR is incorporated.
-- 1947: In New York City, Edwin Land demonstrates the first "instant camera", the Polaroid Land Camera, to a meeting of the Optical Society of America.
-- 1945: World War II: During the Battle of Iwo Jima, Japanese kamikaze planes sink the escort carrier USS Bismarck Sea and damage the USS Saratoga.
-- 1945: World War II:  the Brazilian Expeditionary Force defeat the German forces in the Battle of Monte Castello on the Italian front.
-- 1937: The League of Nations bans foreign national "volunteers" in the Spanish Civil War.
-- 1929: In the first battle of the Warlord Rebellion in northeastern Shandong against the Nationalist government of China, a 24,000-strong rebel force led by Zhang Zongchang was defeated at Zhifu by 7,000 NRA troops.
-- 1925: The New Yorker publishes its first issue.
-- 1921: Constituent Assembly of the Democratic Republic of Georgia adopts the country's first constitution.
-- 1921: Rezā Shāh takes control of Tehran during a successful coup.
-- 1919: German socialist Kurt Eisner is assassinated. His death results in the establishment of the Bavarian Soviet Republic and parliament and government fleeing Munich, Germany.
-- 1918: The last Carolina parakeet dies in captivity at the Cincinnati Zoo.
-- 1916: World War I: In France, the Battle of Verdun begins.
-- 1913: Ioannina is incorporated into the Greek state after the Balkan Wars.
-- 1896: An Englishman raised in Australia, Bob Fitzsimmons, fights an Irishman, Peter Maher, in an American promoted event which technically takes place in Mexico, winning the 1896 World Heavyweight Championship in boxing.
-- 1885: The newly completed Washington Monument is dedicated.
-- 1878: The first telephone directory is issued in New Haven, Connecticut.
-- 1874: The Oakland Daily Tribune publishes its first edition.
-- 1862: American Civil War: Battle of Valverde is fought near Fort Craig in New Mexico Territory.
-- 1861: Mariehamn, the capital city of Åland, is founded.
-- 1848: Karl Marx and Friedrich Engels publish The Communist Manifesto.
-- 1842: John Greenough is granted the first U.S. patent for the sewing machine.
-- 1828: Initial issue of the Cherokee Phoenix is the first periodical to use the Cherokee syllabary invented by Sequoyah.
-- 1808: Without a previous declaration of war, Russian troops cross the border to Sweden at Abborfors in eastern Finland, thus beginning the Finnish War, in which Sweden will lose the eastern half of the country (i.e. Finland) to Russia.
-- 1804: The first self-propelling steam locomotive makes its outing at the Pen-y-Darren Ironworks in Wales.
-- 1797: A force of 1,400 French soldiers invade Britain at Fishguard in support of the Society of United Irishmen. They were defeated by 500 British reservists.
-- 1613: Mikhail I is unanimously elected Tsar by a national assembly, beginning the Romanov dynasty of Imperial Russia.
-- 1440: The Prussian Confederation is formed.
-- 1245: Thomas, the first known Bishop of Finland, is granted resignation after confessing to torture and forgery.
+- After accidentally straying into the airspace of the Israeli-occupied Sinai Peninsula, Libyan Arab Airlines Flight 114 was shot down by two Israeli fighter aircraft, killing 108 of the 113 people on board. (1973)
+- American Black nationalist Malcolm X (pictured) was assassinated while giving a speech in New York City's Audubon Ballroom. (1965)
+- A number of student protesters demanding the establishment of Bengali as an official language were killed by police in Dhaka, East Pakistan. (1952)
+- Nanjing decade: In the first battle of the Warlord Rebellion in northeastern Shandong against the Nationalist government of China, a 24,000-strong rebel force led by Zhang Zongchang was defeated at Zhifu by 7,000 NRA troops. (1929)
+- Bavarian socialist Kurt Eisner, who had organized the German Revolution that overthrew the Wittelsbach monarchy and established Bavaria as a republic, was assassinated. (1919)
+- Lucy Hobbs Taylor (pictured) became the first woman to receive a doctorate from a dental college. (1866)
+- American Civil War: The Confederate Army began an attempt to gain control of the Southwest with a major victory in the Battle of Valverde. (1862)
+- The inaugural issue of the Cherokee Phoenix, the first newspaper in a Native American language, was published. (1828)
+- Jacobite rising of 1745: The siege of Inverness ended with British forces surrendering to the Jacobite army. (1746)
+- King James I of Scotland was murdered at Perth in a failed coup by his uncle and former ally Walter Stewart, Earl of Atholl. (1437)
+- In the prelude to the 2022 Russian invasion of Ukraine Russian President Vladimir Putin declares the Luhansk People's Republic and Donetsk People's Republic as independent from Ukraine, and moves troops into the region. The action is condemned by the United Nations. (2022)
+- At least 17 people are killed and 119 injured following several bombings in the Indian city of Hyderabad. (2013)
+- Steve Fossett lands in Leader, Saskatchewan, Canada becoming the first person to make a solo flight across the Pacific Ocean in a balloon. (1995)
+- Aldrich Ames is arrested by the Federal Bureau of Investigation for selling national secrets to the Soviet Union in Arlington County, Virginia. (1994)
+- Watergate scandal: Former United States Attorney General John N. Mitchell and former White House aides H. R. Haldeman and John Ehrlichman are sentenced to prison. (1975)
+- The last Israeli soldiers leave the west bank of the Suez Canal pursuant to a truce with Egypt. (1974)
+- Over the Sinai Desert, Israeli fighter aircraft shoot down Libyan Arab Airlines Flight 114 jet killing 108 people. (1973)
+- United States President Richard Nixon visits China to normalize Sino-American relations. (1972)
+- The Soviet uncrewed spaceship Luna 20 lands on the Moon. (1972)
+- The Convention on Psychotropic Substances is signed at Vienna. (1971)
+- The CND symbol, aka peace symbol, commissioned by the Direct Action Committee in protest against the Atomic Weapons Research Establishment, is designed and completed by Gerald Holtom. (1958)
+- The British government, under Winston Churchill, abolishes identity cards in the UK to "set the people free". (1952)
+- The Bengali language movement protests occur at the University of Dhaka in East Pakistan (now Bangladesh). (1952)
+- NASCAR is incorporated. (1948)
+- In New York City, Edwin Land demonstrates the first "instant camera", the Polaroid Land Camera, to a meeting of the Optical Society of America. (1947)
+- World War II: During the Battle of Iwo Jima, Japanese kamikaze planes sink the escort carrier USS Bismarck Sea and damage the USS Saratoga. (1945)
+- World War II:  the Brazilian Expeditionary Force defeat the German forces in the Battle of Monte Castello on the Italian front. (1945)
+- The League of Nations bans foreign national "volunteers" in the Spanish Civil War. (1937)
+- In the first battle of the Warlord Rebellion in northeastern Shandong against the Nationalist government of China, a 24,000-strong rebel force led by Zhang Zongchang was defeated at Zhifu by 7,000 NRA troops. (1929)
+- The New Yorker publishes its first issue. (1925)
+- Constituent Assembly of the Democratic Republic of Georgia adopts the country's first constitution. (1921)
+- Rezā Shāh takes control of Tehran during a successful coup. (1921)
+- German socialist Kurt Eisner is assassinated. His death results in the establishment of the Bavarian Soviet Republic and parliament and government fleeing Munich, Germany. (1919)
+- The last Carolina parakeet dies in captivity at the Cincinnati Zoo. (1918)
+- World War I: In France, the Battle of Verdun begins. (1916)
+- Ioannina is incorporated into the Greek state after the Balkan Wars. (1913)
+- An Englishman raised in Australia, Bob Fitzsimmons, fights an Irishman, Peter Maher, in an American promoted event which technically takes place in Mexico, winning the 1896 World Heavyweight Championship in boxing. (1896)
+- The newly completed Washington Monument is dedicated. (1885)
+- The first telephone directory is issued in New Haven, Connecticut. (1878)
+- The Oakland Daily Tribune publishes its first edition. (1874)
+- American Civil War: Battle of Valverde is fought near Fort Craig in New Mexico Territory. (1862)
+- Mariehamn, the capital city of Åland, is founded. (1861)
+- Karl Marx and Friedrich Engels publish The Communist Manifesto. (1848)
+- John Greenough is granted the first U.S. patent for the sewing machine. (1842)
+- Initial issue of the Cherokee Phoenix is the first periodical to use the Cherokee syllabary invented by Sequoyah. (1828)
+- Without a previous declaration of war, Russian troops cross the border to Sweden at Abborfors in eastern Finland, thus beginning the Finnish War, in which Sweden will lose the eastern half of the country (i.e. Finland) to Russia. (1808)
+- The first self-propelling steam locomotive makes its outing at the Pen-y-Darren Ironworks in Wales. (1804)
+- A force of 1,400 French soldiers invade Britain at Fishguard in support of the Society of United Irishmen. They were defeated by 500 British reservists. (1797)
+- Mikhail I is unanimously elected Tsar by a national assembly, beginning the Romanov dynasty of Imperial Russia. (1613)
+- The Prussian Confederation is formed. (1440)
+- Thomas, the first known Bishop of Finland, is granted resignation after confessing to torture and forgery. (1245)
 
-### Births
-- 2007: Leeseo, South Korean singer
-- 1999: Metawin Opas-iamkajorn, Thai actor and singer
-- 1996: Noah Rubin, American tennis player
-- 1996: Sophie Turner, English actress
-- 1994: Tang Haochen, Chinese tennis player
-- 1994: Hayley Orrantia, American actress and singer-songwriter
-- 1994: Wendy, South Korean singer
-- 1993: Steve Leo Beleck, Cameroonian footballer
-- 1993: Davy Klaassen, Dutch footballer
-- 1992: Phil Jones, English footballer
-- 1991: Joe Alwyn, English actor
-- 1991: Riyad Mahrez, Algerian footballer
-- 1991: Ji So-yun, South Korean footballer
-- 1991: Solar, South Korean singer, songwriter and actress
-- 1991: Devon Travis, American baseball player
-- 1990: Mattias Tedenby, Swedish ice hockey player
-- 1989: Corbin Bleu, American actor, model, dancer, film producer and singer-songwriter
-- 1989: Ian Cole, American ice hockey player
-- 1989: Federico Fernández, Argentine footballer
-- 1989: Jake Muzzin, Canadian ice hockey player
-- 1988: Donté Greene, American basketball player
-- 1987: Eniola Aluko, English footballer
-- 1987: Ashley Greene, American actress
-- 1987: Elliot Page, Canadian actor
-- 1986: Charlotte Church, Welsh singer-songwriter and actress
-- 1985: Georgios Samaras, Greek footballer
-- 1984: Andrew Ellis, New Zealand rugby player
-- 1984: David Odonkor, German footballer
-- 1984: Marco Paoloni, Italian footballer
-- 1984: James Wisniewski, American ice hockey player
-- 1983: Braylon Edwards, American football player
-- 1983: Franklin Gutiérrez, Venezuelan baseball player
-- 1983: Mélanie Laurent, French actress
-- 1982: Andre Barrett, American basketball player
-- 1982: Chantal Claret, American singer-songwriter
-- 1982: Tebogo Jacko Magubane, South African DJ and producer
-- 1981: Tsuyoshi Wada, Japanese baseball player
-- 1980: Brad Fast, Canadian ice hockey player
-- 1980: Tiziano Ferro, Italian singer-songwriter and producer
-- 1980: Brendan Sexton III, American actor
-- 1980: Jigme Khesar Namgyel Wangchuck, 5th King of Bhutan
-- 1979: Tituss Burgess, American actor and singer
-- 1979: Carlito, Puerto Rican wrestler
-- 1979: Pascal Chimbonda, Guadeloupean-French footballer
-- 1979: Jennifer Love Hewitt, American actress and producer
-- 1979: Jordan Peele, American actor, comedian, director, producer, and screenwriter
-- 1978: Erick Barkley, American basketball player
-- 1977: Steve Francis, American basketball player
-- 1977: Rhiannon Giddens, American musician
-- 1976: Michael McIntyre, English comedian, actor and television presenter
-- 1976: Ryan Smyth, Canadian ice hockey player
-- 1975: Scott Miller, Australian swimmer
-- 1974: Iván Campo, Spanish footballer
-- 1973: Heri Joensen, Faroese singer-songwriter and guitarist
-- 1973: Brian Rolston, American ice hockey player and coach
-- 1971: Pierre Fulke, Swedish golfer
-- 1970: Michael Slater, Australian cricketer and sportscaster
-- 1969: James Dean Bradfield, Welsh singer-songwriter and guitarist
-- 1969: Aunjanue Ellis, American actress and producer
-- 1969: Petra Kronberger, Austrian skier
-- 1969: Tony Meola, American soccer player and manager
-- 1969: Cathy Richardson, American singer-songwriter and guitarist
-- 1967: Leroy Burrell, American runner and coach
-- 1967: Sari Essayah, Finnish athlete and politician
-- 1965: Mark Ferguson, Australian journalist
-- 1964: Mark Kelly, American astronaut and politician
-- 1964: Scott Kelly, American astronaut
-- 1963: William Baldwin, American actor
-- 1963: Ranking Roger, English singer-songwriter and musician (died 2019)
-- 1963: Greg Turner, New Zealand golfer
-- 1962: Chuck Palahniuk, American novelist and journalist
-- 1962: David Foster Wallace, American novelist, short story writer, and essayist (died 2008)
-- 1961: Christopher Atkins, American actor and businessman
-- 1961: Elliot Hirshman, American psychologist and academic
-- 1960: Plamen Oresharski, Bulgarian economist and politician, 52nd Prime Minister of Bulgaria
-- 1959: José María Cano, Spanish singer-songwriter and painter
-- 1958: Jake Burns, Northern Irish singer-songwriter and guitarist
-- 1958: Mary Chapin Carpenter, American singer-songwriter and guitarist
-- 1958: Kim Coates, Canadian-American actor
-- 1958: Jack Coleman, American actor
-- 1958: Alan Trammell, American baseball player, coach, and manager
-- 1955: Kelsey Grammer, American actor, singer, and producer
-- 1954: Christina Rees, British politician
-- 1953: Christine Ebersole, American actress and singer
-- 1953: William Petersen, American actor and producer
-- 1952: Jean-Jacques Burnel, English bass player, songwriter, and producer
-- 1952: Vitaly Churkin, Russian diplomat, former Ambassador of Russia to the United Nations (died 2017)
-- 1951: Vince Welnick, American keyboard player (died 2006)
-- 1950: Sahle-Work Zewde, Ethiopian politician and diplomat, 5th President of Ethiopia
-- 1949: Frank Brunner, American illustrator
-- 1949: Jerry Harrison, American singer-songwriter, guitarist, and producer
-- 1949: Ronnie Hellström, Swedish footballer (died 2022)
-- 1947: Johnny Echols, American singer-songwriter and guitarist
-- 1947: Olympia Snowe, American politician
-- 1946: Tyne Daly, American actress and singer
-- 1946: Anthony Daniels, English actor and producer
-- 1946: Alan Rickman, English actor and director (died 2016)
-- 1946: Bob Ryan, American journalist and author
-- 1945: Maurice Bembridge, English golfer (died 2024)
-- 1943: David Geffen, American businessman, co-founded DreamWorks and Geffen Records
-- 1942: Tony Martin, Trinidadian-American historian and academic (died 2013)
-- 1942: Margarethe von Trotta, German actress, director, and screenwriter
-- 1940: Peter Gethin, English racing driver (died 2011)
-- 1940: John Lewis, American activist and politician (died 2020)
-- 1938: Bobby Charles, American singer-songwriter (died 2010)
-- 1937: Ron Clarke, Australian runner and politician, Mayor of the Gold Coast (died 2015)
-- 1937: Harald V of Norway
-- 1937: Gary Lockwood, American actor
-- 1936: Barbara Jordan, American lawyer and politician (died 1996)
-- 1935: Richard A. Lupoff, American author (died 2020)
-- 1935: Mark McManus, Scottish actor (died 1994)
-- 1934: Rue McClanahan, American actress (died 2010)
-- 1933: Bob Rafelson, American film director, producer, and screenwriter (died 2022)
-- 1933: Nina Simone, American singer-songwriter and pianist (died 2003)
-- 1929: Chespirito, Mexican actor, director, producer, and screenwriter (died 2014)
-- 1927: Erma Bombeck, American journalist and author (died 1996)
-- 1925: Sam Peckinpah, American director and screenwriter (died 1984)
-- 1925: Jack Ramsay, American basketball player, coach, and sportscaster (died 2014)
-- 1924: Dorothy Blum, American computer scientist and cryptanalyst (died 1980)
-- 1924: Thelma Estrin, American computer scientist and engineer (died 2014)
-- 1924: Robert Mugabe, Zimbabwean educator and politician, 2nd President of Zimbabwe (died 2019)
-- 1921: Zdeněk Miler, Czech animator (died 2011)
-- 1921: John Rawls, American philosopher and academic (died 2002)
-- 1921: Richard T. Whitcomb, American aeronautical engineer (died 2009)
-- 1917: Lucille Bremer, American actress and dancer (died 1996)
-- 1917: Tadd Dameron, American pianist and composer (died 1965)
-- 1915: Claudia Jones, Trinidad-British journalist and activist (died 1964)
-- 1915: Ann Sheridan, American actress and singer (died 1967)
-- 1915: Anton Vratuša, Prime Minister of Slovenia (died 2017)
-- 1914: Ilmari Juutilainen, Finnish soldier and pilot (died 1999)
-- 1914: Zachary Scott, American actor (died 1965)
-- 1914: Jean Tatlock, American psychiatrist and physician (died 1944)
-- 1912: Arline Judge, American actress and singer (died 1974)
-- 1910: Douglas Bader, English fighter pilot in World War II (died 1982)
-- 1909: Hans Erni, Swiss painter, sculptor, and illustrator (died 2015)
-- 1907: W. H. Auden, English-American poet, playwright, and composer (died 1973)
-- 1903: Anaïs Nin, French-American essayist and memoirist (died 1977)
-- 1903: Raymond Queneau, French poet and author (died 1976)
-- 1902: Arthur Nock, English theologian and academic (died 1963)
-- 1900: Jeanne Aubert, French singer and actress (died 1988)
-- 1896: Nirala, Indian poet and author (died 1961)
-- 1895: Henrik Dam, Danish biochemist and physiologist, Nobel Prize laureate (died 1976)
-- 1894: Shanti Swaroop Bhatnagar, Indian chemist and academic (died 1955)
-- 1893: Celia Lovsky, Austrian-American actress (died 1979)
-- 1893: Andrés Segovia, Spanish guitarist (died 1987)
-- 1892: Harry Stack Sullivan, American psychiatrist and psychoanalyst (died 1949)
-- 1888: Clemence Dane, English author and playwright (died 1965)
-- 1887: Korechika Anami, Japanese general and politician, 54th Japanese Minister of War (died 1945)
-- 1885: Sacha Guitry, Russian-French actor, director, and playwright (died 1957)
-- 1881: Kenneth J. Alford, English soldier, bandmaster, and composer (died 1945)
-- 1878: Mirra Alfassa, French-Indian spiritual leader (died 1973)
-- 1875: Jeanne Calment, French super-centenarian, oldest verified person ever (died 1997)
-- 1867: Otto Hermann Kahn, German banker and philanthropist (died 1934)
-- 1865: John Haden Badley, English author and educator, founded the Bedales School (died 1967)
-- 1860: Goscombe John, Welsh-English sculptor and academic (died 1952)
-- 1844: Charles-Marie Widor, French organist and composer (died 1937)
-- 1836: Léo Delibes, French pianist and composer (died 1891)
-- 1821: Charles Scribner I, American publisher, founded Charles Scribner's Sons (died 1871)
-- 1817: José Zorrilla, Spanish poet and playwright (died 1893)
-- 1801: John Henry Newman, English cardinal (died 1890)
-- 1794: Antonio López de Santa Anna, Mexican general and politician, 8th President of Mexico (died 1876)
-- 1791: Carl Czerny, Austrian pianist and composer (died 1857)
-- 1788: Francis Ronalds, British scientist, inventor and engineer who was knighted for developing the first working electric telegraph (died 1873)
-- 1783: Catharina of Württemberg (died 1835)
-- 1728: Peter III of Russia (died 1762)
-- 1705: Edward Hawke, 1st Baron Hawke, English admiral and politician (died 1781)
-- 1621: Rebecca Nurse, Massachusetts colonist, executed as a witch (died 1692)
-- 1609: Raimondo Montecuccoli, Italian military commander (died 1680)
-- 1556: Sethus Calvisius, German astronomer, composer, and theorist (died 1615)
-- 1541: Philipp V, Count of Hanau-Lichtenberg (died 1599)
-- 1498: Ralph Neville, 4th Earl of Westmorland, English Earl (died 1549)
-- 1484: Joachim I Nestor, Elector of Brandenburg (died 1535)
-- 1462: Joanna la Beltraneja, princess of Castile (died 1530)
-- 1397: Isabella of Portugal (died 1471)
-- 921: Abe no Seimei, Japanese astrologer (died 1005)
-
-### Deaths
-- 2025: Clint Hill, American Secret Service agent (born 1932)
-- 2025: Lynne Marie Stewart, American actress (born 1946)
-- 2024: John Bahnsen,  United States Army brigadier general and decorated veteran of the Vietnam War (born 1934)
-- 2021: Mireya Arboleda, Colombian classical pianist (born 1928)
-- 2021: Kevin Dann, Australian rugby league player (born 1958)
-- 2019: Stanley Donen, American film director (born 1924)
-- 2019: Peter Tork, American musician and actor (born 1942)
-- 2018: Billy Graham, American evangelist (born 1918)
-- 2017: Jeanne Martin Cissé, Guinean teacher and politician (born 1926)
-- 2016: Eric Brown, Scottish-English captain and pilot (born 1919)
-- 2015: Aleksei Gubarev, Russian general, pilot, and astronaut (born 1931)
-- 2015: Sadeq Tabatabaei, Iranian journalist and politician (born 1943)
-- 2015: Clark Terry, American trumpet player, composer, and educator (born 1920)
-- 2014: Héctor Maestri, Cuban-American baseball player (born 1935)
-- 2014: Matthew Robinson, Australian snowboarder (born 1985)
-- 2014: Cornelius Schnauber, German–American historian, playwright, and academic (born 1939)
-- 2013: Hasse Jeppson, Swedish footballer (born 1925)
-- 2012: H. M. Darmstandler, American general (born 1922)
-- 2011: Dwayne McDuffie, American author and screenwriter, co-founded Milestone Media (born 1962)
-- 2011: Bernard Nathanson, American physician and activist (born 1926)
-- 2008: Ben Chapman, American actor (born 1928)
-- 2005: Guillermo Cabrera Infante, Cuban author, screenwriter, and critic (born 1929)
-- 2005: Zdzisław Beksiński, Polish painter, photographer, and sculptor (born 1929)
-- 2004: John Charles, Welsh footballer and manager (born 1931)
-- 2002: John Thaw, English actor and producer (born 1942)
-- 1999: Gertrude B. Elion, American biochemist and pharmacologist, Nobel Prize laureate (born 1918)
-- 1999: Ilmari Juutilainen, Finnish soldier and pilot (born 1914)
-- 1999: Wilmer Mizell, American baseball player and politician (born 1930)
-- 1996: Morton Gould, American pianist, composer, and conductor (born 1913)
-- 1995: Robert Bolt, English dramatist (born 1924)
-- 1994: Johannes Steinhoff, German general and pilot (born 1913)
-- 1993: Inge Lehmann, Danish seismologist and geophysicist (born 1888)
-- 1991: Dorothy Auchterlonie Green, Australian poet, critic, and academic (born 1915)
-- 1991: Nutan, Indian actress (born 1936)
-- 1986: Helen Hooven Santmyer, American novelist (born 1895)
-- 1985: Louis Hayward, South African-American actor (born 1909)
-- 1984: Mikhail Sholokhov, Russian novelist and short story writer, Nobel Prize laureate (born 1905)
-- 1982: Gershom Scholem, German-Israeli historian and philosopher (born 1897)
-- 1980: Alfred Andersch, German-Swiss author (born 1914)
-- 1974: Tim Horton, Canadian ice hockey player and businessman, co-founded Tim Hortons (born 1930)
-- 1972: Zhang Guohua, Chinese general and politician (born 1914)
-- 1972: Bronislava Nijinska, Russian-American dancer and choreographer (born 1891)
-- 1972: Eugène Tisserant, French cardinal (born 1884)
-- 1968: Howard Florey, Australian pathologist and pharmacologist, Nobel Prize laureate (born 1898)
-- 1967: Charles Beaumont, American author and screenwriter (born 1929)
-- 1965: Malcolm X, American minister and activist (born 1925)
-- 1958: Duncan Edwards, English footballer (born 1936)
-- 1947: Fannie Charles Dillon, American composer (born 1881)
-- 1946: José Streel, Belgian journalist (born 1911)
-- 1945: Eric Liddell, Scottish rugby player and runner (born 1902)
-- 1944: Ferenc Szisz, Hungarian-French racing driver (born 1873)
-- 1941: Frederick Banting, Canadian physician and academic, Nobel Prize laureate (born 1891)
-- 1938: George Ellery Hale, American astronomer and academic (born 1868)
-- 1934: Augusto César Sandino, Nicaraguan rebel leader (born 1895)
-- 1926: Heike Kamerlingh Onnes, Dutch physicist and academic, Nobel Prize laureate (born 1853)
-- 1919: Kurt Eisner, German journalist and politician, Minister-President of Bavaria (born 1867)
-- 1918: Incas, last known Carolina parakeet (hatched fl. 1885)
-- 1891: James Timberlake, American lieutenant and police officer (born 1846)
-- 1888: William Weston, English-Australian politician, 3rd Premier of Tasmania (born 1804)
-- 1862: Justinus Kerner, German poet and physician (born 1786)
-- 1846: Emperor Ninkō of Japan (born 1800)
-- 1829: Kittur Chennamma, Indian queen and freedom fighter (born 1778)
-- 1824: Eugène de Beauharnais, French general (born 1781)
-- 1821: Georg Friedrich von Martens, German jurist and diplomat (born 1756)
-- 1730: Pope Benedict XIII (born 1649)
-- 1715: Charles Calvert, 3rd Baron Baltimore, English politician (born 1637)
-- 1677: Baruch Spinoza, Dutch philosopher and scholar (born 1632)
-- 1595: Robert Southwell, English priest and poet (born 1561)
-- 1590: Ambrose Dudley, 3rd Earl of Warwick, English nobleman and general (born 1528)
-- 1572: Cho Sik, Korean poet and scholar (born 1501)
-- 1554: Hieronymus Bock, German botanist and physician (born 1498)
-- 1543: Ahmad ibn Ibrahim al-Ghazi, Somalian general (born 1507)
-- 1513: Pope Julius II (born 1443)
-- 1471: Jan Rokycana, Czech bishop and theologian (born 1396)
-- 1437: James I of Scotland (born 1394; assassinated)
-- 1267: Baldwin of Ibelin, Seneschal of Cyprus
-- 1211: Aymon de Briançon, archbishop of Tarentaise and crusader
-- 1184: Minamoto no Yoshinaka, Japanese shōgun (born 1154)
-- 675: Randoald of Grandval, prior of the Benedictine monastery of Grandval
-- 4: Gaius Caesar, Roman consul and grandson of Augustus (born 20 BC)
+### Birthdays
+- Leeseo, South Korean singer (2007)
+- Metawin Opas-iamkajorn, Thai actor and singer (1999)
+- Noah Rubin, American tennis player (1996)
+- Sophie Turner, English actress (1996)
+- Tang Haochen, Chinese tennis player (1994)
+- Hayley Orrantia, American actress and singer-songwriter (1994)
+- Wendy, South Korean singer (1994)
+- Steve Leo Beleck, Cameroonian footballer (1993)
+- Davy Klaassen, Dutch footballer (1993)
+- Phil Jones, English footballer (1992)
+- Joe Alwyn, English actor (1991)
+- Riyad Mahrez, Algerian footballer (1991)
+- Ji So-yun, South Korean footballer (1991)
+- Solar, South Korean singer, songwriter and actress (1991)
+- Devon Travis, American baseball player (1991)
+- Mattias Tedenby, Swedish ice hockey player (1990)
+- Corbin Bleu, American actor, model, dancer, film producer and singer-songwriter (1989)
+- Ian Cole, American ice hockey player (1989)
+- Federico Fernández, Argentine footballer (1989)
+- Jake Muzzin, Canadian ice hockey player (1989)
+- Donté Greene, American basketball player (1988)
+- Eniola Aluko, English footballer (1987)
+- Ashley Greene, American actress (1987)
+- Elliot Page, Canadian actor (1987)
+- Charlotte Church, Welsh singer-songwriter and actress (1986)
+- Georgios Samaras, Greek footballer (1985)
+- Andrew Ellis, New Zealand rugby player (1984)
+- David Odonkor, German footballer (1984)
+- Marco Paoloni, Italian footballer (1984)
+- James Wisniewski, American ice hockey player (1984)
+- Braylon Edwards, American football player (1983)
+- Franklin Gutiérrez, Venezuelan baseball player (1983)
+- Mélanie Laurent, French actress (1983)
+- Andre Barrett, American basketball player (1982)
+- Chantal Claret, American singer-songwriter (1982)
+- Tebogo Jacko Magubane, South African DJ and producer (1982)
+- Tsuyoshi Wada, Japanese baseball player (1981)
+- Brad Fast, Canadian ice hockey player (1980)
+- Tiziano Ferro, Italian singer-songwriter and producer (1980)
+- Brendan Sexton III, American actor (1980)
+- Jigme Khesar Namgyel Wangchuck, 5th King of Bhutan (1980)
+- Tituss Burgess, American actor and singer (1979)
+- Carlito, Puerto Rican wrestler (1979)
+- Pascal Chimbonda, Guadeloupean-French footballer (1979)
+- Jennifer Love Hewitt, American actress and producer (1979)
+- Jordan Peele, American actor, comedian, director, producer, and screenwriter (1979)
+- Erick Barkley, American basketball player (1978)
+- Steve Francis, American basketball player (1977)
+- Rhiannon Giddens, American musician (1977)
+- Michael McIntyre, English comedian, actor and television presenter (1976)
+- Ryan Smyth, Canadian ice hockey player (1976)
+- Scott Miller, Australian swimmer (1975)
+- Iván Campo, Spanish footballer (1974)
+- Heri Joensen, Faroese singer-songwriter and guitarist (1973)
+- Brian Rolston, American ice hockey player and coach (1973)
+- Pierre Fulke, Swedish golfer (1971)
+- Michael Slater, Australian cricketer and sportscaster (1970)
+- James Dean Bradfield, Welsh singer-songwriter and guitarist (1969)
+- Aunjanue Ellis, American actress and producer (1969)
+- Petra Kronberger, Austrian skier (1969)
+- Tony Meola, American soccer player and manager (1969)
+- Cathy Richardson, American singer-songwriter and guitarist (1969)
+- Leroy Burrell, American runner and coach (1967)
+- Sari Essayah, Finnish athlete and politician (1967)
+- Mark Ferguson, Australian journalist (1965)
+- Mark Kelly, American astronaut and politician (1964)
+- Scott Kelly, American astronaut (1964)
+- William Baldwin, American actor (1963)
+- Ranking Roger, English singer-songwriter and musician (died 2019) (1963)
+- Greg Turner, New Zealand golfer (1963)
+- Chuck Palahniuk, American novelist and journalist (1962)
+- David Foster Wallace, American novelist, short story writer, and essayist (died 2008) (1962)
+- Christopher Atkins, American actor and businessman (1961)
+- Elliot Hirshman, American psychologist and academic (1961)
+- Plamen Oresharski, Bulgarian economist and politician, 52nd Prime Minister of Bulgaria (1960)
+- José María Cano, Spanish singer-songwriter and painter (1959)
+- Jake Burns, Northern Irish singer-songwriter and guitarist (1958)
+- Mary Chapin Carpenter, American singer-songwriter and guitarist (1958)
+- Kim Coates, Canadian-American actor (1958)
+- Jack Coleman, American actor (1958)
+- Alan Trammell, American baseball player, coach, and manager (1958)
+- Kelsey Grammer, American actor, singer, and producer (1955)
+- Christina Rees, British politician (1954)
+- Christine Ebersole, American actress and singer (1953)
+- William Petersen, American actor and producer (1953)
+- Jean-Jacques Burnel, English bass player, songwriter, and producer (1952)
+- Vitaly Churkin, Russian diplomat, former Ambassador of Russia to the United Nations (died 2017) (1952)
+- Vince Welnick, American keyboard player (died 2006) (1951)
+- Sahle-Work Zewde, Ethiopian politician and diplomat, 5th President of Ethiopia (1950)
+- Frank Brunner, American illustrator (1949)
+- Jerry Harrison, American singer-songwriter, guitarist, and producer (1949)
+- Ronnie Hellström, Swedish footballer (died 2022) (1949)
+- Johnny Echols, American singer-songwriter and guitarist (1947)
+- Olympia Snowe, American politician (1947)
+- Tyne Daly, American actress and singer (1946)
+- Anthony Daniels, English actor and producer (1946)
+- Alan Rickman, English actor and director (died 2016) (1946)
+- Bob Ryan, American journalist and author (1946)
+- Maurice Bembridge, English golfer (died 2024) (1945)
+- David Geffen, American businessman, co-founded DreamWorks and Geffen Records (1943)
+- Tony Martin, Trinidadian-American historian and academic (died 2013) (1942)
+- Margarethe von Trotta, German actress, director, and screenwriter (1942)
+- Peter Gethin, English racing driver (died 2011) (1940)
+- John Lewis, American activist and politician (died 2020) (1940)
+- Bobby Charles, American singer-songwriter (died 2010) (1938)
+- Ron Clarke, Australian runner and politician, Mayor of the Gold Coast (died 2015) (1937)
+- Harald V of Norway,  King of Norway (1937)
+- Gary Lockwood, American actor (1937)
+- Barbara Jordan, American lawyer and politician (died 1996) (1936)
+- Richard A. Lupoff, American author (died 2020) (1935)
+- Mark McManus, Scottish actor (died 1994) (1935)
+- Rue McClanahan, American actress (died 2010) (1934)
+- Bob Rafelson, American film director, producer, and screenwriter (died 2022) (1933)
+- Nina Simone, American singer-songwriter and pianist (died 2003) (1933)
+- Chespirito, Mexican actor, director, producer, and screenwriter (died 2014) (1929)
+- Erma Bombeck, American journalist and author (died 1996) (1927)
+- Sam Peckinpah, American director and screenwriter (died 1984) (1925)
+- Jack Ramsay, American basketball player, coach, and sportscaster (died 2014) (1925)
+- Dorothy Blum, American computer scientist and cryptanalyst (died 1980) (1924)
+- Thelma Estrin, American computer scientist and engineer (died 2014) (1924)
+- Robert Mugabe, Zimbabwean educator and politician, 2nd President of Zimbabwe (died 2019) (1924)
+- Zdeněk Miler, Czech animator (died 2011) (1921)
+- John Rawls, American philosopher and academic (died 2002) (1921)
+- Richard T. Whitcomb, American aeronautical engineer (died 2009) (1921)
+- Lucille Bremer, American actress and dancer (died 1996) (1917)
+- Tadd Dameron, American pianist and composer (died 1965) (1917)
+- Claudia Jones, Trinidad-British journalist and activist (died 1964) (1915)
+- Ann Sheridan, American actress and singer (died 1967) (1915)
+- Anton Vratuša, Prime Minister of Slovenia (died 2017) (1915)
+- Ilmari Juutilainen, Finnish soldier and pilot (died 1999) (1914)
+- Zachary Scott, American actor (died 1965) (1914)
+- Jean Tatlock, American psychiatrist and physician (died 1944) (1914)
+- Arline Judge, American actress and singer (died 1974) (1912)
+- Douglas Bader, English fighter pilot in World War II (died 1982) (1910)
+- Hans Erni, Swiss painter, sculptor, and illustrator (died 2015) (1909)
+- W. H. Auden, English-American poet, playwright, and composer (died 1973) (1907)
+- Anaïs Nin, French-American essayist and memoirist (died 1977) (1903)
+- Raymond Queneau, French poet and author (died 1976) (1903)
+- Arthur Nock, English theologian and academic (died 1963) (1902)
+- Jeanne Aubert, French singer and actress (died 1988) (1900)
+- Nirala, Indian poet and author (died 1961) (1896)
+- Henrik Dam, Danish biochemist and physiologist, Nobel Prize laureate (died 1976) (1895)
+- Shanti Swaroop Bhatnagar, Indian chemist and academic (died 1955) (1894)
+- Celia Lovsky, Austrian-American actress (died 1979) (1893)
+- Andrés Segovia, Spanish guitarist (died 1987) (1893)
+- Harry Stack Sullivan, American psychiatrist and psychoanalyst (died 1949) (1892)
+- Clemence Dane, English author and playwright (died 1965) (1888)
+- Korechika Anami, Japanese general and politician, 54th Japanese Minister of War (died 1945) (1887)
+- Sacha Guitry, Russian-French actor, director, and playwright (died 1957) (1885)
+- Kenneth J. Alford, English soldier, bandmaster, and composer (died 1945) (1881)
+- Mirra Alfassa, French-Indian spiritual leader (died 1973) (1878)
+- Jeanne Calment, French super-centenarian, oldest verified person ever (died 1997) (1875)
+- Otto Hermann Kahn, German banker and philanthropist (died 1934) (1867)
+- John Haden Badley, English author and educator, founded the Bedales School (died 1967) (1865)
+- Goscombe John, Welsh-English sculptor and academic (died 1952) (1860)
+- Charles-Marie Widor, French organist and composer (died 1937) (1844)
+- Léo Delibes, French pianist and composer (died 1891) (1836)
+- Charles Scribner I, American publisher, founded Charles Scribner's Sons (died 1871) (1821)
+- José Zorrilla, Spanish poet and playwright (died 1893) (1817)
+- John Henry Newman, English cardinal (died 1890) (1801)
+- Antonio López de Santa Anna, Mexican general and politician, 8th President of Mexico (died 1876) (1794)
+- Carl Czerny, Austrian pianist and composer (died 1857) (1791)
+- Francis Ronalds, British scientist, inventor and engineer who was knighted for developing the first working electric telegraph (died 1873) (1788)
+- Catharina of Württemberg (died 1835) (1783)
+- Peter III of Russia (died 1762) (1728)
+- Edward Hawke, 1st Baron Hawke, English admiral and politician (died 1781) (1705)
+- Rebecca Nurse, Massachusetts colonist, executed as a witch (died 1692) (1621)
+- Raimondo Montecuccoli, Italian military commander (died 1680) (1609)
+- Sethus Calvisius, German astronomer, composer, and theorist (died 1615) (1556)
+- Philipp V, Count of Hanau-Lichtenberg (died 1599) (1541)
+- Ralph Neville, 4th Earl of Westmorland, English Earl (died 1549) (1498)
+- Joachim I Nestor, Elector of Brandenburg (died 1535) (1484)
+- Joanna la Beltraneja, princess of Castile (died 1530) (1462)
+- Isabella of Portugal (died 1471) (1397)
+- Abe no Seimei, Japanese astrologer (died 1005) (921)
