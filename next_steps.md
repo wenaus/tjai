@@ -4,37 +4,19 @@
 
 Transform tjai from a reactive knowledge base into a proactive thinking system that works while you're away, synthesizing your knowledge, finding deep connections, and bringing world awareness — then presenting the results when you return.
 
-### The Vision
+### ToDo
 
-tjai step one was memory and knowledge base — done. Step two is mind expansion: a system that uses your structured knowledge (memories, bookmarks, poems, recipes, quotes, todos, profile) plus real-time world awareness to generate insight autonomously. Not a butler that does tasks (OpenClaw's model), but an intellect extension that thinks 24x7.
+- AI-informed prioritized RSS reader. Inoreader has my RSS collection. Import it, and curate it overnight. priority unreads. Right now I have almost 4k unread items, accrued over less than a week. I need AI to pick out the important ones, present a priority RSS reader.
+- daily synposis is in. Add daily news from tech and culture. part of it is the rss, but part is seeing what the rss doesn't. And covering things I don't look at because they don't have progressive read, hiding seen items. in particular reddit. reddit highlights in my subscribed areas and interest areas.
+- research queue. The Star Trek "Computer, perform an analysis" — and the computer actually performs the analysis. Real analysis, not the skimming that AIs reflexively do.
+- dialog management. It is exploding tjai content. Absolutely must keep all of it. But how to manage. Also, synthesising, inferring from it, developing new plans from it.
+- telegram triage. After a road trip day, capture what went into telegram. todos, ideas, research items, etc.
+- E-R model. designed from real use cases.
+- next steps, project planning. Make todo's actually work. Introduce vision items, with associated todos. tick off the todos as they get done. will really surface the plan much more than a next steps in github. also a good replacement/ancillary to claude's own planning system which is useless because it doesn't persist past restart. and it hides it (even from itself).
 
-When you come back after hours away, tjai should have amazing things to meld into your actual brain.
+## AI ideas on agents
 
-### Architecture
-
-The core insight: **`claude -p` invoked from cron uses your subscription, not API credits.** Claude Code has MCP tools (tjai read/write) and web search built in. This is the entire engine.
-
-```
-cron (every N minutes)
-  → claude -p "reflection prompt" --allowedTools "mcp__tjai__*,WebSearch,WebFetch"
-    → reads tjai entries via MCP (memories, bookmarks, recent activity)
-    → searches the web for developments relevant to your interests
-    → thinks — finds connections, generates insights, forms questions
-    → writes reflections back to tjai via MCP create_entry
-  → simple Python script pushes new reflections to Telegram
-    → each item gets inline keyboard thumbs up/down
-    → feedback stored, used to calibrate future reflections
-```
-
-No API costs. Subscription-covered. All output persists in the distributed REST+MCP-served database — not local JSON files.
-
-### Context from OpenClaw and the Zeitgeist
-
-OpenClaw (Peter Steinberger, 180K GitHub stars, Feb 2026) popularized the **heartbeat pattern**: a daemon that wakes every 30 minutes, reviews a checklist, decides whether to act or stay silent. Combined with cron and messaging integrations, it creates a genuinely proactive agent. ChatGPT Pulse ($200/month) and Google CC do overnight research → morning briefings. Letta/MemGPT leads on memory architecture with git-based versioning.
-
-Key differences from OpenClaw: OpenClaw is a **doing** system (send messages, browse web, run commands) with massive security surface ($560 API runaway, 341 malicious community skills, one-click RCE bugs). tjai's always-on features are a **thinking** system — no filesystem access, no command execution, no acting on your behalf. Closed security surface, open intellectual surface.
-
-tjai's advantage over all of them: **structured, typed, context-organized personal knowledge** — not just chat history. Poems, recipes, bookmarks, todos, profile facts, AI guidance, calendar events. The reflection agent reasons across types and contexts, which conversation-history-based systems cannot do.
+I don't sign on to all of them. Actual ToDos go above.
 
 ### Agent 1: Reflection Agent (the core)
 
@@ -58,39 +40,11 @@ This is where the 20x subscription token budget goes productively — paying for
 
 Requires adding embeddings to tjai entries for semantic similarity search. SQLite or Postgres vector extension, computed on entry creation/modification.
 
-### Agent 3: Morning Briefing (with feedback loop)
-
-Two layers:
-- **Practical**: today's calendar, overdue todos, time-sensitive items
-- **Intellectual**: 2-3 reflections or connections generated overnight, plus world developments relevant to your interests and recent activity
-
-Every item gets Telegram inline keyboard thumbs up/down. Feedback is stored and used to tune future output — the self-learning loop. Not self-learning in the OpenClaw sense (writing its own skills), but calibrating what kinds of thinking are worth your attention.
-
-The briefing is not just internal rumination — it brings up-to-the-hour world awareness to the intellectual enhancement via web search during the reflection runs.
-
-### Agent 4: Question Generator (most ambitious)
-
-Instead of telling you connections, the system asks questions derived from your knowledge base:
-
-> "You've noted three things about distributed computing resilience and two poems about impermanence. Is there a connection you haven't articulated?"
-
-Not "what do you want to do today" but provocations seeded from your own intellectual life.
-
 ### Agent 5: Research Queue (user-initiated depth)
 
 The other agents are system-initiated — the system decides what to think about. The research queue inverts this: the user encounters a topic that deserves real investigation and defers it to a process that can actually do the work.
 
 The problem it solves: in real-time conversation, the AI gives reflexive, shallow, confident-sounding answers. Some questions deserve actual research — multiple sources, cross-referencing, cited evidence, explicit unknowns. The research queue is the mechanism for "Computer, perform an analysis" — and the computer actually performs the analysis.
-
-**Flow:**
-1. User says "add to research queue" (or `tj do :research "topic"`)
-2. Creates a todo tagged `:research`, status active
-3. Heartbeat picks up pending research items
-4. Claude is invoked with a **research-specific system prompt** — think deeply, search thoroughly, use multiple sources, cite evidence, state what can't be determined. This framing is what enforces quality — it's a different mode of operation from conversational chat.
-5. Results written back to the **same entry** (content replaced with findings), status set to `done`
-6. Completed research items appear in the next status report
-
-**Why this works:** The AI has real competence behind a veneer of reflexive laziness. Given explicit direction — "this is a research task" — the output quality is categorically different. The research prompt framing enforces that discipline systematically, rather than hoping the AI happens to try hard enough in the moment.
 
 **Relationship to bookmarks:** Bookmarks are "read later" (passive). Research items are "understand later" (active) — they come back with results. Both acknowledge that the moment of encounter isn't the right moment for depth.
 
@@ -104,8 +58,6 @@ Overnight, review the day's captured dialog (Phase 3) in the context of recent d
 - **New entries**: research items spawned from things mentioned but not explored, todos for follow-up work, relations between today's discussion and previous entries
 - **Vision updates**: when dialog advances or reshapes a vision item, flag it
 - **State of the art research**: proactive web search on the day's technical topics — who's doing what, what tools and patterns are emerging, what's changed recently. Hyperfocused overnight tech news, filtered through the day's actual work rather than generic feeds. AI moves at lightning speed; if we discussed knowledge graphs today, by morning the system has surveyed the current landscape and brought back what's relevant.
-
-**Why this is different from Agent 1 (Reflection):** Reflection reasons about individual entries — a bookmark, a memory, a poem. Dialog synthesis reasons about the *flow of thought* across a conversation or sequence of conversations. It sees the trajectory, not just the points. And it looks outward — using dialog topics as search seeds to bring back current developments from the wider world.
 
 **Builds on:** Phase 3 dialog capture (already done), relations model (for linking synthesis outputs to the conversations that produced them), research queue (for spawning investigation items).
 
@@ -124,66 +76,6 @@ Quick Telegram messages are raw intent — typed fast, no structure, no metadata
 **Why this matters:** The phone is the capture device. You're walking, commuting, half-awake. The barrier to entry must be zero — just type or speak. But zero-friction capture without triage is a junk drawer. This agent turns the junk drawer into a filing system, overnight, without the user ever having to go back and organize.
 
 **Builds on:** =tgbot context entries, @watch named entry, todo system, research queue (Agent 5).
-
-### MCP Heartbeat Tool: The Key Architectural Insight
-
-A persistent `claude -p` daemon is impractical (can't sleep between tool calls, MCP timeouts, context fills up). But the invocation can be made lightweight and dynamic by putting the intelligence in a new MCP tool rather than in the prompt.
-
-**The pattern:**
-
-```
-Every 15 min (cron) or on-demand (script/webhook trigger):
-  → claude -p "Call the tjai heartbeat tool. Follow its instructions."
-    → MCP heartbeat() returns dynamic, context-aware instructions
-    → Claude follows them: reads entries, searches web, reflects, writes back
-    → stdout captured to rolling text file
-    → Session ends
-```
-
-The prompt is static and tiny. All dynamism lives in the **`heartbeat()` MCP endpoint** — a new tjai MCP tool that:
-
-- Tracks state: last run time, what's been reflected on, accumulated feedback
-- Checks what's new since last heartbeat (new entries, bookmarks, dialog)
-- Checks user feedback patterns (thumbs up/down on previous reflections)
-- Assembles a context-aware instruction set for Claude to follow
-- Varies the task: sometimes reflect, sometimes research, sometimes generate questions, sometimes process the research queue
-- Adapts strategy based on what worked (more cross-domain connections, fewer todo nudges)
-
-This is better than a hardcoded prompt because the MCP tool learns and adapts. The `claude -p` invocation is a standardized, stateless wrapper. The heartbeat tool is the brain.
-
-**Triggering:** Cron for periodic runs, but also invocable by external events — a new high-priority entry, a Telegram command ("think about this"), a webhook. Same `claude -p` command, different instructions from the heartbeat tool based on what triggered it and current state.
-
-**Output persistence:** stdout from each run is appended to a rolling text file. A simple script tails for new reflections and pushes to Telegram with inline keyboard feedback. The text file also serves as an audit trail and debugging aid.
-
-**Security surface:** Virtually non-existent beyond the existing attack surface (EC2 machine, Telegram bot token, MCP endpoint authentication). No filesystem access (restrict `--allowedTools` to MCP + web search), no command execution, no messaging on behalf of user, no public-facing agent, no community skill marketplace. The system reads/writes its own authenticated database and pushes to its own Telegram account.
-
-### Implementation Plan
-
-**Phase 1: Heartbeat prototype**
-- New `heartbeat()` MCP endpoint in tjai server
-- Heartbeat state tracking (last run, entries processed, feedback scores)
-- Cron job invoking `claude -p` with static heartbeat prompt and tjai MCP tools
-- Heartbeat tool returns dynamic instructions based on current state
-- Claude writes reflection entries back to tjai (tag=reflection)
-- stdout captured to rolling log file
-- Simple Telegram push of new reflections
-- Inline keyboard thumbs up/down on each item
-- Feedback stored as tjai entries or entry metadata
-
-**Phase 2: Embeddings and semantic search**
-- Add vector embeddings to tjai entries (compute on create/modify)
-- Semantic similarity queries for the deep connection finder
-- Background batch: embed recent entries, find cross-context connections
-
-**Phase 3: Dialog capture** ✓ DONE
-- Implemented: api/dialog endpoint, Claude Code hooks (load.py, record.py, SYSPROMPT.md)
-- All Claude Code conversations recorded into tjai via REST API
-- Reflection daemon can now incorporate dialog history
-
-**Phase 4: Feedback-driven calibration**
-- Analyze thumbs up/down patterns to tune reflection prompts
-- Learn which connection types, topics, and depth levels the user values
-- Adjust seed selection and prompt framing based on accumulated feedback
 
 ### Entry Relations (E-R Model)
 
@@ -216,39 +108,6 @@ Project planning moves from next_steps.md (a file) to tjai (a database) for prio
 
 **Status flow:** Todos move active → done as work completes. A vision moves to done when the user decides the work is complete, not automatically. Done visions with their rich content become the historical record.
 
-### Dependencies on Existing Infrastructure
-
-- tjai MCP server: working (read/write entries)
-- Telegram bot: working (push messages, inline keyboards)
-- Claude Code CLI: working (`claude -p` with MCP tools)
-- 20x Claude subscription: provides token budget
-- cron: available on server
-- REST API: working (for dialog capture hooks)
-- Web search in Claude Code: working
-
-### Cost Model
-
-All LLM inference is subscription-covered via `claude -p`. The only costs are:
-- Server compute for cron jobs and Telegram pushes (negligible)
-- Storage for reflection entries and embeddings (negligible in SQLite/Postgres)
-- The user's existing 20x Claude subscription (already paid, massively underutilized)
-
----
-
-## Action Agent Next Steps
-
-The action agent daemon, CLI (`tj run`, `tj wake`, `tj l actions`), and MCP (`run_action`) are built and working. See README.md for documentation. Remaining work:
-
-### Agent Lifecycle Monitoring
-
-`tj agent` launches detached Claude instances that report results by appending `[RESULT]` to a tracking entry. There is no proper lifecycle tracking — no status field, no PID, no way to distinguish a running agent from a crashed one. The current content-parsing hack (`[RESULT]` in content) is fragile and wrong.
-
-**What's needed:**
-- Agent tracking entries should use the `status` field: `active` on launch, `done` on completion
-- Store the Claude process PID in the entry's `data` field so stale agents can be detected (PID gone = crashed)
-- The agent's system prompt must instruct it to set `status='done'` when it calls `edit_entry` with `[RESULT]`
-- Dashboard (`tj` status view) queries by status field, shows running/completed/crashed agents
-- This is a central piece of the system now — every action that dispatches `tj agent` needs reliable status
 
 ---
 
