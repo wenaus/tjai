@@ -40,10 +40,14 @@ def handle_wake(signum, frame):
     wake_requested = True
 
 
+SYSCONFIG_POLL_INTERVAL = 3  # seconds between sysconfig checks
+
+
 def sleep_until_next(trigger_filter=None):
     """Sleep until the next action is due, capped at MAX_SLEEP.
 
-    Polls wake_requested every second so SIGHUP breaks sleep immediately.
+    Polls wake_requested every second (SIGHUP) and sysconfig every few
+    seconds (web UI refresh requests) to break sleep promptly.
     """
     global wake_requested
 
@@ -67,15 +71,45 @@ def sleep_until_next(trigger_filter=None):
 
     sleep_secs = max(MIN_SLEEP, min(MAX_SLEEP, earliest_due - now))
     deadline = now + sleep_secs
+    last_sysconfig_check = 0
 
     while time.time() < deadline:
         if shutdown_requested or wake_requested:
             break
+        # Poll sysconfig for refresh requests from web UI
+        elapsed = time.time() - last_sysconfig_check
+        if elapsed >= SYSCONFIG_POLL_INTERVAL:
+            last_sysconfig_check = time.time()
+            from tjai_app.models import SysConfig
+            req = SysConfig.objects.filter(
+                key='system_health_refresh_requested'
+            ).values_list('value', flat=True).first()
+            if req:
+                wake_requested = True
+                break
         time.sleep(1)
 
     if wake_requested:
         wake_requested = False
-        logger.info("Woken by SIGHUP")
+        logger.info("Woken by SIGHUP or sysconfig request")
+
+
+def _check_health_refresh():
+    """Run system health collection if requested via sysconfig flag."""
+    from tjai_app.models import SysConfig
+    req = SysConfig.objects.filter(key='system_health_refresh_requested').first()
+    if not req or not req.value:
+        return
+    # Clear the flag first to avoid re-runs
+    req.value = ''
+    req.timestamp_modified = time.time()
+    req.save(update_fields=['value', 'timestamp_modified'])
+    logger.info("Running system health refresh (requested)")
+    try:
+        from system_health import main as health_main
+        health_main()
+    except Exception as e:
+        logger.error("System health refresh failed: %s", e, exc_info=True)
 
 
 def main():
@@ -122,6 +156,9 @@ def main():
     logger.info("Action agent started (PID %d)", pid)
     while not shutdown_requested:
         try:
+            # Check for on-demand system health refresh request
+            _check_health_refresh()
+
             due = get_due_actions(trigger_filter=args.trigger)
             for action in due:
                 if shutdown_requested:

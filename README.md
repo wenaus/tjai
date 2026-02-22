@@ -240,9 +240,12 @@ python manage.py createsuperuser
 
 ### Endpoints
 
-- `/tjai/` - Landing page
+- `/tjai/` - Dashboard with entry list, filtering by kind/context/tags
 - `/tjai/login/` - Authentication
-- `/tjai/dashboard/` - Web dashboard (requires login)
+- `/tjai/entry/` - Entry detail view with human-readable data display
+- `/tjai/daily/` - Daily synopsis (Today in History)
+- `/tjai/system/` - System health monitoring dashboard
+- `/tjai/agent-log/` - Action agent execution log
 - `/tjai/api/health` - Health check
 - `/tjai/api/sync/push` - Push dirty entries from client
 - `/tjai/api/sync/pull` - Pull updates to client (paginated, 500 entries/batch)
@@ -574,6 +577,60 @@ The action agent and related subsystems log to both stdout (for supervisord) and
 - `tjai_app/models.py` — `AppLog` model
 - `tjai_app/views.py` — `agent_log` page and `agent_log_data` API
 - `tjai_app/templates/tjai_app/agent_log.html` — Log viewer UI
+
+### System Health Monitoring
+
+A real-time system health dashboard at `/tjai/system/` showing server status with auto-refresh.
+
+**What it monitors:**
+
+- **System** — uptime, load, memory, swap, disk usage
+- **PostgreSQL** — connections, cache hit ratio, DB size, tuple activity, top tables
+- **tjai** — entry counts by kind, recent activity, agent status (Action Agent, Telegram Bot, Supervisord), action schedules, sync machines
+- **Backups** — latest backup date, DB dump size, presence of all expected files (env files, data dir, Apache config). Green if complete and recent, yellow/red if stale or missing files
+- **Dropbox** — running status, auto-restart if down
+- **Processes** — Apache, CloudWatch agent, action agent, supervisord process counts
+- **CloudWatch** — 24h CPU utilization chart, memory/swap/disk trends
+
+**Health status (banner):**
+
+- **Green** — all metrics within normal ranges
+- **Yellow** — approaching thresholds (load > 2x CPUs, memory < 20%, disk > 80%, backup > 1 day old)
+- **Red** — critical (load > 3x CPUs, memory < 10%, disk > 90%, agents down, no backups)
+
+**How it works:**
+
+`system_health.py` collects all metrics and writes to SysConfig (`system_health_data` as JSON, `system_health_status` as green/yellow/red). The web page fetches via `/tjai/api/system/data` and renders client-side. "Refresh Now" button requests a fresh collection via the action agent.
+
+**Files:**
+
+- `scripts/system_health.py` — Metric collection and health assessment
+- `tjai_app/templates/tjai_app/system_health.html` — Dashboard UI
+- `tjai_app/views.py` — `system_health` page and API endpoints (`system_data`, `system_refresh`)
+
+### Server Backups
+
+Automated daily backup of all tjai server data to Dropbox.
+
+**What gets backed up:**
+
+| Item | Backup filename | Source |
+|------|----------------|--------|
+| PostgreSQL database | `tjai-db.sql.gz` | `pg_dump`, gzip compressed |
+| Production secrets | `env-www.env` | `/var/www/tjai/.env` |
+| Personal API keys | `env-home.env` | `~/.env` |
+| Data files | `data/` | `/var/www/tjai/data/` (history files etc.) |
+| Apache config | `etaverse.conf` | `/etc/apache2/sites-enabled/etaverse.conf` |
+
+**Destination:** `~/Dropbox/tjai-backups/server/YYYY-MM-DD/` — one directory per day, all kept (no rotation).
+
+**Schedule:** Runs overnight as a tjai action entry (`trigger=overnight`, `interval_hours=24`).
+
+**Health monitoring:** The system health page checks backup freshness, file presence, and DB dump size. Alerts if backups are stale (> 2 days) or missing expected files.
+
+**Files:**
+
+- `scripts/backup.py` — Backup script (pg_dump, file copies, Apache config via sudo)
 
 ### Gmail Add-on
 

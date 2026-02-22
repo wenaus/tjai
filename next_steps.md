@@ -250,21 +250,6 @@ The action agent daemon, CLI (`tj run`, `tj wake`, `tj l actions`), and MCP (`ru
 - Dashboard (`tj` status view) queries by status field, shows running/completed/crashed agents
 - This is a central piece of the system now — every action that dispatches `tj agent` needs reliable status
 
-### Production Deployment ✓ DONE
-
-Supervisord manages the action agent daemon. Deploy script (`update_from_dev.sh`) restarts it automatically. Agent logging goes to both stdout (supervisord) and DB (AppLog table, visible at `/tjai/agent-log/`).
-
-### Known Bugs
-
-- **bootstrap.py breaks `python3 -c`** — The `os.execv` re-exec approach doesn't preserve -c inline code. Needs a fix that detects -c invocation and skips re-exec.
-- **MCP `get_memories` crashes with `start_date` parameter** — Any MCP tool using `parse_date_filter` via `_apply_date_filter` returns "EOF when reading a line". Works standalone, crashes in the WSGI/async layer. Likely `get_timezone_object()` failing in Apache WSGI context. The `tz` parameter was added to `parse_date_filter` to allow callers to pass timezone directly, but the MCP/WSGI root cause is not diagnosed.
-
-### Future Actions
-
-- **Startup hook** — When Claude Code starts, check if today's `:daily` journal entry exists and present Today in History.
-- **Telegram push** — Push filtered history to Telegram for morning reading.
-- **More action entries** — Research queue processing, reflection runs, telegram triage.
-
 ---
 
 ## Location-Aware Personal Guide

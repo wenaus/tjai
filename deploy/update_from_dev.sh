@@ -38,14 +38,4 @@ popd >/dev/null
 # reload apache
 sudo systemctl reload apache2
 
-# restart telegram bot
-echo "Restarting Telegram bot..."
-"$REPO_ROOT/deploy/restart_tgbot.sh"
-
-# restart action agent (if supervisord is running)
-if [ -S /tmp/tjai-supervisor.sock ]; then
-    echo "Restarting action agent..."
-    "$VENV/bin/supervisorctl" -c "$TARGET_DIR/deploy/supervisord.conf" restart action-agent
-fi
-
 echo "Deployment complete."

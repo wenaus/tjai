@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Health - tjai</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 13px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #top-menu {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 4px 16px;
+            background: #222;
+            border-bottom: 1px solid #333;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+        #top-menu .menu-title { color: #d8a070; font-weight: bold; margin-right: 8px; }
+        #top-menu a { color: #8a8a8a; text-decoration: none; }
+        #top-menu a:hover { color: #e0e0e0; }
+        #content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 24px;
+        }
+        .banner {
+            padding: 10px 16px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .banner-green { background: rgba(156, 204, 101, 0.15); border: 1px solid #558b2f; }
+        .banner-yellow { background: rgba(255, 213, 79, 0.15); border: 1px solid #f9a825; }
+        .banner-red { background: rgba(239, 83, 80, 0.15); border: 1px solid #c62828; }
+        .banner-gray { background: rgba(138, 138, 138, 0.15); border: 1px solid #555; }
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .dot-green { background: #9ccc65; }
+        .dot-yellow { background: #ffd54f; }
+        .dot-red { background: #ef5350; }
+        .dot-gray { background: #8a8a8a; }
+        .banner-text { flex: 1; }
+        .banner-status { font-weight: bold; font-size: 14px; }
+        .banner-time { color: #8a8a8a; font-size: 12px; margin-left: 12px; }
+        .banner-actions { display: flex; gap: 8px; align-items: center; }
+        .btn {
+            background: #333;
+            color: #e0e0e0;
+            border: 1px solid #555;
+            padding: 4px 12px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+        }
+        .btn:hover { background: #444; }
+        .btn:disabled { opacity: 0.5; cursor: default; }
+        .auto-refresh { color: #666; font-size: 11px; }
+        .section { margin-bottom: 20px; }
+        .section-title {
+            color: #d8a070;
+            font-weight: bold;
+            margin-bottom: 8px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #333;
+        }
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 8px;
+        }
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 8px;
+            background: #222;
+            border-radius: 3px;
+        }
+        .metric-label { color: #8a8a8a; }
+        .metric-value { color: #e0e0e0; font-weight: bold; }
+        .metric-warn { color: #ffd54f; }
+        .metric-crit { color: #ef5350; }
+        .issues-list { margin-top: 8px; }
+        .issue {
+            padding: 4px 8px;
+            margin: 2px 0;
+            border-radius: 3px;
+        }
+        .issue-yellow { background: rgba(255, 213, 79, 0.1); color: #ffd54f; }
+        .issue-red { background: rgba(239, 83, 80, 0.1); color: #ef5350; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        th {
+            text-align: left;
+            color: #8a8a8a;
+            padding: 4px 8px;
+            border-bottom: 1px solid #333;
+        }
+        td {
+            padding: 4px 8px;
+            border-bottom: 1px solid #2a2a2a;
+        }
+        td.num { text-align: right; color: #b0bec5; }
+        .process-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 3px 8px;
+            background: #222;
+            border-radius: 3px;
+            margin: 2px 0;
+            max-width: 300px;
+        }
+        .process-name { color: #8a8a8a; }
+        .process-count { color: #e0e0e0; font-weight: bold; }
+        .process-zero { color: #ef5350; font-weight: bold; }
+        .chart-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 2px 0;
+            font-size: 12px;
+        }
+        .chart-label { color: #8a8a8a; width: 45px; text-align: right; }
+        .chart-bar-bg {
+            flex: 1;
+            height: 14px;
+            background: #2a2a2a;
+            border-radius: 2px;
+            max-width: 400px;
+        }
+        .chart-bar {
+            height: 100%;
+            border-radius: 2px;
+            background: #64b5f6;
+            min-width: 1px;
+        }
+        .chart-val { color: #b0bec5; width: 45px; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1a1a1a; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+        * { scrollbar-width: thin; scrollbar-color: #444 #1a1a1a; }
+    </style>
+</head>
+<body>
+    {% with current_page="system" %}{% include "tjai_app/_menu.html" %}{% endwith %}
+    <div id="content">
+        <div id="banner" class="banner banner-gray">
+            <div class="status-dot dot-gray" id="status-dot"></div>
+            <div class="banner-text">
+                <span class="banner-status" id="banner-status">Loading...</span>
+                <span class="banner-time" id="banner-time"></span>
+            </div>
+            <div class="banner-actions">
+                <span class="auto-refresh" id="auto-refresh"></span>
+                <button class="btn" id="refresh-btn" onclick="refreshNow()">Refresh Now</button>
+            </div>
+        </div>
+        <div id="issues-section"></div>
+        <div id="metrics-content">Loading system health data...</div>
+    </div>
+
+    <script>
+        const CSRF = '{{ csrf_token }}';
+        let lastFetchTime = 0;
+        let autoRefreshInterval;
+
+        function fmt(n) {
+            if (n === null || n === undefined) return '-';
+            if (typeof n === 'number') {
+                if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+                if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+                if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+                return n.toLocaleString();
+            }
+            return n;
+        }
+
+        function timeAgo(ts) {
+            const sec = Math.floor(Date.now() / 1000 - ts);
+            if (sec < 60) return sec + 's ago';
+            if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
+            return Math.floor(sec / 3600) + 'h ' + Math.floor((sec % 3600) / 60) + 'm ago';
+        }
+
+        function metricClass(val, yellowThresh, redThresh, invert) {
+            if (invert) {
+                if (val < redThresh) return 'metric-crit';
+                if (val < yellowThresh) return 'metric-warn';
+            } else {
+                if (val > redThresh) return 'metric-crit';
+                if (val > yellowThresh) return 'metric-warn';
+            }
+            return 'metric-value';
+        }
+
+        function renderBanner(data) {
+            const status = data.status || 'unknown';
+            const banner = document.getElementById('banner');
+            const dot = document.getElementById('status-dot');
+            banner.className = 'banner banner-' + (status === 'green' || status === 'yellow' || status === 'red' ? status : 'gray');
+            dot.className = 'status-dot dot-' + (status === 'green' || status === 'yellow' || status === 'red' ? status : 'gray');
+            document.getElementById('banner-status').textContent = 'SYSTEM HEALTH: ' + status.toUpperCase();
+            document.getElementById('banner-time').textContent = data.timestamp ? 'Collected ' + timeAgo(data.timestamp) : '';
+        }
+
+        function renderIssues(issues) {
+            const el = document.getElementById('issues-section');
+            if (!issues || issues.length === 0) {
+                el.innerHTML = '';
+                return;
+            }
+            let html = '<div class="section"><div class="section-title">Issues</div><div class="issues-list">';
+            for (const issue of issues) {
+                const cls = issue.toLowerCase().includes('< 10%') || issue.toLowerCase().includes('> 90%') || issue.toLowerCase().includes('> 2x') || issue.toLowerCase().includes('< 95%') || issue.toLowerCase().includes('> 50%') ? 'issue-red' : 'issue-yellow';
+                html += `<div class="issue ${cls}">${issue}</div>`;
+            }
+            html += '</div></div>';
+            el.innerHTML = html;
+        }
+
+        function renderMetrics(data) {
+            const s = data.system || {};
+            const pg = data.postgres || {};
+            const proc = data.processes || {};
+            const cw = data.cloudwatch || {};
+
+            let html = '';
+
+            // System section
+            html += '<div class="section"><div class="section-title">System</div><div class="metric-grid">';
+            html += metric('Uptime', s.uptime_days + ' days');
+            html += metric('Load', `${s.load_1m} / ${s.load_5m} / ${s.load_15m}  (${s.cpu_count} CPU)`, metricClass(s.load_1m, s.cpu_count, s.cpu_count * 2, false));
+            html += metric('Memory', `${s.mem_available_mb} / ${s.mem_total_mb} MB available (${s.mem_available_pct}%)`, metricClass(s.mem_available_pct, 20, 10, true));
+            html += metric('Swap', `${s.swap_used_mb} / ${s.swap_total_mb} MB (${s.swap_used_pct}%)`, metricClass(s.swap_used_pct, 20, 50, false));
+            html += metric('Disk', `${s.disk_used_gb} / ${s.disk_total_gb} GB (${s.disk_used_pct}%)`, metricClass(s.disk_used_pct, 80, 90, false));
+            html += '</div></div>';
+
+            // PostgreSQL section
+            html += '<div class="section"><div class="section-title">PostgreSQL</div><div class="metric-grid">';
+            html += metric('Connections', pg.connections);
+            html += metric('Cache Hit Ratio', pg.cache_hit_ratio + '%', metricClass(pg.cache_hit_ratio, 99, 95, true));
+            html += metric('DB Size', pg.db_size_mb + ' MB');
+            html += metric('Commits', fmt(pg.xact_commit));
+            html += metric('Rollbacks', fmt(pg.xact_rollback));
+            html += metric('Deadlocks', pg.deadlocks, pg.deadlocks > 0 ? 'metric-crit' : 'metric-value');
+            html += metric('Tuples Returned', fmt(pg.tup_returned));
+            html += metric('Tuples Inserted', fmt(pg.tup_inserted));
+            html += metric('Tuples Updated', fmt(pg.tup_updated));
+            html += metric('Tuples Deleted', fmt(pg.tup_deleted));
+            html += '</div>';
+
+            // Top tables
+            if (pg.top_tables && pg.top_tables.length > 0) {
+                html += '<table style="margin-top:12px"><tr><th>Table</th><th style="text-align:right">Rows</th><th style="text-align:right">Inserts</th><th style="text-align:right">Updates</th><th style="text-align:right">Deletes</th><th style="text-align:right">Seq Scan</th><th style="text-align:right">Idx Scan</th></tr>';
+                for (const t of pg.top_tables) {
+                    html += `<tr><td>${t.name}</td><td class="num">${fmt(t.live_rows)}</td><td class="num">${fmt(t.inserts)}</td><td class="num">${fmt(t.updates)}</td><td class="num">${fmt(t.deletes)}</td><td class="num">${fmt(t.seq_scan)}</td><td class="num">${fmt(t.idx_scan)}</td></tr>`;
+                }
+                html += '</table>';
+            }
+            html += '</div>';
+
+            // tjai section
+            const tj = data.tjai || {};
+            if (tj.entries_total) {
+                html += '<div class="section"><div class="section-title">tjai</div><div class="metric-grid">';
+                html += metric('Entries', `${fmt(tj.entries_active)} active / ${fmt(tj.entries_total)} total`);
+                html += metric('Deleted', fmt(tj.entries_deleted));
+                html += metric('Contexts', tj.contexts);
+                html += metric('Unique Tags', tj.unique_tags);
+                html += metric('Modified (24h)', fmt(tj.modified_24h));
+                html += metric('Modified (1h)', fmt(tj.modified_1h));
+                html += metric('Log Entries', fmt(tj.log_entries));
+                // Entry breakdown by kind
+                const kinds = tj.entries_by_kind || {};
+                const kindOrder = ['memory', 'bookmark', 'journal', 'todo', 'ai', 'profile', 'action', 'log', 'list'];
+                const kindStr = kindOrder.filter(k => kinds[k]).map(k => `${k}: ${fmt(kinds[k])}`).join(', ');
+                if (kindStr) html += metric('By Kind', kindStr);
+                html += '</div>';
+
+                // Agents
+                if (tj.agents && tj.agents.length > 0) {
+                    html += '<div style="margin-top:12px;margin-bottom:4px;color:#8a8a8a;font-size:12px">Agents</div>';
+                    for (const ag of tj.agents) {
+                        const statusCls = ag.status === 'running' ? 'metric-value' : ag.status === 'stale' ? 'metric-warn' : 'metric-crit';
+                        const dotColor = ag.status === 'running' ? '#9ccc65' : ag.status === 'stale' ? '#ffd54f' : '#ef5350';
+                        let detail = `PID ${ag.pid || '?'}`;
+                        if (ag.heartbeat_min !== undefined && ag.heartbeat_min !== null) {
+                            detail += `, heartbeat ${ag.heartbeat_min}m ago`;
+                        }
+                        html += `<div class="process-row" style="max-width:500px"><span class="process-name"><span style="color:${dotColor}">&#9679;</span> ${ag.name}</span><span class="${statusCls}">${ag.status} <span style="color:#666;font-weight:normal">${detail}</span></span></div>`;
+                    }
+                }
+
+                // Actions list
+                if (tj.actions && tj.actions.length > 0) {
+                    html += '<table style="margin-top:12px"><tr><th>Action</th><th>Trigger</th><th style="text-align:right">Interval</th><th style="text-align:right">Last Run</th></tr>';
+                    for (const a of tj.actions) {
+                        const lr = a.last_run_min !== null ? a.last_run_min + 'm ago' : 'never';
+                        const link = a.id ? `<a href="/tjai/entry/?uuid=${a.id}" style="color:#64b5f6">${a.content}</a>` : a.content;
+                        html += `<tr><td>${link}</td><td>${a.trigger}</td><td class="num">${a.interval_h}h</td><td class="num">${lr}</td></tr>`;
+                    }
+                    html += '</table>';
+                }
+
+                // Machines
+                if (tj.machines && tj.machines.length > 0) {
+                    html += '<div style="margin-top:12px;margin-bottom:4px;color:#8a8a8a;font-size:12px">Sync Machines</div>';
+                    for (const m of tj.machines) {
+                        const syncStr = m.last_sync_min !== null ? m.last_sync_min + 'm ago' : 'never';
+                        const syncCls = m.last_sync_min > 60 ? 'metric-warn' : 'metric-value';
+                        html += `<div class="process-row"><span class="process-name">${m.name}</span><span class="${syncCls}">synced ${syncStr}</span></div>`;
+                    }
+                }
+
+                html += '</div>';
+            }
+
+            // Dropbox section
+            const db = data.dropbox || {};
+            html += '<div class="section"><div class="section-title">Dropbox</div>';
+            const dbDotColor = db.running ? '#9ccc65' : '#ef5350';
+            const dbStatusCls = db.running ? 'metric-value' : 'metric-crit';
+            const dbNote = db.restarted ? ' (restart attempted)' : '';
+            html += `<div class="process-row" style="max-width:500px"><span class="process-name"><span style="color:${dbDotColor}">&#9679;</span> Status</span><span class="${dbStatusCls}">${db.status}${dbNote}</span></div>`;
+            if (db.newest_backup_min !== undefined) {
+                const bkCls = db.newest_backup_min > 1440 ? 'metric-warn' : 'metric-value';
+                html += `<div class="process-row" style="max-width:500px"><span class="process-name">Backups</span><span class="${bkCls}">${db.backup_count} files, newest ${Math.round(db.newest_backup_min)}m ago</span></div>`;
+            }
+            html += '</div>';
+
+            // Backups section
+            const bk = data.backups || {};
+            html += '<div class="section"><div class="section-title">Backups</div>';
+            if (!bk.exists) {
+                html += '<div style="color:#ef5350">No backup directory found</div>';
+            } else if (!bk.latest) {
+                html += '<div style="color:#ef5350">No backups yet</div>';
+            } else {
+                const lt = bk.latest;
+                const allOk = lt.all_present && lt.db_size_mb >= 1;
+                const dotColor = allOk ? '#9ccc65' : '#ffd54f';
+                const statusText = allOk ? 'OK' : 'Issues';
+                const statusCls = allOk ? 'metric-value' : 'metric-warn';
+                html += `<div class="process-row" style="max-width:500px"><span class="process-name"><span style="color:${dotColor}">&#9679;</span> Latest</span><span class="${statusCls}">${lt.date}</span></div>`;
+                html += `<div class="metric-grid">`;
+                html += metric('Total Backups', bk.total_days + ' days');
+                html += metric('DB Dump', lt.db_size_mb !== null ? lt.db_size_mb + ' MB' : 'MISSING', lt.db_size_mb !== null && lt.db_size_mb >= 1 ? 'metric-value' : 'metric-crit');
+                html += metric('Data Files', lt.data_files > 0 ? lt.data_files + ' files' : 'MISSING', lt.data_files > 0 ? 'metric-value' : 'metric-crit');
+                // Individual config files
+                const cfgFiles = ['env-www.env', 'env-home.env', 'etaverse.conf'];
+                for (const f of cfgFiles) {
+                    const size = lt.files[f];
+                    const present = size !== null && size !== undefined;
+                    html += metric(f, present ? Math.round(size / 1024) + ' KB' : 'MISSING', present ? 'metric-value' : 'metric-crit');
+                }
+                html += '</div>';
+            }
+            html += '</div>';
+
+            // Processes section
+            html += '<div class="section"><div class="section-title">Processes</div>';
+            for (const [name, count] of Object.entries(proc)) {
+                const cls = count === 0 ? 'process-zero' : 'process-count';
+                html += `<div class="process-row"><span class="process-name">${name}</span><span class="${cls}">${count}</span></div>`;
+            }
+            html += '</div>';
+
+            // CloudWatch section
+            if (cw && !cw.error) {
+                html += '<div class="section"><div class="section-title">CloudWatch 24h</div>';
+                if (cw.cpu_avg_24h !== undefined) {
+                    html += `<div style="margin-bottom:8px;color:#b0bec5">CPU avg: ${cw.cpu_avg_24h}%</div>`;
+                }
+                if (cw.cpu_hourly && cw.cpu_hourly.length > 0) {
+                    for (const p of cw.cpu_hourly) {
+                        const barWidth = Math.max(1, Math.min(100, p.avg));
+                        html += `<div class="chart-row"><span class="chart-label">${p.hour}</span><div class="chart-bar-bg"><div class="chart-bar" style="width:${barWidth}%"></div></div><span class="chart-val">${p.avg}%</span></div>`;
+                    }
+                }
+                if (cw.mem_used_percent_hourly) {
+                    html += '<div style="margin-top:12px;margin-bottom:4px;color:#b0bec5">Memory Used %</div>';
+                    for (const p of cw.mem_used_percent_hourly) {
+                        const barWidth = Math.max(1, Math.min(100, p.avg));
+                        html += `<div class="chart-row"><span class="chart-label">${p.hour}</span><div class="chart-bar-bg"><div class="chart-bar" style="width:${barWidth}%;background:#ce93d8"></div></div><span class="chart-val">${p.avg}%</span></div>`;
+                    }
+                }
+                html += '</div>';
+            } else if (cw && cw.error) {
+                html += `<div class="section"><div class="section-title">CloudWatch 24h</div><div style="color:#ef5350">Error: ${cw.error}</div></div>`;
+            }
+
+            document.getElementById('metrics-content').innerHTML = html;
+        }
+
+        function metric(label, value, cls) {
+            cls = cls || 'metric-value';
+            return `<div class="metric"><span class="metric-label">${label}</span><span class="${cls}">${value}</span></div>`;
+        }
+
+        let recheckPending = false;
+
+        async function fetchData() {
+            try {
+                // If a recheck was requested (e.g. Dropbox restart), do a full refresh
+                if (recheckPending) {
+                    recheckPending = false;
+                    refreshNow();
+                    return;
+                }
+                const resp = await fetch('/tjai/api/system/data');
+                if (!resp.ok) {
+                    if (resp.status === 404) {
+                        document.getElementById('metrics-content').innerHTML = 'No health data collected yet. Click "Refresh Now" to collect.';
+                        return;
+                    }
+                    throw new Error('HTTP ' + resp.status);
+                }
+                const data = await resp.json();
+                lastFetchTime = Date.now();
+                if (data.recheck) recheckPending = true;
+                renderBanner(data);
+                renderIssues(data.issues);
+                renderMetrics(data);
+            } catch (e) {
+                document.getElementById('metrics-content').innerHTML = `<div style="color:#ef5350">Error loading data: ${e.message}</div>`;
+            }
+        }
+
+        async function refreshNow() {
+            const btn = document.getElementById('refresh-btn');
+            btn.disabled = true;
+            btn.textContent = 'Requesting...';
+            try {
+                const resp = await fetch('/tjai/api/system/refresh', {
+                    method: 'POST',
+                    headers: {'X-CSRFToken': CSRF},
+                });
+                if (!resp.ok) {
+                    const err = await resp.json();
+                    alert('Refresh failed: ' + (err.error || 'Unknown error'));
+                    btn.disabled = false;
+                    btn.textContent = 'Refresh Now';
+                    return;
+                }
+                // Agent is collecting — poll for fresh data
+                btn.textContent = 'Collecting...';
+                const requestedAt = Date.now() / 1000;
+                let attempts = 0;
+                const poll = setInterval(async () => {
+                    attempts++;
+                    try {
+                        const dr = await fetch('/tjai/api/system/data');
+                        if (dr.ok) {
+                            const data = await dr.json();
+                            if (data.timestamp > requestedAt) {
+                                clearInterval(poll);
+                                lastFetchTime = Date.now();
+                                renderBanner(data);
+                                renderIssues(data.issues);
+                                renderMetrics(data);
+                                btn.disabled = false;
+                                btn.textContent = 'Refresh Now';
+                            }
+                        }
+                    } catch (e) {}
+                    if (attempts >= 15) {
+                        clearInterval(poll);
+                        btn.disabled = false;
+                        btn.textContent = 'Refresh Now';
+                    }
+                }, 1000);
+            } catch (e) {
+                alert('Refresh failed: ' + e.message);
+                btn.disabled = false;
+                btn.textContent = 'Refresh Now';
+            }
+        }
+
+        function updateAutoRefresh() {
+            if (!lastFetchTime) return;
+            const sec = Math.floor((Date.now() - lastFetchTime) / 1000);
+            const remaining = Math.max(0, 60 - sec);
+            document.getElementById('auto-refresh').textContent = `Auto-refresh in ${remaining}s`;
+            // Also update the "collected X ago" text
+            const bannerTime = document.getElementById('banner-time');
+            if (bannerTime.dataset.ts) {
+                bannerTime.textContent = 'Collected ' + timeAgo(parseFloat(bannerTime.dataset.ts));
+            }
+        }
+
+        // Override banner-time to store timestamp for live updates
+        const origRenderBanner = renderBanner;
+        renderBanner = function(data) {
+            origRenderBanner(data);
+            if (data.timestamp) {
+                document.getElementById('banner-time').dataset.ts = data.timestamp;
+            }
+        };
+
+        fetchData();
+        autoRefreshInterval = setInterval(() => {
+            if (Date.now() - lastFetchTime >= 60000) {
+                fetchData();
+            }
+        }, 5000);
+        setInterval(updateAutoRefresh, 1000);
+    </script>
+</body>
+</html>

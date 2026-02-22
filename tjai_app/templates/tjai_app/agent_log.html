@@ -75,11 +75,7 @@
     </style>
 </head>
 <body>
-    <div id="top-menu">
-        <span class="menu-title">tjai</span>
-        <a href="{% url 'dashboard' %}">Dashboard</a>
-        <a href="{% url 'agent_log' %}" class="active">Agent Log</a>
-    </div>
+    {% with current_page="agent_log" %}{% include "tjai_app/_menu.html" %}{% endwith %}
     <div class="toolbar">
         <label>Level:</label>
         <select id="level-filter">

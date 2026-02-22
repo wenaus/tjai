@@ -1,4 +1,5 @@
 import json
+import os
 import time
 import uuid
 from datetime import datetime, timedelta
@@ -1647,3 +1648,33 @@ def api_entry_content(request, entry_id):
         'tags': tags,
         'event_date': data.get('event_date') if data else None,
     })
+
+
+@login_required
+def system_health(request):
+    """Render the system health page."""
+    return render(request, 'tjai_app/system_health.html')
+
+
+@login_required
+def api_system_data(request):
+    """Return system health data from sysconfig as JSON."""
+    data = SysConfig.objects.filter(
+        key='system_health_data'
+    ).values_list('value', flat=True).first()
+    if data:
+        return JsonResponse(json.loads(data))
+    return JsonResponse({'error': 'No health data collected yet'}, status=404)
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_system_refresh(request):
+    """Request system health data collection via action agent."""
+    now = time.time()
+    SysConfig.objects.update_or_create(
+        key='system_health_refresh_requested',
+        defaults={'value': str(now), 'timestamp_modified': now},
+    )
+    return JsonResponse({'status': 'requested'})

@@ -187,12 +187,7 @@
     </style>
 </head>
 <body>
-    <div id="top-menu">
-        <span class="menu-title">tjai</span>
-        <a href="{% url 'dashboard' %}">Dashboard</a>
-        <a href="{% url 'daily_synopsis' %}" class="active">Synopsis</a>
-        <a href="{% url 'agent_log' %}">Agent Log</a>
-    </div>
+    {% with current_page="synopsis" %}{% include "tjai_app/_menu.html" %}{% endwith %}
     <div class="container">
         <div class="panel-left" id="date-list">
             <div class="loading">Loading dates...</div>

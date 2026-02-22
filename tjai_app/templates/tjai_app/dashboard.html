@@ -200,11 +200,7 @@
     </style>
 </head>
 <body>
-    <div id="top-menu">
-        <span class="menu-title">tjai</span>
-        <a href="{% url 'daily_synopsis' %}">Synopsis</a>
-        <a href="{% url 'agent_log' %}">Agent Log</a>
-    </div>
+    {% with current_page="dashboard" %}{% include "tjai_app/_menu.html" %}{% endwith %}
     <div class="container">
         <div class="panel panel-left" id="calendar-panel">
             <div id="calendar-section">

@@ -1,0 +1,16 @@
+[Unit]
+Description=tjai supervisord (action agent manager)
+After=network.target postgresql.service
+
+[Service]
+Type=forking
+User=admin
+PIDFile=/tmp/tjai-supervisord.pid
+ExecStart=/var/www/tjai/.venv/bin/supervisord -c /var/www/tjai/deploy/supervisord.conf
+ExecStop=/var/www/tjai/.venv/bin/supervisorctl -c /var/www/tjai/deploy/supervisord.conf shutdown
+ExecReload=/var/www/tjai/.venv/bin/supervisorctl -c /var/www/tjai/deploy/supervisord.conf restart all
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
