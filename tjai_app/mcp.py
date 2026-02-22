@@ -346,6 +346,24 @@ async def get_entry(entry_id: str) -> dict:
 
 
 @mcp.tool()
+async def get_entry_by_entry_id(entry_id: str) -> dict:
+    """
+    Find an entry by its human-readable entry_id (stored in data.entry_id).
+
+    Use this instead of get_entry when you have a readable identifier like
+    'daily-2026-02-23' or 'history-selection-guidance' rather than a UUID.
+
+    Args:
+        entry_id: The human-readable entry_id (e.g., 'daily-2026-02-23').
+
+    Returns:
+        Full entry with all fields including the UUID id.
+        Returns {"error": "..."} if not found.
+    """
+    return await sync_to_async(services.get_entry_by_entry_id)(entry_id=entry_id)
+
+
+@mcp.tool()
 async def edit_entry(
     entry_id: str,
     content: str,

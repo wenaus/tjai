@@ -15,7 +15,7 @@ from django.db.models import Count
 from django.db.models.functions import Lower
 from django.http import Http404
 from django.conf import settings as django_settings
-from .models import Context, Entry, Tag, TagStats, SubNote, Machine, SysConfig
+from .models import AppLog, Context, Entry, Tag, TagStats, SubNote, Machine, SysConfig
 
 
 def api_health(request):
@@ -629,6 +629,7 @@ def dashboard_status(request):
     filter_kind = request.GET.get('kind')
     filter_context = request.GET.get('context')
     filter_machine = request.GET.get('machine')
+    exclude_contexts = [c for c in request.GET.get('exclude_context', '').split(',') if c]
 
     base_qs = Entry.objects.filter(
         deleted_at__isnull=True,
@@ -640,9 +641,13 @@ def dashboard_status(request):
         base_qs = base_qs.filter(kind=filter_kind)
     if filter_context:
         base_qs = base_qs.filter(context_id=filter_context)
+    if exclude_contexts:
+        base_qs = base_qs.exclude(context_id__in=exclude_contexts)
     if filter_tag:
-        tagged_ids = Tag.objects.filter(tag_name=filter_tag).values_list('entry_id', flat=True)
-        base_qs = base_qs.filter(id__in=tagged_ids)
+        filter_tags = [t for t in filter_tag.split(',') if t]
+        for t in filter_tags:
+            tagged_ids = Tag.objects.filter(tag_name=t).values_list('entry_id', flat=True)
+            base_qs = base_qs.filter(id__in=tagged_ids)
     if filter_machine:
         base_qs = base_qs.filter(data__hostname=filter_machine)
 
@@ -812,6 +817,36 @@ def dashboard_named(request):
         })
 
     return JsonResponse({'entries': result})
+
+
+@login_required
+def agent_log(request):
+    """Agent log page — shows recent log entries from the AppLog table."""
+    return render(request, 'tjai_app/agent_log.html')
+
+
+@login_required
+def agent_log_data(request):
+    """Return agent log entries as JSON."""
+    import logging as _logging
+    limit = min(int(request.GET.get('limit', 200)), 1000)
+    min_level = request.GET.get('level', '').upper()
+    level_map = {'DEBUG': _logging.DEBUG, 'INFO': _logging.INFO,
+                 'WARNING': _logging.WARNING, 'ERROR': _logging.ERROR}
+
+    qs = AppLog.objects.order_by('-timestamp')
+    if min_level in level_map:
+        qs = qs.filter(level__gte=level_map[min_level])
+    qs = qs[:limit]
+
+    entries = [{
+        'timestamp': log.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+        'level': log.levelname,
+        'message': log.message,
+        'source': log.source,
+    } for log in qs]
+
+    return JsonResponse({'entries': entries})
 
 
 @login_required

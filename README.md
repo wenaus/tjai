@@ -515,7 +515,6 @@ supervisord
   "ai_prompt": "{guidance}\n\nRead .../MM-DD-complete.md. Curate...",
   "journal_entry": {
     "content": "Today in History: {date_str}",
-    "name": ":daily",
     "tags": "history"
   }
 }
@@ -551,6 +550,30 @@ tj l actions                        # See what actions exist
 - `deploy/restart_action_agent.sh` — Convenience restart script
 
 **AI dispatch:** Actions that need intelligence use `tj agent` to launch a detached Claude instance. The agent runs on the Claude subscription (not API credits), has MCP tool access, and writes results back to a tjai tracking entry.
+
+### Application Logging
+
+The action agent and related subsystems log to both stdout (for supervisord) and the database (AppLog table) for dashboard visibility.
+
+**How it works:**
+
+- `DbLogHandler` (`tjai_app/db_log_handler.py`) is a Python `logging.Handler` that writes log records to the `AppLog` model
+- The `action_runner` module configures a logger with two handlers: `DbLogHandler` (DB) + `StreamHandler` (stdout)
+- All action agent output uses structured logging (`logger.info/error`) instead of print statements
+
+**Viewing logs:**
+
+- **Web UI:** `/tjai/agent-log/` — filterable by level (DEBUG/INFO/WARNING/ERROR), auto-refreshes
+- **API:** `/tjai/api/agent-log?limit=200&level=ERROR` — JSON endpoint for programmatic access
+
+**AppLog model fields:** `source`, `timestamp`, `level`, `levelname`, `message`, `extra_data` (JSON, optional)
+
+**Files:**
+
+- `tjai_app/db_log_handler.py` — The `DbLogHandler` logging handler
+- `tjai_app/models.py` — `AppLog` model
+- `tjai_app/views.py` — `agent_log` page and `agent_log_data` API
+- `tjai_app/templates/tjai_app/agent_log.html` — Log viewer UI
 
 ### Gmail Add-on
 

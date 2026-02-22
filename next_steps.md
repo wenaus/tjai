@@ -250,12 +250,9 @@ The action agent daemon, CLI (`tj run`, `tj wake`, `tj l actions`), and MCP (`ru
 - Dashboard (`tj` status view) queries by status field, shows running/completed/crashed agents
 - This is a central piece of the system now — every action that dispatches `tj agent` needs reliable status
 
-### Production Deployment
+### Production Deployment ✓ DONE
 
-- Install `supervisor` in the production venv (`pip install supervisor`)
-- Start supervisord with `deploy/restart_action_agent.sh`
-- Verify daemon survives deploy cycles (`update_from_dev.sh`)
-- Verify auto-restart after crash (`kill -9`)
+Supervisord manages the action agent daemon. Deploy script (`update_from_dev.sh`) restarts it automatically. Agent logging goes to both stdout (supervisord) and DB (AppLog table, visible at `/tjai/agent-log/`).
 
 ### Known Bugs
 

@@ -19,7 +19,7 @@ import traceback
 
 import bootstrap  # noqa: F401 - Django setup
 from tjai_app.action_runner import (
-    get_due_actions, execute_action, write_heartbeat,
+    get_due_actions, execute_action, write_heartbeat, logger,
 )
 from tjai_app.models import Entry
 
@@ -75,7 +75,7 @@ def sleep_until_next(trigger_filter=None):
 
     if wake_requested:
         wake_requested = False
-        print(f"Woken by SIGHUP", flush=True)
+        logger.info("Woken by SIGHUP")
 
 
 def main():
@@ -93,13 +93,13 @@ def main():
     if args.dry_run:
         due = get_due_actions(trigger_filter=args.trigger)
         if not due:
-            print("No actions due.")
+            logger.info("No actions due.")
         else:
             for action in due:
                 data = action.data or {}
-                print(f"  DUE: {action.content[:80]}  "
-                      f"[trigger={data.get('trigger', '?')}, "
-                      f"interval={data.get('interval_hours', 24)}h]")
+                logger.info("  DUE: %s  [trigger=%s, interval=%sh]",
+                            action.content[:80], data.get('trigger', '?'),
+                            data.get('interval_hours', 24))
         return
 
     # --run: execute one action and exit
@@ -107,7 +107,7 @@ def main():
         action = Entry.objects.filter(id=args.run, kind='action',
                                       deleted_at__isnull=True).first()
         if not action:
-            print(f"Action not found: {args.run}", file=sys.stderr)
+            logger.error("Action not found: %s", args.run)
             sys.exit(1)
         execute_action(action)
         return
@@ -119,7 +119,7 @@ def main():
         key='action_agent_pid',
         defaults={'value': str(pid), 'timestamp_modified': time.time()},
     )
-    print(f"Action agent started (PID {pid})", flush=True)
+    logger.info("Action agent started (PID %d)", pid)
     while not shutdown_requested:
         try:
             due = get_due_actions(trigger_filter=args.trigger)
@@ -129,17 +129,15 @@ def main():
                 try:
                     execute_action(action)
                 except Exception as e:
-                    print(f"ERROR: Action {action.id} failed: {e}",
-                          file=sys.stderr, flush=True)
-                    traceback.print_exc(file=sys.stderr)
+                    logger.error("Action %s failed: %s", action.id, e,
+                                 exc_info=True)
             write_heartbeat()
             sleep_until_next(trigger_filter=args.trigger)
         except Exception as e:
-            print(f"ERROR: Main loop: {e}", file=sys.stderr, flush=True)
-            traceback.print_exc(file=sys.stderr)
+            logger.error("Main loop: %s", e, exc_info=True)
             time.sleep(60)
 
-    print("Action agent shutting down", flush=True)
+    logger.info("Action agent shutting down")
 
 
 if __name__ == '__main__':

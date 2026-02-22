@@ -1,3 +1,5 @@
+import logging
+
 from django.db import models
 
 
@@ -113,6 +115,30 @@ class TagStats(models.Model):
 
     class Meta:
         db_table = 'tag_stats'
+
+
+class AppLog(models.Model):
+    """Application log entries, stored in DB for dashboard visibility."""
+    LEVEL_CHOICES = [
+        (logging.CRITICAL, 'CRITICAL'),
+        (logging.ERROR, 'ERROR'),
+        (logging.WARNING, 'WARNING'),
+        (logging.INFO, 'INFO'),
+        (logging.DEBUG, 'DEBUG'),
+    ]
+    source = models.CharField(max_length=100, db_index=True)
+    timestamp = models.DateTimeField(db_index=True)
+    level = models.IntegerField(choices=LEVEL_CHOICES, default=logging.INFO, db_index=True)
+    levelname = models.CharField(max_length=50)
+    message = models.TextField()
+    extra_data = models.JSONField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'applog'
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['timestamp', 'source']),
+        ]
 
 
 class SysConfig(models.Model):

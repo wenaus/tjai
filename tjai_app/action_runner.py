@@ -4,6 +4,7 @@ Used by the action_agent daemon, CLI (tj run), and MCP (run_action).
 All functions use Django ORM directly — must be called in a Django context.
 """
 
+import logging
 import subprocess
 import sys
 import time
@@ -11,12 +12,26 @@ import traceback
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from .db_log_handler import DbLogHandler
 from .models import Entry, SysConfig
 from . import services
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / 'scripts'
 TJAI_DIR = SCRIPTS_DIR.parent
 TJ_PY = TJAI_DIR / 'tj.py'
+
+# Logger: writes to DB (visible on dashboard) + stdout (for supervisord)
+logger = logging.getLogger('action_agent')
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    _fmt = logging.Formatter('%(asctime)s %(levelname)s %(message)s',
+                             datefmt='%Y-%m-%d %H:%M:%S')
+    _db = DbLogHandler(source='action_agent')
+    _db.setFormatter(_fmt)
+    logger.addHandler(_db)
+    _sh = logging.StreamHandler(sys.stdout)
+    _sh.setFormatter(_fmt)
+    logger.addHandler(_sh)
 
 
 def get_due_actions(trigger_filter=None):
@@ -68,7 +83,7 @@ def get_template_vars(target_date):
     }
 
 
-def resolve_prompt_template(prompt_template):
+def resolve_prompt_template(prompt_template, extra_vars=None):
     """Resolve placeholders in the AI prompt, including guidance from tjai."""
     template_vars = get_template_vars(get_target_date())
 
@@ -77,6 +92,9 @@ def resolve_prompt_template(prompt_template):
         deleted_at__isnull=True,
     ).first()
     template_vars['guidance'] = entry.content if entry else ''
+
+    if extra_vars:
+        template_vars.update(extra_vars)
 
     return prompt_template.format(**template_vars)
 
@@ -94,26 +112,31 @@ def run_mechanical(action):
 
     script_path = SCRIPTS_DIR / script_name
     if not script_path.exists():
-        print(f"ERROR: Script not found: {script_path}", file=sys.stderr)
+        logger.error("Script not found: %s", script_path)
         return False
 
     cmd = [sys.executable, str(script_path)] + script_args
-    print(f"  Running: {' '.join(cmd)}")
+    logger.info("Running: %s", ' '.join(cmd))
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.stdout:
-        print(result.stdout, end='')
+        for line in result.stdout.rstrip().split('\n'):
+            logger.info("  %s", line)
     if result.returncode != 0:
-        print(f"ERROR: {script_name} exited {result.returncode}", file=sys.stderr)
+        logger.error("%s exited %d", script_name, result.returncode)
         if result.stderr:
-            print(result.stderr, file=sys.stderr)
+            for line in result.stderr.rstrip().split('\n'):
+                logger.error("  %s", line)
         return False
 
     return True
 
 
 def create_journal_entry(action):
-    """Create/update the journal entry specified in the action's data."""
+    """Find or create the journal entry specified in the action's data.
+
+    Returns the entry_id string on success, None on failure, True if no journal config.
+    """
     data = action.data or {}
     journal = data.get('journal_entry')
     if not journal:
@@ -122,62 +145,56 @@ def create_journal_entry(action):
     template_vars = get_template_vars(get_target_date())
     content = journal['content'].format(**template_vars)
     event_date = template_vars['yyyymmdd']
-    name = journal.get('name')
     tags = journal.get('tags')
+    entry_id = f"daily-{template_vars['yyyy-mm-dd']}"
 
-    if name:
-        existing = Entry.objects.filter(
-            name=name,
-            deleted_at__isnull=True,
-        ).first()
-        if existing:
-            result = services.edit_entry(
-                entry_id=str(existing.id),
-                content=content,
-                event_date=event_date,
-            )
-            if 'error' in result:
-                print(f"  ERROR updating journal entry: {result['error']}",
-                      file=sys.stderr)
-                return False
-            print(f"  Updated journal entry: {content}")
-            return True
+    existing = Entry.objects.filter(
+        data__entry_id=entry_id,
+        deleted_at__isnull=True,
+    ).first()
+    if existing:
+        logger.info("Found existing journal entry: %s", entry_id)
+        return entry_id
 
     result = services.create_entry(
         content=content,
         kind='journal',
         event_date=event_date,
-        name=name,
         tags=tags,
+        data={'entry_id': entry_id},
     )
     if 'error' in result:
-        print(f"  ERROR creating journal entry: {result['error']}",
-              file=sys.stderr)
-        return False
-    print(f"  Created journal entry: {content}")
-    return True
+        logger.error("Creating journal entry: %s", result['error'])
+        return None
+    logger.info("Created journal entry: %s (%s)", content, entry_id)
+    return entry_id
 
 
-def dispatch_ai(action):
+def dispatch_ai(action, entry_id=None):
     """Dispatch the AI step via tj agent."""
     data = action.data or {}
     ai_prompt = data.get('ai_prompt')
     if not ai_prompt:
         return True
 
-    prompt = resolve_prompt_template(ai_prompt)
-    print(f"  Dispatching tj agent...")
+    extra_vars = {}
+    if entry_id:
+        extra_vars['entry_id'] = entry_id
+    prompt = resolve_prompt_template(ai_prompt, extra_vars=extra_vars)
+    logger.info("Dispatching tj agent...")
 
     result = subprocess.run(
         [sys.executable, str(TJ_PY), 'agent', prompt],
         capture_output=True, text=True,
     )
     if result.stdout:
-        print(result.stdout, end='')
+        for line in result.stdout.rstrip().split('\n'):
+            logger.info("  %s", line)
     if result.returncode != 0:
-        print(f"ERROR: tj agent failed ({result.returncode})", file=sys.stderr)
+        logger.error("tj agent failed (exit %d)", result.returncode)
         if result.stderr:
-            print(result.stderr, file=sys.stderr)
+            for line in result.stderr.rstrip().split('\n'):
+                logger.error("  %s", line)
         return False
 
     return True
@@ -205,24 +222,26 @@ def execute_action(action):
         last_run_str = datetime.fromtimestamp(float(last_run)).strftime('%b %-d %H:%M')
     else:
         last_run_str = 'never'
-    print(f"\nAction: {action.content[:80]}")
-    print(f"  Trigger: {data.get('trigger', '?')}, "
-          f"Last run: {last_run_str}")
+    logger.info("Action: %s", action.content[:80])
+    logger.info("  Trigger: %s, Last run: %s",
+                data.get('trigger', '?'), last_run_str)
 
     if not run_mechanical(action):
-        print(f"  Mechanical step failed, skipping remaining steps")
+        logger.error("Mechanical step failed, aborting")
         return False
 
-    if not create_journal_entry(action):
-        print(f"  Journal entry creation failed")
+    entry_id = create_journal_entry(action)
+    if entry_id is None:
+        logger.error("Journal entry creation failed, aborting")
+        return False
 
-    if not dispatch_ai(action):
-        print(f"  AI dispatch failed")
+    if not dispatch_ai(action, entry_id=entry_id if isinstance(entry_id, str) else None):
+        logger.error("AI dispatch failed")
         update_last_run(action)
         return False
 
     update_last_run(action)
-    print(f"  Done.")
+    logger.info("Done.")
     return True
 
 
@@ -250,7 +269,7 @@ def run_action(entry_id):
             "entry_id": str(action.id),
         }
     except Exception as e:
-        traceback.print_exc(file=sys.stderr)
+        logger.error("Action execution failed: %s", e, exc_info=True)
         return {"error": f"Action execution failed: {e}"}
 
 

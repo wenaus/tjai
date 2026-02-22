@@ -17,10 +17,34 @@
             color: #e0e0e0;
             height: 100vh;
             overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        #top-menu {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 4px 16px;
+            background: #222;
+            border-bottom: 1px solid #333;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+        #top-menu .menu-title {
+            color: #d8a070;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        #top-menu a {
+            color: #8a8a8a;
+        }
+        #top-menu a:hover {
+            color: #e0e0e0;
         }
         .container {
             display: flex;
-            height: 100vh;
+            flex: 1;
+            overflow: hidden;
         }
         .panel {
             padding: 16px;
@@ -33,6 +57,12 @@
             flex-direction: column;
         }
         #calendar-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #calendar-content {
             flex: 1;
             overflow-y: auto;
         }
@@ -143,6 +173,10 @@
         .tag-link.active { background: #9ccc65; color: #1a1a1a !important; padding: 1px 4px; border-radius: 3px; }
         .kind-link.active { background: #daa520; color: #1a1a1a !important; padding: 1px 4px; border-radius: 3px; }
         .context-link.active { background: #ce93d8; color: #1a1a1a !important; padding: 1px 4px; border-radius: 3px; }
+        .ctx-toggle { cursor: pointer; color: #ef5350; font-size: 11px; margin-left: 1px; }
+        .ctx-toggle:hover { opacity: 0.7; }
+        .ctx-toggle.excluded { color: #9ccc65; }
+        .tag-link.available { border: 1px solid #558b2f; padding: 0px 3px; border-radius: 3px; }
         /* Dark mode scrollbars */
         ::-webkit-scrollbar {
             width: 8px;
@@ -166,6 +200,10 @@
     </style>
 </head>
 <body>
+    <div id="top-menu">
+        <span class="menu-title">tjai</span>
+        <a href="{% url 'agent_log' %}">Agent Log</a>
+    </div>
     <div class="container">
         <div class="panel panel-left" id="calendar-panel">
             <div id="calendar-section">
@@ -243,7 +281,9 @@
 
         async function fetchStatus() {
             try {
-                const resp = await fetch('/tjai/api/dashboard/status');
+                const params = buildFilterParams();
+                const qs = params.length ? `?${params.join('&')}` : '';
+                const resp = await fetch(`/tjai/api/dashboard/status${qs}`);
                 const data = await resp.json();
                 renderStatus(data);
             } catch (e) {
@@ -400,14 +440,13 @@
 
             document.getElementById('calendar-content').innerHTML = html || 'No upcoming events';
 
-            // Scroll to today, positioning it in the upper-middle of the calendar section
+            // Scroll to today, positioning it in the upper third of the calendar
             const todayEl = document.getElementById('today-marker');
             if (todayEl) {
-                const calSection = document.getElementById('calendar-section');
-                const todayTop = todayEl.offsetTop;
-                const sectionHeight = calSection.clientHeight;
+                const calContent = document.getElementById('calendar-content');
+                const sectionHeight = calContent.clientHeight;
                 // Position today about 1/3 from the top
-                calSection.scrollTop = todayTop - (sectionHeight / 3);
+                calContent.scrollTop = todayEl.offsetTop - (sectionHeight / 3);
             }
         }
 
@@ -481,10 +520,35 @@
         let loadingMore = false;
         let isSearchActive = false;
         let activeMachine = null;
-        let activeTag = null;
+        let activeTags = new Set();
         let activeKind = null;
         let activeContext = null;
+        let excludedContexts = new Set();
         let isFilterActive = false;
+
+        function syncStateToUrl() {
+            const params = new URLSearchParams();
+            if (activeTags.size > 0) params.set('tag', [...activeTags].sort().join(','));
+            if (activeKind) params.set('kind', activeKind);
+            if (activeContext) params.set('context', activeContext);
+            if (activeMachine) params.set('machine', activeMachine);
+            if (excludedContexts.size > 0) params.set('exclude', [...excludedContexts].sort().join(','));
+            const qs = params.toString();
+            const url = qs ? `${location.pathname}?${qs}` : location.pathname;
+            history.replaceState(null, '', url);
+        }
+
+        function loadStateFromUrl() {
+            const params = new URLSearchParams(location.search);
+            const tagParam = params.get('tag');
+            if (tagParam) tagParam.split(',').forEach(t => activeTags.add(t));
+            activeKind = params.get('kind') || null;
+            activeContext = params.get('context') || null;
+            activeMachine = params.get('machine') || null;
+            const excl = params.get('exclude');
+            if (excl) excl.split(',').forEach(c => excludedContexts.add(c));
+            isFilterActive = !!(activeTags.size > 0 || activeKind || activeContext || activeMachine || excludedContexts.size > 0);
+        }
 
         function entriesLabel() {
             const prefix = isFilterActive ? 'filtered' : 'with mod time';
@@ -494,10 +558,11 @@
 
         function buildFilterParams() {
             const params = [];
-            if (activeTag) params.push(`tag=${encodeURIComponent(activeTag)}`);
+            if (activeTags.size > 0) params.push(`tag=${encodeURIComponent([...activeTags].join(','))}`);
             if (activeKind) params.push(`kind=${encodeURIComponent(activeKind)}`);
             if (activeContext) params.push(`context=${encodeURIComponent(activeContext)}`);
             if (activeMachine) params.push(`machine=${encodeURIComponent(activeMachine)}`);
+            if (excludedContexts.size > 0) params.push(`exclude_context=${encodeURIComponent([...excludedContexts].join(','))}`);
             return params;
         }
 
@@ -562,6 +627,7 @@
                 totalEntryCount = data.total_count || entries.length;
                 document.getElementById('entries-label').innerHTML = entriesLabel();
                 document.getElementById('entries-list').innerHTML = renderEntries(entries, dashboardTimezone);
+                highlightAvailableTags(entries);
             } catch (err) {
                 console.error('Filter fetch failed:', err);
             }
@@ -586,11 +652,13 @@
             if (data.contexts && data.contexts.length > 0) {
                 const customPages = ['poetry', 'recipe'];
                 const ctxChips = data.contexts.map(c => {
+                    const excl = excludedContexts.has(c);
+                    const nameColor = excl ? '#666' : '#ce93d8';
                     if (customPages.includes(c)) {
-                        return `<a href="/tjai/context/${c}/" style="color:#ce93d8;text-decoration:none">${c}</a>`;
+                        return `<span style="white-space:nowrap"><a href="/tjai/context/${c}/" style="color:${nameColor};text-decoration:none">${c}</a><span class="ctx-toggle${excl ? ' excluded' : ''}" data-ctx="${c}" title="${excl ? 'Include' : 'Exclude'} ${c}">${excl ? '+' : '\u2212'}</span></span>`;
                     }
                     const activeClass = activeContext === c ? ' active' : '';
-                    return `<a href="#" class="context-link${activeClass}" data-context="${c}" style="color:#ce93d8;text-decoration:none">${c}</a>`;
+                    return `<span style="white-space:nowrap"><a href="#" class="context-link${activeClass}" data-context="${c}" style="color:${nameColor};text-decoration:none">${c}</a><span class="ctx-toggle${excl ? ' excluded' : ''}" data-ctx="${c}" title="${excl ? 'Include' : 'Exclude'} ${c}">${excl ? '+' : '\u2212'}</span></span>`;
                 }).join(' ');
                 html += `<div class="status-line">Contexts: ${ctxChips}</div>`;
             }
@@ -598,7 +666,7 @@
             // Tags
             if (data.all_tags && data.all_tags.length > 0) {
                 const tagLinks = data.all_tags.map(t => {
-                    const activeClass = activeTag === t ? ' active' : '';
+                    const activeClass = activeTags.has(t) ? ' active' : '';
                     return `<a href="#" class="tag-link${activeClass}" data-tag="${t}" style="color:#9ccc65;text-decoration:none">${t}</a>`;
                 }).join(', ');
                 html += `<div class="status-line">Tags: ${tagLinks}, <a href="/tjai/tag/_none/" style="color:#888;text-decoration:none">(none)</a></div>`;
@@ -664,17 +732,32 @@
 
             document.getElementById('status-fixed').innerHTML = html;
 
-            // Entries (tj l format) - skip if search or server-side filter is active
+            // Entries (tj l format) - skip only if search is active
             dashboardTimezone = data.timezone || 'America/New_York';
-            if (!document.getElementById('entry-search').value.trim() && !isFilterActive) {
-                isSearchActive = false;
+            if (!document.getElementById('entry-search').value.trim() && !isSearchActive) {
                 const entries = data.recent_entries || [];
                 loadedEntryCount = entries.length;
                 hasMoreEntries = data.has_more;
                 totalEntryCount = data.total_count || entries.length;
+                isFilterActive = buildFilterParams().length > 0;
                 document.getElementById('entries-label').innerHTML = entriesLabel();
                 document.getElementById('entries-list').innerHTML = renderEntries(entries, dashboardTimezone);
+                // Highlight tags that co-occur with selected tags
+                highlightAvailableTags(entries);
             }
+        }
+
+        function highlightAvailableTags(entries) {
+            const availableTags = new Set();
+            if (activeTags.size > 0) {
+                for (const e of entries) {
+                    if (e.all_tags) e.all_tags.forEach(t => availableTags.add(t));
+                }
+            }
+            document.querySelectorAll('.tag-link').forEach(chip => {
+                const t = chip.dataset.tag;
+                chip.classList.toggle('available', activeTags.size > 0 && !activeTags.has(t) && availableTags.has(t));
+            });
         }
 
         function getWeekNumber(d) {
@@ -716,18 +799,44 @@
         // Helper to toggle a filter and update active class on its link group
         function toggleFilter(varName, value, linkClass) {
             if (varName === 'machine') activeMachine = activeMachine === value ? null : value;
-            else if (varName === 'tag') activeTag = activeTag === value ? null : value;
+            else if (varName === 'tag') { if (activeTags.has(value)) activeTags.delete(value); else activeTags.add(value); }
             else if (varName === 'kind') activeKind = activeKind === value ? null : value;
             else if (varName === 'context') activeContext = activeContext === value ? null : value;
-            const current = varName === 'machine' ? activeMachine : varName === 'tag' ? activeTag : varName === 'kind' ? activeKind : activeContext;
-            document.querySelectorAll(`.${linkClass}`).forEach(el => {
-                el.classList.toggle('active', el.dataset[varName] === current);
-            });
+            if (varName === 'tag') {
+                document.querySelectorAll(`.${linkClass}`).forEach(el => {
+                    el.classList.toggle('active', activeTags.has(el.dataset[varName]));
+                });
+            } else {
+                const current = varName === 'machine' ? activeMachine : varName === 'kind' ? activeKind : activeContext;
+                document.querySelectorAll(`.${linkClass}`).forEach(el => {
+                    el.classList.toggle('active', el.dataset[varName] === current);
+                });
+            }
+            syncStateToUrl();
             fetchFilteredEntries();
         }
 
         // Event delegation for all filter clicks
         document.getElementById('status-fixed').addEventListener('click', function(e) {
+            // Context exclude toggle (minus sign) — must check before context-link
+            const ctxToggle = e.target.closest('.ctx-toggle');
+            if (ctxToggle) {
+                e.preventDefault();
+                e.stopPropagation();
+                const ctx = ctxToggle.dataset.ctx;
+                if (excludedContexts.has(ctx)) excludedContexts.delete(ctx);
+                else excludedContexts.add(ctx);
+                const excl = excludedContexts.has(ctx);
+                ctxToggle.textContent = excl ? '+' : '\u2212';
+                ctxToggle.classList.toggle('excluded', excl);
+                ctxToggle.title = (excl ? 'Include ' : 'Exclude ') + ctx;
+                const nameEl = ctxToggle.previousElementSibling;
+                if (nameEl) nameEl.style.color = excl ? '#666' : '#ce93d8';
+                syncStateToUrl();
+                fetchFilteredEntries();
+                return;
+            }
+
             const machineLink = e.target.closest('.machine-link');
             if (machineLink) { e.preventDefault(); toggleFilter('machine', machineLink.dataset.machine, 'machine-link'); return; }
 
@@ -744,6 +853,7 @@
                 document.querySelectorAll('.kind-link').forEach(el => {
                     el.classList.toggle('active', activeKind === el.dataset.kind);
                 });
+                syncStateToUrl();
                 fetchFilteredEntries();
                 return;
             }
@@ -763,11 +873,13 @@
             }
             // Clear all filters
             activeMachine = null;
-            activeTag = null;
+            activeTags.clear();
             activeKind = null;
             activeContext = null;
+            excludedContexts.clear();
             isFilterActive = false;
             document.querySelectorAll('.machine-link.active, .tag-link.active, .kind-link.active, .context-link.active').forEach(el => el.classList.remove('active'));
+            syncStateToUrl();
             // Refresh
             refresh();
         });
@@ -808,6 +920,9 @@
             searchInput.focus();
             restoreFromSearch();
         });
+
+        // Load filter state from URL params (for bookmarks / programmatic URLs)
+        loadStateFromUrl();
 
         // Initial load
         refresh();

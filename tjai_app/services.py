@@ -500,6 +500,19 @@ def get_entry(entry_id):
     return _format_entry(entry)
 
 
+def get_entry_by_entry_id(entry_id):
+    """Find an entry by its human-readable entry_id stored in data.entry_id."""
+    if not entry_id:
+        return {"error": "entry_id is required"}
+    entry = Entry.objects.select_related('context').filter(
+        data__entry_id=entry_id,
+        deleted_at__isnull=True,
+    ).prefetch_related('tags').first()
+    if not entry:
+        return {"error": f"No entry found with entry_id '{entry_id}'"}
+    return _format_entry(entry)
+
+
 def edit_entry(entry_id, content, context=None, clear_context=False,
                tags=None, event_date=None, event_time=None, clear_event_date=False,
                priority=None, clear_priority=False, status=None, clear_status=False,

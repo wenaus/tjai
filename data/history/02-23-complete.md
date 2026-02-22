@@ -1,256 +1,256 @@
 # On This Day: Mon Feb 23, 2026
 
 ### Events
-- 2021: Riots in four Ecuadorian prisons, caused by gang rivalries, resulted in the deaths of 79 inmates.
-- 2017: Syrian civil war: Allied troops led by the Turkish Armed Forces captured the city of al-Bab from the Islamic State.
-- 2008: A B-2 Spirit stealth bomber crashed on the runway shortly after takeoff from Andersen Air Force Base in Guam in the most expensive crash in U.S. Air Force history.
-- 1987: SN 1987A, the first supernova that modern astronomers were able to study in great detail, was observed from Earth occurring in the Large Magellanic Cloud.
-- 1971: Vietnam War: South Vietnamese General Đỗ Cao Trí was killed in a helicopter crash en route to taking control of the faltering Operation Lam Son 719.
-- 1945: Second World War: An Allied bombing run on Pforzheim, Germany, killed approximately 31 percent of its population and destroyed about 83 percent of its buildings.
-- 1945: American photographer Joe Rosenthal took the Pulitzer Prize–winning photograph Raising the Flag on Iwo Jima during the Battle of Iwo Jima, an image that was later reproduced on the Marine Corps War Memorial.
-- 1944: In response to an insurgency in Chechnya, the Soviet Union began the forced deportation of the native Chechen and Ingush of North Caucasus.
-- 1943: 35 children and 1 adult employee were killed in a fire at an orphanage in the town of Cavan, Ireland.
-- 1941: Plutonium was first chemically identified by chemist Glenn T. Seaborg and his team at the University of California, Berkeley.
-- 1886: American inventor Charles Martin Hall discovered an inexpensive method of producing aluminium.
-- 1854: The Orange River Convention was signed in Bloemfontein, with the United Kingdom agreeing to recognise the independence of the Orange Free State in present-day South Africa.
-- 1847: Mexican–American War: The United States Army used artillery to repulse the much larger Mexican army at the Battle of Buena Vista near Saltillo.
-- 1778: American Revolutionary War: Prussian military officer Friedrich Wilhelm von Steuben arrived at Valley Forge in Pennsylvania as a volunteer for the Continental Army.
-- 1739: The identity of English highwayman Dick Turpin was uncovered by his former schoolmate, who recognised his handwriting, leading to Turpin's trial.
-- 1725: Johann Sebastian Bach premiered his Shepherd Cantata for the birthday of Christian, Duke of Saxe-Weissenfels (pictured).
-- 2025: A snap election is held in Germany.
-- 2021: Four simultaneous prison riots leave at least 62 people dead in Ecuador.
-- 2020: Ahmaud Arbery, a 25-year-old African-American citizen, is shot and murdered by three white men after visiting a house under construction while jogging at a neighborhood in Satilla Shores near Brunswick in Glynn County, Georgia.
-- 2019: Atlas Air Flight 3591, a Boeing 767 freighter, crashes into Trinity Bay near Anahuac, Texas, killing all three people on board.
-- 2018: Parliamentary elections are held in Djibouti.
-- 2017: The Turkish-backed Free Syrian Army captures Al-Bab from ISIL.
-- 2012: A series of attacks across Iraq leave at least 83 killed and more than 250 injured.
-- 2010: Unknown criminals pour more than 2+1⁄2 million liters of diesel oil and other hydrocarbons into the river Lambro, in northern Italy, sparking an environmental disaster.
-- 2008: A United States Air Force B-2 Spirit bomber crashes on Guam, marking  the first operational loss of a B-2.
-- 2008: The Japanese WINDS satellite is launched.
-- 2007: A train derails on an evening express service near Grayrigg, Cumbria, England, killing one person and injuring 88. This results in hundreds of points being checked over the UK after a few similar accidents.
-- 2002: An Ariane 4 rocket is launched from the Guiana Space Centre carrying Intelsat 904.
-- 1999: Kurdish rebel leader Abdullah Öcalan is charged with treason in Ankara, Turkey.
-- 1999: An avalanche buries the town of Galtür, Austria, killing 31.
-- 1998: In the United States, tornadoes in central Florida destroy or damage 2,600 structures and kill 42 people.
-- 1991: In Thailand, General Sunthorn Kongsompong leads a bloodless coup d'état, deposing Prime Minister Chatichai Choonhavan.
-- 1988: Saddam Hussein begins the Anfal genocide against Kurds and Assyrians in northern Iraq.
-- 1987: Supernova 1987a is seen in the Large Magellanic Cloud.
-- 1983: The United States Environmental Protection Agency announces its intent to buy out and evacuate the dioxin-contaminated community of Times Beach, Missouri.
-- 1981: In Spain, Antonio Tejero attempts a coup d'état by capturing the Spanish Congress of Deputies.
-- 1980: Iran hostage crisis: Supreme Leader Ayatollah Ruhollah Khomeini states that Iran's parliament will decide the fate of the American embassy hostages.
-- 1974: The Symbionese Liberation Army demands $4 million more to release kidnap victim Patty Hearst.
-- 1971: Operation Lam Son 719: South Vietnamese General Do Cao Tri was killed in a helicopter crash en route to taking control of the faltering campaign.
-- 1966: In Syria, Ba'ath Party member Salah Jadid leads an intra-party military coup that replaces the previous government of General Amin al-Hafiz, also a Baathist.
-- 1958: Five-time Argentine Formula One champion Juan Manuel Fangio is kidnapped by rebels involved in the Cuban Revolution, on the eve of the Cuban Grand Prix. He was released the following day after the race.
-- 1954: The first mass inoculation of children against polio with the Salk vaccine begins in Pittsburgh.
-- 1950: General elections are held in the United Kingdom.
-- 1947: International Organization for Standardization is founded.
-- 1945: World War II: During the Battle of Iwo Jima, a group of United States Marines reach the top of Mount Suribachi on the island and are photographed raising the American flag.
-- 1945: World War II: The 11th Airborne Division, with Filipino guerrillas, free all 2,147 captives of the Los Baños internment camp, in what General Colin Powell later would refer to as "the textbook airborne operation for all ages and all armies."
-- 1945: World War II: The capital of the Philippines, Manila, is liberated by combined Filipino and American forces.
-- 1945: World War II: Capitulation of German garrison in Poznań. The city is liberated by Soviet and Polish forces.
-- 1945: World War II: The German town of Pforzheim is annihilated in a raid by 379 British bombers.
-- 1945: American Airlines Flight 009 crashes near Rural Retreat, Virginia, killing 17.
-- 1944: The Soviet Union begins the forced deportation of the Chechen and Ingush people from the North Caucasus to Central Asia.
-- 1943: The Cavan Orphanage fire kills thirty-five girls and an elderly cook.
-- 1943: Greek Resistance: The United Panhellenic Organization of Youth is founded in Greece.
-- 1942: World War II: Japanese submarines fire artillery shells at the coastline near Santa Barbara, California.
-- 1941: Plutonium is first produced and isolated by Dr. Glenn T. Seaborg.
-- 1934: Leopold III becomes King of Belgium.
-- 1927: U.S. President Calvin Coolidge signs a bill by Congress establishing the Federal Radio Commission (later replaced by the Federal Communications Commission) which was to regulate the use of radio frequencies in the United States.
-- 1927: German theoretical physicist Werner Heisenberg writes a letter to fellow physicist Wolfgang Pauli, in which he describes his uncertainty principle for the first time.
-- 1917: First demonstrations in Saint Petersburg, Russia. The beginning of the February Revolution (March 8 in the Gregorian calendar).
-- 1909: The AEA Silver Dart makes the first powered flight in Canada and the British Empire.
-- 1905: Chicago attorney Paul Harris and three other businessmen meet for lunch to form the Rotary Club, the world's first service club.
-- 1903: Cuba leases Guantánamo Bay to the United States "in perpetuity".
-- 1900: Second Boer War: During the Battle of the Tugela Heights, the first British attempt to take Hart's Hill fails.
-- 1898: Émile Zola is imprisoned in France after writing J'Accuse…!, a letter accusing the French government of antisemitism and wrongfully imprisoning Captain Alfred Dreyfus.
-- 1887: The French Riviera is hit by a large earthquake, killing around 2,000.
-- 1886: Charles Martin Hall produced the first samples of aluminium from the electrolysis of aluminium oxide, after several years of intensive work. He was assisted in this project by his older sister, Julia Brainerd Hall.
-- 1885: Sino-French War: French Army gains an important victory in the Battle of Đồng Đăng in the Tonkin region of Vietnam.
-- 1883: Alabama becomes the first U.S. state to enact an anti-trust law.
-- 1870: Reconstruction Era: Post-U.S. Civil War military control of Mississippi ends and it is readmitted to the Union.
-- 1861: President-elect Abraham Lincoln arrives secretly in Washington, D.C., after the thwarting of an alleged assassination plot in Baltimore, Maryland.
-- 1854: The official independence of the Orange Free State, South Africa is declared.
-- 1847: Mexican–American War: Battle of Buena Vista: In Mexico, American troops under future president General Zachary Taylor defeat Mexican General Antonio López de Santa Anna.
-- 1836: Texas Revolution: The Siege of the Alamo (prelude to the Battle of the Alamo) begins in San Antonio, Texas.
-- 1820: Cato Street Conspiracy: A plot to murder all the British cabinet ministers is exposed and the conspirators arrested.
-- 1778: American Revolutionary War: Baron von Steuben arrives at Valley Forge, Pennsylvania, to help train the Continental Army.
-- 1763: Berbice slave uprising in Guyana: The first major slave revolt in South America.
-- 1725: J. S. Bach leads his Tafel-Music Shepherd Cantata for the birthday of Christian, Duke of Saxe-Weissenfels.
-- 1455: Traditionally the date of publication of the Gutenberg Bible, the first Western book printed with movable type.
-- 705: Empress Wu Zetian abdicates the throne, restoring the Tang dynasty.
-- 628: Khosrow II, last Sasanian shah of Iran, is overthrown.
-- 532: Byzantine emperor Justinian I lays the foundation stone of a new Orthodox Christian basilica in Constantinople – the Hagia Sophia.
-- 303: Roman emperor Diocletian orders the destruction of the Christian church in Nicomedia, beginning eight years of Diocletianic Persecution.
+- Riots in four Ecuadorian prisons, caused by gang rivalries, resulted in the deaths of 79 inmates. (2021)
+- Syrian civil war: Allied troops led by the Turkish Armed Forces captured the city of al-Bab from the Islamic State. (2017)
+- A B-2 Spirit stealth bomber crashed on the runway shortly after takeoff from Andersen Air Force Base in Guam in the most expensive crash in U.S. Air Force history. (2008)
+- SN 1987A, the first supernova that modern astronomers were able to study in great detail, was observed from Earth occurring in the Large Magellanic Cloud. (1987)
+- Vietnam War: South Vietnamese General Đỗ Cao Trí was killed in a helicopter crash en route to taking control of the faltering Operation Lam Son 719. (1971)
+- Second World War: An Allied bombing run on Pforzheim, Germany, killed approximately 31 percent of its population and destroyed about 83 percent of its buildings. (1945)
+- American photographer Joe Rosenthal took the Pulitzer Prize–winning photograph Raising the Flag on Iwo Jima during the Battle of Iwo Jima, an image that was later reproduced on the Marine Corps War Memorial. (1945)
+- In response to an insurgency in Chechnya, the Soviet Union began the forced deportation of the native Chechen and Ingush of North Caucasus. (1944)
+- 35 children and 1 adult employee were killed in a fire at an orphanage in the town of Cavan, Ireland. (1943)
+- Plutonium was first chemically identified by chemist Glenn T. Seaborg and his team at the University of California, Berkeley. (1941)
+- American inventor Charles Martin Hall discovered an inexpensive method of producing aluminium. (1886)
+- The Orange River Convention was signed in Bloemfontein, with the United Kingdom agreeing to recognise the independence of the Orange Free State in present-day South Africa. (1854)
+- Mexican–American War: The United States Army used artillery to repulse the much larger Mexican army at the Battle of Buena Vista near Saltillo. (1847)
+- American Revolutionary War: Prussian military officer Friedrich Wilhelm von Steuben arrived at Valley Forge in Pennsylvania as a volunteer for the Continental Army. (1778)
+- The identity of English highwayman Dick Turpin was uncovered by his former schoolmate, who recognised his handwriting, leading to Turpin's trial. (1739)
+- Johann Sebastian Bach premiered his Shepherd Cantata for the birthday of Christian, Duke of Saxe-Weissenfels (pictured). (1725)
+- A snap election is held in Germany. (2025)
+- Four simultaneous prison riots leave at least 62 people dead in Ecuador. (2021)
+- Ahmaud Arbery, a 25-year-old African-American citizen, is shot and murdered by three white men after visiting a house under construction while jogging at a neighborhood in Satilla Shores near Brunswick in Glynn County, Georgia. (2020)
+- Atlas Air Flight 3591, a Boeing 767 freighter, crashes into Trinity Bay near Anahuac, Texas, killing all three people on board. (2019)
+- Parliamentary elections are held in Djibouti. (2018)
+- The Turkish-backed Free Syrian Army captures Al-Bab from ISIL. (2017)
+- A series of attacks across Iraq leave at least 83 killed and more than 250 injured. (2012)
+- Unknown criminals pour more than 2+1⁄2 million liters of diesel oil and other hydrocarbons into the river Lambro, in northern Italy, sparking an environmental disaster. (2010)
+- A United States Air Force B-2 Spirit bomber crashes on Guam, marking  the first operational loss of a B-2. (2008)
+- The Japanese WINDS satellite is launched. (2008)
+- A train derails on an evening express service near Grayrigg, Cumbria, England, killing one person and injuring 88. This results in hundreds of points being checked over the UK after a few similar accidents. (2007)
+- An Ariane 4 rocket is launched from the Guiana Space Centre carrying Intelsat 904. (2002)
+- Kurdish rebel leader Abdullah Öcalan is charged with treason in Ankara, Turkey. (1999)
+- An avalanche buries the town of Galtür, Austria, killing 31. (1999)
+- In the United States, tornadoes in central Florida destroy or damage 2,600 structures and kill 42 people. (1998)
+- In Thailand, General Sunthorn Kongsompong leads a bloodless coup d'état, deposing Prime Minister Chatichai Choonhavan. (1991)
+- Saddam Hussein begins the Anfal genocide against Kurds and Assyrians in northern Iraq. (1988)
+- Supernova 1987a is seen in the Large Magellanic Cloud. (1987)
+- The United States Environmental Protection Agency announces its intent to buy out and evacuate the dioxin-contaminated community of Times Beach, Missouri. (1983)
+- In Spain, Antonio Tejero attempts a coup d'état by capturing the Spanish Congress of Deputies. (1981)
+- Iran hostage crisis: Supreme Leader Ayatollah Ruhollah Khomeini states that Iran's parliament will decide the fate of the American embassy hostages. (1980)
+- The Symbionese Liberation Army demands $4 million more to release kidnap victim Patty Hearst. (1974)
+- Operation Lam Son 719: South Vietnamese General Do Cao Tri was killed in a helicopter crash en route to taking control of the faltering campaign. (1971)
+- In Syria, Ba'ath Party member Salah Jadid leads an intra-party military coup that replaces the previous government of General Amin al-Hafiz, also a Baathist. (1966)
+- Five-time Argentine Formula One champion Juan Manuel Fangio is kidnapped by rebels involved in the Cuban Revolution, on the eve of the Cuban Grand Prix. He was released the following day after the race. (1958)
+- The first mass inoculation of children against polio with the Salk vaccine begins in Pittsburgh. (1954)
+- General elections are held in the United Kingdom. (1950)
+- International Organization for Standardization is founded. (1947)
+- World War II: During the Battle of Iwo Jima, a group of United States Marines reach the top of Mount Suribachi on the island and are photographed raising the American flag. (1945)
+- World War II: The 11th Airborne Division, with Filipino guerrillas, free all 2,147 captives of the Los Baños internment camp, in what General Colin Powell later would refer to as "the textbook airborne operation for all ages and all armies." (1945)
+- World War II: The capital of the Philippines, Manila, is liberated by combined Filipino and American forces. (1945)
+- World War II: Capitulation of German garrison in Poznań. The city is liberated by Soviet and Polish forces. (1945)
+- World War II: The German town of Pforzheim is annihilated in a raid by 379 British bombers. (1945)
+- American Airlines Flight 009 crashes near Rural Retreat, Virginia, killing 17. (1945)
+- The Soviet Union begins the forced deportation of the Chechen and Ingush people from the North Caucasus to Central Asia. (1944)
+- The Cavan Orphanage fire kills thirty-five girls and an elderly cook. (1943)
+- Greek Resistance: The United Panhellenic Organization of Youth is founded in Greece. (1943)
+- World War II: Japanese submarines fire artillery shells at the coastline near Santa Barbara, California. (1942)
+- Plutonium is first produced and isolated by Dr. Glenn T. Seaborg. (1941)
+- Leopold III becomes King of Belgium. (1934)
+- U.S. President Calvin Coolidge signs a bill by Congress establishing the Federal Radio Commission (later replaced by the Federal Communications Commission) which was to regulate the use of radio frequencies in the United States. (1927)
+- German theoretical physicist Werner Heisenberg writes a letter to fellow physicist Wolfgang Pauli, in which he describes his uncertainty principle for the first time. (1927)
+- First demonstrations in Saint Petersburg, Russia. The beginning of the February Revolution (March 8 in the Gregorian calendar). (1917)
+- The AEA Silver Dart makes the first powered flight in Canada and the British Empire. (1909)
+- Chicago attorney Paul Harris and three other businessmen meet for lunch to form the Rotary Club, the world's first service club. (1905)
+- Cuba leases Guantánamo Bay to the United States "in perpetuity". (1903)
+- Second Boer War: During the Battle of the Tugela Heights, the first British attempt to take Hart's Hill fails. (1900)
+- Émile Zola is imprisoned in France after writing J'Accuse…!, a letter accusing the French government of antisemitism and wrongfully imprisoning Captain Alfred Dreyfus. (1898)
+- The French Riviera is hit by a large earthquake, killing around 2,000. (1887)
+- Charles Martin Hall produced the first samples of aluminium from the electrolysis of aluminium oxide, after several years of intensive work. He was assisted in this project by his older sister, Julia Brainerd Hall. (1886)
+- Sino-French War: French Army gains an important victory in the Battle of Đồng Đăng in the Tonkin region of Vietnam. (1885)
+- Alabama becomes the first U.S. state to enact an anti-trust law. (1883)
+- Reconstruction Era: Post-U.S. Civil War military control of Mississippi ends and it is readmitted to the Union. (1870)
+- President-elect Abraham Lincoln arrives secretly in Washington, D.C., after the thwarting of an alleged assassination plot in Baltimore, Maryland. (1861)
+- The official independence of the Orange Free State, South Africa is declared. (1854)
+- Mexican–American War: Battle of Buena Vista: In Mexico, American troops under future president General Zachary Taylor defeat Mexican General Antonio López de Santa Anna. (1847)
+- Texas Revolution: The Siege of the Alamo (prelude to the Battle of the Alamo) begins in San Antonio, Texas. (1836)
+- Cato Street Conspiracy: A plot to murder all the British cabinet ministers is exposed and the conspirators arrested. (1820)
+- American Revolutionary War: Baron von Steuben arrives at Valley Forge, Pennsylvania, to help train the Continental Army. (1778)
+- Berbice slave uprising in Guyana: The first major slave revolt in South America. (1763)
+- J. S. Bach leads his Tafel-Music Shepherd Cantata for the birthday of Christian, Duke of Saxe-Weissenfels. (1725)
+- Traditionally the date of publication of the Gutenberg Bible, the first Western book printed with movable type. (1455)
+- Empress Wu Zetian abdicates the throne, restoring the Tang dynasty. (705)
+- Khosrow II, last Sasanian shah of Iran, is overthrown. (628)
+- Byzantine emperor Justinian I lays the foundation stone of a new Orthodox Christian basilica in Constantinople – the Hagia Sophia. (532)
+- Roman emperor Diocletian orders the destruction of the Christian church in Nicomedia, beginning eight years of Diocletianic Persecution. (303)
 
 ### Birthdays
-- 2002: Emilia Jones, English actress
-- 2000: Femke Bol, Dutch hurdler and sprinter
-- 1997: Jamal Murray, Canadian basketball player
-- 1996: D'Angelo Russell, American basketball player
-- 1995: Andrew Wiggins, Canadian basketball player
-- 1994: Dakota Fanning, American actress
-- 1994: Triptii Dimri, Indian actress
-- 1992: Casemiro, Brazilian footballer
-- 1992: Kyriakos Papadopoulos, Greek footballer
-- 1992: Samara Weaving, Australian actress and model
-- 1990: Kevin Connauton, Canadian ice hockey player
-- 1990: Marco Scandella, Canadian ice hockey player
-- 1989: Evan Bates, American ice dancer
-- 1989: Jérémy Pied, French footballer
-- 1989: Wilin Rosario, Dominican baseball player
-- 1988: Nicolás Gaitán, Argentine footballer
-- 1987: Ab-Soul, American rapper
-- 1987: Malik Hairston, American basketball player
-- 1987: Theophilus London, Trinidadian-American singer-songwriter and producer
-- 1986: Emerson Conceição, Brazilian footballer
-- 1986: Skylar Grey, American singer-songwriter
-- 1986: Kazuya Kamenashi, Japanese singer-songwriter and actor
-- 1986: Jerod Mayo, American football player and coach
-- 1986: Ola Svensson, Swedish singer-songwriter
-- 1983: Aziz Ansari, American comedian, actor, producer, and screenwriter
-- 1983: Emily Blunt, English actress
-- 1983: Mido, Egyptian footballer, manager and sportscaster
-- 1983: Dijon Thompson, American basketball player
-- 1982: Jia Perkins, American basketball player and coach
-- 1982: Karan Singh Grover, Indian actor
-- 1981: Gareth Barry, English footballer
-- 1981: Josh Gad, American actor, producer, and screenwriter
-- 1981: Charles Tillman, American football player
-- 1978: Residente, Puerto Rican singer-songwriter
-- 1978: Dan Snyder, Canadian ice hockey player (died 2003)
-- 1977: Kristina Šmigun-Vähi, Estonian skier
-- 1976: Kelly Macdonald, Scottish actress
-- 1975: Michael Cornacchia, American actor, director, producer, and screenwriter
-- 1975: Robert Lopez, American songwriter and playwright
-- 1974: Herschelle Gibbs, South African cricketer
-- 1974: Robbi Kempson, South African rugby player
-- 1973: Jeff Nordgaard, American-Polish basketball player
-- 1972: Alessandro Sturba, Italian footballer
-- 1972: Rondell White, American baseball player
-- 1971: Carin Koch, Swedish golfer
-- 1971: Melinda Messenger, English model and television host
-- 1971: Joe-Max Moore, American soccer player
-- 1970: Niecy Nash, American actress and producer
-- 1969: Michael Campbell, New Zealand golfer
-- 1969: Martine Croxall, English journalist and television news presenter
-- 1969: Daymond John, American fashion designer and businessman, founded FUBU
-- 1969: Bhagyashree, Indian actress
-- 1967: Steve Stricker, American golfer
-- 1967: Chris Vrenna, American drummer, songwriter, and producer
-- 1965: Kristin Davis, American actress and producer
-- 1965: Michael Dell, American businessman
-- 1965: Helena Suková, Czech-Monacan tennis player
-- 1964: John Norum, Norwegian guitarist and songwriter
-- 1963: Bobby Bonilla, American baseball player
-- 1963: Radosław Sikorski, Polish journalist and politician, 11th Minister of Foreign Affairs of Poland
-- 1962: Michael Wilton, American guitarist
-- 1960: Naruhito, Emperor of Japan
-- 1959: Clayton Anderson, American engineer and astronaut
-- 1959: Nick de Bois, English politician
-- 1959: Ian Liddell-Grainger, Scottish soldier and politician
-- 1959: Linda Nolan, Irish singer and actress (died 2025)
-- 1958: David Sylvian, English singer-songwriter
-- 1957: Charlie Brandt, American serial killer (died 2004)
-- 1956: Sandra Osborne, Scottish politician
-- 1955: Howard Jones, English singer-songwriter
-- 1955: Flip Saunders, American basketball player and coach (died 2015)
-- 1955: Francesca Simon, American-British author
-- 1954: Rajini Thiranagama, Sri Lankan physician and academic (died 1989)
-- 1954: Viktor Yushchenko, Ukrainian captain and politician, 3rd President of Ukraine
-- 1953: Kenny Bee, Hong Kong singer-songwriter, guitarist, and actor
-- 1953: Satoru Nakajima, Japanese racing driver
-- 1952: Brad Whitford, American guitarist and songwriter
-- 1951: Eddie Dibbs, American tennis player
-- 1951: Debbie Friedman, American singer-songwriter of Jewish melodies (died 2011)
-- 1951: Ed "Too Tall" Jones, American football player and boxer
-- 1951: Patricia Richardson, American actress
-- 1950: Rebecca Goldstein, American philosopher and author
-- 1950: John Greaves, Welsh bass guitarist and composer
-- 1949: César Aira, Argentine author and translator
-- 1949: Marc Garneau, Canadian engineer, astronaut, and politician (died 2025)
-- 1948: Bill Alexander, English director and producer
-- 1948: Trevor Cherry, English footballer (died 2020)
-- 1948: Steve Priest, English singer-songwriter and bass player (died 2020)
-- 1947: Pia Kjærsgaard, Danish politician, Speaker of the Danish Parliament
-- 1947: Anton Mosimann, Swiss chef and author
-- 1946: Rusty Young, American singer-songwriter and guitarist (died 2021)
-- 1945: Allan Boesak, South African cleric and politician
-- 1944: Bernard Cornwell, English author and educator
-- 1944: Florian Fricke, German keyboard player and composer (died 2001)
-- 1944: Johnny Winter, American singer-songwriter, guitarist, and producer (died 2014)
-- 1943: Fred Biletnikoff, American football player and coach
-- 1943: Bobby Mitchell, American golfer (died 2018)
-- 1941: Ron Hunt, American baseball player
-- 1940: Peter Fonda, American actor, director, producer, and screenwriter (died 2019)
-- 1940: Jackie Smith, American football player
-- 1939: Lee Shaffer, American basketball player
-- 1938: Sylvia Chase, American broadcast journalist (died 2019)
-- 1938: Paul Morrissey, American director, producer, and screenwriter (died 2024)
-- 1938: Diane Varsi, American actress (died 1992)
-- 1937: Tom Osborne, American football player, coach, and politician
-- 1932: Majel Barrett, American actress and producer (died 2008)
-- 1931: Tom Wesselmann, American painter and sculptor (died 2004)
-- 1930: Paul West, English-American author, poet, and academic (died 2015)
-- 1929: Patriarch Alexy II of Moscow (died 2008)
-- 1929: Elston Howard, American baseball player and coach (died 1980)
-- 1928: Hans Herrmann, German racing driver (died 2026)
-- 1928: Vasily Lazarev, Russian colonel, physician, and astronaut (died 1990)
-- 1927: Régine Crespin, French soprano and actress (died 2007)
-- 1927: Jessica Huntley, Guyanese activist and publisher (died 2013)
-- 1925: Louis Stokes, American lawyer and politician (died 2015)
-- 1924: Allan McLeod Cormack, South-African-American physicist and academic, Nobel Prize laureate (died 1998)
-- 1923: Rafael Addiego Bruno, Uruguayan jurist and politician, President of Uruguay (died 2014)
-- 1923: Harry Clarke, English footballer (died 2000)
-- 1923: Ioannis Grivas, Greek judge and politician, 176th Prime Minister of Greece (died 2016)
-- 1923: Dante Lavelli, American football player (died 2009)
-- 1923: Clarence D. Lester, American fighter pilot (died 1986)
-- 1923: Mary Francis Shura, American author (died 1991)
-- 1922: Johnny Franz, English record producer (died 1977)
-- 1920: Paul Gérin-Lajoie, Canadian lawyer and politician (died 2018)
-- 1919: Johnny Carey, Irish footballer and manager (died 1995)
-- 1915: Jon Hall, American actor and director (died 1979)
-- 1915: Paul Tibbets, American general and pilot (died 2007)
-- 1908: William McMahon, Australian lawyer and politician, 20th Prime Minister of Australia (died 1988)
-- 1904: Terence Fisher, English director and screenwriter (died 1980)
-- 1904: William L. Shirer, American journalist and historian (died 1993)
-- 1899: Erich Kästner, German author and poet (died 1974)
-- 1899: Norman Taurog, American director and screenwriter (died 1981)
-- 1894: Harold Horder, Australian rugby league player and coach (died 1978)
-- 1892: Kathleen Harrison, English actress (died 1995)
-- 1892: Agnes Smedley, American journalist and writer (died 1950)
-- 1889: Musidora, French actress and director (died 1957)
-- 1889: Cyril Delevanti, English-American actor (died 1975)
-- 1889: Victor Fleming, American director, cinematographer, and producer (died 1949)
-- 1889: John Gilbert Winant, American captain, pilot, and politician, 60th Governor of New Hampshire (died 1947)
-- 1884: Casimir Funk, Polish biochemist (died 1967)
-- 1883: Karl Jaspers, German-Swiss psychiatrist and philosopher (died 1969)
-- 1883: Guy C. Wiggins, American painter (died 1962)
-- 1878: Kazimir Malevich, Ukrainian painter and theorist (died 1935)
-- 1874: Konstantin Päts, Estonian lawyer and politician, 1st President of Estonia (died 1956)
-- 1873: Liang Qichao, Chinese journalist, philosopher, and scholar (died 1929)
-- 1868: W. E. B. Du Bois, American sociologist, historian, and activist (died 1963)
-- 1868: Anna Hofman-Uddgren, Swedish actress, singer, and director (died 1947)
-- 1850: César Ritz, Swiss businessman, founded The Ritz Hotel, London and Hôtel Ritz Paris (died 1918)
-- 1842: Karl Robert Eduard von Hartmann, German philosopher and author (died 1906)
-- 1831: Hendrik Willem Mesdag, Dutch painter (died 1915)
-- 1830: Magdalene Osenbroch, Norwegian actress (died 1854)
-- 1805: Johan Jakob Nervander, Finnish poet, physicist and meteorologist (died 1848)
-- 1792: José Joaquín de Herrera, Mexican politician and general (died 1854)
-- 1744: Mayer Amschel Rothschild, German banker and businessman (died 1812)
-- 1723: Richard Price, Welsh-English minister and philosopher (died 1791)
-- 1685: George Frideric Handel, German-English organist and composer (died 1759)
-- 1680: Jean-Baptiste Le Moyne, Sieur de Bienville, Canadian politician, 2nd Colonial Governor of Louisiana (died 1767)
-- 1646: Tokugawa Tsunayoshi, Japanese shōgun (died 1709)
-- 1633: Samuel Pepys, English diarist and politician (died 1703)
-- 1606: George Frederick of Nassau-Siegen, officer in the Dutch Army (died 1674)
-- 1592: Balthazar Gerbier, Dutch painter (died 1663)
-- 1583: Jean-Baptiste Morin, French mathematician, astrologer, and astronomer (died 1656)
-- 1539: Henry XI of Legnica, thrice Duke of Legnica (died 1588)
-- 1539: Salima Sultan Begum, Empress of the Mughal Empire (died 1612)
-- 1529: Onofrio Panvinio, Italian historian (died 1568)
-- 1443: Matthias Corvinus, Hungarian king (died 1490)
-- 1417: Pope Paul II (died 1471)
-- 1417: Louis IX, Duke of Bavaria (died 1479)
-- 1133: Al-Zafir, Fatimid caliph (died 1154)
+- Emilia Jones, English actress (2002)
+- Femke Bol, Dutch hurdler and sprinter (2000)
+- Jamal Murray, Canadian basketball player (1997)
+- D'Angelo Russell, American basketball player (1996)
+- Andrew Wiggins, Canadian basketball player (1995)
+- Dakota Fanning, American actress (1994)
+- Triptii Dimri, Indian actress (1994)
+- Casemiro, Brazilian footballer (1992)
+- Kyriakos Papadopoulos, Greek footballer (1992)
+- Samara Weaving, Australian actress and model (1992)
+- Kevin Connauton, Canadian ice hockey player (1990)
+- Marco Scandella, Canadian ice hockey player (1990)
+- Evan Bates, American ice dancer (1989)
+- Jérémy Pied, French footballer (1989)
+- Wilin Rosario, Dominican baseball player (1989)
+- Nicolás Gaitán, Argentine footballer (1988)
+- Ab-Soul, American rapper (1987)
+- Malik Hairston, American basketball player (1987)
+- Theophilus London, Trinidadian-American singer-songwriter and producer (1987)
+- Emerson Conceição, Brazilian footballer (1986)
+- Skylar Grey, American singer-songwriter (1986)
+- Kazuya Kamenashi, Japanese singer-songwriter and actor (1986)
+- Jerod Mayo, American football player and coach (1986)
+- Ola Svensson, Swedish singer-songwriter (1986)
+- Aziz Ansari, American comedian, actor, producer, and screenwriter (1983)
+- Emily Blunt, English actress (1983)
+- Mido, Egyptian footballer, manager and sportscaster (1983)
+- Dijon Thompson, American basketball player (1983)
+- Jia Perkins, American basketball player and coach (1982)
+- Karan Singh Grover, Indian actor (1982)
+- Gareth Barry, English footballer (1981)
+- Josh Gad, American actor, producer, and screenwriter (1981)
+- Charles Tillman, American football player (1981)
+- Residente, Puerto Rican singer-songwriter (1978)
+- Dan Snyder, Canadian ice hockey player (died 2003) (1978)
+- Kristina Šmigun-Vähi, Estonian skier (1977)
+- Kelly Macdonald, Scottish actress (1976)
+- Michael Cornacchia, American actor, director, producer, and screenwriter (1975)
+- Robert Lopez, American songwriter and playwright (1975)
+- Herschelle Gibbs, South African cricketer (1974)
+- Robbi Kempson, South African rugby player (1974)
+- Jeff Nordgaard, American-Polish basketball player (1973)
+- Alessandro Sturba, Italian footballer (1972)
+- Rondell White, American baseball player (1972)
+- Carin Koch, Swedish golfer (1971)
+- Melinda Messenger, English model and television host (1971)
+- Joe-Max Moore, American soccer player (1971)
+- Niecy Nash, American actress and producer (1970)
+- Michael Campbell, New Zealand golfer (1969)
+- Martine Croxall, English journalist and television news presenter (1969)
+- Daymond John, American fashion designer and businessman, founded FUBU (1969)
+- Bhagyashree, Indian actress (1969)
+- Steve Stricker, American golfer (1967)
+- Chris Vrenna, American drummer, songwriter, and producer (1967)
+- Kristin Davis, American actress and producer (1965)
+- Michael Dell, American businessman (1965)
+- Helena Suková, Czech-Monacan tennis player (1965)
+- John Norum, Norwegian guitarist and songwriter (1964)
+- Bobby Bonilla, American baseball player (1963)
+- Radosław Sikorski, Polish journalist and politician, 11th Minister of Foreign Affairs of Poland (1963)
+- Michael Wilton, American guitarist (1962)
+- Naruhito, Emperor of Japan (1960)
+- Clayton Anderson, American engineer and astronaut (1959)
+- Nick de Bois, English politician (1959)
+- Ian Liddell-Grainger, Scottish soldier and politician (1959)
+- Linda Nolan, Irish singer and actress (died 2025) (1959)
+- David Sylvian, English singer-songwriter (1958)
+- Charlie Brandt, American serial killer (died 2004) (1957)
+- Sandra Osborne, Scottish politician (1956)
+- Howard Jones, English singer-songwriter (1955)
+- Flip Saunders, American basketball player and coach (died 2015) (1955)
+- Francesca Simon, American-British author (1955)
+- Rajini Thiranagama, Sri Lankan physician and academic (died 1989) (1954)
+- Viktor Yushchenko, Ukrainian captain and politician, 3rd President of Ukraine (1954)
+- Kenny Bee, Hong Kong singer-songwriter, guitarist, and actor (1953)
+- Satoru Nakajima, Japanese racing driver (1953)
+- Brad Whitford, American guitarist and songwriter (1952)
+- Eddie Dibbs, American tennis player (1951)
+- Debbie Friedman, American singer-songwriter of Jewish melodies (died 2011) (1951)
+- Ed "Too Tall" Jones, American football player and boxer (1951)
+- Patricia Richardson, American actress (1951)
+- Rebecca Goldstein, American philosopher and author (1950)
+- John Greaves, Welsh bass guitarist and composer (1950)
+- César Aira, Argentine author and translator (1949)
+- Marc Garneau, Canadian engineer, astronaut, and politician (died 2025) (1949)
+- Bill Alexander, English director and producer (1948)
+- Trevor Cherry, English footballer (died 2020) (1948)
+- Steve Priest, English singer-songwriter and bass player (died 2020) (1948)
+- Pia Kjærsgaard, Danish politician, Speaker of the Danish Parliament (1947)
+- Anton Mosimann, Swiss chef and author (1947)
+- Rusty Young, American singer-songwriter and guitarist (died 2021) (1946)
+- Allan Boesak, South African cleric and politician (1945)
+- Bernard Cornwell, English author and educator (1944)
+- Florian Fricke, German keyboard player and composer (died 2001) (1944)
+- Johnny Winter, American singer-songwriter, guitarist, and producer (died 2014) (1944)
+- Fred Biletnikoff, American football player and coach (1943)
+- Bobby Mitchell, American golfer (died 2018) (1943)
+- Ron Hunt, American baseball player (1941)
+- Peter Fonda, American actor, director, producer, and screenwriter (died 2019) (1940)
+- Jackie Smith, American football player (1940)
+- Lee Shaffer, American basketball player (1939)
+- Sylvia Chase, American broadcast journalist (died 2019) (1938)
+- Paul Morrissey, American director, producer, and screenwriter (died 2024) (1938)
+- Diane Varsi, American actress (died 1992) (1938)
+- Tom Osborne, American football player, coach, and politician (1937)
+- Majel Barrett, American actress and producer (died 2008) (1932)
+- Tom Wesselmann, American painter and sculptor (died 2004) (1931)
+- Paul West, English-American author, poet, and academic (died 2015) (1930)
+- Patriarch Alexy II of Moscow (died 2008) (1929)
+- Elston Howard, American baseball player and coach (died 1980) (1929)
+- Hans Herrmann, German racing driver (died 2026) (1928)
+- Vasily Lazarev, Russian colonel, physician, and astronaut (died 1990) (1928)
+- Régine Crespin, French soprano and actress (died 2007) (1927)
+- Jessica Huntley, Guyanese activist and publisher (died 2013) (1927)
+- Louis Stokes, American lawyer and politician (died 2015) (1925)
+- Allan McLeod Cormack, South-African-American physicist and academic, Nobel Prize laureate (died 1998) (1924)
+- Rafael Addiego Bruno, Uruguayan jurist and politician, President of Uruguay (died 2014) (1923)
+- Harry Clarke, English footballer (died 2000) (1923)
+- Ioannis Grivas, Greek judge and politician, 176th Prime Minister of Greece (died 2016) (1923)
+- Dante Lavelli, American football player (died 2009) (1923)
+- Clarence D. Lester, American fighter pilot (died 1986) (1923)
+- Mary Francis Shura, American author (died 1991) (1923)
+- Johnny Franz, English record producer (died 1977) (1922)
+- Paul Gérin-Lajoie, Canadian lawyer and politician (died 2018) (1920)
+- Johnny Carey, Irish footballer and manager (died 1995) (1919)
+- Jon Hall, American actor and director (died 1979) (1915)
+- Paul Tibbets, American general and pilot (died 2007) (1915)
+- William McMahon, Australian lawyer and politician, 20th Prime Minister of Australia (died 1988) (1908)
+- Terence Fisher, English director and screenwriter (died 1980) (1904)
+- William L. Shirer, American journalist and historian (died 1993) (1904)
+- Erich Kästner, German author and poet (died 1974) (1899)
+- Norman Taurog, American director and screenwriter (died 1981) (1899)
+- Harold Horder, Australian rugby league player and coach (died 1978) (1894)
+- Kathleen Harrison, English actress (died 1995) (1892)
+- Agnes Smedley, American journalist and writer (died 1950) (1892)
+- Musidora, French actress and director (died 1957) (1889)
+- Cyril Delevanti, English-American actor (died 1975) (1889)
+- Victor Fleming, American director, cinematographer, and producer (died 1949) (1889)
+- John Gilbert Winant, American captain, pilot, and politician, 60th Governor of New Hampshire (died 1947) (1889)
+- Casimir Funk, Polish biochemist (died 1967) (1884)
+- Karl Jaspers, German-Swiss psychiatrist and philosopher (died 1969) (1883)
+- Guy C. Wiggins, American painter (died 1962) (1883)
+- Kazimir Malevich, Ukrainian painter and theorist (died 1935) (1878)
+- Konstantin Päts, Estonian lawyer and politician, 1st President of Estonia (died 1956) (1874)
+- Liang Qichao, Chinese journalist, philosopher, and scholar (died 1929) (1873)
+- W. E. B. Du Bois, American sociologist, historian, and activist (died 1963) (1868)
+- Anna Hofman-Uddgren, Swedish actress, singer, and director (died 1947) (1868)
+- César Ritz, Swiss businessman, founded The Ritz Hotel, London and Hôtel Ritz Paris (died 1918) (1850)
+- Karl Robert Eduard von Hartmann, German philosopher and author (died 1906) (1842)
+- Hendrik Willem Mesdag, Dutch painter (died 1915) (1831)
+- Magdalene Osenbroch, Norwegian actress (died 1854) (1830)
+- Johan Jakob Nervander, Finnish poet, physicist and meteorologist (died 1848) (1805)
+- José Joaquín de Herrera, Mexican politician and general (died 1854) (1792)
+- Mayer Amschel Rothschild, German banker and businessman (died 1812) (1744)
+- Richard Price, Welsh-English minister and philosopher (died 1791) (1723)
+- George Frideric Handel, German-English organist and composer (died 1759) (1685)
+- Jean-Baptiste Le Moyne, Sieur de Bienville, Canadian politician, 2nd Colonial Governor of Louisiana (died 1767) (1680)
+- Tokugawa Tsunayoshi, Japanese shōgun (died 1709) (1646)
+- Samuel Pepys, English diarist and politician (died 1703) (1633)
+- George Frederick of Nassau-Siegen, officer in the Dutch Army (died 1674) (1606)
+- Balthazar Gerbier, Dutch painter (died 1663) (1592)
+- Jean-Baptiste Morin, French mathematician, astrologer, and astronomer (died 1656) (1583)
+- Henry XI of Legnica, thrice Duke of Legnica (died 1588) (1539)
+- Salima Sultan Begum, Empress of the Mughal Empire (died 1612) (1539)
+- Onofrio Panvinio, Italian historian (died 1568) (1529)
+- Matthias Corvinus, Hungarian king (died 1490) (1443)
+- Pope Paul II (died 1471) (1417)
+- Louis IX, Duke of Bavaria (died 1479) (1417)
+- Al-Zafir, Fatimid caliph (died 1154) (1133)
