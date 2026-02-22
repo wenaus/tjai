@@ -92,6 +92,7 @@ def handle_ai_agent(args) -> None:
     # Create tjai entry for tracking
     entry_id = _create_tracking_entry(prompt, context)
     print(f"Tracking: {entry_id[:8]}  [{prompt[:60]}]")
+    print(f"TRACKING_ID={entry_id}")
 
     # Build system prompt
     system_prompt = _build_system_prompt(guidance_text, entry_id, prompt)
@@ -183,6 +184,8 @@ This is not optional. The entry is your report-back mechanism."""
 
 def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: str) -> None:
     """Launch claude -p in background. Logs all outcomes to the tjai entry."""
+    import shlex
+
     cmd = [
         claude_path,
         '-p', prompt,
@@ -196,13 +199,28 @@ def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: 
 
     _append_to_entry(entry_id, "LAUNCHED")
 
-    subprocess.Popen(
-        cmd,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-        env=env,
-    )
+    action_id = os.environ.get('TJAI_ACTION_ID')
+    if action_id:
+        # Wrap claude command: run claude, then mark completion in sysconfig
+        scripts_dir = Path(__file__).resolve().parent.parent.parent / 'scripts'
+        completion_cmd = f'{sys.executable} {scripts_dir}/agent_complete.py {shlex.quote(action_id)}'
+        shell_cmd = f'{shlex.join(cmd)} ; {completion_cmd}'
+        subprocess.Popen(
+            ['bash', '-c', shell_cmd],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            env=env,
+        )
+    else:
+        subprocess.Popen(
+            cmd,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            env=env,
+        )
 
     print(f"Agent launched")

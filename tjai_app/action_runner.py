@@ -183,18 +183,45 @@ def dispatch_ai(action, entry_id=None):
     prompt = resolve_prompt_template(ai_prompt, extra_vars=extra_vars)
     logger.info("Dispatching tj agent...")
 
+    # Write launch status to sysconfig for real-time tracking
+    action_id = data.get('entry_id')  # human-readable id like 'picks-agent'
+    if action_id:
+        import os
+        now = time.time()
+        SysConfig.objects.update_or_create(
+            key=f'agent_{action_id}_status',
+            defaults={'value': 'running', 'timestamp_modified': now})
+        SysConfig.objects.update_or_create(
+            key=f'agent_{action_id}_launched',
+            defaults={'value': str(now), 'timestamp_modified': now})
+
+    env = os.environ.copy() if action_id else None
+    if action_id:
+        env['TJAI_ACTION_ID'] = action_id
+
     result = subprocess.run(
         [sys.executable, str(TJ_PY), 'agent', prompt],
-        capture_output=True, text=True,
+        capture_output=True, text=True, env=env,
     )
     if result.stdout:
         for line in result.stdout.rstrip().split('\n'):
             logger.info("  %s", line)
+            # Capture tracking entry ID for sysconfig
+            if action_id and line.startswith('TRACKING_ID='):
+                tracking_id = line.split('=', 1)[1].strip()
+                SysConfig.objects.update_or_create(
+                    key=f'agent_{action_id}_tracking',
+                    defaults={'value': tracking_id,
+                              'timestamp_modified': time.time()})
     if result.returncode != 0:
         logger.error("tj agent failed (exit %d)", result.returncode)
         if result.stderr:
             for line in result.stderr.rstrip().split('\n'):
                 logger.error("  %s", line)
+        if action_id:
+            SysConfig.objects.update_or_create(
+                key=f'agent_{action_id}_status',
+                defaults={'value': 'failed', 'timestamp_modified': time.time()})
         return False
 
     return True

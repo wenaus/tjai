@@ -91,6 +91,10 @@
             border-bottom: 1px solid #444;
             margin-bottom: 12px;
             text-transform: capitalize;
+            position: sticky;
+            top: 0;
+            background: #1a1a1a;
+            z-index: 2;
         }
         .source-block {
             margin-bottom: 16px;
@@ -102,6 +106,10 @@
             gap: 12px;
             padding: 4px 0;
             margin-bottom: 6px;
+            position: sticky;
+            top: 30px;
+            background: #1a1a1a;
+            z-index: 1;
         }
         .source-header .source-name {
             color: #81c784;
@@ -184,11 +192,11 @@
         }
         .rss-meta {
             color: #666;
-            font-size: 11px;
+            font-size: 13px;
         }
         .rss-precis {
             color: #999;
-            font-size: 11px;
+            font-size: 13px;
             line-height: 1.4;
             margin-top: 2px;
             max-height: 2.8em;
@@ -353,7 +361,6 @@
                         }
                         html += `</div>`;
                     }
-                    html += `</div>`;
                     html += `<div style="margin-top:6px"><button class="feed-bottom-btn" onclick="markAllRead('${esc(src.source)}', this)">Mark All Read</button></div>`;
                     html += `<hr style="border:none;border-top:1px solid #333;margin:10px 0">`;
                     html += `</div>`;
@@ -423,6 +430,15 @@
             });
         }
 
+        function showToast(msg) {
+            const t = document.createElement('div');
+            t.textContent = msg;
+            t.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#2e7d32;color:#fff;padding:10px 20px;border-radius:6px;font-size:14px;z-index:9999;opacity:0;transition:opacity 0.3s';
+            document.body.appendChild(t);
+            requestAnimationFrame(() => t.style.opacity = '1');
+            setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 3000);
+        }
+
         async function markAllRead(source, btn) {
             btn.textContent = '...';
             btn.disabled = true;
@@ -433,14 +449,12 @@
             });
             const data = await resp.json();
             if (data.ok) {
-                // Remove the source block from the DOM
+                showToast(`Marked ${source} as read`);
                 const block = btn.closest('.source-block');
                 if (block) block.remove();
-                // Check if category is now empty
                 document.querySelectorAll('.category-block').forEach(cb => {
                     if (cb.querySelectorAll('.source-block').length === 0) cb.remove();
                 });
-                // Update stats
                 const statsEl = document.getElementById('global-stats');
                 const current = parseInt(statsEl.textContent) || 0;
                 const newCount = Math.max(0, current - (data.marked || 0));

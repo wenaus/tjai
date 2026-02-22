@@ -19,6 +19,7 @@
             --purple: #ce93d8;
             --safe-top: env(safe-area-inset-top, 0px);
             --safe-bottom: env(safe-area-inset-bottom, 0px);
+            --tabs-h: calc(41px + var(--safe-top));
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         a { color: var(--link); }
@@ -254,6 +255,12 @@
         }
         .run-time { color: var(--accent); font-weight: 600; }
         .run-stats { flex: 1; }
+        .run-block > .run-header:first-child {
+            position: sticky;
+            top: var(--tabs-h);
+            background: var(--bg);
+            z-index: 10;
+        }
         .run-header button {
             background: var(--secondary-bg);
             color: var(--fg);
@@ -386,6 +393,10 @@
             margin-top: 16px;
             padding: 4px 0;
             text-transform: capitalize;
+            position: sticky;
+            top: var(--tabs-h);
+            background: var(--bg);
+            z-index: 10;
         }
         .source-header {
             display: flex;
@@ -393,6 +404,10 @@
             gap: 8px;
             padding: 6px 0;
             font-size: 13px;
+            position: sticky;
+            top: calc(var(--tabs-h) + 26px);
+            background: var(--bg);
+            z-index: 9;
         }
         .source-name { color: var(--purple); font-weight: 600; flex: 1; }
         .source-count { color: var(--hint); }
@@ -878,19 +893,26 @@
             const picks = run.picks;
             const activeCount = picks.filter(p => !p.archived && !p.kept).length;
             const keptCount = picks.filter(p => p.kept).length;
+            const allDone = activeCount === 0;
+
+            // Fully processed with nothing kept — skip entirely
+            if (allDone && keptCount === 0) continue;
+
+            // Which picks to show: if fully processed, only kept items
+            const visiblePicks = allDone ? picks.filter(p => p.kept) : picks;
 
             html += `<div class="run-block" data-run="${escapeHtml(runId)}">`;
             html += '<div class="run-header">';
             html += `<span class="run-time">${formatRunTime(runId)}</span>`;
             html += `<span class="run-stats">${picks.length} picks, ${keptCount} kept</span>`;
-            if (activeCount > 0) {
+            if (!allDone) {
                 html += `<button onclick="archiveRun('${escapeHtml(runId)}')">Archive All</button>`;
             } else {
                 html += `<button class="done" disabled>All reviewed</button>`;
             }
             html += '</div>';
 
-            for (const pick of picks) {
+            for (const pick of visiblePicks) {
                 const classes = ['pick-item'];
                 if (pick.archived) classes.push('archived');
                 if (pick.kept) classes.push('kept');
@@ -906,6 +928,9 @@
                 html += `<button class="${pick.kept ? 'active-keep' : ''}" onclick="togglePickKeep('${pick.id}', ${!pick.kept}, this)">Keep</button>`;
                 html += `<button class="${pick.readme ? 'active-readme' : ''}" onclick="togglePickReadme('${pick.id}', this)">ReadMe</button>`;
                 html += '</div></div>';
+            }
+            if (!allDone) {
+                html += `<div class="run-header" style="border:none;margin-top:8px;padding:0"><button onclick="archiveRun('${escapeHtml(runId)}')">Archive All</button></div>`;
             }
             html += '</div>';
         }
@@ -1032,19 +1057,31 @@
             if (!block) continue;
             const activeCount = run.picks.filter(p => !p.archived && !p.kept).length;
             const keptCount = run.picks.filter(p => p.kept).length;
+            const allDone = activeCount === 0;
+            // Fully processed, nothing kept — remove entire block
+            if (allDone && keptCount === 0) {
+                block.remove();
+                continue;
+            }
+            // Fully processed with kept items — hide archived, keep the kept visible
+            if (allDone) {
+                block.querySelectorAll('.pick-item.archived').forEach(el => el.remove());
+            }
             const statsEl = block.querySelector('.run-stats');
             if (statsEl) statsEl.textContent = `${run.picks.length} picks, ${keptCount} kept`;
-            const btn = block.querySelector('.run-header button');
-            if (btn && activeCount === 0) {
-                btn.className = 'done';
-                btn.disabled = true;
-                btn.textContent = 'All reviewed';
-                btn.onclick = null;
-            } else if (btn && activeCount > 0) {
-                btn.className = '';
-                btn.disabled = false;
-                btn.textContent = 'Archive All';
-            }
+            // Update all Archive All buttons (header + bottom)
+            block.querySelectorAll('.run-header button').forEach(btn => {
+                if (allDone) {
+                    btn.className = 'done';
+                    btn.disabled = true;
+                    btn.textContent = 'All reviewed';
+                    btn.onclick = null;
+                } else {
+                    btn.className = '';
+                    btn.disabled = false;
+                    btn.textContent = 'Archive All';
+                }
+            });
         }
     }
 
@@ -1246,6 +1283,15 @@
         });
     }
 
+    function showRssToast(msg) {
+        const t = document.createElement('div');
+        t.textContent = msg;
+        t.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#2e7d32;color:#fff;padding:10px 20px;border-radius:6px;font-size:14px;z-index:9999;opacity:0;transition:opacity 0.3s';
+        document.body.appendChild(t);
+        requestAnimationFrame(() => t.style.opacity = '1');
+        setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 3000);
+    }
+
     async function markRssSourceRead(source, btn) {
         btn.textContent = '...';
         btn.disabled = true;
@@ -1257,6 +1303,7 @@
             });
             const data = await resp.json();
             if (data.ok) {
+                showRssToast(`Marked ${source} as read`);
                 const block = btn.closest('.source-block');
                 if (block) block.remove();
                 document.querySelectorAll('.category-block').forEach(cb => {

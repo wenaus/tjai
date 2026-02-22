@@ -136,10 +136,14 @@ def main():
                             data.get('interval_hours', 24))
         return
 
-    # --run: execute one action and exit
+    # --run: execute one action and exit (accepts UUID or data.entry_id)
     if args.run:
         action = Entry.objects.filter(id=args.run, kind='action',
                                       deleted_at__isnull=True).first()
+        if not action:
+            action = Entry.objects.filter(
+                data__entry_id=args.run, kind='action',
+                deleted_at__isnull=True).first()
         if not action:
             logger.error("Action not found: %s", args.run)
             sys.exit(1)

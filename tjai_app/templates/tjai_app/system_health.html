@@ -313,11 +313,27 @@
 
                 // Actions list
                 if (tj.actions && tj.actions.length > 0) {
-                    html += '<table style="margin-top:12px"><tr><th>Action</th><th>Trigger</th><th style="text-align:right">Interval</th><th style="text-align:right">Last Run</th></tr>';
+                    html += '<table style="margin-top:12px"><tr><th>Action</th><th>Trigger</th><th style="text-align:right">Interval</th><th style="text-align:right">Last Run</th><th style="text-align:right">Agent</th></tr>';
                     for (const a of tj.actions) {
-                        const lr = a.last_run_min !== null ? a.last_run_min + 'm ago' : 'never';
+                        const lr = a.last_run_min !== null ? Math.round(a.last_run_min) + 'm ago' : 'never';
                         const link = a.id ? `<a href="/tjai/entry/?uuid=${a.id}" style="color:#64b5f6">${a.content}</a>` : a.content;
-                        html += `<tr><td>${link}</td><td>${a.trigger}</td><td class="num">${a.interval_h}h</td><td class="num">${lr}</td></tr>`;
+                        let agentCol = '';
+                        if (a.agent_status === 'running') {
+                            const dur = a.agent_launched_min != null ? Math.round(a.agent_launched_min) + 'm' : '';
+                            const logLink = a.agent_tracking ? `<a href="/tjai/entry/?uuid=${a.agent_tracking}" style="color:#64b5f6">log</a>` : '';
+                            agentCol = `<span style="color:#ffd54f">running ${dur}</span> ${logLink}`;
+                        } else if (a.agent_status === 'completed') {
+                            const ago = a.agent_completed_min != null ? Math.round(a.agent_completed_min) + 'm ago' : '';
+                            const dur = a.agent_duration_min != null ? '(' + a.agent_duration_min.toFixed(1) + 'm)' : '';
+                            const logLink = a.agent_tracking ? `<a href="/tjai/entry/?uuid=${a.agent_tracking}" style="color:#64b5f6">log</a>` : '';
+                            agentCol = `<span style="color:#9ccc65">done ${ago} ${dur}</span> ${logLink}`;
+                        } else if (a.agent_status === 'failed') {
+                            const logLink = a.agent_tracking ? `<a href="/tjai/entry/?uuid=${a.agent_tracking}" style="color:#64b5f6">log</a>` : '';
+                            agentCol = `<span style="color:#ef5350">failed</span> ${logLink}`;
+                        } else if (a.agent_status) {
+                            agentCol = a.agent_status;
+                        }
+                        html += `<tr><td>${link}</td><td>${a.trigger}</td><td class="num">${a.interval_h}h</td><td class="num">${lr}</td><td class="num">${agentCol}</td></tr>`;
                     }
                     html += '</table>';
                 }
@@ -517,7 +533,7 @@
             }
         };
 
-        fetchData();
+        refreshNow();
         autoRefreshInterval = setInterval(() => {
             if (Date.now() - lastFetchTime >= 60000) {
                 fetchData();

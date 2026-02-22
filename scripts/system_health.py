@@ -409,17 +409,43 @@ def collect_tjai():
     actions = list(Entry.objects.filter(
         kind='action', deleted_at__isnull=True
     ).exclude(status='done'))
+    # Bulk-fetch agent sysconfig keys
+    agent_sysconfig = {}
+    for sc in SysConfig.objects.filter(key__startswith='agent_'):
+        agent_sysconfig[sc.key] = sc.value
     metrics['actions'] = []
     for a in actions:
         data = a.data or {}
         last_run = data.get('last_run')
-        metrics['actions'].append({
+        action_id = data.get('entry_id')
+        action_info = {
             'id': str(a.id),
             'content': a.content[:60],
             'trigger': data.get('trigger', '?'),
             'interval_h': data.get('interval_hours', 24),
             'last_run_min': round((now - last_run) / 60, 1) if last_run else None,
-        })
+        }
+        if action_id:
+            agent_status = agent_sysconfig.get(f'agent_{action_id}_status')
+            launched = agent_sysconfig.get(f'agent_{action_id}_launched')
+            completed = agent_sysconfig.get(f'agent_{action_id}_completed')
+            tracking = agent_sysconfig.get(f'agent_{action_id}_tracking')
+            action_info['agent_status'] = agent_status
+            if launched:
+                action_info['agent_launched_min'] = round(
+                    (now - float(launched)) / 60, 1)
+            if completed:
+                action_info['agent_completed_min'] = round(
+                    (now - float(completed)) / 60, 1)
+            if launched and completed:
+                try:
+                    action_info['agent_duration_min'] = round(
+                        (float(completed) - float(launched)) / 60, 1)
+                except (ValueError, TypeError):
+                    pass
+            if tracking:
+                action_info['agent_tracking'] = tracking
+        metrics['actions'].append(action_info)
 
     # Log entries count
     metrics['log_entries'] = AppLog.objects.count()

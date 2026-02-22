@@ -66,7 +66,7 @@
         .content-area {
             flex: 1;
             overflow-y: auto;
-            padding: 16px 24px 40px;
+            padding: 0 24px 40px;
         }
         .run-block {
             margin-bottom: 24px;
@@ -78,6 +78,13 @@
             padding: 8px 0;
             border-bottom: 1px solid #444;
             margin-bottom: 12px;
+        }
+        .run-block > .run-header:first-child {
+            position: sticky;
+            top: 0;
+            background: #1a1a1a;
+            z-index: 1;
+            padding-top: 16px;
         }
         .run-header .run-time {
             color: #d8a070;
@@ -254,6 +261,12 @@
                 const keptCount = picks.filter(p => p.kept).length;
                 const allDone = activeCount === 0;
 
+                // Fully processed with nothing kept — skip entirely
+                if (allDone && keptCount === 0) continue;
+
+                // Which picks to show: if fully processed, only kept items
+                const visiblePicks = allDone ? picks.filter(p => p.kept) : picks;
+
                 html += `<div class="run-block" data-run="${esc(runId)}">`;
                 html += '<div class="run-header">';
                 html += `<span class="run-time">${formatRunTime(runId)}</span>`;
@@ -265,7 +278,7 @@
                 }
                 html += '</div>';
 
-                for (const pick of picks) {
+                for (const pick of visiblePicks) {
                     const classes = ['pick-item'];
                     if (pick.archived) classes.push('archived');
                     if (pick.kept) classes.push('kept');
@@ -288,6 +301,9 @@
                     html += '</div>';
                 }
 
+                if (!allDone) {
+                    html += `<div class="run-header" style="border:none;margin-top:8px;padding:0"><button onclick="archiveRun('${esc(runId)}')">Archive All</button></div>`;
+                }
                 html += '</div>';
             }
 
@@ -436,19 +452,31 @@
                 if (!block) continue;
                 const activeCount = run.picks.filter(p => !p.archived && !p.kept).length;
                 const keptCount = run.picks.filter(p => p.kept).length;
+                const allDone = activeCount === 0;
+                // Fully processed, nothing kept — remove entire block
+                if (allDone && keptCount === 0) {
+                    block.remove();
+                    continue;
+                }
+                // Fully processed with kept items — hide archived, keep the kept visible
+                if (allDone) {
+                    block.querySelectorAll('.pick-item.archived').forEach(el => el.remove());
+                }
                 const statsEl = block.querySelector('.run-stats');
                 if (statsEl) statsEl.textContent = `${run.picks.length} picks, ${keptCount} kept`;
-                const btn = block.querySelector('.run-header button');
-                if (btn && activeCount === 0) {
-                    btn.className = 'done';
-                    btn.disabled = true;
-                    btn.textContent = 'All reviewed';
-                    btn.onclick = null;
-                } else if (btn && activeCount > 0) {
-                    btn.className = '';
-                    btn.disabled = false;
-                    btn.textContent = 'Archive All';
-                }
+                // Update all Archive All buttons (header + bottom)
+                block.querySelectorAll('.run-header button').forEach(btn => {
+                    if (allDone) {
+                        btn.className = 'done';
+                        btn.disabled = true;
+                        btn.textContent = 'All reviewed';
+                        btn.onclick = null;
+                    } else {
+                        btn.className = '';
+                        btn.disabled = false;
+                        btn.textContent = 'Archive All';
+                    }
+                });
             }
         }
 
