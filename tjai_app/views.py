@@ -16,7 +16,7 @@ from django.db.models import Count
 from django.db.models.functions import Lower
 from django.http import Http404
 from django.conf import settings as django_settings
-from .models import AppLog, Context, Entry, Tag, TagStats, SubNote, Machine, SysConfig
+from .models import AppLog, Context, Entry, RssItem, Tag, TagStats, SubNote, Machine, SysConfig
 
 
 def api_health(request):
@@ -1258,10 +1258,17 @@ def api_add_bookmark(request):
         Q(content__contains=f'({url})') | Q(content=url) | Q(content__startswith=url + ' ')
     ).first()
     if duplicate:
+        if text:
+            base = f"[{title}]({url})" if title else url
+            duplicate.content = base + '   ' + text
+            duplicate.timestamp_modified = time.time()
+            duplicate.is_dirty = 1
+            duplicate.save(update_fields=['content', 'timestamp_modified', 'is_dirty'])
         return JsonResponse({
             "status": "duplicate",
             "entry_id": duplicate.id,
             "content": duplicate.content,
+            "updated": bool(text),
         })
 
     now = time.time()
@@ -1880,3 +1887,318 @@ def api_system_refresh(request):
         defaults={'value': str(now), 'timestamp_modified': now},
     )
     return JsonResponse({'status': 'requested'})
+
+
+# --- RSS Reader ---
+
+@login_required
+def rss_page(request):
+    """Render the RSS reader triage page."""
+    return render(request, 'tjai_app/rss.html')
+
+
+@login_required
+def api_rss_data(request):
+    """Return unread RSS items grouped by category and source."""
+    items = RssItem.objects.filter(read=False).order_by('category', 'source', '-published')
+
+    # Find URLs that already have :readme bookmarks
+    readme_entry_ids = Tag.objects.filter(tag_name='readme').values_list('entry_id', flat=True)
+    readme_entries = Entry.objects.filter(
+        id__in=readme_entry_ids, kind='bookmark', deleted_at__isnull=True,
+    )
+    readme_urls = set()
+    for e in readme_entries:
+        content = e.content or ''
+        if '](' in content:
+            readme_urls.add(content[content.index('](') + 2:].rstrip(')'))
+        else:
+            readme_urls.add(content.strip())
+
+    # Group by category → source
+    categories = {}
+    for item in items:
+        cat = item.category or 'uncategorized'
+        if cat not in categories:
+            categories[cat] = {}
+        src = item.source
+        if src not in categories[cat]:
+            categories[cat][src] = []
+        categories[cat][src].append({
+            'guid': item.guid,
+            'title': item.title,
+            'url': item.url,
+            'precis': item.precis,
+            'published': item.published.isoformat() if item.published else None,
+            'fetched': item.fetched.isoformat(),
+            'readme': item.url in readme_urls,
+        })
+
+    result = []
+    for cat in sorted(categories.keys()):
+        sources = []
+        for src in sorted(categories[cat].keys()):
+            sources.append({
+                'source': src,
+                'items': categories[cat][src],
+            })
+        result.append({
+            'category': cat,
+            'sources': sources,
+        })
+
+    total_unread = RssItem.objects.filter(read=False).count()
+    oldest = RssItem.objects.filter(read=False, published__isnull=False).order_by('published').values_list('published', flat=True).first()
+    from django.utils import timezone as djtz
+    return JsonResponse({
+        'categories': result,
+        'total_unread': total_unread,
+        'oldest_date': oldest.isoformat() if oldest else None,
+        'server_time': djtz.now().isoformat(),
+    })
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_rss_mark_read(request):
+    """Mark items from a source as read, only those fetched before a cutoff time."""
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    source = body.get('source')
+    before = body.get('before')
+    if not source:
+        return JsonResponse({'error': 'source required'}, status=400)
+
+    qs = RssItem.objects.filter(source=source, read=False)
+    if before:
+        from django.utils.dateparse import parse_datetime
+        cutoff = parse_datetime(before)
+        if cutoff:
+            qs = qs.filter(fetched__lte=cutoff)
+    count = qs.update(read=True)
+    return JsonResponse({'ok': True, 'marked': count})
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_rss_mark_item_read(request):
+    """Mark a single RSS item as read by guid."""
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    guid = body.get('guid')
+    if not guid:
+        return JsonResponse({'error': 'guid required'}, status=400)
+
+    count = RssItem.objects.filter(guid=guid, read=False).update(read=True)
+    total_unread = RssItem.objects.filter(read=False).count()
+    return JsonResponse({'ok': True, 'marked': count, 'total_unread': total_unread})
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_rss_mark_all_read(request):
+    """Mark all unread RSS items as read, only those fetched before a cutoff time."""
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        body = {}
+
+    before = body.get('before')
+    qs = RssItem.objects.filter(read=False)
+    if before:
+        from django.utils.dateparse import parse_datetime
+        cutoff = parse_datetime(before)
+        if cutoff:
+            qs = qs.filter(fetched__lte=cutoff)
+    count = qs.update(read=True)
+    return JsonResponse({'ok': True, 'marked': count})
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_rss_readme(request):
+    """Toggle :readme bookmark for an RSS item."""
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    url = body.get('url', '').strip()
+    title = body.get('title', '').strip()
+    activate = body.get('activate', True)
+
+    if not url:
+        return JsonResponse({'error': 'url required'}, status=400)
+
+    from django.db.models import Q
+
+    if activate:
+        # Check for existing bookmark with this URL
+        existing = Entry.objects.filter(
+            kind='bookmark',
+            deleted_at__isnull=True,
+        ).filter(
+            Q(content__contains=f'({url})') | Q(content=url) | Q(content__startswith=url + ' ')
+        ).first()
+
+        if existing:
+            # Just ensure :readme tag exists
+            Tag.objects.get_or_create(entry_id=existing.id, tag_name='readme')
+            return JsonResponse({'ok': True, 'entry_id': str(existing.id)})
+
+        # Create bookmark with :readme tag
+        content = f"[{title}]({url})" if title else url
+        now = time.time()
+        entry = Entry.objects.create(
+            id=str(uuid.uuid4()),
+            content=content,
+            kind='bookmark',
+            timestamp_created=now,
+            timestamp_modified=now,
+            is_dirty=1,
+        )
+        Tag.objects.create(tag_name='readme', entry=entry)
+        return JsonResponse({'ok': True, 'entry_id': str(entry.id)})
+    else:
+        # Deactivate: remove :readme tag from bookmark with this URL
+        matching = Entry.objects.filter(
+            kind='bookmark',
+            deleted_at__isnull=True,
+        ).filter(
+            Q(content__contains=f'({url})') | Q(content=url) | Q(content__startswith=url + ' ')
+        ).first()
+        if matching:
+            Tag.objects.filter(entry_id=matching.id, tag_name='readme').delete()
+        return JsonResponse({'ok': True})
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_rss_fetch(request):
+    """Trigger a manual RSS fetch."""
+    import subprocess
+    script = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'scripts', 'fetch_rss.py')
+    venv_python = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.venv', 'bin', 'python3')
+    result = subprocess.run(
+        [venv_python, script],
+        capture_output=True, text=True, timeout=120,
+    )
+    if result.returncode != 0:
+        return JsonResponse({
+            'error': 'Fetch failed',
+            'stderr': result.stderr[-500:] if result.stderr else '',
+        }, status=500)
+    return JsonResponse({'ok': True, 'output': result.stdout[-500:] if result.stdout else ''})
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_rss_add_source(request):
+    """Validate a URL, find its RSS feed, and add to rss-sources entry."""
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    url = (body.get('url') or '').strip()
+    category = (body.get('category') or 'uncategorized').strip().lower()
+
+    if not url:
+        return JsonResponse({'error': 'url required'}, status=400)
+
+    # Try to find the actual RSS feed URL
+    import feedparser
+    import requests as req_lib
+
+    feed_url = url
+    feed = feedparser.parse(url)
+
+    # If the URL isn't a feed, look for <link rel="alternate"> in the HTML
+    if feed.bozo and not feed.entries:
+        try:
+            resp = req_lib.get(url, timeout=15, headers={'User-Agent': 'tjai-rss/1.0'})
+            resp.raise_for_status()
+            html = resp.text
+            # Look for RSS/Atom feed links
+            import re
+            feed_links = re.findall(
+                r'<link[^>]+type=["\']application/(?:rss\+xml|atom\+xml)["\'][^>]*href=["\']([^"\']+)["\']',
+                html, re.IGNORECASE,
+            )
+            if not feed_links:
+                feed_links = re.findall(
+                    r'<link[^>]+href=["\']([^"\']+)["\'][^>]*type=["\']application/(?:rss\+xml|atom\+xml)["\']',
+                    html, re.IGNORECASE,
+                )
+            if feed_links:
+                # Resolve relative URLs
+                from urllib.parse import urljoin
+                feed_url = urljoin(url, feed_links[0])
+                feed = feedparser.parse(feed_url)
+            else:
+                return JsonResponse({'error': f'No RSS feed found at {url}'}, status=400)
+        except Exception as e:
+            return JsonResponse({'error': f'Failed to fetch {url}: {e}'}, status=400)
+
+    if not feed.entries:
+        return JsonResponse({'error': f'Feed at {feed_url} has no entries'}, status=400)
+
+    feed_title = feed.feed.get('title', feed_url) if hasattr(feed, 'feed') else feed_url
+
+    # Add to rss-sources entry
+    entry = Entry.objects.filter(
+        data__entry_id='rss-sources',
+        deleted_at__isnull=True,
+    ).first()
+    if not entry:
+        return JsonResponse({'error': 'rss-sources entry not found'}, status=404)
+
+    content = entry.content or ''
+    heading = f'## {category}'
+
+    if heading in content:
+        # Add URL under existing category heading
+        lines = content.split('\n')
+        insert_idx = None
+        for i, line in enumerate(lines):
+            if line.strip().lower() == heading:
+                # Find the end of this category section
+                insert_idx = i + 1
+                while insert_idx < len(lines):
+                    next_line = lines[insert_idx].strip()
+                    if next_line.startswith('## ') or (not next_line and insert_idx + 1 < len(lines) and lines[insert_idx + 1].strip().startswith('## ')):
+                        break
+                    insert_idx += 1
+                break
+        if insert_idx is not None:
+            lines.insert(insert_idx, feed_url)
+            content = '\n'.join(lines)
+        else:
+            content += f'\n{feed_url}'
+    else:
+        # Add new category section
+        content = content.rstrip() + f'\n\n{heading}\n{feed_url}'
+
+    entry.content = content
+    entry.timestamp_modified = time.time()
+    entry.save()
+
+    return JsonResponse({
+        'ok': True,
+        'feed_url': feed_url,
+        'feed_title': feed_title,
+        'category': category,
+        'entry_count': len(feed.entries),
+    })

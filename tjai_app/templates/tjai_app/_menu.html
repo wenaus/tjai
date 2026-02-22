@@ -4,6 +4,7 @@
     {% if current_page == "synopsis" %}<span style="color:#e0e0e0">Synopsis</span>{% else %}<a href="{% url 'daily_synopsis' %}">Synopsis</a>{% endif %}
     {% if current_page == "agent_log" %}<span style="color:#e0e0e0">Agent Log</span>{% else %}<a href="{% url 'agent_log' %}">Agent Log</a>{% endif %}
     {% if current_page == "picks" %}<span style="color:#e0e0e0">Picks</span>{% else %}<a href="{% url 'picks' %}">Picks</a>{% endif %}
+    {% if current_page == "rss" %}<span style="color:#e0e0e0">RSS</span>{% else %}<a href="{% url 'rss' %}">RSS</a>{% endif %}
     {% if current_page == "readme" %}<span style="color:#e0e0e0">ReadMe</span>{% else %}<a href="{% url 'readme' %}">ReadMe</a>{% endif %}
     {% if current_page == "archive" %}<span style="color:#e0e0e0">Archive</span>{% else %}<a href="{% url 'dashboard' %}?status=archive">Archive</a>{% endif %}
     {% if current_page == "system" %}<span style="color:{{ health_color }}">System</span>{% else %}<a href="{% url 'system_health' %}" style="color:{{ health_color }}">System</a>{% endif %}

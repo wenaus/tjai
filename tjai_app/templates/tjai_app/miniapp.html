@@ -38,12 +38,16 @@
             background: var(--secondary-bg);
             border-bottom: 1px solid rgba(255,255,255,0.08);
             padding-top: var(--safe-top);
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
         }
+        .tabs::-webkit-scrollbar { display: none; }
         .tab {
-            flex: 1;
-            padding: 12px 4px;
+            flex: 0 0 auto;
+            padding: 12px 10px;
             text-align: center;
             font-size: 13px;
+            white-space: nowrap;
             font-weight: 600;
             color: var(--hint);
             border: none;
@@ -102,6 +106,7 @@
         .cal-time {
             color: var(--accent);
             min-width: 48px;
+            margin-right: 8px;
             flex-shrink: 0;
         }
         .cal-content { flex: 1; }
@@ -235,13 +240,215 @@
         }
         .search-input::placeholder { color: var(--hint); }
         .search-input:focus { border-color: var(--link); }
+
+        /* Picks */
+        .run-block { margin-bottom: 16px; }
+        .run-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            font-size: 13px;
+            color: var(--hint);
+        }
+        .run-time { color: var(--accent); font-weight: 600; }
+        .run-stats { flex: 1; }
+        .run-header button {
+            background: var(--secondary-bg);
+            color: var(--fg);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .run-header button.done { opacity: 0.4; }
+        .pick-item {
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .pick-item.archived { opacity: 0.35; }
+        .pick-item.kept { border-left: 3px solid var(--green); padding-left: 9px; }
+        .pick-title a { color: var(--link); font-weight: 600; font-size: 15px; }
+        .pick-source { font-size: 12px; color: var(--hint); margin-top: 2px; }
+        .pick-precis { font-size: 14px; margin-top: 4px; line-height: 1.4; }
+        .pick-rationale { font-size: 13px; color: var(--hint); margin-top: 4px; font-style: italic; }
+        .pick-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 6px;
+        }
+        .pick-actions button {
+            background: var(--secondary-bg);
+            color: var(--fg);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 13px;
+            cursor: pointer;
+            min-height: 36px;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .pick-actions .active-up { color: var(--green); border-color: var(--green); }
+        .pick-actions .active-down { color: #ef5350; border-color: #ef5350; }
+        .pick-actions .active-keep { color: var(--green); border-color: var(--green); font-weight: 700; }
+        .pick-actions .active-readme { color: var(--accent); border-color: var(--accent); }
+        .picks-stats {
+            font-size: 13px;
+            color: var(--hint);
+            padding: 4px 0 8px;
+        }
+
+        /* ReadMe */
+        .readme-count {
+            font-size: 13px;
+            color: var(--hint);
+            padding: 4px 0 8px;
+        }
+        .readme-item {
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .readme-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .readme-title a { color: var(--link); font-weight: 600; flex: 1; }
+        .readme-title button {
+            background: var(--secondary-bg);
+            color: var(--hint);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 12px;
+            flex-shrink: 0;
+            cursor: pointer;
+        }
+        .readme-detail { font-size: 12px; color: var(--hint); margin-top: 2px; }
+        .readme-precis { font-size: 14px; margin-top: 4px; line-height: 1.4; }
+
+        /* Synopsis */
+        .syn-dates {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 4px 0 12px;
+        }
+        .syn-date {
+            background: var(--secondary-bg);
+            color: var(--fg);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 13px;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .syn-date.today { color: var(--green); border-color: var(--green); }
+        .syn-date.selected { color: var(--link); border-color: var(--link); background: rgba(100,181,246,0.12); }
+        .syn-content {
+            line-height: 1.6;
+            font-size: 15px;
+        }
+        .syn-content h1, .syn-content h2, .syn-content h3 {
+            color: var(--accent);
+            margin: 16px 0 8px;
+            font-size: 16px;
+        }
+        .syn-content ul, .syn-content ol { padding-left: 20px; }
+        .syn-content li { margin-bottom: 4px; }
+        .syn-content a { color: var(--link); }
+
+        /* RSS */
+        .rss-stats {
+            font-size: 13px;
+            color: var(--hint);
+            padding: 4px 0 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .rss-stats button {
+            background: var(--secondary-bg);
+            color: var(--fg);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .category-header {
+            color: var(--accent);
+            font-weight: 700;
+            font-size: 15px;
+            margin-top: 16px;
+            padding: 4px 0;
+            text-transform: capitalize;
+        }
+        .source-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+            font-size: 13px;
+        }
+        .source-name { color: var(--purple); font-weight: 600; flex: 1; }
+        .source-count { color: var(--hint); }
+        .source-header button {
+            background: var(--secondary-bg);
+            color: var(--fg);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 11px;
+            cursor: pointer;
+        }
+        .rss-item {
+            padding: 8px 0 8px 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .rss-item.read { opacity: 0.35; }
+        .rss-title {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .rss-title a { color: var(--link); flex: 1; }
+        .rss-title button {
+            background: var(--secondary-bg);
+            color: var(--fg);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 11px;
+            flex-shrink: 0;
+            cursor: pointer;
+        }
+        .rss-title .active-readme { color: var(--accent); border-color: var(--accent); }
+        .rss-meta { font-size: 12px; color: var(--hint); margin-top: 2px; }
+        .rss-precis { font-size: 13px; color: var(--hint); margin-top: 2px; line-height: 1.3; }
+        .feed-bottom-btn {
+            background: var(--secondary-bg);
+            color: var(--fg);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 11px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
     <div class="tabs">
-        <button class="tab active" data-tab="cal">Calendar</button>
+        <button class="tab active" data-tab="cal">Cal</button>
+        <button class="tab" data-tab="picks">Picks</button>
+        <button class="tab" data-tab="readme">ReadMe</button>
+        <button class="tab" data-tab="syn">Syn</button>
+        <button class="tab" data-tab="rss">RSS</button>
         <button class="tab" data-tab="named">Named</button>
-        <button class="tab" data-tab="ctx">Contexts</button>
+        <button class="tab" data-tab="ctx">Ctx</button>
         <button class="tab" data-tab="search">Search</button>
     </div>
 
@@ -253,6 +460,18 @@
     </div>
     <div id="panel-ctx" class="panel">
         <div class="loading">Loading...</div>
+    </div>
+    <div id="panel-picks" class="panel">
+        <div class="loading">Loading picks...</div>
+    </div>
+    <div id="panel-readme" class="panel">
+        <div class="loading">Loading reading list...</div>
+    </div>
+    <div id="panel-syn" class="panel">
+        <div class="loading">Loading synopsis...</div>
+    </div>
+    <div id="panel-rss" class="panel">
+        <div class="loading">Loading RSS...</div>
     </div>
     <div id="panel-search" class="panel">
         <div class="search-box">
@@ -348,6 +567,10 @@
         if (id === 'cal') loadCalendar();
         else if (id === 'named') loadNamed();
         else if (id === 'ctx') loadContextList();
+        else if (id === 'picks') loadPicks();
+        else if (id === 'readme') loadReadme();
+        else if (id === 'syn') loadSynopsis();
+        else if (id === 'rss') loadRss();
     }
 
     function showError(panelId, msg) {
@@ -459,19 +682,28 @@
 
             if (entry.data?._placeholder) continue;
 
-            const isPast = entry.event_date < now && !entry.data?.clock;
             const isToday = entry.date_key === todayKey;
+            const isPast = entry.event_date < now && !entry.data?.clock && !isToday;
             let cls = 'cal-entry';
             if (isPast) cls += ' past-event';
             if (isToday) cls += ' today-marker';
 
             const timeStr = entry.time_display || '';
-            const content = linkifyContent(escapeHtml(entry.content));
+            const isAnnual = entry.data?.annual;
+            const isSynopsis = entry.data?.entry_id && entry.data.entry_id.startsWith('daily-');
             const ctx = entry.context ? ` <span class="named-context">=${entry.context}</span>` : '';
 
-            html += `<div class="${cls}" onclick="toggleExpand(this,'${entry.id}')">`;
+            let contentHtml;
+            if (isSynopsis) {
+                contentHtml = `<a href="#" onclick="event.preventDefault();openSynopsis('${escapeHtml(entry.data.entry_id)}')">Daily Synopsis</a>`;
+            } else {
+                contentHtml = linkifyContent(escapeHtml(entry.content));
+            }
+
+            const contentStyle = isAnnual ? ' style="color:#d47ab0"' : '';
+            html += `<div class="${cls}"${isSynopsis ? '' : ` onclick="toggleExpand(this,'${entry.id}')"`}>`;
             html += `<span class="cal-time">${escapeHtml(timeStr)}</span>`;
-            html += `<span class="cal-content">${content}${ctx}</span>`;
+            html += `<span class="cal-content"${contentStyle}>${contentHtml}${ctx}</span>`;
             html += `</div>`;
         }
 
@@ -598,6 +830,528 @@
             html += `</div>`;
         }
         return html;
+    }
+
+    // --- Helpers ---
+    function getCsrf() {
+        const c = document.cookie.match(/csrftoken=([^;]+)/);
+        return c ? c[1] : '';
+    }
+
+    // --- Picks ---
+    let allRuns = [];
+
+    async function loadPicks() {
+        const panel = document.getElementById('panel-picks');
+        try {
+            const resp = await fetch('/tjai/api/picks/data');
+            const data = await resp.json();
+            if (data.error) {
+                panel.innerHTML = `<div class="error-msg">${escapeHtml(data.error)}</div>`;
+                return;
+            }
+            allRuns = data.runs || [];
+            renderPicks();
+        } catch (e) {
+            panel.innerHTML = '<div class="error-msg">Error loading picks</div>';
+        }
+    }
+
+    function renderPicks() {
+        const panel = document.getElementById('panel-picks');
+        if (allRuns.length === 0) {
+            panel.innerHTML = '<div class="loading">No picks yet.</div>';
+            return;
+        }
+
+        let totalActive = 0, totalKept = 0;
+        for (const run of allRuns) {
+            for (const p of run.picks) {
+                if (p.kept) totalKept++;
+                else if (!p.archived) totalActive++;
+            }
+        }
+
+        let html = `<div class="picks-stats">${totalActive} to review, ${totalKept} kept</div>`;
+        for (const run of allRuns) {
+            const runId = run.run;
+            const picks = run.picks;
+            const activeCount = picks.filter(p => !p.archived && !p.kept).length;
+            const keptCount = picks.filter(p => p.kept).length;
+
+            html += `<div class="run-block" data-run="${escapeHtml(runId)}">`;
+            html += '<div class="run-header">';
+            html += `<span class="run-time">${formatRunTime(runId)}</span>`;
+            html += `<span class="run-stats">${picks.length} picks, ${keptCount} kept</span>`;
+            if (activeCount > 0) {
+                html += `<button onclick="archiveRun('${escapeHtml(runId)}')">Archive All</button>`;
+            } else {
+                html += `<button class="done" disabled>All reviewed</button>`;
+            }
+            html += '</div>';
+
+            for (const pick of picks) {
+                const classes = ['pick-item'];
+                if (pick.archived) classes.push('archived');
+                if (pick.kept) classes.push('kept');
+
+                html += `<div class="${classes.join(' ')}" id="pick-${pick.id}">`;
+                html += `<div class="pick-title"><a href="${escapeHtml(pick.url)}" target="_blank" rel="noopener" onclick="markViewed('${pick.id}', this)">${escapeHtml(pick.title)}</a></div>`;
+                if (pick.source) html += `<div class="pick-source">${escapeHtml(pick.source)}</div>`;
+                html += `<div class="pick-precis">${escapeHtml(pick.precis)}</div>`;
+                if (pick.rationale) html += `<div class="pick-rationale">Why: ${escapeHtml(pick.rationale)}</div>`;
+                html += '<div class="pick-actions">';
+                html += `<button class="${pick.thumbs === 'up' ? 'active-up' : ''}" onclick="setThumbs('${pick.id}', 'up', this)">\u25B2</button>`;
+                html += `<button class="${pick.thumbs === 'down' ? 'active-down' : ''}" onclick="setThumbs('${pick.id}', 'down', this)">\u25BC</button>`;
+                html += `<button class="${pick.kept ? 'active-keep' : ''}" onclick="togglePickKeep('${pick.id}', ${!pick.kept}, this)">Keep</button>`;
+                html += `<button class="${pick.readme ? 'active-readme' : ''}" onclick="togglePickReadme('${pick.id}', this)">ReadMe</button>`;
+                html += '</div></div>';
+            }
+            html += '</div>';
+        }
+        panel.innerHTML = html;
+    }
+
+    function formatRunTime(runStr) {
+        if (!runStr || runStr === 'unknown') return 'Unknown run';
+        try {
+            const d = new Date(runStr);
+            return d.toLocaleDateString('en-US', {
+                weekday: 'short', month: 'short', day: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+            });
+        } catch { return runStr; }
+    }
+
+    function findPick(id) {
+        for (const run of allRuns) {
+            const p = run.picks.find(p => p.id === id);
+            if (p) return p;
+        }
+        return null;
+    }
+
+    async function updatePick(entryId, field, value) {
+        const resp = await fetch('/tjai/api/picks/update', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+            body: JSON.stringify({entry_id: entryId, field, value}),
+        });
+        const data = await resp.json();
+        if (data.error) console.error('Update failed:', data.error);
+        return data;
+    }
+
+    function markViewed(id, linkEl) {
+        const pick = findPick(id);
+        if (!pick || pick.archived || pick.kept) return;
+        pick.archived = true;
+        updatePick(id, 'archived', true);
+        const el = document.getElementById('pick-' + id);
+        if (el) el.classList.add('archived');
+        updatePickStats();
+        updateRunHeaders();
+    }
+
+    function setThumbs(id, direction, btn) {
+        const pick = findPick(id);
+        if (!pick) return;
+        const newVal = pick.thumbs === direction ? null : direction;
+        pick.thumbs = newVal;
+        updatePick(id, 'thumbs', newVal);
+        const actions = btn.parentElement;
+        actions.children[0].className = newVal === 'up' ? 'active-up' : '';
+        actions.children[1].className = newVal === 'down' ? 'active-down' : '';
+    }
+
+    function togglePickReadme(id, btn) {
+        const pick = findPick(id);
+        if (!pick) return;
+        const newVal = !pick.readme;
+        pick.readme = newVal;
+        updatePick(id, 'readme', newVal);
+        btn.className = newVal ? 'active-readme' : '';
+    }
+
+    function togglePickKeep(id, keepVal, btn) {
+        const pick = findPick(id);
+        if (!pick) return;
+        pick.kept = keepVal;
+        if (keepVal) pick.archived = false;
+        updatePick(id, 'kept', keepVal);
+        const el = document.getElementById('pick-' + id);
+        if (el) {
+            el.classList.toggle('kept', keepVal);
+            if (keepVal) el.classList.remove('archived');
+        }
+        btn.className = keepVal ? 'active-keep' : '';
+        updatePickStats();
+        updateRunHeaders();
+    }
+
+    async function archiveRun(runId) {
+        const resp = await fetch('/tjai/api/picks/archive-run', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+            body: JSON.stringify({run_id: runId}),
+        });
+        const data = await resp.json();
+        if (data.error) {
+            console.error('Archive run failed:', data.error);
+            return;
+        }
+        const run = allRuns.find(r => r.run === runId);
+        if (run) {
+            for (const p of run.picks) {
+                if (!p.kept) {
+                    p.archived = true;
+                    const el = document.getElementById('pick-' + p.id);
+                    if (el) el.classList.add('archived');
+                }
+            }
+        }
+        updatePickStats();
+        updateRunHeaders();
+    }
+
+    function updatePickStats() {
+        let active = 0, kept = 0;
+        for (const run of allRuns) {
+            for (const p of run.picks) {
+                if (p.kept) kept++;
+                else if (!p.archived) active++;
+            }
+        }
+        const el = document.querySelector('.picks-stats');
+        if (el) el.textContent = `${active} to review, ${kept} kept`;
+    }
+
+    function updateRunHeaders() {
+        for (const run of allRuns) {
+            const block = document.querySelector(`.run-block[data-run="${CSS.escape(run.run)}"]`);
+            if (!block) continue;
+            const activeCount = run.picks.filter(p => !p.archived && !p.kept).length;
+            const keptCount = run.picks.filter(p => p.kept).length;
+            const statsEl = block.querySelector('.run-stats');
+            if (statsEl) statsEl.textContent = `${run.picks.length} picks, ${keptCount} kept`;
+            const btn = block.querySelector('.run-header button');
+            if (btn && activeCount === 0) {
+                btn.className = 'done';
+                btn.disabled = true;
+                btn.textContent = 'All reviewed';
+                btn.onclick = null;
+            } else if (btn && activeCount > 0) {
+                btn.className = '';
+                btn.disabled = false;
+                btn.textContent = 'Archive All';
+            }
+        }
+    }
+
+    // --- ReadMe ---
+    let readmeItems = [];
+
+    async function loadReadme() {
+        const panel = document.getElementById('panel-readme');
+        try {
+            const resp = await fetch('/tjai/api/readme/data');
+            const data = await resp.json();
+            if (data.error) {
+                panel.innerHTML = `<div class="error-msg">${escapeHtml(data.error)}</div>`;
+                return;
+            }
+            readmeItems = data.items || [];
+            renderReadme();
+        } catch (e) {
+            panel.innerHTML = '<div class="error-msg">Error loading reading list</div>';
+        }
+    }
+
+    function renderReadme() {
+        const panel = document.getElementById('panel-readme');
+        if (readmeItems.length === 0) {
+            panel.innerHTML = '<div class="loading">Reading list is empty.</div>';
+            return;
+        }
+        let html = `<div class="readme-count">${readmeItems.length} item${readmeItems.length !== 1 ? 's' : ''} to read</div>`;
+        for (const item of readmeItems) {
+            html += `<div class="readme-item" id="rm-${item.id}">`;
+            html += `<div class="readme-title"><a href="${escapeHtml(item.url)}" target="_blank" rel="noopener">${escapeHtml(item.title)}</a><button onclick="dismissReadme('${item.id}')">remove</button></div>`;
+            let detail = '';
+            if (item.modified) {
+                const d = new Date(item.modified * 1000);
+                detail = d.toLocaleDateString('en-US', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'});
+            }
+            if (item.tags && item.tags.length) detail += (detail ? ' \u00b7 ' : '') + item.tags.map(t => ':' + escapeHtml(t)).join(' ');
+            if (detail) html += `<div class="readme-detail">${detail}</div>`;
+            if (item.precis) html += `<div class="readme-precis">${escapeHtml(item.precis)}</div>`;
+            html += '</div>';
+        }
+        panel.innerHTML = html;
+    }
+
+    function dismissReadme(id) {
+        fetch('/tjai/api/readme/dismiss', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+            body: JSON.stringify({entry_id: id}),
+        });
+        readmeItems = readmeItems.filter(i => i.id !== id);
+        renderReadme();
+    }
+
+    // --- Synopsis ---
+    let synDates = [];
+    let synTodayKey = '';
+
+    async function loadSynopsis() {
+        const panel = document.getElementById('panel-syn');
+        try {
+            const resp = await fetch('/tjai/api/synopsis/dates');
+            const data = await resp.json();
+            if (data.error) {
+                panel.innerHTML = `<div class="error-msg">${escapeHtml(data.error)}</div>`;
+                return;
+            }
+            synDates = data.dates || [];
+            synTodayKey = data.today_key || '';
+            renderSynopsisDates();
+            if (synDates.length > 0) selectSynopsis(synDates[0].entry_id);
+        } catch (e) {
+            panel.innerHTML = '<div class="error-msg">Error loading synopsis</div>';
+        }
+    }
+
+    function renderSynopsisDates() {
+        const panel = document.getElementById('panel-syn');
+        if (synDates.length === 0) {
+            panel.innerHTML = '<div class="loading">No synopses found.</div>';
+            return;
+        }
+        let html = '<div class="syn-dates">';
+        for (const d of synDates) {
+            const isToday = d.date_key === synTodayKey;
+            html += `<div class="syn-date${isToday ? ' today' : ''}" data-entry-id="${escapeHtml(d.entry_id)}" onclick="selectSynopsis('${escapeHtml(d.entry_id)}')">${escapeHtml(d.date_display)}</div>`;
+        }
+        html += '</div><div id="syn-content"><div class="loading">Select a date...</div></div>';
+        panel.innerHTML = html;
+    }
+
+    function openSynopsis(entryId) {
+        switchTab('syn');
+        loaded['syn'] = true;
+        const panel = document.getElementById('panel-syn');
+        panel.innerHTML = '<div id="syn-content"><div class="loading">Loading...</div></div>';
+        selectSynopsis(entryId);
+    }
+
+    async function selectSynopsis(entryId) {
+        document.querySelectorAll('.syn-date').forEach(el => {
+            el.classList.toggle('selected', el.dataset.entryId === entryId);
+        });
+        const contentEl = document.getElementById('syn-content');
+        if (contentEl) contentEl.innerHTML = '<div class="loading">Loading...</div>';
+        try {
+            const resp = await fetch(`/tjai/api/synopsis/content?entry_id=${encodeURIComponent(entryId)}`);
+            const data = await resp.json();
+            if (data.error) {
+                if (contentEl) contentEl.innerHTML = `<div class="error-msg">${escapeHtml(data.error)}</div>`;
+                return;
+            }
+            if (contentEl) contentEl.innerHTML = `<div class="syn-content">${data.content_html}</div>`;
+        } catch (e) {
+            if (contentEl) contentEl.innerHTML = '<div class="error-msg">Error loading synopsis</div>';
+        }
+    }
+
+    // --- RSS ---
+    let rssData = [];
+    let rssPageBuiltAt = null;
+
+    async function loadRss() {
+        const panel = document.getElementById('panel-rss');
+        try {
+            const resp = await fetch('/tjai/api/rss/data');
+            const data = await resp.json();
+            if (data.error) {
+                panel.innerHTML = `<div class="error-msg">${escapeHtml(data.error)}</div>`;
+                return;
+            }
+            rssData = data.categories || [];
+            rssPageBuiltAt = data.server_time;
+            renderRss(data.total_unread, data.oldest_date);
+        } catch (e) {
+            panel.innerHTML = '<div class="error-msg">Error loading RSS</div>';
+        }
+    }
+
+    function renderRss(totalUnread, oldestDate) {
+        const panel = document.getElementById('panel-rss');
+        let statsText = `${totalUnread || 0} unread`;
+        if (oldestDate) {
+            const d = new Date(oldestDate);
+            statsText += ` \u00b7 oldest ${d.toLocaleDateString('en-US', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}`;
+        }
+
+        if (rssData.length === 0) {
+            panel.innerHTML = `<div class="rss-stats" id="rss-stats">${statsText}</div><div class="loading">No unread RSS items.</div>`;
+            return;
+        }
+
+        let html = `<div class="rss-stats" id="rss-stats"><span>${statsText}</span><button onclick="markRssAllRead(this)">Mark All Read</button></div>`;
+        for (const cat of rssData) {
+            html += `<div class="category-block"><div class="category-header">${escapeHtml(cat.category)}</div>`;
+            for (const src of cat.sources) {
+                html += `<div class="source-block" data-source="${escapeHtml(src.source)}">`;
+                html += `<div class="source-header"><span class="source-name">${escapeHtml(src.source)}</span><span class="source-count">${src.items.length}</span><button onclick="markRssSourceRead('${escapeHtml(src.source)}', this)">Mark Read</button></div>`;
+                for (const item of src.items) {
+                    html += `<div class="rss-item" data-guid="${escapeHtml(item.guid)}">`;
+                    html += `<div class="rss-title"><a href="${escapeHtml(item.url)}" target="_blank" rel="noopener" onclick="markRssItemRead(this)">${escapeHtml(item.title)}</a>`;
+                    html += `<button class="${item.readme ? 'active-readme' : ''}" data-url="${escapeHtml(item.url)}" data-title="${escapeHtml(item.title)}" onclick="toggleRssReadme(this)">ReadMe</button></div>`;
+                    if (item.published) {
+                        const d = new Date(item.published);
+                        html += `<div class="rss-meta">${d.toLocaleDateString('en-US', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</div>`;
+                    }
+                    if (item.precis) {
+                        const tmp = document.createElement('div');
+                        tmp.innerHTML = item.precis;
+                        const clean = tmp.textContent || '';
+                        if (clean.length > 0) html += `<div class="rss-precis">${escapeHtml(clean)}</div>`;
+                    }
+                    html += '</div>';
+                }
+                html += `<div style="margin-top:6px"><button class="feed-bottom-btn" onclick="markRssSourceRead('${escapeHtml(src.source)}', this)">Mark Read</button></div>`;
+                html += `<hr style="border:none;border-top:1px solid rgba(255,255,255,0.2);margin:10px 0">`;
+                html += '</div>';
+            }
+            html += '</div>';
+        }
+        panel.innerHTML = html;
+    }
+
+    function markRssItemRead(linkEl) {
+        const item = linkEl.closest('.rss-item');
+        if (item.classList.contains('read')) return;
+        item.classList.add('read');
+        const guid = item.dataset.guid;
+        fetch('/tjai/api/rss/mark-item-read', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+            body: JSON.stringify({guid}),
+        }).then(r => r.json()).then(data => {
+            if (data.total_unread !== undefined) {
+                const statsEl = document.querySelector('#rss-stats span');
+                if (statsEl) statsEl.textContent = `${data.total_unread} unread`;
+            }
+        });
+    }
+
+    async function markRssSourceRead(source, btn) {
+        btn.textContent = '...';
+        btn.disabled = true;
+        try {
+            const resp = await fetch('/tjai/api/rss/mark-read', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                body: JSON.stringify({source, before: rssPageBuiltAt}),
+            });
+            const data = await resp.json();
+            if (data.ok) {
+                const block = btn.closest('.source-block');
+                if (block) block.remove();
+                document.querySelectorAll('.category-block').forEach(cb => {
+                    if (cb.querySelectorAll('.source-block').length === 0) cb.remove();
+                });
+                const statsEl = document.querySelector('#rss-stats span');
+                if (statsEl) {
+                    const current = parseInt(statsEl.textContent) || 0;
+                    statsEl.textContent = `${Math.max(0, current - (data.marked || 0))} unread`;
+                }
+                if (document.querySelectorAll('.source-block').length === 0) {
+                    document.getElementById('panel-rss').innerHTML =
+                        '<div class="rss-stats" id="rss-stats"><span>0 unread</span></div><div class="loading">All caught up.</div>';
+                }
+            } else {
+                btn.textContent = 'Mark Read';
+                btn.disabled = false;
+            }
+        } catch (e) {
+            btn.textContent = 'Mark Read';
+            btn.disabled = false;
+        }
+    }
+
+    async function markRssAllRead(btn) {
+        btn.textContent = '...';
+        btn.disabled = true;
+        try {
+            const resp = await fetch('/tjai/api/rss/mark-all-read', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                body: JSON.stringify({before: rssPageBuiltAt}),
+            });
+            const data = await resp.json();
+            if (data.ok) {
+                document.getElementById('panel-rss').innerHTML =
+                    '<div class="rss-stats" id="rss-stats"><span>0 unread</span></div><div class="loading">All caught up.</div>';
+            }
+        } catch (e) {}
+        btn.textContent = 'Mark All Read';
+        btn.disabled = false;
+    }
+
+    async function markRssCatRead(btn) {
+        const catBlock = btn.closest('.category-block');
+        if (!catBlock) return;
+        const sourceBlocks = catBlock.querySelectorAll('.source-block');
+        const sources = Array.from(sourceBlocks).map(b => b.dataset.source);
+        if (sources.length === 0) return;
+        btn.textContent = '...';
+        btn.disabled = true;
+        let totalMarked = 0;
+        for (const source of sources) {
+            try {
+                const resp = await fetch('/tjai/api/rss/mark-read', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                    body: JSON.stringify({source, before: rssPageBuiltAt}),
+                });
+                const data = await resp.json();
+                if (data.ok) totalMarked += (data.marked || 0);
+            } catch (e) {}
+        }
+        catBlock.remove();
+        const statsEl = document.querySelector('#rss-stats span');
+        if (statsEl) {
+            const current = parseInt(statsEl.textContent) || 0;
+            statsEl.textContent = `${Math.max(0, current - totalMarked)} unread`;
+        }
+        if (document.querySelectorAll('.category-block').length === 0) {
+            document.getElementById('panel-rss').innerHTML =
+                '<div class="rss-stats" id="rss-stats"><span>0 unread</span></div><div class="loading">All caught up.</div>';
+        }
+    }
+
+    function toggleRssReadme(btn) {
+        if (btn.disabled) return;
+        const activate = !btn.classList.contains('active-readme');
+        const url = btn.dataset.url;
+        const title = btn.dataset.title;
+        btn.classList.toggle('active-readme', activate);
+        btn.disabled = true;
+        fetch('/tjai/api/rss/readme', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+            body: JSON.stringify({url, title, activate}),
+        }).then(r => r.json()).then(data => {
+            if (!data.ok) {
+                btn.classList.toggle('active-readme', !activate);
+                console.error('ReadMe toggle failed:', data.error);
+            }
+        }).catch(e => {
+            btn.classList.toggle('active-readme', !activate);
+            console.error('ReadMe toggle failed:', e);
+        }).finally(() => { btn.disabled = false; });
     }
 
     // Go

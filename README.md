@@ -228,7 +228,7 @@ cd /home/admin/github/tjrepo/tjai
 
 This rsyncs code to `/var/www/tjai/`, installs requirements, and runs migrations.
 
-### Manual Django commands
+### Manual Django commands (production)
 
 ```bash
 source /var/www/tjai/.venv/bin/activate
@@ -238,6 +238,17 @@ python manage.py collectstatic --noinput
 python manage.py createsuperuser
 ```
 
+### Django commands from dev tree
+
+The dev tree at `/home/admin/github/tjrepo/tjai/` has no `.env` file. Django settings require `DJANGO_DATABASE_URL` and other vars that live in `/var/www/tjai/.env`. That file uses plain `KEY=VALUE` (no `export`), so `set -a` is needed:
+
+```bash
+set -a && source /var/www/tjai/.env && set +a
+cd /home/admin/github/tjrepo/tjai
+.venv/bin/python manage.py makemigrations tjai_app --name <name>
+.venv/bin/python manage.py migrate
+```
+
 ### Endpoints
 
 - `/tjai/` - Dashboard with entry list, filtering by kind/context/tags/status
@@ -245,6 +256,7 @@ python manage.py createsuperuser
 - `/tjai/entry/` - Entry detail view with human-readable data display
 - `/tjai/daily/` - Daily synopsis (Today in History)
 - `/tjai/picks/` - AI-curated news picks triage page
+- `/tjai/rss/` - RSS reader with source-grouped triage
 - `/tjai/readme/` - Reading list (items tagged :readme)
 - `/tjai/system/` - System health monitoring dashboard
 - `/tjai/agent-log/` - Action agent execution log

@@ -141,6 +141,26 @@ class AppLog(models.Model):
         ]
 
 
+class RssItem(models.Model):
+    """RSS feed items — ephemeral until user acts on them."""
+    guid = models.TextField(primary_key=True)  # feed guid or url hash
+    feed_url = models.TextField()
+    source = models.TextField()       # feed title
+    category = models.TextField(default='uncategorized')
+    title = models.TextField()
+    url = models.TextField()          # article link
+    precis = models.TextField(default='')
+    published = models.DateTimeField(null=True)
+    fetched = models.DateTimeField()
+    read = models.BooleanField(default=False, db_index=True)
+
+    class Meta:
+        db_table = 'rss_items'
+        indexes = [
+            models.Index(fields=['read', 'category', 'source']),
+        ]
+
+
 class SysConfig(models.Model):
     """System-wide configuration parameters (server-authoritative)."""
     key = models.CharField(max_length=255, primary_key=True)
