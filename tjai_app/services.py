@@ -21,7 +21,7 @@ from .tagger import tag_bookmark
 from tj.commands.journal import parse_time
 from tj.date_utils import parse_date_filter
 
-VALID_KINDS = ('memory', 'todo', 'journal', 'profile', 'ai', 'bookmark', 'list')
+VALID_KINDS = ('memory', 'todo', 'journal', 'profile', 'ai', 'bookmark', 'list', 'action')
 VALID_STATUSES = ('active', 'done', 'blocked', 'archive')
 
 
@@ -125,14 +125,15 @@ def _strip_punct(s):
 
 def _apply_date_filter(qs, start_date, end_date):
     """Apply date range filter to queryset. Both dates optional; None means no filter."""
+    tz = _get_timezone()
     if start_date is not None:
-        start_ts, err = parse_date_filter(start_date)
+        start_ts, err = parse_date_filter(start_date, tz=tz)
         if err:
             return None, {"error": err}
         if start_ts:
             qs = qs.filter(timestamp_modified__gte=start_ts)
     if end_date is not None:
-        end_ts, err = parse_date_filter(end_date, end_of_day=True)
+        end_ts, err = parse_date_filter(end_date, end_of_day=True, tz=tz)
         if err:
             return None, {"error": err}
         if end_ts:
@@ -289,7 +290,7 @@ def list_contexts():
 
 def create_entry(content, kind="memory", context=None, name=None, tags=None,
                  event_date=None, event_time=None, priority=None, status=None,
-                 create_context=False, source_tags=None):
+                 create_context=False, source_tags=None, data=None):
     if not content or not content.strip():
         return {"error": "content is required and cannot be empty"}
     if kind not in VALID_KINDS:
@@ -354,18 +355,18 @@ def create_entry(content, kind="memory", context=None, name=None, tags=None,
             if hour is None:
                 hour, minute = 12, 0
 
-    data = {}
+    entry_data = data.copy() if data else {}
     if event_date:
         tz = _get_timezone()
         dt = datetime.strptime(event_date, '%Y%m%d').replace(hour=hour, minute=minute, tzinfo=tz)
-        data['event_date'] = dt.timestamp()
-    if not data:
-        data = None
+        entry_data['event_date'] = dt.timestamp()
+    if not entry_data:
+        entry_data = None
 
     # Compute mmdd for annual events
     entry_mmdd = None
-    if tags and 'annual' in tags and data and 'event_date' in data:
-        event_dt = datetime.fromtimestamp(data['event_date'])
+    if tags and 'annual' in tags and entry_data and 'event_date' in entry_data:
+        event_dt = datetime.fromtimestamp(entry_data['event_date'])
         entry_mmdd = event_dt.month * 100 + event_dt.day
 
     entry = Entry.objects.create(
@@ -376,7 +377,7 @@ def create_entry(content, kind="memory", context=None, name=None, tags=None,
         name=name,
         priority=priority,
         status=status,
-        data=data,
+        data=entry_data,
         timestamp_created=now,
         timestamp_modified=now,
         is_dirty=1,
@@ -502,7 +503,7 @@ def get_entry(entry_id):
 def edit_entry(entry_id, content, context=None, clear_context=False,
                tags=None, event_date=None, event_time=None, clear_event_date=False,
                priority=None, clear_priority=False, status=None, clear_status=False,
-               name=None, clear_name=False, keep_time=False):
+               name=None, clear_name=False, keep_time=False, data=None):
     if not entry_id:
         return {"error": "entry_id is required"}
     if not content:
@@ -571,6 +572,17 @@ def edit_entry(entry_id, content, context=None, clear_context=False,
         if not entry.data:
             entry.data = None
 
+    if data is not None:
+        if entry.data is None:
+            entry.data = {}
+        for k, v in data.items():
+            if v is None:
+                entry.data.pop(k, None)
+            else:
+                entry.data[k] = v
+        if not entry.data:
+            entry.data = None
+
     if priority is not None:
         entry.priority = priority
     elif clear_priority:
@@ -625,3 +637,9 @@ def delete_entry(entry_id, content):
     entry.save(update_fields=['deleted_at', 'timestamp_modified', 'is_dirty'])
 
     return {"deleted": True, "entry": _format_entry(entry)}
+
+
+def run_action(entry_id):
+    """Execute a specific action entry immediately. Delegates to action_runner."""
+    from .action_runner import run_action as _run_action
+    return _run_action(entry_id)

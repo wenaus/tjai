@@ -162,7 +162,8 @@ ENTRY_TYPE_ABBREV = {
     'todo': 'do',
     'ai': 'ai',
     'list': 'l',
-    'log': 'log'
+    'log': 'log',
+    'action': 'act',
 }
 
 # Bidirectional map: accepts both abbreviation and full name, returns full name
@@ -171,6 +172,7 @@ ENTRY_TYPE_MAP = {}
 for _full_name, _abbrev in ENTRY_TYPE_ABBREV.items():
     ENTRY_TYPE_MAP[_abbrev] = _full_name  # j -> journal
     ENTRY_TYPE_MAP[_full_name] = _full_name  # journal -> journal
+ENTRY_TYPE_MAP['actions'] = 'action'  # plural alias
 
 
 def get_safe_exclude_tags(additional_excludes: Optional[List[str]] = None) -> Optional[List[str]]:

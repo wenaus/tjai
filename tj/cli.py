@@ -295,6 +295,15 @@ def create_parser() -> argparse.ArgumentParser:
     p_ai_agent.add_argument('input', nargs='*', help="[=context] prompt")
     p_ai_agent.set_defaults(func=handle_ai_agent)
 
+    # Action runner
+    from tj.commands.run_action import handle_run_action, handle_wake_agent
+    p_run = subparsers.add_parser('run', help="Execute an action entry now.")
+    p_run.add_argument('target', help="Action number (from tj l actions) or entry name")
+    p_run.set_defaults(func=handle_run_action)
+
+    p_wake = subparsers.add_parser('wake', help="Wake the action agent to check for due actions.")
+    p_wake.set_defaults(func=handle_wake_agent)
+
     # Help
     p_help = subparsers.add_parser('h', help="Show this help message.", add_help=False)
     p_help.set_defaults(func=handle_help)
@@ -434,6 +443,29 @@ def show_status() -> None:
             print(f"\nTelegram bot: unknown (server unreachable)")
         else:
             print(f"\nTelegram bot: not running")
+
+        # Action agent status
+        try:
+            from tj.server import send_command
+            resp = send_command("get_sysconfig")
+            if resp.get("status") == "ok":
+                sc = resp["result"]
+                agent_pid = sc.get("action_agent_pid")
+                agent_hb = sc.get("action_agent_heartbeat")
+                if agent_pid and agent_hb:
+                    import os
+                    age = int(time.time() - float(agent_hb))
+                    ago = f"{age}s" if age < 120 else f"{age // 60}m"
+                    pid = int(agent_pid)
+                    try:
+                        os.kill(pid, 0)
+                        print(f"Action agent: running (PID {pid}, heartbeat {ago} ago)")
+                    except OSError:
+                        print(f"Action agent: not running (stale PID {pid}, last heartbeat {ago} ago)")
+                else:
+                    print(f"Action agent: not configured")
+        except Exception:
+            print(f"Action agent: unknown (server unreachable)")
 
         # Config info
         from tj.config import get_config_lines

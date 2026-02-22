@@ -9,7 +9,7 @@ Available tools:
     get_profile       - Get personal facts and preferences about the user
     get_ai_guidance   - Get behavioral instructions for AI assistants
     list_contexts     - List all projects/topics for organizing entries
-    create_entry      - Add new entries (memories, todos, journal, profile, ai, bookmark)
+    create_entry      - Add new entries (memories, todos, journal, profile, ai, bookmark, action)
     get_todos         - Retrieve todo items with filtering options
     get_memories      - Get memory entries. Call unfiltered to see general activity
     get_bookmarks     - Get saved bookmark entries (URLs)
@@ -18,7 +18,7 @@ Available tools:
     edit_entry        - Edit an existing entry
     delete_entry      - Soft delete an entry (requires user approval)
 
-Entry types: memory, todo, journal, profile, bookmark, ai, list
+Entry types: memory, todo, journal, profile, bookmark, ai, list, action
 
 Contexts group entries by project or topic. Most tools accept a context parameter
 to filter results. Use get_ai_guidance(context) before starting work on any
@@ -143,6 +143,7 @@ async def create_entry(
     priority: int = None,
     status: str = None,
     create_context: bool = False,
+    data: dict = None,
 ) -> dict:
     """
     Create a new entry in the user's tjai knowledge base.
@@ -155,7 +156,8 @@ async def create_entry(
         content: The entry text (required). Do NOT include time in content - use event_time.
         kind: Entry type. One of: memory (general notes, default), todo (tasks),
               journal (calendar events with event_date), profile (facts about user),
-              ai (instructions for AI assistants), bookmark (URLs), list (lists).
+              ai (instructions for AI assistants), bookmark (URLs), list (lists),
+              action (automated actions with trigger config).
         context: Context/project name to associate with. Must exist unless
                  create_context=True. Use list_contexts() to see existing contexts.
         name: Optional unique identifier for easy reference (e.g., @budget).
@@ -168,6 +170,9 @@ async def create_entry(
         status: Status value. One of: active, done, blocked, archive.
         create_context: If True, creates context if it doesn't exist. Default: False
                         (fails if context doesn't exist, preventing typos).
+        data: JSON metadata object. For journal entries, event_date/event_time are
+              stored here automatically. For action entries, holds trigger config
+              (trigger, interval_hours, mechanical_script, ai_prompt, last_run).
 
     Example for calendar event "Meeting at 9am on Jan 28, 2026":
         create_entry(content="Meeting", kind="journal", event_date="20260128", event_time="0900")
@@ -181,6 +186,7 @@ async def create_entry(
         content=content, kind=kind, context=context, name=name, tags=tags,
         event_date=event_date, event_time=event_time, priority=priority,
         status=status, create_context=create_context, source_tags=['fromai'],
+        data=data,
     )
 
 
@@ -356,6 +362,7 @@ async def edit_entry(
     name: str = None,
     clear_name: bool = False,
     keep_time: bool = False,
+    data: dict = None,
 ) -> dict:
     """
     Edit an existing entry in the user's tjai knowledge base.
@@ -379,6 +386,8 @@ async def edit_entry(
         name: Set unique identifier for easy reference.
         clear_name: If True, removes name.
         keep_time: If True, preserve original modification timestamp.
+        data: JSON metadata to merge into the entry's data field. Keys with
+              null values are removed. Merges with existing data (does not replace).
 
     Returns:
         The updated entry with all fields.
@@ -391,7 +400,26 @@ async def edit_entry(
         priority=priority, clear_priority=clear_priority,
         status=status, clear_status=clear_status,
         name=name, clear_name=clear_name, keep_time=keep_time,
+        data=data,
     )
+
+
+@mcp.tool()
+async def run_action(entry_id: str) -> dict:
+    """
+    Execute a specific action entry immediately.
+
+    Runs the action's full pipeline: mechanical script, journal entry,
+    AI dispatch, and updates last_run. Returns execution result.
+
+    Args:
+        entry_id: The UUID of the action entry to execute (required).
+
+    Returns:
+        Result dict with success status, action content, and entry_id.
+        Returns {"error": "..."} if entry not found or execution fails.
+    """
+    return await sync_to_async(services.run_action)(entry_id=entry_id)
 
 
 @mcp.tool()

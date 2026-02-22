@@ -7,13 +7,14 @@ from typing import Optional, Tuple
 from .timezone_manager import get_timezone_object
 
 
-def parse_date_filter(date_str: str, default_days_ago: int = None, end_of_day: bool = False) -> Tuple[Optional[float], Optional[str]]:
+def parse_date_filter(date_str: str, default_days_ago: int = None, end_of_day: bool = False, tz=None) -> Tuple[Optional[float], Optional[str]]:
     """Parse a date string for filtering queries.
 
     Supports:
     - None/empty: returns default_days_ago from now, or None if no default
     - "today": start of today (or end if end_of_day=True)
     - "yesterday": start of yesterday (or end if end_of_day=True)
+    - "N hours ago" or "Nh": N hours ago
     - "N days ago" or "Nd": N days ago
     - "last week": 7 days ago
     - Day names (mon, tuesday, etc.): most recent occurrence
@@ -29,7 +30,8 @@ def parse_date_filter(date_str: str, default_days_ago: int = None, end_of_day: b
         Tuple of (timestamp, error_string). On success error is None.
         On failure timestamp is None and error explains the problem.
     """
-    tz = get_timezone_object()
+    if tz is None:
+        tz = get_timezone_object()
     now = datetime.now(tz) if tz else datetime.now()
 
     def set_time(dt):
@@ -59,6 +61,13 @@ def parse_date_filter(date_str: str, default_days_ago: int = None, end_of_day: b
     # "last week"
     if date_str == "last week":
         dt = set_time(now - timedelta(days=7))
+        return dt.timestamp(), None
+
+    # "N hours ago" or "Nh"
+    match = re.match(r'^(\d+)\s*h(?:ours?)?\s*(?:ago)?$', date_str)
+    if match:
+        hours = int(match.group(1))
+        dt = now - timedelta(hours=hours)
         return dt.timestamp(), None
 
     # "N days ago" or "Nd"
