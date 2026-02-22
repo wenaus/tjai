@@ -156,7 +156,7 @@
                     var st = document.getElementById('saveStatus');
                     st.style.display = 'inline';
                     setTimeout(function() { st.style.display = 'none'; }, 2000);
-                    location.href = '/tjai/entry/' + encodeURIComponent(data.slug) + '/';
+                    location.href = data.url;
                 } else {
                     alert('Save failed: ' + (data.error || 'unknown'));
                 }

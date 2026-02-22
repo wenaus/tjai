@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>tjai Daily Briefing</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 13px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        #top-menu {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 4px 16px;
+            background: #222;
+            border-bottom: 1px solid #333;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+        #top-menu .menu-title {
+            color: #d8a070;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        #top-menu a {
+            color: #8a8a8a;
+        }
+        #top-menu a:hover {
+            color: #e0e0e0;
+        }
+        #top-menu a.active {
+            color: #e0e0e0;
+        }
+        .container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        .panel-left {
+            width: 200px;
+            min-width: 200px;
+            border-right: 1px solid #333;
+            overflow-y: auto;
+            padding: 12px 0;
+        }
+        .panel-right {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 32px;
+        }
+        .date-item {
+            padding: 6px 16px;
+            cursor: pointer;
+            color: #8a8a8a;
+            white-space: nowrap;
+        }
+        .date-item:hover {
+            background: #2a2a2a;
+            color: #e0e0e0;
+        }
+        .date-item.selected {
+            background: #2a2a2a;
+            color: #e0e0e0;
+            border-right: 2px solid #d8a070;
+        }
+        .date-item.today {
+            color: #9ccc65;
+            font-weight: bold;
+        }
+        .date-item.today.selected {
+            color: #9ccc65;
+        }
+        .briefing-content {
+            line-height: 1.6;
+        }
+        .briefing-content h1 {
+            color: #d8a070;
+            font-size: 18px;
+            margin-bottom: 16px;
+        }
+        .briefing-content h2 {
+            color: #d8a070;
+            font-size: 15px;
+            margin-top: 20px;
+            margin-bottom: 8px;
+        }
+        .briefing-content h3 {
+            color: #ce93d8;
+            font-size: 14px;
+            margin-top: 16px;
+            margin-bottom: 6px;
+        }
+        .briefing-content p {
+            margin-bottom: 8px;
+        }
+        .briefing-content ul, .briefing-content ol {
+            margin-left: 20px;
+            margin-bottom: 8px;
+        }
+        .briefing-content li {
+            margin-bottom: 4px;
+        }
+        .briefing-content a {
+            color: #64b5f6;
+            text-decoration: none;
+        }
+        .briefing-content a:hover {
+            text-decoration: underline;
+        }
+        .briefing-content strong {
+            color: #e8c87a;
+        }
+        .briefing-content em {
+            color: #ce93d8;
+        }
+        .briefing-content code {
+            background: #2a2a2a;
+            padding: 1px 4px;
+            border-radius: 3px;
+        }
+        .briefing-content hr {
+            border: none;
+            border-top: 1px solid #333;
+            margin: 16px 0;
+        }
+        .briefing-content table {
+            border-collapse: collapse;
+            margin-bottom: 12px;
+        }
+        .briefing-content th, .briefing-content td {
+            border: 1px solid #444;
+            padding: 4px 8px;
+        }
+        .briefing-content th {
+            background: #2a2a2a;
+            color: #d8a070;
+        }
+        .loading {
+            color: #8a8a8a;
+            padding: 20px;
+        }
+        .error {
+            color: #ef5350;
+            padding: 20px;
+        }
+        a.entry-link {
+            color: #8a8a8a;
+            font-size: 11px;
+            text-decoration: none;
+            margin-left: 12px;
+        }
+        a.entry-link:hover {
+            color: #e0e0e0;
+        }
+        /* Dark mode scrollbars */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: #444 #1a1a1a;
+        }
+    </style>
+</head>
+<body>
+    <div id="top-menu">
+        <span class="menu-title">tjai</span>
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <a href="{% url 'daily_briefing' %}" class="active">Briefing</a>
+        <a href="{% url 'agent_log' %}">Agent Log</a>
+    </div>
+    <div class="container">
+        <div class="panel-left" id="date-list">
+            <div class="loading">Loading dates...</div>
+        </div>
+        <div class="panel-right" id="briefing-panel">
+            <div class="loading">Select a date to view the briefing.</div>
+        </div>
+    </div>
+
+    <script>
+        let allDates = [];
+        let todayKey = '';
+        let selectedEntryId = null;
+
+        async function fetchDates() {
+            try {
+                const resp = await fetch('/tjai/api/briefing/dates');
+                const data = await resp.json();
+                if (data.error) {
+                    document.getElementById('date-list').innerHTML = `<div class="error">${data.error}</div>`;
+                    return;
+                }
+                allDates = data.dates || [];
+                todayKey = data.today_key || '';
+                renderDateList();
+                if (allDates.length > 0) {
+                    selectDate(allDates[0].entry_id);
+                }
+            } catch (e) {
+                document.getElementById('date-list').innerHTML = '<div class="error">Error loading dates</div>';
+            }
+        }
+
+        function renderDateList() {
+            let html = '';
+            for (const d of allDates) {
+                const isToday = d.date_key === todayKey;
+                const todayClass = isToday ? ' today' : '';
+                const label = isToday ? `${d.date_display} (today)` : d.date_display;
+                html += `<div class="date-item${todayClass}" data-entry-id="${d.entry_id}" data-date-key="${d.date_key}">${label}</div>`;
+            }
+            document.getElementById('date-list').innerHTML = html || '<div class="loading">No briefings found.</div>';
+
+            document.querySelectorAll('.date-item').forEach(el => {
+                el.addEventListener('click', function() {
+                    selectDate(this.dataset.entryId);
+                });
+            });
+        }
+
+        async function selectDate(entryId) {
+            selectedEntryId = entryId;
+            document.querySelectorAll('.date-item').forEach(el => {
+                el.classList.toggle('selected', el.dataset.entryId === entryId);
+            });
+            document.getElementById('briefing-panel').innerHTML = '<div class="loading">Loading...</div>';
+            try {
+                const resp = await fetch(`/tjai/api/briefing/content?entry_id=${encodeURIComponent(entryId)}`);
+                const data = await resp.json();
+                if (data.error) {
+                    document.getElementById('briefing-panel').innerHTML = `<div class="error">${data.error}</div>`;
+                    return;
+                }
+                const entryLink = `<a class="entry-link" href="/tjai/entry/?entry_id=${encodeURIComponent(entryId)}">[edit]</a>`;
+                document.getElementById('briefing-panel').innerHTML =
+                    `<div class="briefing-content">${data.content_html}</div>${entryLink}`;
+            } catch (e) {
+                document.getElementById('briefing-panel').innerHTML = '<div class="error">Error loading briefing</div>';
+            }
+        }
+
+        fetchDates();
+    </script>
+</body>
+</html>

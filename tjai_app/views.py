@@ -677,6 +677,7 @@ def dashboard_status(request):
             'timestamp': e.timestamp_modified,
             'line_count': line_count if line_count > 1 else None,
             'name': e.name,
+            'entry_id': data.get('entry_id') if data else None,
             'nickname': data.get('nickname') if data else None,
             'event_date': data.get('event_date') if data else None,
             'hostname': data.get('hostname') if data else None,
@@ -785,6 +786,7 @@ def dashboard_search(request):
             'timestamp': e.timestamp_modified,
             'line_count': line_count if line_count > 1 else None,
             'name': e.name,
+            'entry_id': data.get('entry_id') if data else None,
             'nickname': data.get('nickname') if data else None,
             'event_date': data.get('event_date') if data else None,
             'hostname': data.get('hostname') if data else None,
@@ -820,6 +822,83 @@ def dashboard_named(request):
 
 
 @login_required
+def daily_briefing(request):
+    """Render the daily briefing page."""
+    return render(request, 'tjai_app/daily_briefing.html')
+
+
+@login_required
+def daily_briefing_data(request):
+    """Return list of daily briefing dates as JSON."""
+    import zoneinfo
+
+    daily_tag_ids = Tag.objects.filter(tag_name='daily').values_list('entry_id', flat=True)
+    entries = Entry.objects.filter(
+        kind='journal',
+        deleted_at__isnull=True,
+        id__in=daily_tag_ids,
+    ).order_by('-data__event_date')
+
+    tz_config = SysConfig.objects.filter(key='timezone').first()
+    timezone_name = tz_config.value if tz_config else 'America/New_York'
+    try:
+        tz = zoneinfo.ZoneInfo(timezone_name)
+        today_dt = datetime.now(tz)
+    except Exception:
+        today_dt = datetime.now()
+    today_key = today_dt.strftime('%Y%m%d')
+
+    result = []
+    for entry in entries:
+        data = entry.data if isinstance(entry.data, dict) else {}
+        entry_id = data.get('entry_id', '')
+        date_str = entry_id.replace('daily-', '') if entry_id.startswith('daily-') else ''
+        date_key = date_str.replace('-', '')
+        try:
+            dt = datetime.strptime(date_str, '%Y-%m-%d')
+            date_display = dt.strftime('%a %b %-d %Y')
+        except ValueError:
+            date_display = date_str
+        result.append({
+            'entry_id': entry_id,
+            'date_display': date_display,
+            'date_key': date_key,
+        })
+
+    return JsonResponse({'dates': result, 'today_key': today_key})
+
+
+@login_required
+def daily_briefing_content(request):
+    """Return rendered markdown content for a specific daily briefing."""
+    import markdown
+    import re
+
+    entry_id = request.GET.get('entry_id')
+    if not entry_id:
+        return JsonResponse({'error': 'entry_id parameter required'}, status=400)
+
+    entry = Entry.objects.filter(
+        data__entry_id=entry_id,
+        deleted_at__isnull=True,
+    ).first()
+    if not entry:
+        return JsonResponse({'error': 'Briefing not found'}, status=404)
+
+    content_html = markdown.markdown(
+        entry.content,
+        extensions=['nl2br', 'tables', 'fenced_code'],
+    )
+    content_html = re.sub(
+        r'(?<!["\'>])(https?://[^\s<]+)',
+        r'<a href="\1" target="_blank">\1</a>',
+        content_html,
+    )
+
+    return JsonResponse({'content_html': content_html, 'entry_id': entry_id})
+
+
+@login_required
 def agent_log(request):
     """Agent log page — shows recent log entries from the AppLog table."""
     return render(request, 'tjai_app/agent_log.html')
@@ -850,15 +929,41 @@ def agent_log_data(request):
 
 
 @login_required
-def entry_detail(request, entry_id):
-    """Show single entry detail page. Accepts nickname (data->nickname), @name, or UUID."""
+def entry_detail(request, entry_id=None):
+    """Show single entry detail page.
+
+    Query params (one lookup, no guessing):
+        ?uuid=...       lookup by primary key
+        ?entry_id=...   lookup by data.entry_id
+        ?nickname=...   lookup by data.nickname
+        ?name=...       lookup by entry name
+
+    Path arg (legacy): /entry/<entry_id>/ — detects UUID format, otherwise
+    tries entry_id then nickname then name.
+    """
     import markdown
-    # Try nickname first, then @name, then UUID
-    entry = Entry.objects.filter(data__nickname=entry_id, deleted_at__isnull=True).first()
-    if not entry:
-        entry = Entry.objects.filter(name=entry_id, deleted_at__isnull=True).first()
-    if not entry:
-        entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
+    base = Entry.objects.filter(deleted_at__isnull=True)
+
+    # Query-param lookups: one param, one query
+    entry = None
+    if request.GET.get('uuid'):
+        entry = base.filter(id=request.GET['uuid']).first()
+    elif request.GET.get('entry_id'):
+        entry = base.filter(data__entry_id=request.GET['entry_id']).first()
+    elif request.GET.get('nickname'):
+        entry = base.filter(data__nickname=request.GET['nickname']).first()
+    elif request.GET.get('name'):
+        entry = base.filter(name=request.GET['name']).first()
+    elif entry_id:
+        # Legacy path arg — detect UUID by format
+        import re
+        if re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-', entry_id):
+            entry = base.filter(id=entry_id).first()
+        else:
+            entry = (base.filter(data__entry_id=entry_id).first()
+                     or base.filter(data__nickname=entry_id).first()
+                     or base.filter(name=entry_id).first())
+
     if not entry:
         raise Http404("Entry not found")
     tags = list(Tag.objects.filter(entry_id=entry.id).values_list('tag_name', flat=True))
@@ -915,8 +1020,15 @@ def api_entry_save(request, entry_id):
     entry.timestamp_modified = time.time()
     entry.save()
     data_dict = entry.data if isinstance(entry.data, dict) else None
-    slug = (data_dict.get('nickname') if data_dict else None) or entry.name or str(entry.id)
-    return JsonResponse({'ok': True, 'slug': slug})
+    if data_dict and data_dict.get('entry_id'):
+        url = f'/tjai/entry/?entry_id={data_dict["entry_id"]}'
+    elif data_dict and data_dict.get('nickname'):
+        url = f'/tjai/entry/?nickname={data_dict["nickname"]}'
+    elif entry.name:
+        url = f'/tjai/entry/?name={entry.name}'
+    else:
+        url = f'/tjai/entry/?uuid={entry.id}'
+    return JsonResponse({'ok': True, 'url': url})
 
 
 def _entries_for_list(entries):

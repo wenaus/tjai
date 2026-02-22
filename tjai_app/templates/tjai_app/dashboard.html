@@ -202,6 +202,7 @@
 <body>
     <div id="top-menu">
         <span class="menu-title">tjai</span>
+        <a href="{% url 'daily_briefing' %}">Briefing</a>
         <a href="{% url 'agent_log' %}">Agent Log</a>
     </div>
     <div class="container">
@@ -308,7 +309,7 @@
                 const contextStr = entry.context ? ` <span style="color:#ce93d8">=${entry.context}</span>` : '';
                 const content = linkifyContent(escapeHtml(entry.content));
                 const lineCount = entry.line_count > 1 ? ` <span style="color:#8a8a8a">[${entry.line_count} lines]</span>` : '';
-                html += `<div class="entry"><a href="/tjai/entry/${encodeURIComponent(entry.name)}/" style="color:inherit;text-decoration:none">${nameStr}${contextStr} ${content}${lineCount}</a></div>`;
+                html += `<div class="entry"><a href="/tjai/entry/?name=${encodeURIComponent(entry.name)}" style="color:inherit;text-decoration:none">${nameStr}${contextStr} ${content}${lineCount}</a></div>`;
             }
             document.getElementById('named-content').innerHTML = html || 'No named entries';
         }
@@ -435,7 +436,9 @@
                 } else {
                     contentHtml = `<span class="${contentClass}">${linkifyContent(escapeHtml(entry.content))}</span>`;
                 }
-                html += `<div class="entry"><a href="/tjai/entry/${entry.id}/" style="color:inherit;text-decoration:none">${timeStr}${countdownStr}${contentHtml}</a></div>`;
+                const calEid = entry.data && entry.data.entry_id;
+                const calEntryUrl = calEid ? `/tjai/entry/?entry_id=${encodeURIComponent(calEid)}` : `/tjai/entry/?uuid=${entry.id}`;
+                html += `<div class="entry"><a href="${calEntryUrl}" style="color:inherit;text-decoration:none">${timeStr}${countdownStr}${contentHtml}</a></div>`;
             }
 
             document.getElementById('calendar-content').innerHTML = html || 'No upcoming events';
@@ -466,8 +469,11 @@
                 const kindMap = {memory: 'm', todo: 'do', profile: 'p', bookmark: 'b', ai: 'ai', journal: 'j', log: 'log'};
                 const kindAbbr = kindMap[entry.kind] || entry.kind;
 
-                const entrySlug = entry.nickname || entry.name || entry.id;
-                let line = `<a href="/tjai/entry/${encodeURIComponent(entrySlug)}/" style="color:inherit;text-decoration:none">`;
+                const entryUrl = entry.entry_id ? `/tjai/entry/?entry_id=${encodeURIComponent(entry.entry_id)}`
+                    : entry.nickname ? `/tjai/entry/?nickname=${encodeURIComponent(entry.nickname)}`
+                    : entry.name ? `/tjai/entry/?name=${encodeURIComponent(entry.name)}`
+                    : `/tjai/entry/?uuid=${entry.id}`;
+                let line = `<a href="${entryUrl}" style="color:inherit;text-decoration:none">`;
                 line += `<span style="color:#daa520">===</span>  `;
                 line += `<span style="color:#8a8a8a">${tsStr}</span> `;
                 line += `<span style="color:#daa520">[${kindAbbr}]</span> `;
