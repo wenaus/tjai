@@ -60,16 +60,10 @@ def build_complete(data):
     births = data.get('births', [])
     if births:
         lines.append('')
-        lines.append('### Births')
+        lines.append('### Birthdays')
         for item in births:
             lines.append(format_item(item))
 
-    deaths = data.get('deaths', [])
-    if deaths:
-        lines.append('')
-        lines.append('### Deaths')
-        for item in deaths:
-            lines.append(format_item(item))
 
     return '\n'.join(lines)
 
@@ -88,8 +82,7 @@ def write_complete(target_date, data):
     sel = len(data.get('selected', []))
     ev = len(data.get('events', []))
     bi = len(data.get('births', []))
-    de = len(data.get('deaths', []))
-    print(f"Stats: {sel} selected, {ev} events, {bi} births, {de} deaths")
+    print(f"Stats: {sel} selected, {ev} events, {bi} births")
 
 
 def main():

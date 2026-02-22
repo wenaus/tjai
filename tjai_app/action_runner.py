@@ -199,9 +199,15 @@ def execute_action(action):
     Returns True on success, False on failure.
     """
     data = action.data or {}
+    last_run = data.get('last_run')
+    if last_run:
+        from datetime import datetime
+        last_run_str = datetime.fromtimestamp(float(last_run)).strftime('%b %-d %H:%M')
+    else:
+        last_run_str = 'never'
     print(f"\nAction: {action.content[:80]}")
     print(f"  Trigger: {data.get('trigger', '?')}, "
-          f"Last run: {data.get('last_run', 'never')}")
+          f"Last run: {last_run_str}")
 
     if not run_mechanical(action):
         print(f"  Mechanical step failed, skipping remaining steps")
