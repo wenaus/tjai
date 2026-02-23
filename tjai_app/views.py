@@ -1912,7 +1912,7 @@ def api_research_run(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_research_stop(request):
-    """Request research runner to stop after current item completes."""
+    """Soft stop: finish current item, then don't continue to next."""
     status = SysConfig.objects.filter(
         key='agent_research-agent_status'
     ).values_list('value', flat=True).first()
@@ -1925,6 +1925,40 @@ def api_research_stop(request):
         defaults={'value': '1', 'timestamp_modified': now},
     )
     return JsonResponse({'ok': True})
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_research_abort(request):
+    """Hard abort: kill processes immediately and reset status."""
+    return _abort_agent('agent_research-agent_status', 'research agent')
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_picks_abort(request):
+    """Hard abort: kill processes immediately and reset status."""
+    return _abort_agent('agent_picks-agent_status', 'picks agent')
+
+
+def _abort_agent(status_key, agent_name):
+    """Kill zombie processes and force-reset agent status. Returns JsonResponse."""
+    status = SysConfig.objects.filter(
+        key=status_key
+    ).values_list('value', flat=True).first()
+    if status != 'running':
+        return JsonResponse({'error': f'{agent_name} not running'}, status=409)
+
+    killed = _kill_zombie_agent_processes()
+    now = time.time()
+    SysConfig.objects.update_or_create(
+        key=status_key,
+        defaults={'value': 'failed', 'timestamp_modified': now})
+    logger.warning("Aborted %s: killed %d zombie process(es), status reset to failed",
+                   agent_name, killed)
+    return JsonResponse({'ok': True, 'killed': killed})
 
 
 @login_required

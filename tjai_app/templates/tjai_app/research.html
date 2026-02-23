@@ -247,7 +247,9 @@
                 if (item.priority) {
                     html += `<span style="color:#666;font-size:11px">P${item.priority}</span>`;
                 }
-                if (item.status !== 'done') {
+                if (isRunning) {
+                    html += `<button class="btn-submit" style="color:#ef5350;border-color:#ef5350" onclick="abortAgent(this)">Abort</button>`;
+                } else if (item.status !== 'done') {
                     const disabled = agentRunning ? ' disabled' : '';
                     html += `<button class="btn-submit"${disabled} onclick="submitItem('${esc(item.entry_id)}', this)">Submit</button>`;
                 }
@@ -293,6 +295,28 @@
             } catch (e) {
                 btn.textContent = 'Error';
                 setTimeout(() => { btn.textContent = 'Submit'; btn.disabled = false; }, 3000);
+            }
+        }
+
+        async function abortAgent(btn) {
+            btn.disabled = true;
+            btn.textContent = 'Aborting...';
+            try {
+                const resp = await fetch('/tjai/api/research/abort', {
+                    method: 'POST',
+                    headers: {'X-CSRFToken': getCsrf()},
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    btn.textContent = data.error;
+                    setTimeout(fetchData, 3000);
+                    return;
+                }
+                btn.textContent = 'Aborted';
+                setTimeout(fetchData, 2000);
+            } catch (e) {
+                btn.textContent = 'Error';
+                setTimeout(fetchData, 3000);
             }
         }
 
