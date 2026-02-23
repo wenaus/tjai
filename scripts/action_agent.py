@@ -80,7 +80,9 @@ def sleep_until_next(trigger_filter=None):
         if elapsed >= SYSCONFIG_POLL_INTERVAL:
             last_sysconfig_check = time.time()
             from tjai_app.models import SysConfig
-            for check_key in ('system_health_refresh_requested',):
+            # Check for kill request first (runs as admin, has permission)
+            _check_kill_request()
+            for check_key in ('action_agent_wake_requested', 'system_health_refresh_requested'):
                 req = SysConfig.objects.filter(
                     key=check_key
                 ).values_list('value', flat=True).first()
@@ -94,6 +96,51 @@ def sleep_until_next(trigger_filter=None):
     if wake_requested:
         wake_requested = False
         logger.info("Woken by SIGHUP or sysconfig request")
+        # Clear the web-UI wake flag so we don't re-trigger
+        from tjai_app.models import SysConfig
+        SysConfig.objects.filter(key='action_agent_wake_requested').update(
+            value='', timestamp_modified=time.time())
+
+
+def _check_kill_request():
+    """Kill zombie claude agent processes if requested via sysconfig flag."""
+    from tjai_app.models import SysConfig
+    req = SysConfig.objects.filter(key='agent_kill_requested').first()
+    if not req or not req.value:
+        return
+    req.value = ''
+    req.timestamp_modified = time.time()
+    req.save(update_fields=['value', 'timestamp_modified'])
+    logger.info("Kill requested — scanning for zombie agent processes")
+    killed = 0
+    import subprocess as sp
+    try:
+        result = sp.run(['ps', '-eo', 'pid=,etimes=,args='],
+                        capture_output=True, text=True, timeout=5)
+    except (FileNotFoundError, sp.TimeoutExpired):
+        return
+    for line in result.stdout.strip().split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+        if '--output-format' not in line or 'text' not in line:
+            continue
+        if 'claude' not in line:
+            continue
+        parts = line.split(None, 2)
+        if len(parts) < 2:
+            continue
+        try:
+            pid = int(parts[0])
+        except ValueError:
+            continue
+        try:
+            os.kill(pid, signal.SIGTERM)
+            logger.warning("Killed zombie claude process PID %d", pid)
+            killed += 1
+        except ProcessLookupError:
+            pass
+    logger.info("Kill request completed: %d process(es) killed", killed)
 
 
 def _check_health_refresh():

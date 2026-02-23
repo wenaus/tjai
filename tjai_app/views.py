@@ -27,22 +27,18 @@ STALE_AGENT_SECONDS = 7200  # 2 hours — any agent 'running' longer than this i
 
 
 def _wake_action_agent():
-    """Send SIGHUP to action agent daemon. Returns (ok, message)."""
-    pid_val = SysConfig.objects.filter(
-        key='action_agent_pid'
-    ).values_list('value', flat=True).first()
-    if not pid_val:
-        logger.error("_wake_action_agent: no action_agent_pid in sysconfig")
-        return False, "Action agent PID not found — agent may be down"
-    try:
-        os.kill(int(pid_val), signal.SIGHUP)
-        return True, None
-    except ProcessLookupError:
-        logger.error("_wake_action_agent: PID %s not found — agent is dead", pid_val)
-        return False, f"Action agent (PID {pid_val}) is dead — restart it"
-    except ValueError:
-        logger.error("_wake_action_agent: invalid PID value %r", pid_val)
-        return False, f"Invalid action agent PID: {pid_val}"
+    """Wake action agent daemon via sysconfig flag. Returns (ok, message).
+
+    We write a sysconfig key that the agent polls every few seconds.
+    Cannot use os.kill(SIGHUP) because Apache runs as www-data and
+    the agent runs as admin — different users, no signal permission.
+    """
+    now = time.time()
+    SysConfig.objects.update_or_create(
+        key='action_agent_wake_requested',
+        defaults={'value': '1', 'timestamp_modified': now},
+    )
+    return True, None
 
 
 def _kill_zombie_agent_processes():
@@ -102,13 +98,15 @@ def _heal_stale_agent(status_key, launched_key, agent_name):
     if status_val == 'running' and launched_val:
         elapsed = time.time() - float(launched_val)
         if elapsed > STALE_AGENT_SECONDS:
-            logger.warning("%s stale (%.0fm), killing zombies and resetting to idle",
+            logger.warning("%s stale (%.0fm), resetting to idle and requesting kill",
                            agent_name, elapsed / 60)
-            _kill_zombie_agent_processes()
             now = time.time()
             SysConfig.objects.update_or_create(
                 key=status_key,
                 defaults={'value': 'idle', 'timestamp_modified': now})
+            SysConfig.objects.update_or_create(
+                key='agent_kill_requested',
+                defaults={'value': '1', 'timestamp_modified': now})
             status_val = 'idle'
 
     return status_val, launched_val
@@ -1944,21 +1942,28 @@ def api_picks_abort(request):
 
 
 def _abort_agent(status_key, agent_name):
-    """Kill zombie processes and force-reset agent status. Returns JsonResponse."""
+    """Request abort of a running agent. Resets status and requests process kill.
+
+    Cannot kill processes directly because Apache (www-data) lacks permission
+    to signal admin's processes. Sets a sysconfig flag that the action agent
+    daemon picks up to do the actual kill.
+    """
     status = SysConfig.objects.filter(
         key=status_key
     ).values_list('value', flat=True).first()
     if status != 'running':
         return JsonResponse({'error': f'{agent_name} not running'}, status=409)
 
-    killed = _kill_zombie_agent_processes()
     now = time.time()
     SysConfig.objects.update_or_create(
         key=status_key,
         defaults={'value': 'idle', 'timestamp_modified': now})
-    logger.warning("Aborted %s: killed %d zombie process(es), status reset to idle",
-                   agent_name, killed)
-    return JsonResponse({'ok': True, 'killed': killed})
+    # Request the action agent daemon to kill zombie processes
+    SysConfig.objects.update_or_create(
+        key='agent_kill_requested',
+        defaults={'value': '1', 'timestamp_modified': now})
+    logger.warning("Abort requested for %s, status reset to idle", agent_name)
+    return JsonResponse({'ok': True})
 
 
 @login_required
