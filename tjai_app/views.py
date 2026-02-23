@@ -102,14 +102,14 @@ def _heal_stale_agent(status_key, launched_key, agent_name):
     if status_val == 'running' and launched_val:
         elapsed = time.time() - float(launched_val)
         if elapsed > STALE_AGENT_SECONDS:
-            logger.warning("%s stale (%.0fm), killing zombies and resetting to failed",
+            logger.warning("%s stale (%.0fm), killing zombies and resetting to idle",
                            agent_name, elapsed / 60)
             _kill_zombie_agent_processes()
             now = time.time()
             SysConfig.objects.update_or_create(
                 key=status_key,
-                defaults={'value': 'failed', 'timestamp_modified': now})
-            status_val = 'failed'
+                defaults={'value': 'idle', 'timestamp_modified': now})
+            status_val = 'idle'
 
     return status_val, launched_val
 
@@ -1955,8 +1955,8 @@ def _abort_agent(status_key, agent_name):
     now = time.time()
     SysConfig.objects.update_or_create(
         key=status_key,
-        defaults={'value': 'failed', 'timestamp_modified': now})
-    logger.warning("Aborted %s: killed %d zombie process(es), status reset to failed",
+        defaults={'value': 'idle', 'timestamp_modified': now})
+    logger.warning("Aborted %s: killed %d zombie process(es), status reset to idle",
                    agent_name, killed)
     return JsonResponse({'ok': True, 'killed': killed})
 
