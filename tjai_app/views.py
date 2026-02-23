@@ -22,7 +22,7 @@ from django.conf import settings as django_settings
 from .models import AppLog, Context, Entry, RssItem, Tag, TagStats, SubNote, Machine, SysConfig
 
 
-STALE_AGENT_SECONDS = 1800  # 30 min — fallback if watchdog hasn't run yet
+STALE_AGENT_SECONDS = 7200  # 2h — conservative fallback when watchdog hasn't reported
 
 
 def _wake_action_agent():
