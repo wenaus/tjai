@@ -22,7 +22,20 @@ from django.conf import settings as django_settings
 from .models import AppLog, Context, Entry, RssItem, Tag, TagStats, SubNote, Machine, SysConfig
 
 
-STALE_AGENT_SECONDS = 7200  # 2h — conservative fallback when watchdog hasn't reported
+AGENT_GRACE_SECONDS = 300  # 5 min — never touch an agent younger than this
+
+
+def _log_research(level, message, entry_id=None):
+    """Write to AppLog with optional per-entry reference. Visible on agent-log page."""
+    from django.utils import timezone as tz
+    AppLog.objects.create(
+        source='research',
+        timestamp=tz.now(),
+        level=level,
+        levelname=logging.getLevelName(level),
+        message=message,
+        extra_data={'entry_id': entry_id} if entry_id else None,
+    )
 
 
 def _wake_action_agent():
@@ -41,10 +54,13 @@ def _wake_action_agent():
 
 
 def _heal_stale_agent(status_key, launched_key, agent_name):
-    """Check if an agent is stale and heal it. Returns corrected status string.
+    """Check if a running agent is truly dead and clean up if so.
 
-    Primary: uses watchdog health status (agent_{id}_health sysconfig key).
-    Fallback: if watchdog hasn't run yet, uses elapsed time from launch.
+    Rules:
+    1. NEVER intervene within AGENT_GRACE_SECONDS of launch.
+    2. After grace: only clean up if process is confirmed dead (process_alive='0').
+    3. If process is alive, do NOT kill or reset — just report.
+    4. Set status to 'failed' (not 'idle') so errors are visible.
     """
     status_val = SysConfig.objects.filter(
         key=status_key
@@ -53,35 +69,49 @@ def _heal_stale_agent(status_key, launched_key, agent_name):
         key=launched_key
     ).values_list('value', flat=True).first()
 
-    if status_val == 'running':
-        # Extract action_id from status_key: agent_{action_id}_status
-        action_id = status_key.split('agent_', 1)[1].rsplit('_status', 1)[0]
+    if status_val != 'running':
+        return status_val, launched_val
 
-        # Primary: check watchdog health
-        health = SysConfig.objects.filter(
-            key=f'agent_{action_id}_health'
-        ).values_list('value', flat=True).first()
+    action_id = status_key.split('agent_', 1)[1].rsplit('_status', 1)[0]
+    now = time.time()
+    launch_age = (now - float(launched_val)) if launched_val else 0
 
-        is_stale = False
-        if health == 'stale':
-            is_stale = True
-        elif health is None and launched_val:
-            # Watchdog hasn't run yet — fall back to elapsed time
-            elapsed = time.time() - float(launched_val)
-            if elapsed > STALE_AGENT_SECONDS:
-                is_stale = True
+    # Rule 1: never touch agents in their grace period
+    if launch_age < AGENT_GRACE_SECONDS:
+        return status_val, launched_val
 
-        if is_stale:
-            logger.warning("%s stale, resetting to idle and requesting kill",
-                           agent_name)
-            now = time.time()
-            SysConfig.objects.update_or_create(
-                key=status_key,
-                defaults={'value': 'idle', 'timestamp_modified': now})
-            SysConfig.objects.update_or_create(
-                key='agent_kill_requested',
-                defaults={'value': '1', 'timestamp_modified': now})
-            status_val = 'idle'
+    # Read watchdog diagnostics
+    process_alive = SysConfig.objects.filter(
+        key=f'agent_{action_id}_process_alive'
+    ).values_list('value', flat=True).first()
+
+    # Rule 2: only clean up if process is confirmed dead
+    if process_alive != '0':
+        return status_val, launched_val
+
+    # Process is dead and agent_complete didn't set status (still 'running').
+    current_entry = SysConfig.objects.filter(
+        key=f'agent_{action_id}_entry'
+    ).values_list('value', flat=True).first()
+
+    elapsed_str = f' after {int(launch_age)}s' if launched_val else ''
+    error_msg = f"Agent process died{elapsed_str} without completing"
+
+    SysConfig.objects.update_or_create(
+        key=f'agent_{action_id}_last_error',
+        defaults={'value': error_msg, 'timestamp_modified': now})
+    SysConfig.objects.update_or_create(
+        key=f'agent_{action_id}_last_error_time',
+        defaults={'value': str(now), 'timestamp_modified': now})
+
+    _log_research(logging.ERROR, f"{agent_name}: {error_msg}",
+                  entry_id=current_entry)
+
+    logger.warning("%s process dead, marking failed", agent_name)
+    SysConfig.objects.update_or_create(
+        key=status_key,
+        defaults={'value': 'failed', 'timestamp_modified': now})
+    status_val = 'failed'
 
     return status_val, launched_val
 
@@ -991,9 +1021,15 @@ def agent_log_data(request):
     level_map = {'DEBUG': _logging.DEBUG, 'INFO': _logging.INFO,
                  'WARNING': _logging.WARNING, 'ERROR': _logging.ERROR}
 
+    ref = request.GET.get('ref', '').strip()
+
     qs = AppLog.objects.order_by('-timestamp')
     if min_level in level_map:
         qs = qs.filter(level__gte=level_map[min_level])
+    if ref:
+        # Filter by entry reference: tagged in extra_data OR mentioned in message
+        from django.db.models import Q
+        qs = qs.filter(Q(extra_data__entry_id=ref) | Q(message__icontains=ref[:8]))
     qs = qs[:limit]
 
     entries = [{
@@ -1495,6 +1531,40 @@ def api_dialog(request):
         return JsonResponse({"error": "role must be 'user' or 'assistant'"}, status=400)
 
     now = time.time()
+    entry_data = {
+        "role": role,
+        "session_id": data.get("session_id"),
+        "project_path": data.get("project_path"),
+        "hostname": data.get("hostname"),
+    }
+
+    extra_tags = []
+
+    # Detect research subagent products
+    if content.startswith('<task-notification>'):
+        import re
+        summary_m = re.search(r'<summary>(.*?)</summary>', content, re.DOTALL)
+        if summary_m:
+            summary_text = summary_m.group(1).strip()
+            active_uuid = SysConfig.objects.filter(
+                key='agent_research-agent_entry'
+            ).values_list('value', flat=True).first()
+            if active_uuid:
+                source = Entry.objects.filter(
+                    id=active_uuid, deleted_at__isnull=True
+                ).first()
+                if source:
+                    source_eid = (source.data or {}).get('entry_id', '')
+                    entry_data['source_entry_id'] = source_eid
+                    entry_data['source_uuid'] = active_uuid
+                    slug = re.sub(r'[^a-z0-9]+', '-',
+                                  summary_text.lower().replace('agent ', '')
+                                  .replace('"', '').replace('completed', '')
+                                  .strip()).strip('-')[:40]
+                    if source_eid and slug:
+                        entry_data['entry_id'] = f'{source_eid}:{slug}'
+                    extra_tags.append('research-subagent')
+
     entry = Entry.objects.create(
         id=str(uuid.uuid4()),
         content=content,
@@ -1503,14 +1573,11 @@ def api_dialog(request):
         timestamp_created=now,
         timestamp_modified=now,
         is_dirty=0,
-        data={
-            "role": role,
-            "session_id": data.get("session_id"),
-            "project_path": data.get("project_path"),
-            "hostname": data.get("hostname"),
-        },
+        data=entry_data,
     )
     Tag.objects.create(tag_name='ccdialog', entry=entry)
+    for tag in extra_tags:
+        Tag.objects.create(tag_name=tag, entry=entry)
 
     return JsonResponse({"status": "ok", "entry_id": entry.id})
 
@@ -1766,6 +1833,7 @@ def api_research_data(request):
             'priority': e.priority,
             'created': e.timestamp_created,
             'modified': e.timestamp_modified,
+            'started_at': data.get('started_at'),
         })
 
     # System prompt entry UUID
@@ -1870,18 +1938,49 @@ def api_research_run(request):
         )
         data['next_target_entry'] = str(first_item.id)
 
+    target_uuid = data.get('next_target_entry')
+    topic_line = data.get('next_target', '').split('\n')[-1]  # "Topic: ..."
+
+    # Record start time on the target entry for duration tracking
+    if target_uuid:
+        target_entry = Entry.objects.filter(id=target_uuid).first()
+        if target_entry:
+            tdata = target_entry.data or {}
+            tdata['started_at'] = time.time()
+            target_entry.data = tdata
+            target_entry.save(update_fields=['data'])
+
+    # Single item: prevent queue drain from chaining to the next item
+    now = time.time()
+    if entry_id != 'all':
+        SysConfig.objects.update_or_create(
+            key='research_stop_requested',
+            defaults={'value': '1', 'timestamp_modified': now})
+    else:
+        # Submit All: clear any previous stop request
+        SysConfig.objects.update_or_create(
+            key='research_stop_requested',
+            defaults={'value': '', 'timestamp_modified': now})
+
     # Clear last_run so get_due_actions sees it as overdue
     data['last_run'] = 0
     research_action.data = data
-    research_action.timestamp_modified = time.time()
+    research_action.timestamp_modified = now
     research_action.save(update_fields=['data', 'timestamp_modified'])
+
+    _log_research(logging.INFO,
+                  f"Submit triggered — {topic_line}",
+                  entry_id=target_uuid)
 
     # Wake the action agent via SIGHUP
     wake_ok, wake_msg = _wake_action_agent()
     if not wake_ok:
+        _log_research(logging.WARNING,
+                      f"Action agent wake failed: {wake_msg}",
+                      entry_id=target_uuid)
         return JsonResponse({'ok': True, 'warning': wake_msg})
 
-    logger.info("api_research_run: triggered for %s, action agent woken", entry_id)
+    _log_research(logging.INFO, "Action agent woken", entry_id=target_uuid)
     return JsonResponse({'ok': True, 'entry_id': entry_id})
 
 
@@ -1943,6 +2042,62 @@ def _abort_agent(status_key, agent_name):
         defaults={'value': '1', 'timestamp_modified': now})
     logger.warning("Abort requested for %s, status reset to idle", agent_name)
     return JsonResponse({'ok': True})
+
+
+@login_required
+def research_studies(request):
+    """Page showing subagent entries produced during a research topic."""
+    return render(request, 'tjai_app/research_studies.html')
+
+
+@login_required
+def api_research_studies(request):
+    """Return subagent entries for a specific research topic."""
+    topic_uuid = request.GET.get('uuid', '').strip()
+    if not topic_uuid:
+        return JsonResponse({'error': 'uuid required'}, status=400)
+
+    # Get the parent research entry for display info
+    parent = Entry.objects.filter(
+        id=topic_uuid, deleted_at__isnull=True,
+    ).first()
+    parent_info = None
+    if parent:
+        pdata = parent.data if isinstance(parent.data, dict) else {}
+        parent_info = {
+            'id': str(parent.id),
+            'entry_id': pdata.get('entry_id', ''),
+            'content': parent.content.split('\n')[0],
+        }
+
+    # Find subagent entries: tagged research-subagent with source_uuid matching
+    sub_ids = Tag.objects.filter(
+        tag_name='research-subagent'
+    ).values_list('entry_id', flat=True)
+
+    entries = Entry.objects.filter(
+        id__in=sub_ids,
+        deleted_at__isnull=True,
+        data__source_uuid=topic_uuid,
+    ).order_by('-timestamp_modified')
+
+    items = []
+    for e in entries:
+        data = e.data if isinstance(e.data, dict) else {}
+        items.append({
+            'id': str(e.id),
+            'entry_id': data.get('entry_id', ''),
+            'content': e.content[:500] if e.content else '',
+            'kind': e.kind,
+            'created': e.timestamp_created,
+            'modified': e.timestamp_modified,
+            'context': e.context.name if e.context else None,
+        })
+
+    return JsonResponse({
+        'parent': parent_info,
+        'items': items,
+    })
 
 
 @login_required

@@ -92,16 +92,28 @@
             <option value="500">500</option>
         </select>
         <button onclick="fetchLog()">Refresh</button>
+        <span id="ref-filter"></span>
         <span id="log-count"></span>
     </div>
     <div id="log-container">Loading...</div>
 
     <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const refFilter = urlParams.get('ref') || '';
+        const refName = urlParams.get('name') || refFilter.substring(0, 8);
+
+        if (refFilter) {
+            document.getElementById('ref-filter').innerHTML =
+                `<span style="color:#ffd54f">Filtered: ${refName}</span> ` +
+                `<a href="/tjai/agent-log" style="color:#8a8a8a;font-size:11px">[clear]</a>`;
+        }
+
         async function fetchLog() {
             const level = document.getElementById('level-filter').value;
             const limit = document.getElementById('limit-select').value;
             let url = `/tjai/api/agent-log?limit=${limit}`;
             if (level) url += `&level=${level}`;
+            if (refFilter) url += `&ref=${encodeURIComponent(refFilter)}`;
             try {
                 const resp = await fetch(url);
                 const data = await resp.json();

@@ -184,10 +184,12 @@ def dispatch_ai(action, entry_id=None):
 
     # Prepend next_target info (ephemeral dispatch data from UI "Submit" button)
     next_target = data.get('next_target')
+    target_entry = data.get('next_target_entry')
     if next_target:
         prompt = f"{next_target}\n\n{prompt}"
 
-    logger.info("Dispatching tj agent...")
+    logger.info("Dispatching tj agent...",
+                extra={'entry_id': target_entry} if target_entry else {})
 
     # Write launch status to sysconfig for real-time tracking
     action_id = data.get('entry_id')  # human-readable id like 'picks-agent'

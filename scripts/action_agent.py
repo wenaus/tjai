@@ -202,12 +202,19 @@ def _check_agent_health():
 
         process_alive = len(alive_pids) > 0
 
-        # Determine health
+        # Determine health — consider launch time when no activity yet
         activity_age = (now - last_activity) if last_activity else None
+        launched_val = SysConfig.objects.filter(
+            key=f'agent_{action_id}_launched'
+        ).values_list('value', flat=True).first()
+        launch_age = (now - float(launched_val)) if launched_val else None
+
         if activity_age is not None and activity_age < 120:
             health = 'active'
         elif activity_age is not None and activity_age < 600:
             health = 'idle'
+        elif launch_age is not None and launch_age < 300:
+            health = 'starting'
         else:
             health = 'stale'
 

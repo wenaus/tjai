@@ -37,8 +37,15 @@ def main():
     stderr_file = sys.argv[3] if len(sys.argv) > 3 else None
     now = time.time()
 
+    # Look up which entry this agent was working on for per-entry logging
+    current_entry = SysConfig.objects.filter(
+        key=f'agent_{action_id}_entry'
+    ).values_list('value', flat=True).first()
+    ref_extra = {'entry_id': current_entry} if current_entry else {}
+
     status = 'completed' if exit_code == 0 else 'failed'
-    logger.info("%s: exit_code=%d, status=%s", action_id, exit_code, status)
+    logger.info("%s: exit_code=%d, status=%s", action_id, exit_code, status,
+                extra=ref_extra)
 
     # Log captured stderr from the claude subprocess
     stderr_content = ''
@@ -48,7 +55,8 @@ def main():
             os.unlink(stderr_file)
             if stderr_content:
                 for line in stderr_content.split('\n'):
-                    logger.error("%s stderr: %s", action_id, line)
+                    logger.error("%s stderr: %s", action_id, line,
+                                 extra=ref_extra)
         except Exception:
             pass
 
