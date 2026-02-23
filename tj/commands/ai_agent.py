@@ -232,10 +232,10 @@ def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: 
         claude_cmd = shlex.join(cmd)
         if timeout_secs > 0:
             claude_cmd = f'timeout {timeout_secs} {claude_cmd}'
-        # stderr goes to temp file; agent_complete.py reads and logs it to AppLog
+        # Capture all output; agent_complete.py reads and logs it to AppLog
         shell_cmd = (
             f'ERRFILE=$(mktemp /tmp/tjai-agent-XXXXXX.err) ; '
-            f'{claude_cmd} 2>"$ERRFILE" ; '
+            f'{claude_cmd} >"$ERRFILE" 2>&1 ; '
             f'{completion_cmd} $? "$ERRFILE"'
         )
         subprocess.Popen(
