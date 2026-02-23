@@ -1,16 +1,22 @@
 # Next Steps
 
+## claude usage
+
+ccusage is a nice tool for tracking usage but it operates only locally. build a usage gathering system that aggregates ccusage information from machines I work on into a comprehensive tjai report.
+
+## Making todos work
+
+Make todo's actually work. Introduce vision items, with associated todos. tick off the todos as they get done. will really surface the plan much more than a next steps in github. also a good replacement/ancillary to claude's own planning system which is useless because it doesn't persist past restart and it is hidden even from claude.
+
 ## Always-On Intellectual Agent
 
 Transform tjai from a reactive knowledge base into a proactive thinking system that works while you're away, synthesizing your knowledge, finding deep connections, and bringing world awareness — then presenting the results when you return.
 
 ### ToDo
 
-- research queue. The Star Trek "Computer, perform an analysis" — and the computer actually performs the analysis. Real analysis, not the skimming that AIs reflexively do.
 - dialog management. It is exploding tjai content. Absolutely must keep all of it. But how to manage. Also, synthesising, inferring from it, developing new plans from it.
 - telegram triage. After a road trip day, capture what went into telegram. todos, ideas, research items, etc.
-- E-R model. designed from real use cases.
-- next steps, project planning. Make todo's actually work. Introduce vision items, with associated todos. tick off the todos as they get done. will really surface the plan much more than a next steps in github. also a good replacement/ancillary to claude's own planning system which is useless because it doesn't persist past restart. and it hides it (even from itself).
+- E-R model. designed from real use cases. One may be research versioning — a v2 topic extends v1 with a new prompt direction.
 
 ## AI ideas on agents
 

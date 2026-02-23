@@ -258,6 +258,8 @@ cd /home/admin/github/tjrepo/tjai
 - `/tjai/picks/` - AI-curated news picks triage page
 - `/tjai/rss/` - RSS reader with source-grouped triage
 - `/tjai/readme/` - Reading list (items tagged :readme)
+- `/tjai/research/` - Research queue with agent status and controls
+- `/tjai/research/studies/` - Subagent reports for a research topic
 - `/tjai/system/` - System health monitoring dashboard
 - `/tjai/agent-log/` - Action agent execution log
 - `/tjai/api/health` - Health check
@@ -566,6 +568,82 @@ Entry(
 - `tjai_app/views.py` — `picks`, `api_picks_data`, `api_picks_update`, `api_picks_archive_run`, `readme_page`, `api_readme_data`, `api_readme_dismiss`
 - `tjai_app/templates/tjai_app/picks.html` — Picks triage page
 - `tjai_app/templates/tjai_app/readme.html` — ReadMe reading list page
+
+### Research Queue
+
+"Computer, perform an analysis." The Research Queue is tjai's version of the Star Trek computer — you give it a topic, and it actually performs deep research, not the reflexive skimming that AI assistants default to. The system dispatches an autonomous Claude agent that searches broadly, reads primary sources, cross-references claims, and writes a structured analyst's brief. While you sleep (or work on other things), the computer thinks.
+
+**How it works:**
+
+1. Create a memory entry tagged `:research` with a topic description as the content
+2. The Research page (`/tjai/research/`) shows the queue with status for each item
+3. Click **Submit** on an item (or **Submit All** for the entire queue). The action agent launches a detached Claude instance with a research-optimized system prompt
+4. The agent spawns parallel subagents — typically 4-5 per topic — each tackling a different facet (e.g., for an MCP ecosystem survey: protocol spec, server landscape, adoption patterns, future directions)
+5. Each subagent searches the web, reads full articles, and writes its findings into a tjai entry tagged `research-subagent` with provenance linking back to the parent topic
+6. The main agent synthesizes all subagent findings into a 3000-6000 word structured report (Executive Summary, Detailed Findings, Contradictions, Implications, Sources) and writes it directly into the research entry, marking it `done`
+7. On success, the queue automatically chains to the next pending item (priority order, then FIFO) — unless stopped
+
+**Research page (`/tjai/research/`):**
+
+- Queue of research items with status badges (pending / running / done)
+- Real-time agent status banner with activity dot (green=active, yellow=idle, red=stale)
+- **Submit** / **Submit All** — trigger research for one or all items
+- **Stop** — soft stop (finish current item, don't chain to next)
+- **Abort** — hard stop (kill the running agent)
+- **Studies** link per item — opens the studies page showing all subagent reports for that topic
+- Agent log link for debugging
+
+**Studies page (`/tjai/research/studies/`):**
+
+Shows all subagent entries produced during research on a topic. Each study includes the subagent's summary and findings, with links to the full entry. Studies are linked to their parent research topic via `data.source_uuid`.
+
+**Quality controls:**
+
+The research system prompt (stored as a tjai entry, `research-system-prompt`) enforces:
+- Depth over breadth — one topic understood thoroughly beats five skimmed
+- Primary sources first — academic papers, official docs, project repos
+- Cross-referencing — contradictions tracked and assessed
+- Epistemic honesty — distinguish fact, consensus, debate, speculation, unknown
+- All content in tjai entries — never reference ephemeral local files
+
+**Data model (research entry):**
+
+```python
+Entry(
+    kind='memory',
+    content='Topic description... → replaced with full report when done',
+    status='pending',           # pending → done
+    data={
+        'entry_id': 'research-mcp',           # human-readable identifier
+        'started_at': 1771962258.67,          # when research began
+    }
+)
+# Tags: 'research'
+```
+
+**Data model (study/subagent entry):**
+
+```python
+Entry(
+    kind='memory',
+    content='<task-notification>...<summary>Agent findings</summary>...</task-notification>',
+    data={
+        'entry_id': 'research-mcp:mcp-server-ecosystem-survey',   # compound ID
+        'source_uuid': 'parent-research-entry-uuid',               # links to parent
+        'source_entry_id': 'research-mcp',                         # parent's entry_id
+    }
+)
+# Tags: 'research-subagent', 'ccdialog'
+```
+
+**Infrastructure:** Uses the Action Agent pipeline. The research agent action entry (`research-agent`) defines the AI prompt template, model choice (Opus), timeout (2 hours), and references the system prompt entry. Agent lifecycle is coordinated via SysConfig keys (`agent_research-agent_status`, `_entry`, `_tracking`, `_health`, etc.), monitored by the watchdog, and finalized by `agent_complete.py` which handles status transitions and queue drain.
+
+**Files:**
+
+- `tjai_app/views.py` — `research_page`, `api_research_data`, `api_research_run`, `api_research_stop`, `api_research_abort`, `research_studies`, `api_research_studies`
+- `tjai_app/templates/tjai_app/research.html` — Research queue page
+- `tjai_app/templates/tjai_app/research_studies.html` — Studies listing page
+- `scripts/agent_complete.py` — Post-completion handler with queue drain logic
 
 ### RSS Reader
 
