@@ -221,6 +221,7 @@ def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: 
 
     env = os.environ.copy()
     env.pop('CLAUDECODE', None)
+    env.pop('ANTHROPIC_API_KEY', None)  # Force subscription auth, not API
 
     _append_to_entry(entry_id, "LAUNCHED")
 
