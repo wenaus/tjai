@@ -509,6 +509,7 @@ def dashboard(request):
     """Render the dashboard HTML page."""
     return render(request, 'tjai_app/dashboard.html', {
         'is_archive': request.GET.get('status') == 'archive',
+        'is_dialog': request.GET.get('context') == 'claude-code',
     })
 
 
@@ -735,7 +736,12 @@ def dashboard_status(request):
     filter_context = request.GET.get('context')
     filter_machine = request.GET.get('machine')
     filter_status = request.GET.get('status')
+    filter_date = request.GET.get('date')  # YYYY-MM-DD, filter entries to this day
     exclude_contexts = [c for c in request.GET.get('exclude_context', '').split(',') if c]
+
+    # Exclude claude-code (dialog) from default dashboard view
+    if not filter_context and 'claude-code' not in exclude_contexts:
+        exclude_contexts.append('claude-code')
 
     base_qs = Entry.objects.filter(
         deleted_at__isnull=True,
@@ -758,6 +764,35 @@ def dashboard_status(request):
             base_qs = base_qs.filter(id__in=tagged_ids)
     if filter_machine:
         base_qs = base_qs.filter(data__hostname=filter_machine)
+
+    # Daily counts for dialog mode — DB query covering last 14 days
+    daily_counts = None
+    if filter_context and offset == 0:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo('America/New_York')
+        now_eastern = datetime.now(tz=tz)
+        day_counts = {}
+        for days_ago in range(14):
+            day = (now_eastern - timedelta(days=days_ago)).date()
+            day_start = datetime.combine(day, datetime.min.time()).replace(tzinfo=tz)
+            day_end = day_start + timedelta(days=1)
+            count = base_qs.filter(
+                timestamp_modified__gte=day_start.timestamp(),
+                timestamp_modified__lt=day_end.timestamp(),
+            ).count()
+            if count > 0:
+                day_counts[day.isoformat()] = count
+        daily_counts = [{'date': k, 'count': v} for k, v in sorted(day_counts.items(), reverse=True)]
+
+    if filter_date:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo('America/New_York')
+        day_start = datetime.strptime(filter_date, '%Y-%m-%d').replace(tzinfo=tz)
+        day_end = day_start + timedelta(days=1)
+        base_qs = base_qs.filter(
+            timestamp_modified__gte=day_start.timestamp(),
+            timestamp_modified__lt=day_end.timestamp(),
+        )
 
     base_qs = base_qs.order_by('-timestamp_modified')
 
@@ -856,6 +891,7 @@ def dashboard_status(request):
         'open_todos': open_todos,
         'machines': machines,
         'oldest_sync': {'machine': oldest_machine, 'age_min': sync_age_min} if oldest_machine else None,
+        'daily_counts': daily_counts,
     })
 
 
@@ -1032,8 +1068,10 @@ def agent_log_data(request):
         qs = qs.filter(Q(extra_data__entry_id=ref) | Q(message__icontains=ref[:8]))
     qs = qs[:limit]
 
+    from zoneinfo import ZoneInfo
+    tz = ZoneInfo('America/New_York')
     entries = [{
-        'timestamp': log.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+        'timestamp': log.timestamp.astimezone(tz).strftime('%Y-%m-%d %H:%M:%S'),
         'level': log.levelname,
         'message': log.message,
         'source': log.source,
@@ -2112,11 +2150,17 @@ def api_picks_data(request):
     ).order_by('-timestamp_created')
 
     runs = {}
+    run_meta = {}
     for e in entries:
         data = e.data if isinstance(e.data, dict) else {}
         run_key = data.get('run', 'unknown')
         if run_key not in runs:
             runs[run_key] = []
+            run_meta[run_key] = {'timestamps': [], 'sources': set()}
+        run_meta[run_key]['timestamps'].append(e.timestamp_created)
+        source = data.get('source', '')
+        if source:
+            run_meta[run_key]['sources'].add(source)
         # Parse markdown link: [Title](url)
         content = e.content or ''
         title = content
@@ -2140,9 +2184,16 @@ def api_picks_data(request):
     # Sort runs by key descending (ISO timestamps sort correctly)
     sorted_runs = []
     for run_key in sorted(runs.keys(), reverse=True):
+        meta = run_meta.get(run_key, {})
+        timestamps = meta.get('timestamps', [])
+        duration = None
+        if len(timestamps) >= 2:
+            duration = round(max(timestamps) - min(timestamps))
         sorted_runs.append({
             'run': run_key,
             'picks': runs[run_key],
+            'duration_seconds': duration,
+            'source_count': len(meta.get('sources', set())),
         })
 
     # Picks agent schedule info
@@ -2180,7 +2231,21 @@ def api_picks_data(request):
     agent_info['last_error'] = picks_keys.get('agent_picks-agent_last_error')
     agent_info['last_error_time'] = picks_keys.get('agent_picks-agent_last_error_time')
 
-    return JsonResponse({'runs': sorted_runs, 'agent': agent_info})
+    # Count total configured sources from picks-sources entry
+    total_sources = 0
+    sources_entry = Entry.objects.filter(
+        context__name='picks', deleted_at__isnull=True,
+        data__entry_id='picks-sources',
+    ).first()
+    if sources_entry and sources_entry.content:
+        total_sources = sum(1 for line in sources_entry.content.splitlines()
+                           if line.strip().startswith('- '))
+
+    return JsonResponse({
+        'runs': sorted_runs,
+        'agent': agent_info,
+        'total_sources': total_sources,
+    })
 
 
 @login_required

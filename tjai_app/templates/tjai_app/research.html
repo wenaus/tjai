@@ -196,6 +196,7 @@
         }
 
         let agentRunning = false;
+        let hasPending = false;
 
         async function fetchData() {
             try {
@@ -207,6 +208,7 @@
                     return;
                 }
                 agentRunning = (data.agent || {}).status === 'running';
+                hasPending = (data.items || []).some(i => i.status !== 'done');
                 render(data);
                 updateAllBtn();
             } catch (e) {
@@ -399,11 +401,16 @@
                 btn.style.color = '#ef5350';
                 btn.style.borderColor = '#ef5350';
                 btn.disabled = false;
-            } else {
+            } else if (hasPending) {
                 btn.textContent = 'Submit All';
                 btn.style.color = '#64b5f6';
                 btn.style.borderColor = '#64b5f6';
                 btn.disabled = false;
+            } else {
+                btn.textContent = 'Submit All';
+                btn.style.color = '#555';
+                btn.style.borderColor = '#444';
+                btn.disabled = true;
             }
         }
 

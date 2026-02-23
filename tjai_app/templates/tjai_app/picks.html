@@ -256,6 +256,7 @@
 
     <script>
         let allRuns = [];
+        let totalSources = 0;
 
         async function fetchPicks() {
             try {
@@ -267,6 +268,7 @@
                     return;
                 }
                 allRuns = data.runs || [];
+                totalSources = data.total_sources || 0;
                 updateAgentInfo(data.agent || {});
                 renderPicks();
             } catch (e) {
@@ -300,7 +302,12 @@
                 html += `<div class="run-block" data-run="${esc(runId)}">`;
                 html += '<div class="run-header">';
                 html += `<span class="run-time">${formatRunTime(runId)}</span>`;
-                html += `<span class="run-stats">${picks.length} picks, ${keptCount} kept</span>`;
+                let statsText = `${picks.length} picks, ${keptCount} kept`;
+                if (run.source_count) {
+                    statsText += totalSources ? `, ${run.source_count} of ${totalSources} sources` : `, ${run.source_count} sources`;
+                }
+                if (run.duration_seconds != null) statsText += ` · ${formatDuration(run.duration_seconds)}`;
+                html += `<span class="run-stats">${statsText}</span>`;
                 if (!allDone) {
                     html += `<button onclick="archiveRun('${esc(runId)}')">Archive All</button>`;
                 } else {
@@ -370,6 +377,16 @@
             } catch {
                 return runStr;
             }
+        }
+
+        function formatDuration(seconds) {
+            if (seconds < 60) return seconds + 's';
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            if (m < 60) return s > 0 ? `${m}m ${s}s` : `${m}m`;
+            const h = Math.floor(m / 60);
+            const rm = m % 60;
+            return rm > 0 ? `${h}h ${rm}m` : `${h}h`;
         }
 
         function esc(s) {
@@ -493,7 +510,14 @@
                     block.querySelectorAll('.pick-item.archived').forEach(el => el.remove());
                 }
                 const statsEl = block.querySelector('.run-stats');
-                if (statsEl) statsEl.textContent = `${run.picks.length} picks, ${keptCount} kept`;
+                if (statsEl) {
+                    let st = `${run.picks.length} picks, ${keptCount} kept`;
+                    if (run.source_count) {
+                        st += totalSources ? `, ${run.source_count} of ${totalSources} sources` : `, ${run.source_count} sources`;
+                    }
+                    if (run.duration_seconds != null) st += ` · ${formatDuration(run.duration_seconds)}`;
+                    statsEl.textContent = st;
+                }
                 // Update all Archive All buttons (header + bottom)
                 block.querySelectorAll('.run-header button').forEach(btn => {
                     if (allDone) {

@@ -200,8 +200,9 @@
     </style>
 </head>
 <body>
-    {% if is_archive %}{% with current_page="archive" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% else %}{% with current_page="dashboard" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% endif %}
+    {% if is_archive %}{% with current_page="archive" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% elif is_dialog %}{% with current_page="dialog" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% else %}{% with current_page="dashboard" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% endif %}
     <div class="container">
+        {% if not is_archive and not is_dialog %}
         <div class="panel panel-left" id="calendar-panel">
             <div id="calendar-section">
                 <div class="panel-header">Calendar <span id="calendar-time" style="color:#8a8a8a;font-weight:normal"></span></div>
@@ -212,8 +213,9 @@
                 <div id="named-content">Loading...</div>
             </div>
         </div>
+        {% endif %}
         <div class="panel panel-right" id="status-panel">
-            <div class="panel-header" style="display:flex; align-items:center;">Status<span class="refresh-indicator"><span id="refresh-indicator"></span> <a href="{% url 'logout' %}" style="color:#999;margin-left:12px">Logout</a></span></div>
+            <div class="panel-header" style="display:flex; align-items:center;">{% if is_archive %}Archive{% elif is_dialog %}Dialog{% else %}Status{% endif %}<span class="refresh-indicator"><span id="refresh-indicator"></span> <a href="{% url 'logout' %}" style="color:#999;margin-left:12px">Logout</a></span></div>
             <div id="status-fixed">Loading...</div>
             <div id="entries-header" style="display:flex; align-items:center; gap:12px; margin-top:16px; margin-bottom:8px; border-top:1px solid #333; padding-top:12px; flex-shrink:0;">
                 <span id="entries-label" style="color: #d8a070;">Entries <span style="color:#8a8a8a">with mod time</span></span>
@@ -527,6 +529,8 @@
         let activeKind = null;
         let activeContext = null;
         let activeStatus = null;
+        let activeDate = null;
+        let cachedDailyCounts = null;
         let excludedContexts = new Set();
         let isFilterActive = false;
 
@@ -538,6 +542,7 @@
             if (activeMachine) params.set('machine', activeMachine);
             if (activeStatus) params.set('status', activeStatus);
             if (excludedContexts.size > 0) params.set('exclude', [...excludedContexts].sort().join(','));
+            if (activeDate) params.set('date', activeDate);
             const qs = params.toString();
             const url = qs ? `${location.pathname}?${qs}` : location.pathname;
             history.replaceState(null, '', url);
@@ -553,7 +558,8 @@
             activeStatus = params.get('status') || null;
             const excl = params.get('exclude');
             if (excl) excl.split(',').forEach(c => excludedContexts.add(c));
-            isFilterActive = !!(activeTags.size > 0 || activeKind || activeContext || activeMachine || activeStatus || excludedContexts.size > 0);
+            activeDate = params.get('date') || null;
+            isFilterActive = !!(activeTags.size > 0 || activeKind || activeContext || activeMachine || activeStatus || activeDate || excludedContexts.size > 0);
         }
 
         function entriesLabel() {
@@ -570,6 +576,7 @@
             if (activeMachine) params.push(`machine=${encodeURIComponent(activeMachine)}`);
             if (activeStatus) params.push(`status=${encodeURIComponent(activeStatus)}`);
             if (excludedContexts.size > 0) params.push(`exclude_context=${encodeURIComponent([...excludedContexts].join(','))}`);
+            if (activeDate) params.push(`date=${encodeURIComponent(activeDate)}`);
             return params;
         }
 
@@ -670,8 +677,8 @@
                 html += `<div class="status-line">Contexts: ${ctxChips}</div>`;
             }
 
-            // Tags
-            if (data.all_tags && data.all_tags.length > 0) {
+            // Tags (suppress in dialog mode)
+            if (!isDialogMode && data.all_tags && data.all_tags.length > 0) {
                 const tagLinks = data.all_tags.map(t => {
                     const activeClass = activeTags.has(t) ? ' active' : '';
                     return `<a href="#" class="tag-link${activeClass}" data-tag="${t}" style="color:#9ccc65;text-decoration:none">${t}</a>`;
@@ -711,6 +718,22 @@
                     return mLink;
                 });
                 html += `<div class="status-line">Machines: ${machineStrs.join(', ')}</div>`;
+            }
+
+            // Daily counts bar (dialog mode) — after machines, at bottom of status
+            if (data.daily_counts) cachedDailyCounts = data.daily_counts;
+            if (cachedDailyCounts && cachedDailyCounts.length > 0) {
+                const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                const dayChips = cachedDailyCounts.map(d => {
+                    const parts = d.date.split('-');
+                    const mon = months[parseInt(parts[1]) - 1];
+                    const day = parseInt(parts[2]);
+                    const label = `${mon} ${day}`;
+                    const isActive = activeDate === d.date;
+                    const style = isActive ? 'color:#1a1a1a;background:#64b5f6;padding:1px 4px;border-radius:3px' : 'color:#64b5f6';
+                    return `<a href="#" class="date-link" data-date="${d.date}" style="${style};text-decoration:none">${label}</a>&nbsp;<span style="color:#8a8a8a">${d.count}</span>`;
+                }).join('&nbsp; ');
+                html += `<div class="status-line">Dialog: ${dayChips}</div>`;
             }
 
             // Today's work sessions
@@ -788,16 +811,27 @@
             const sec = Math.floor((Date.now() - lastRefreshTime) / 1000);
             document.getElementById('refresh-indicator').textContent = `Last refresh ${sec}s ago. Build time ${lastBuildTime} ms`;
             // Update calendar time
-            const now = new Date();
-            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const timeStr = `${days[now.getDay()]} ${months[now.getMonth()]} ${now.getDate()} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
-            document.getElementById('calendar-time').textContent = timeStr;
+            const calTime = document.getElementById('calendar-time');
+            if (calTime) {
+                const now = new Date();
+                const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                const timeStr = `${days[now.getDay()]} ${months[now.getMonth()]} ${now.getDate()} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+                calTime.textContent = timeStr;
+            }
         }
+
+        const isArchiveMode = {{ is_archive|yesno:"true,false" }};
+        const isDialogMode = {{ is_dialog|yesno:"true,false" }};
+        const isSimplifiedMode = isArchiveMode || isDialogMode;
 
         async function refresh() {
             const start = performance.now();
-            await Promise.all([fetchCalendar(), fetchStatus(), fetchNamed()]);
+            const fetches = [fetchStatus()];
+            if (!isSimplifiedMode) {
+                fetches.push(fetchCalendar(), fetchNamed());
+            }
+            await Promise.all(fetches);
             lastBuildTime = Math.round(performance.now() - start);
             updateRefreshIndicator();
             updateRefreshDisplay();
@@ -867,6 +901,15 @@
 
             const ctxLink = e.target.closest('.context-link');
             if (ctxLink) { e.preventDefault(); toggleFilter('context', ctxLink.dataset.context, 'context-link'); return; }
+
+            const dateLink = e.target.closest('.date-link');
+            if (dateLink) {
+                e.preventDefault();
+                activeDate = activeDate === dateLink.dataset.date ? null : dateLink.dataset.date;
+                syncStateToUrl();
+                refresh();
+                return;
+            }
         });
 
         // Filter clear button - clears everything: search, all filters
@@ -884,6 +927,7 @@
             activeKind = null;
             activeContext = null;
             activeStatus = null;
+            activeDate = null;
             excludedContexts.clear();
             isFilterActive = false;
             document.querySelectorAll('.machine-link.active, .tag-link.active, .kind-link.active, .context-link.active').forEach(el => el.classList.remove('active'));
