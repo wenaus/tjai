@@ -223,24 +223,15 @@ def _check_agent_health():
             SysConfig.objects.update_or_create(
                 key=key, defaults={'value': value, 'timestamp_modified': now})
 
-        # Recovery: stale + no process = dead agent, reset status
+        # Watchdog only observes and reports — NEVER resets status or kills.
+        # Status management is agent_complete.py's job. The UI reads health
+        # keys to show the user what's happening.
         if health == 'stale' and not process_alive:
-            logger.warning("%s stale (no activity %.0fm, no process) — resetting to idle",
+            logger.warning("%s stale (no activity %.0fm, no process)",
                            action_id,
                            activity_age / 60 if activity_age else 0)
-            SysConfig.objects.update_or_create(
-                key=f'agent_{action_id}_status',
-                defaults={'value': 'idle', 'timestamp_modified': now})
-            SysConfig.objects.update_or_create(
-                key=f'agent_{action_id}_last_error',
-                defaults={'value': 'Agent became stale and process died',
-                          'timestamp_modified': now})
-            SysConfig.objects.update_or_create(
-                key=f'agent_{action_id}_last_error_time',
-                defaults={'value': str(now), 'timestamp_modified': now})
         elif health == 'stale' and process_alive:
-            # Process alive but idle > 10min — log warning, give one more cycle
-            logger.warning("%s stale but process alive (activity %.0fm ago) — monitoring",
+            logger.warning("%s stale but process alive (activity %.0fm ago)",
                            action_id,
                            activity_age / 60 if activity_age else 0)
 
