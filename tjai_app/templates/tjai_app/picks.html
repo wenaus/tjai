@@ -509,6 +509,8 @@
                 btn.style.color = '#555';
                 btn.style.borderColor = '#444';
                 abortBtn.style.display = '';
+                abortBtn.textContent = 'Abort';
+                abortBtn.disabled = false;
             } else {
                 abortBtn.style.display = 'none';
                 if (agent.next_run) {
@@ -536,10 +538,15 @@
                     method: 'POST',
                     headers: {'X-CSRFToken': getCsrf()},
                 });
+                if (!resp.ok && resp.status === 403) {
+                    btn.textContent = 'CSRF error — reload page';
+                    setTimeout(() => { btn.textContent = 'Run now'; btn.disabled = false; }, 5000);
+                    return;
+                }
                 const data = await resp.json();
                 if (data.error) {
                     btn.textContent = data.error;
-                    setTimeout(() => { btn.textContent = 'Run now'; btn.disabled = false; }, 3000);
+                    setTimeout(() => { btn.textContent = 'Run now'; btn.disabled = false; }, 5000);
                     return;
                 }
                 if (data.warning) {
@@ -551,8 +558,8 @@
                 btn.textContent = 'Queued';
                 startPolling();
             } catch (e) {
-                btn.textContent = 'Error';
-                setTimeout(() => { btn.textContent = 'Run now'; btn.disabled = false; }, 3000);
+                btn.textContent = 'Error: ' + e.message;
+                setTimeout(() => { btn.textContent = 'Run now'; btn.disabled = false; }, 5000);
             }
         }
 

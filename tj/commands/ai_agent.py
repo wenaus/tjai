@@ -205,7 +205,7 @@ This is not optional. The entry is your report-back mechanism."""
 
 
 def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: str) -> None:
-    """Launch claude -p in background. Logs all outcomes to the tjai entry."""
+    """Launch claude -p in background. Logs stderr to file for diagnostics."""
     import shlex
 
     model = os.environ.get('TJAI_AGENT_MODEL', 'sonnet')
@@ -226,13 +226,18 @@ def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: 
 
     action_id = os.environ.get('TJAI_ACTION_ID')
     if action_id:
-        # Wrap claude command: run claude, then mark completion with exit code
+        # Wrap: capture stderr to temp file, run claude, pass stderr file to agent_complete
         scripts_dir = Path(__file__).resolve().parent.parent.parent / 'scripts'
         completion_cmd = f'{sys.executable} {scripts_dir}/agent_complete.py {shlex.quote(action_id)}'
         claude_cmd = shlex.join(cmd)
         if timeout_secs > 0:
             claude_cmd = f'timeout {timeout_secs} {claude_cmd}'
-        shell_cmd = f'{claude_cmd} ; {completion_cmd} $?'
+        # stderr goes to temp file; agent_complete.py reads and logs it to AppLog
+        shell_cmd = (
+            f'ERRFILE=$(mktemp /tmp/tjai-agent-XXXXXX.err) ; '
+            f'{claude_cmd} 2>"$ERRFILE" ; '
+            f'{completion_cmd} $? "$ERRFILE"'
+        )
         subprocess.Popen(
             ['bash', '-c', shell_cmd],
             stdin=subprocess.DEVNULL,

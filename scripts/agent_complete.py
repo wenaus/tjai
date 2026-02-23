@@ -2,11 +2,9 @@
 """Mark an agent action as completed/failed in sysconfig, and handle queue drain.
 
 Called automatically after a tj agent claude process finishes.
-Usage: agent_complete.py <action_entry_id> [exit_code]
+Usage: agent_complete.py <action_entry_id> [exit_code] [stderr_file]
 
-Runs with stdout/stderr redirected to /dev/null (detached subprocess),
-so ALL logging goes to AppLog via DbLogHandler. No print() output will
-be visible anywhere.
+All logging goes to AppLog via DbLogHandler (visible on dashboard).
 """
 import os
 import signal
@@ -37,10 +35,22 @@ def main():
 
     action_id = sys.argv[1]
     exit_code = int(sys.argv[2]) if len(sys.argv) > 2 else 0
+    stderr_file = sys.argv[3] if len(sys.argv) > 3 else None
     now = time.time()
 
     status = 'completed' if exit_code == 0 else 'failed'
     logger.info("%s: exit_code=%d, status=%s", action_id, exit_code, status)
+
+    # Log captured stderr from the claude subprocess
+    if stderr_file:
+        try:
+            stderr_content = open(stderr_file).read().strip()
+            os.unlink(stderr_file)
+            if stderr_content:
+                for line in stderr_content.split('\n'):
+                    logger.error("%s stderr: %s", action_id, line)
+        except Exception:
+            pass
 
     SysConfig.objects.update_or_create(
         key=f'agent_{action_id}_status',
@@ -103,15 +113,10 @@ def _research_queue_drain(now):
                 (next_item.data or {}).get('entry_id', str(next_item.id)[:8]),
                 next_item.content[:60])
 
-    # Wake action agent via SIGHUP
-    pid_val = SysConfig.objects.filter(
-        key='action_agent_pid'
-    ).values_list('value', flat=True).first()
-    if pid_val:
-        try:
-            os.kill(int(pid_val), signal.SIGHUP)
-        except (ProcessLookupError, ValueError):
-            logger.warning("research-agent: SIGHUP failed — action agent PID %s not found", pid_val)
+    # Wake action agent via sysconfig flag
+    SysConfig.objects.update_or_create(
+        key='action_agent_wake_requested',
+        defaults={'value': '1', 'timestamp_modified': now})
 
 
 try:
