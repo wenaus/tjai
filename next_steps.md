@@ -12,128 +12,15 @@ Make todo's actually work. Introduce vision items, with associated todos. tick o
 
 Transform tjai from a reactive knowledge base into a proactive thinking system that works while you're away, synthesizing your knowledge, finding deep connections, and bringing world awareness — then presenting the results when you return.
 
-### ToDo
+## dialog management
 
-- dialog management. It is exploding tjai content. Absolutely must keep all of it. But how to manage. Also, synthesising, inferring from it, developing new plans from it.
-- telegram triage. After a road trip day, capture what went into telegram. todos, ideas, research items, etc.
-- E-R model. designed from real use cases. One may be research versioning — a v2 topic extends v1 with a new prompt direction.
+Dialog is exploding tjai content. Absolutely must keep all of it. But how to manage. Also, synthesising, inferring from it, developing new plans from it.
+After a week, consolidate daily dialog into a single entry or a github file?
 
-## AI ideas on agents
+## telegram triage
 
-I don't sign on to all of them. Actual ToDos go above.
-
-### Agent 1: Reflection Agent (the core)
-
-Runs every few hours via cron. Selects a "seed" — a recent entry, a random older one, or a combination. Pulls related entries by context, tags, and (eventually) semantic similarity. Feeds them to Claude with a prompt:
-
-> "Given everything you know about this person (profile, interests, knowledge base), what's interesting here? What patterns do you see? What questions does this raise? What connections to the wider world?"
-
-Stores output as tjai entries (kind=memory, tag=reflection). Over time, the knowledge base grows not just from what the user puts in, but from what the system thinks about what the user put in.
-
-### Agent 2: Deep Connection Finder (the gem mine)
-
-Background batch: take each recent entry, find semantically similar entries across all contexts. Feed pairs to Claude:
-
-> "These are from different parts of this person's life. Is there a meaningful connection?"
-
-Most results will be noise. The hits are gold: "Your bookmark about streaming workflow orchestration at ePIC has a structural parallel to the Gary Snyder watershed poem you saved — both are about how distributed systems achieve coherence without central control."
-
-This is where the 20x subscription token budget goes productively — paying for a system to read your own knowledge base more deeply than you have time to.
-
-**With the relations model (see below), Agent 2 doesn't just report connections — it creates them.** Each discovered connection becomes a first-class edge in the knowledge graph: a relation with type and description capturing the insight. Over months of overnight runs, isolated entries weave into a connected structure. The brain graph builds itself while you sleep.
-
-Requires adding embeddings to tjai entries for semantic similarity search. SQLite or Postgres vector extension, computed on entry creation/modification.
-
-### Agent 5: Research Queue (user-initiated depth)
-
-The other agents are system-initiated — the system decides what to think about. The research queue inverts this: the user encounters a topic that deserves real investigation and defers it to a process that can actually do the work.
-
-The problem it solves: in real-time conversation, the AI gives reflexive, shallow, confident-sounding answers. Some questions deserve actual research — multiple sources, cross-referencing, cited evidence, explicit unknowns. The research queue is the mechanism for "Computer, perform an analysis" — and the computer actually performs the analysis.
-
-**Relationship to bookmarks:** Bookmarks are "read later" (passive). Research items are "understand later" (active) — they come back with results. Both acknowledge that the moment of encounter isn't the right moment for depth.
-
-#### Research Queue — Implementation Plan
-
-**Data Model:**
-- Research items are `kind=memory`, tag `:research`, content = the question
-- They are records of research performed, not tasks — the action system drives execution
-- Status flow: `active` (queued) → `done` (completed)
-- `data.result` — markdown research output (updated incrementally as research progresses)
-- `data.sources` — list of source URLs used
-- `data.submitted` — timestamp when queued
-- `data.completed` — timestamp when research finished
-- No new Django models — uses existing Entry + Tag + SysConfig (for agent tracking)
-
-**Agent Tracking & Mutual Exclusion:**
-- SysConfig keys for the research executor, following the existing agent pattern:
-  - `research_agent_status` — `idle` | `running` | `failed`
-  - `research_agent_started` — timestamp when current run began
-  - `research_agent_entry` — UUID of the entry currently being researched
-  - `research_agent_progress` — free-text progress indicator (e.g. "Searching sources...", "Cross-referencing 4 sources...")
-- The executor **checks `research_agent_status` before starting**. If `running`, it exits immediately (no duplicate runs). Stale detection: if `running` but `research_agent_started` is older than a timeout (e.g. 30 min), treat as failed/stale and allow a new run.
-- On completion: sets status to `idle`, clears entry/progress, writes `research_agent_completed` timestamp.
-- On failure: sets status to `failed` with error info.
-
-**Component 1: Dashboard Page** (`/research/`)
-- Menu entry in `_menu.html` (between ReadMe and Archive)
-- URL route: `path("research/", views.research_page, name="research")`
-- API endpoints:
-  - `GET api/research/data` — returns queued + completed items + current agent status
-  - `POST api/research/submit` — create a new research question (creates memory entry with :research tag)
-- Template: `research.html` — follows picks.html pattern (dark theme, monospace, JS fetch)
-- **UI layout:**
-  - Status banner at top: shows if research is in progress, on what question, for how long, with partial results visible (expandable)
-  - Submit form: text input for new research questions
-  - Queued items: pending questions waiting for execution
-  - Completed items: question + result (expandable/collapsible), sources listed, completion time shown
-- Auto-polls for status updates while research is in progress
-
-**Component 2: System Page Integration**
-- Add a "Research" row to the existing Agents/Actions section on the System page
-- Shows: status (idle/running/failed), current question if running, duration, last completed time
-- Uses the same SysConfig keys — no new infrastructure, just reading existing keys in system_health.py
-
-**Component 3: Research Executor** (`scripts/research_executor.py`)
-- Bootstrap pattern (import bootstrap, Django ORM access)
-- **Startup**: check `research_agent_status` in SysConfig. If `running` and not stale → exit. Otherwise claim the lock (set status=`running`, write start timestamp).
-- Find oldest `active` research entry (kind=memory, tag=:research, status=active)
-- If none found: set status=`idle`, exit
-- For the item: launch `tj agent` with a deep-research prompt
-- The prompt instructs: use web search, check multiple sources, cross-reference findings, cite evidence, flag uncertainties, structure the output with markdown
-- **Progress updates**: the executor updates `research_agent_progress` in SysConfig as it goes (visible on both Research and System pages in real time)
-- Stores result in `entry.data['result']`, sources in `entry.data['sources']`
-- Sets entry `status='done'`, `data['completed'] = timestamp`
-- Clears agent lock: status=`idle`
-- Processes ONE item per run (the action system re-triggers for the next)
-
-**Component 4: Triggering**
-- Action entry (kind=action) that runs `research_executor.py` periodically (e.g. every 15-30 min)
-- Mutual exclusion means frequent triggers are safe — if already running, executor exits immediately
-- "Run Now" button on the Research page triggers the executor via API (same mechanism as System page refresh)
-- Both coexist: periodic polling + manual trigger
-
-**Build order:**
-1. Dashboard page (URL, view, template, API) — shows empty state initially, with submit form
-2. Submit API — creates memory entries with :research tag and status=active
-3. Research executor script with SysConfig-based mutual exclusion
-4. System page integration (add research status to system_health.py metrics)
-5. Action entry to run executor periodically
-6. Test end-to-end: submit → executor picks up → progress visible → result appears
-
-### Agent 6: Dialog Synthesis (the integrator)
-
-Overnight, review the day's captured dialog (Phase 3) in the context of recent days. Not summarizing — synthesizing. A conversation has a trajectory that's often invisible in the moment. A session that starts with a bug fix and ends with an architectural insight has a through-line the participants may not have articulated.
-
-**What it produces:**
-- **Meta-patterns**: "This week's sessions have been about moving tjai from flat storage to a self-organizing knowledge system"
-- **Open questions**: implications raised but not discussed, tensions between ideas, unstated assumptions
-- **New entries**: research items spawned from things mentioned but not explored, todos for follow-up work, relations between today's discussion and previous entries
-- **Vision updates**: when dialog advances or reshapes a vision item, flag it
-- **State of the art research**: proactive web search on the day's technical topics — who's doing what, what tools and patterns are emerging, what's changed recently. Hyperfocused overnight tech news, filtered through the day's actual work rather than generic feeds. AI moves at lightning speed; if we discussed knowledge graphs today, by morning the system has surveyed the current landscape and brought back what's relevant.
-
-**Builds on:** Phase 3 dialog capture (already done), relations model (for linking synthesis outputs to the conversations that produced them), research queue (for spawning investigation items).
-
-### Agent 7: Telegram Triage (the inbox processor)
+After a road trip day, capture what went into telegram. todos, ideas, research items, etc.
+Telegram page on the dash shows telegram activity, with tools to distil and integrate it.
 
 Quick Telegram messages are raw intent — typed fast, no structure, no metadata. The user fires off "look into k8s operator patterns" or "remember to email jose about the beam test" and moves on. These land in =tgbot as unstructured memories. Left alone, they're write-only — captured but never acted on.
 
@@ -148,6 +35,13 @@ Quick Telegram messages are raw intent — typed fast, no structure, no metadata
 **Why this matters:** The phone is the capture device. You're walking, commuting, half-awake. The barrier to entry must be zero — just type or speak. But zero-friction capture without triage is a junk drawer. This agent turns the junk drawer into a filing system, overnight, without the user ever having to go back and organize.
 
 **Builds on:** =tgbot context entries, @watch named entry, todo system, research queue (Agent 5).
+
+
+## E-R model
+
+The foremost design precept of dkbapp, and yet I haven't felt the need for it in this knowledge base so far. Not clear why. Maybe sparse content.
+Do it if/when it is worth it. Needs to be designed from real use cases. One may be research versioning — a v2 topic extends v1 with a new prompt direction.
+Now that entries can be named with usable nicknames (entry_id), maybe less need for E-R. Just support inter-entry referencing by entry_id.
 
 ### Entry Relations (E-R Model)
 
@@ -229,6 +123,45 @@ Project planning moves from next_steps.md (a file) to tjai (a database) for prio
 
 **Status flow:** Todos move active → done as work completes. A vision moves to done when the user decides the work is complete, not automatically. Done visions with their rich content become the historical record.
 
+
+## AI ideas on Always-On Intellectual Agent applications
+
+I don't sign on to all of them. Some are implemented and so not included here anymore (AI picks, research queue).
+
+### Agent 1: Reflection Agent (the core)
+
+Runs every few hours via cron. Selects a "seed" — a recent entry, a random older one, or a combination. Pulls related entries by context, tags, and (eventually) semantic similarity. Feeds them to Claude with a prompt:
+
+> "Given everything you know about this person (profile, interests, knowledge base), what's interesting here? What patterns do you see? What questions does this raise? What connections to the wider world?"
+
+Stores output as tjai entries (kind=memory, tag=reflection). Over time, the knowledge base grows not just from what the user puts in, but from what the system thinks about what the user put in.
+
+### Agent 2: Deep Connection Finder (the gem mine)
+
+Background batch: take each recent entry, find semantically similar entries across all contexts. Feed pairs to Claude:
+
+> "These are from different parts of this person's life. Is there a meaningful connection?"
+
+Most results will be noise. The hits are gold: "Your bookmark about streaming workflow orchestration at ePIC has a structural parallel to the Gary Snyder watershed poem you saved — both are about how distributed systems achieve coherence without central control."
+
+This is where the 20x subscription token budget goes productively — paying for a system to read your own knowledge base more deeply than you have time to.
+
+**With the relations model (see below), Agent 2 doesn't just report connections — it creates them.** Each discovered connection becomes a first-class edge in the knowledge graph: a relation with type and description capturing the insight. Over months of overnight runs, isolated entries weave into a connected structure. The brain graph builds itself while you sleep.
+
+Requires adding embeddings to tjai entries for semantic similarity search. SQLite or Postgres vector extension, computed on entry creation/modification.
+
+### Agent 6: Dialog Synthesis (the integrator)
+
+Overnight, review the day's captured dialog (Phase 3) in the context of recent days. Not summarizing — synthesizing. A conversation has a trajectory that's often invisible in the moment. A session that starts with a bug fix and ends with an architectural insight has a through-line the participants may not have articulated.
+
+**What it produces:**
+- **Meta-patterns**: "This week's sessions have been about moving tjai from flat storage to a self-organizing knowledge system"
+- **Open questions**: implications raised but not discussed, tensions between ideas, unstated assumptions
+- **New entries**: research items spawned from things mentioned but not explored, todos for follow-up work, relations between today's discussion and previous entries
+- **Vision updates**: when dialog advances or reshapes a vision item, flag it
+- **State of the art research**: proactive web search on the day's technical topics — who's doing what, what tools and patterns are emerging, what's changed recently. Hyperfocused overnight tech news, filtered through the day's actual work rather than generic feeds. AI moves at lightning speed; if we discussed knowledge graphs today, by morning the system has surveyed the current landscape and brought back what's relevant.
+
+**Builds on:** Phase 3 dialog capture (already done), relations model (for linking synthesis outputs to the conversations that produced them), research queue (for spawning investigation items).
 
 ---
 
