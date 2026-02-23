@@ -147,20 +147,69 @@ Quick Telegram messages are raw intent — typed fast, no structure, no metadata
 
 tjai entries are currently isolated — no links between them. Adding relations transforms the knowledge base from a flat collection into a connected graph.
 
-**Relations table:** `entry_id, related_id, relation_type, description`
+**Relations table:** `EntryRelation` Django model:
+```
+from_entry_id  — FK to Entry (CASCADE)
+to_entry_id    — FK to Entry (CASCADE)
+relation_type  — CharField (free-form, not enum — types emerge from use)
+description    — TextField (nullable — the *why*, especially for AI-discovered links)
+timestamp_created — FloatField
+data           — JSONField (nullable — extensible metadata, same pattern as Entry)
+```
 
-Four columns. The description is essential — it captures the *why* of a relation, especially when discovered by AI. "Both describe distributed systems achieving coherence without central control" is the value, not just "related."
+Six columns. The description is essential — it captures the *why* of a relation, especially when discovered by AI. "Both describe distributed systems achieving coherence without central control" is the value, not just "related."
+
+**Directionality:** Relations are stored once but queryable both ways. `from_entry` is the subject, `to_entry` is the object. "A extends B" → from=A, to=B. Querying either side returns the relation. The `related_name` accessors: `entry.relations_from` (where this entry is the subject) and `entry.relations_to` (where this entry is the object). A helper `get_all_relations(entry)` returns both.
+
+**Constraints:**
+- Unique on `(from_entry, to_entry, relation_type)` — no duplicate typed edges
+- No self-relations (enforced in code, not DB)
+- Indexes on both FK columns for bidirectional queries
 
 **Relation types** emerge from use rather than being predefined. Early examples:
+- `extends` — research v2 building on v1's findings, with a new prompt direction
+- `references` — a memory discussing a bookmark's content, or any citation
 - `parent` — vision → its todos, or any hierarchical grouping
-- `related` — cross-references between entries
-- `references` — a memory discussing a bookmark's content
 - `prompted_by` — a research item linked to the entries that raised the question
 - `discovered` — AI-found connection (Agent 2), description carries the insight
+- `supersedes` — newer version replacing an older one
+- `related` — general cross-reference
 
-**MCP tools:** `relate_entries(id1, id2, type, description)`, `get_related(entry_id)`. Relations appear in entry responses. Queries can traverse the graph.
+**MCP tools:**
+- `create_relation(from_id, to_id, type, description)` — create a directed relation
+- `get_relations(entry_id, type=None)` — return all relations for an entry (both directions), optionally filtered by type
+- `delete_relation(from_id, to_id, type)` — remove a specific relation
+- Relations appear in entry responses from `get_entry()` — both `relations_from` and `relations_to` lists
+
+**API:** `GET /api/entry/<id>/relations` returns all relations. `POST /api/relations` creates one. Relations included in entry detail views.
+
+**Sync:** Not in v1. The relation table follows the same pattern as SubNote (parent FK + CASCADE). When sync is needed, add `is_dirty` flag and include in the sync protocol alongside entries/tags/subnotes.
 
 **dkbapp precedent:** The predecessor project was built on an E-R model — entities connected to entities, places in neighborhoods, things linked to the people who recommended them. Relations were essential to how the knowledge base was actually used. Their absence from tjai is a gap worth closing.
+
+#### First Use Case: Research Versioning
+
+Research topics support versioning through relations. A v2 topic references its antecedents and adds a new prompt to extend or redirect the research.
+
+**How it works:**
+1. Original research entry `research-mcp` completes with status=done
+2. User creates a new research entry `research-mcp-v2` (or any name) with content = the new prompt direction (e.g., "Deep dive into MCP server authentication patterns, building on the ecosystem survey")
+3. User (or UI) creates relation: `research-mcp-v2 --extends--> research-mcp`
+4. A topic can have **multiple antecedents** — `research-foo` might extend both `research-mcp` and `research-auth`
+5. The research runner, when processing an entry, follows `extends` relations to find antecedent reports and includes them as context in the Claude prompt
+
+**Research runner changes:**
+- Before dispatching Claude, query `EntryRelation.objects.filter(from_entry=item, relation_type='extends')`
+- For each antecedent, fetch its content (the completed report)
+- Append to the prompt: "Previous research on this topic that you should build on:" + antecedent reports
+- This gives Claude the full prior analysis as foundation, so v2 genuinely extends rather than restarts
+
+**Research page changes:**
+- Show version chain: if an item has `extends` relations, display them as links
+- When creating a new version from the UI, offer a "Extends" field to link antecedents
+- Done items show their successors (if any) via reverse relation query
+
+**Multiple antecedents:** A new research topic can synthesize across multiple prior research outputs. The relation model handles this naturally — one entry can have many `extends` relations to different antecedents. The runner collects all of them as context. This is where the graph structure pays off vs. a simple parent/version-number scheme.
 
 ### Vision and Todo Structure
 

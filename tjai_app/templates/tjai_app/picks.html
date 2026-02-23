@@ -219,6 +219,8 @@
     {% with current_page="picks" %}{% include "tjai_app/_menu.html" %}{% endwith %}
     <div class="picks-header">
         <a href="/tjai/entry/?entry_id=picks-sources">Sources</a>
+        <span id="next-run" style="color:#8a8a8a;font-size:11px"></span>
+        <button class="btn-run" id="btn-run" onclick="runNow()" style="background:#333;color:#64b5f6;border:1px solid #64b5f6;padding:2px 10px;border-radius:12px;cursor:pointer;font-family:inherit;font-size:11px;white-space:nowrap">Run now</button>
         <span class="stats" id="global-stats"></span>
     </div>
     <div class="content-area" id="picks-content">
@@ -238,6 +240,7 @@
                     return;
                 }
                 allRuns = data.runs || [];
+                updateAgentInfo(data.agent || {});
                 renderPicks();
             } catch (e) {
                 document.getElementById('picks-content').innerHTML =
@@ -483,6 +486,55 @@
         function getCsrf() {
             const c = document.cookie.match(/csrftoken=([^;]+)/);
             return c ? c[1] : '';
+        }
+
+        let picksAgentRunning = false;
+
+        function updateAgentInfo(agent) {
+            const el = document.getElementById('next-run');
+            const btn = document.getElementById('btn-run');
+            picksAgentRunning = agent.status === 'running';
+            if (picksAgentRunning) {
+                el.textContent = 'Running...';
+                btn.disabled = true;
+                btn.style.color = '#555';
+                btn.style.borderColor = '#444';
+            } else if (agent.next_run) {
+                const secLeft = agent.next_run - Date.now() / 1000;
+                if (secLeft <= 0) {
+                    el.textContent = 'Due now';
+                } else {
+                    const h = Math.floor(secLeft / 3600);
+                    const m = Math.floor((secLeft % 3600) / 60);
+                    el.textContent = h > 0 ? `Next run in ${h}h ${m}m` : `Next run in ${m}m`;
+                }
+                btn.disabled = false;
+                btn.style.color = '#64b5f6';
+                btn.style.borderColor = '#64b5f6';
+            }
+        }
+
+        async function runNow() {
+            const btn = document.getElementById('btn-run');
+            btn.disabled = true;
+            btn.textContent = 'Starting...';
+            try {
+                const resp = await fetch('/tjai/api/picks/run', {
+                    method: 'POST',
+                    headers: {'X-CSRFToken': getCsrf()},
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    btn.textContent = data.error;
+                    setTimeout(() => { btn.textContent = 'Run now'; btn.disabled = false; }, 3000);
+                    return;
+                }
+                btn.textContent = 'Queued';
+                setTimeout(fetchPicks, 5000);
+            } catch (e) {
+                btn.textContent = 'Error';
+                setTimeout(() => { btn.textContent = 'Run now'; btn.disabled = false; }, 3000);
+            }
         }
 
         fetchPicks();

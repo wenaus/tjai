@@ -185,8 +185,10 @@ def dispatch_ai(action, entry_id=None):
 
     # Write launch status to sysconfig for real-time tracking
     action_id = data.get('entry_id')  # human-readable id like 'picks-agent'
+    import os
+    import threading
+
     if action_id:
-        import os
         now = time.time()
         SysConfig.objects.update_or_create(
             key=f'agent_{action_id}_status',
@@ -195,35 +197,49 @@ def dispatch_ai(action, entry_id=None):
             key=f'agent_{action_id}_launched',
             defaults={'value': str(now), 'timestamp_modified': now})
 
-    env = os.environ.copy() if action_id else None
+    env = os.environ.copy()
     if action_id:
         env['TJAI_ACTION_ID'] = action_id
 
-    result = subprocess.run(
+    proc = subprocess.Popen(
         [sys.executable, str(TJ_PY), 'agent', prompt],
-        capture_output=True, text=True, env=env,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
     )
-    if result.stdout:
-        for line in result.stdout.rstrip().split('\n'):
-            logger.info("  %s", line)
-            # Capture tracking entry ID for sysconfig
-            if action_id and line.startswith('TRACKING_ID='):
-                tracking_id = line.split('=', 1)[1].strip()
-                SysConfig.objects.update_or_create(
-                    key=f'agent_{action_id}_tracking',
-                    defaults={'value': tracking_id,
-                              'timestamp_modified': time.time()})
-    if result.returncode != 0:
-        logger.error("tj agent failed (exit %d)", result.returncode)
-        if result.stderr:
-            for line in result.stderr.rstrip().split('\n'):
-                logger.error("  %s", line)
-        if action_id:
-            SysConfig.objects.update_or_create(
-                key=f'agent_{action_id}_status',
-                defaults={'value': 'failed', 'timestamp_modified': time.time()})
-        return False
+    logger.info("tj agent launched (PID %d, non-blocking)", proc.pid)
 
+    def _monitor(proc, action_id):
+        """Background thread: read stdout, capture tracking ID, set final status."""
+        try:
+            stdout, stderr = proc.communicate()
+            if stdout:
+                for line in stdout.rstrip().split('\n'):
+                    logger.info("  %s", line)
+                    if action_id and line.startswith('TRACKING_ID='):
+                        tracking_id = line.split('=', 1)[1].strip()
+                        SysConfig.objects.update_or_create(
+                            key=f'agent_{action_id}_tracking',
+                            defaults={'value': tracking_id,
+                                      'timestamp_modified': time.time()})
+            if proc.returncode != 0:
+                logger.error("tj agent failed (exit %d)", proc.returncode)
+                if stderr:
+                    for line in stderr.rstrip().split('\n'):
+                        logger.error("  %s", line)
+                if action_id:
+                    SysConfig.objects.update_or_create(
+                        key=f'agent_{action_id}_status',
+                        defaults={'value': 'failed',
+                                  'timestamp_modified': time.time()})
+        except Exception:
+            logger.error("Agent monitor thread error:\n%s", traceback.format_exc())
+            if action_id:
+                SysConfig.objects.update_or_create(
+                    key=f'agent_{action_id}_status',
+                    defaults={'value': 'failed',
+                              'timestamp_modified': time.time()})
+
+    thread = threading.Thread(target=_monitor, args=(proc, action_id), daemon=True)
+    thread.start()
     return True
 
 

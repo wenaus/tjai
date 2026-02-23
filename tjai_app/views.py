@@ -1717,6 +1717,7 @@ def api_research_data(request):
         'launched': agent_keys.get('agent_research-agent_launched'),
         'completed': agent_keys.get('agent_research-agent_completed'),
         'tracking': agent_keys.get('agent_research-agent_tracking'),
+        'current_entry': agent_keys.get('agent_research-agent_entry'),
     }
 
     return JsonResponse({
@@ -1753,6 +1754,25 @@ def api_research_run(request):
         defaults={'value': entry_id, 'timestamp_modified': now},
     )
     return JsonResponse({'ok': True, 'entry_id': entry_id})
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_research_stop(request):
+    """Request research runner to stop after current item completes."""
+    status = SysConfig.objects.filter(
+        key='agent_research-agent_status'
+    ).values_list('value', flat=True).first()
+    if status != 'running':
+        return JsonResponse({'error': 'Research agent not running'}, status=409)
+
+    now = time.time()
+    SysConfig.objects.update_or_create(
+        key='research_stop_requested',
+        defaults={'value': '1', 'timestamp_modified': now},
+    )
+    return JsonResponse({'ok': True})
 
 
 @login_required
@@ -1800,7 +1820,28 @@ def api_picks_data(request):
             'picks': runs[run_key],
         })
 
-    return JsonResponse({'runs': sorted_runs})
+    # Picks agent schedule info
+    picks_action = Entry.objects.filter(
+        kind='action', deleted_at__isnull=True,
+        data__entry_id='picks-agent',
+    ).first()
+    agent_info = {}
+    if picks_action:
+        pdata = picks_action.data or {}
+        last_run = pdata.get('last_run', 0)
+        interval = pdata.get('interval_hours', 12)
+        agent_info = {
+            'last_run': last_run,
+            'interval_hours': interval,
+            'next_run': last_run + interval * 3600,
+        }
+    # Running status from sysconfig
+    agent_status = SysConfig.objects.filter(
+        key='agent_picks-agent_status'
+    ).values_list('value', flat=True).first()
+    agent_info['status'] = agent_status or 'idle'
+
+    return JsonResponse({'runs': sorted_runs, 'agent': agent_info})
 
 
 @login_required
@@ -1878,6 +1919,46 @@ def api_picks_archive_run(request):
         count += 1
 
     return JsonResponse({'ok': True, 'archived': count})
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_picks_run(request):
+    """Trigger an immediate picks run by clearing last_run and waking action agent."""
+    picks_action = Entry.objects.filter(
+        kind='action', deleted_at__isnull=True,
+        data__entry_id='picks-agent',
+    ).first()
+    if not picks_action:
+        return JsonResponse({'error': 'picks-agent action not found'}, status=404)
+
+    # Check if already running
+    status = SysConfig.objects.filter(
+        key='agent_picks-agent_status'
+    ).values_list('value', flat=True).first()
+    if status == 'running':
+        return JsonResponse({'error': 'Picks agent already running'}, status=409)
+
+    # Clear last_run so get_due_actions sees it as overdue
+    data = picks_action.data or {}
+    data['last_run'] = 0
+    picks_action.data = data
+    picks_action.timestamp_modified = time.time()
+    picks_action.save(update_fields=['data', 'timestamp_modified'])
+
+    # Wake the action agent via SIGHUP
+    pid_val = SysConfig.objects.filter(
+        key='action_agent_pid'
+    ).values_list('value', flat=True).first()
+    if pid_val:
+        import signal
+        try:
+            os.kill(int(pid_val), signal.SIGHUP)
+        except (ProcessLookupError, ValueError):
+            pass
+
+    return JsonResponse({'ok': True})
 
 
 @login_required

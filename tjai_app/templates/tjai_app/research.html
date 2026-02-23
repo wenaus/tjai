@@ -84,7 +84,9 @@
             border-radius: 3px;
         }
         .status-pending { background: #1a3a5c; color: #64b5f6; }
+        .status-running { background: rgba(255, 213, 79, 0.15); color: #ffd54f; }
         .status-done { background: #1a3c1a; color: #4caf50; }
+        .research-item.running { border-left-color: #ffd54f; }
         .item-content {
             color: #bbb;
             font-size: 12px;
@@ -127,6 +129,7 @@
     {% with current_page="research" %}{% include "tjai_app/_menu.html" %}{% endwith %}
     <div class="research-header">
         <span id="sysprompt-link"></span>
+        <button class="btn-submit" id="btn-all" onclick="submitAllOrStop()">Submit All</button>
         <span class="stats" id="stats"></span>
     </div>
     <div class="agent-banner agent-idle" id="agent-banner">Agent: loading...</div>
@@ -179,6 +182,7 @@
                 }
                 agentRunning = (data.agent || {}).status === 'running';
                 render(data);
+                updateAllBtn();
             } catch (e) {
                 document.getElementById('content').innerHTML =
                     '<div class="error">Error loading research data</div>';
@@ -228,11 +232,13 @@
                 return;
             }
 
+            const currentEntry = (data.agent || {}).current_entry;
             let html = '';
             for (const item of items) {
-                const cls = item.status === 'done' ? 'done' : 'pending';
-                const statusCls = item.status === 'done' ? 'status-done' : 'status-pending';
-                const label = item.status === 'done' ? 'done' : 'pending';
+                const isRunning = agentRunning && item.id === currentEntry;
+                const cls = item.status === 'done' ? 'done' : isRunning ? 'running' : 'pending';
+                const statusCls = item.status === 'done' ? 'status-done' : isRunning ? 'status-running' : 'status-pending';
+                const label = item.status === 'done' ? 'done' : isRunning ? 'running' : 'pending';
 
                 html += `<div class="research-item ${cls}">`;
                 html += '<div class="item-header">';
@@ -246,7 +252,8 @@
                     html += `<button class="btn-submit"${disabled} onclick="submitItem('${esc(item.entry_id)}', this)">Submit</button>`;
                 }
                 html += '</div>';
-                html += `<div class="item-content">${esc(item.content)}</div>`;
+                const topic = item.content.split('\n')[0];
+                html += `<div class="item-content">${esc(topic)}</div>`;
                 html += `<div class="item-meta">Created ${fmtDate(item.created)} · Modified ${fmtDate(item.modified)}</div>`;
                 html += '</div>';
             }
@@ -280,6 +287,56 @@
             } catch (e) {
                 btn.textContent = 'Error';
                 setTimeout(() => { btn.textContent = 'Submit'; btn.disabled = false; }, 3000);
+            }
+        }
+
+        function updateAllBtn() {
+            const btn = document.getElementById('btn-all');
+            if (agentRunning) {
+                btn.textContent = 'Stop';
+                btn.style.color = '#ef5350';
+                btn.style.borderColor = '#ef5350';
+                btn.disabled = false;
+            } else {
+                btn.textContent = 'Submit All';
+                btn.style.color = '#64b5f6';
+                btn.style.borderColor = '#64b5f6';
+                btn.disabled = false;
+            }
+        }
+
+        async function submitAllOrStop() {
+            const btn = document.getElementById('btn-all');
+            btn.disabled = true;
+            if (agentRunning) {
+                btn.textContent = 'Stopping...';
+                try {
+                    await fetch('/tjai/api/research/stop', {
+                        method: 'POST',
+                        headers: {'X-CSRFToken': getCsrf()},
+                    });
+                } catch (e) { /* will refresh on next poll */ }
+                setTimeout(fetchData, 3000);
+            } else {
+                btn.textContent = 'Submitting...';
+                try {
+                    const resp = await fetch('/tjai/api/research/run', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                        body: JSON.stringify({entry_id: 'all'}),
+                    });
+                    const data = await resp.json();
+                    if (data.error) {
+                        btn.textContent = data.error;
+                        setTimeout(updateAllBtn, 3000);
+                        return;
+                    }
+                } catch (e) {
+                    btn.textContent = 'Error';
+                    setTimeout(updateAllBtn, 3000);
+                    return;
+                }
+                setTimeout(fetchData, 3000);
             }
         }
 

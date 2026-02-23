@@ -23,6 +23,7 @@ from tjai_app.models import Entry, SysConfig, Tag
 from tjai_app.action_runner import logger
 
 STALE_TIMEOUT = 1800  # 30 minutes — treat running status as stale after this
+CLAUDE_TIMEOUT = 5400  # 90 minutes — kill hung claude process after this
 ACTION_ID = 'research-agent'
 
 
@@ -121,8 +122,13 @@ def run_research(entry, system_prompt, dry_run=False):
 
     claude_path = shutil.which('claude')
     if not claude_path:
-        logger.error("'claude' CLI not found in PATH")
-        return False
+        # Supervisor PATH may not include ~/.local/bin
+        fallback = os.path.expanduser('~/.local/bin/claude')
+        if os.path.isfile(fallback) and os.access(fallback, os.X_OK):
+            claude_path = fallback
+        else:
+            logger.error("'claude' CLI not found in PATH or ~/.local/bin")
+            return False
 
     task_prompt = build_task_prompt(entry)
     cmd = [
@@ -136,11 +142,15 @@ def run_research(entry, system_prompt, dry_run=False):
     env = os.environ.copy()
     env.pop('CLAUDECODE', None)
 
-    # Update sysconfig with current item
-    sysconfig_set(f'agent_{ACTION_ID}_entry', str(entry.id))
-
-    logger.info("  Dispatching claude (opus)...")
-    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    logger.info("  Dispatching claude (opus), timeout=%dm...", CLAUDE_TIMEOUT // 60)
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, env=env,
+            timeout=CLAUDE_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired:
+        logger.error("  Claude timed out after %dm — killed", CLAUDE_TIMEOUT // 60)
+        return False
 
     if result.returncode != 0:
         logger.error("  Claude failed (exit %d)", result.returncode)
@@ -149,7 +159,7 @@ def run_research(entry, system_prompt, dry_run=False):
                 logger.error("    %s", line)
         return False
 
-    logger.info("  Done")
+    logger.info("  Done (%d chars output)", len(result.stdout))
     return True
 
 
@@ -190,26 +200,44 @@ def main():
                 if not args.dry_run:
                     release_lock('failed')
                 return
-            items = [entry]
-        else:
-            items = get_pending_items()
-
-        if not items:
-            logger.info("Research queue empty")
-            if not args.dry_run:
-                release_lock('completed')
-            return
-
-        logger.info("Research queue: %d item(s)", len(items))
-
-        # Process first batch, then re-check for new items after each completion
-        while items:
-            entry = items[0]
+            # Single item mode — run just this one, no re-query
+            logger.info("Research queue: 1 item (requested)")
+            sysconfig_set(f'agent_{ACTION_ID}_entry', str(entry.id))
             success = run_research(entry, system_prompt, dry_run=args.dry_run)
             if not success and not args.dry_run:
-                logger.error("Research failed, continuing to next item")
-            # Re-query queue for new items added during processing
+                logger.error("Research failed for %s", args.run)
+        else:
             items = get_pending_items()
+            if not items:
+                logger.info("Research queue empty")
+                if not args.dry_run:
+                    release_lock('completed')
+                return
+
+            logger.info("Research queue: %d item(s)", len(items))
+            processed_ids = set()
+
+            # Process queue, re-checking after each completion for new items
+            while items:
+                entry = items[0]
+                if entry.id in processed_ids:
+                    items.pop(0)
+                    continue
+                processed_ids.add(entry.id)
+                sysconfig_set(f'agent_{ACTION_ID}_entry', str(entry.id))
+                sysconfig_set(f'agent_{ACTION_ID}_launched', time.time())
+                success = run_research(entry, system_prompt, dry_run=args.dry_run)
+                if not success and not args.dry_run:
+                    logger.error("Research failed, skipping %s", entry.id)
+                # Check for stop request between items
+                if sysconfig_get('research_stop_requested'):
+                    logger.info("Stop requested, finishing after current item")
+                    sysconfig_set('research_stop_requested', '')
+                    break
+                # Re-query to pick up new items added during processing
+                items = get_pending_items()
+                # Filter out already-processed items
+                items = [i for i in items if i.id not in processed_ids]
 
         if not args.dry_run:
             release_lock('completed')
