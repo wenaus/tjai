@@ -247,7 +247,11 @@ def dispatch_ai(action, entry_id=None):
     logger.info("tj agent launched (PID %d, non-blocking)", proc.pid)
 
     def _monitor(proc, action_id):
-        """Background thread: read stdout, capture tracking ID, set final status."""
+        """Background thread: read stdout/stderr, capture tracking ID.
+
+        Status-setting is agent_complete.py's job — we only log I/O here
+        to avoid race conditions.
+        """
         try:
             stdout, stderr = proc.communicate()
             if stdout:
@@ -260,22 +264,13 @@ def dispatch_ai(action, entry_id=None):
                             defaults={'value': tracking_id,
                                       'timestamp_modified': time.time()})
             if proc.returncode != 0:
-                logger.error("tj agent failed (exit %d)", proc.returncode)
+                logger.error("tj agent exited %d (status set by agent_complete)",
+                             proc.returncode)
                 if stderr:
                     for line in stderr.rstrip().split('\n'):
                         logger.error("  %s", line)
-                if action_id:
-                    SysConfig.objects.update_or_create(
-                        key=f'agent_{action_id}_status',
-                        defaults={'value': 'failed',
-                                  'timestamp_modified': time.time()})
         except Exception:
             logger.error("Agent monitor thread error:\n%s", traceback.format_exc())
-            if action_id:
-                SysConfig.objects.update_or_create(
-                    key=f'agent_{action_id}_status',
-                    defaults={'value': 'failed',
-                              'timestamp_modified': time.time()})
 
     thread = threading.Thread(target=_monitor, args=(proc, action_id), daemon=True)
     thread.start()
@@ -288,7 +283,7 @@ def update_last_run(action):
     data['last_run'] = time.time()
     action.data = data
     action.timestamp_modified = time.time()
-    action.is_dirty = 1
+    action.is_dirty = 0
     action.save(update_fields=['data', 'timestamp_modified', 'is_dirty'])
 
 
@@ -308,23 +303,41 @@ def execute_action(action):
     logger.info("  Trigger: %s, Last run: %s",
                 data.get('trigger', '?'), last_run_str)
 
+    action_id = data.get('entry_id')
+
     if not run_mechanical(action):
         logger.error("Mechanical step failed, aborting")
+        _write_agent_error(action_id, "Mechanical step failed")
         return False
 
     entry_id = create_journal_entry(action)
     if entry_id is None:
         logger.error("Journal entry creation failed, aborting")
+        _write_agent_error(action_id, "Journal entry creation failed")
         return False
 
     if not dispatch_ai(action, entry_id=entry_id if isinstance(entry_id, str) else None):
         logger.error("AI dispatch failed")
+        _write_agent_error(action_id, "AI dispatch failed")
         update_last_run(action)
         return False
 
     update_last_run(action)
     logger.info("Done.")
     return True
+
+
+def _write_agent_error(action_id, error_msg):
+    """Write structured error to sysconfig for UI visibility."""
+    if not action_id:
+        return
+    now = time.time()
+    SysConfig.objects.update_or_create(
+        key=f'agent_{action_id}_last_error',
+        defaults={'value': error_msg, 'timestamp_modified': now})
+    SysConfig.objects.update_or_create(
+        key=f'agent_{action_id}_last_error_time',
+        defaults={'value': str(now), 'timestamp_modified': now})
 
 
 def run_action(entry_id):

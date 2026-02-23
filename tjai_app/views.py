@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import signal
 import time
 import uuid
 from datetime import datetime, timedelta
@@ -23,7 +22,7 @@ from django.conf import settings as django_settings
 from .models import AppLog, Context, Entry, RssItem, Tag, TagStats, SubNote, Machine, SysConfig
 
 
-STALE_AGENT_SECONDS = 7200  # 2 hours — any agent 'running' longer than this is stale
+STALE_AGENT_SECONDS = 1800  # 30 min — fallback if watchdog hasn't run yet
 
 
 def _wake_action_agent():
@@ -41,53 +40,12 @@ def _wake_action_agent():
     return True, None
 
 
-def _kill_zombie_agent_processes():
-    """Find and kill zombie claude agent processes (non-interactive, stale).
-
-    Agent-launched claude has '--output-format text' in the command line.
-    Interactive Claude Code sessions do not. We kill any matching process
-    older than STALE_AGENT_SECONDS.
-    """
-    import subprocess as sp
-    try:
-        # ps: PID, elapsed seconds, full command
-        result = sp.run(
-            ['ps', '-eo', 'pid=,etimes=,args='],
-            capture_output=True, text=True, timeout=5,
-        )
-    except (FileNotFoundError, sp.TimeoutExpired):
-        return 0
-
-    killed = 0
-    for line in result.stdout.strip().split('\n'):
-        line = line.strip()
-        if not line:
-            continue
-        if '--output-format' not in line or 'text' not in line:
-            continue
-        if 'claude' not in line:
-            continue
-        parts = line.split(None, 2)
-        if len(parts) < 2:
-            continue
-        try:
-            pid = int(parts[0])
-            elapsed = int(parts[1])
-        except ValueError:
-            continue
-        if elapsed > STALE_AGENT_SECONDS:
-            try:
-                os.kill(pid, signal.SIGTERM)
-                logger.warning("Killed zombie claude process PID %d (running %dm)",
-                               pid, elapsed // 60)
-                killed += 1
-            except ProcessLookupError:
-                pass
-    return killed
-
-
 def _heal_stale_agent(status_key, launched_key, agent_name):
-    """Check if an agent is stale and heal it. Returns corrected status string."""
+    """Check if an agent is stale and heal it. Returns corrected status string.
+
+    Primary: uses watchdog health status (agent_{id}_health sysconfig key).
+    Fallback: if watchdog hasn't run yet, uses elapsed time from launch.
+    """
     status_val = SysConfig.objects.filter(
         key=status_key
     ).values_list('value', flat=True).first() or 'idle'
@@ -95,11 +53,27 @@ def _heal_stale_agent(status_key, launched_key, agent_name):
         key=launched_key
     ).values_list('value', flat=True).first()
 
-    if status_val == 'running' and launched_val:
-        elapsed = time.time() - float(launched_val)
-        if elapsed > STALE_AGENT_SECONDS:
-            logger.warning("%s stale (%.0fm), resetting to idle and requesting kill",
-                           agent_name, elapsed / 60)
+    if status_val == 'running':
+        # Extract action_id from status_key: agent_{action_id}_status
+        action_id = status_key.split('agent_', 1)[1].rsplit('_status', 1)[0]
+
+        # Primary: check watchdog health
+        health = SysConfig.objects.filter(
+            key=f'agent_{action_id}_health'
+        ).values_list('value', flat=True).first()
+
+        is_stale = False
+        if health == 'stale':
+            is_stale = True
+        elif health is None and launched_val:
+            # Watchdog hasn't run yet — fall back to elapsed time
+            elapsed = time.time() - float(launched_val)
+            if elapsed > STALE_AGENT_SECONDS:
+                is_stale = True
+
+        if is_stale:
+            logger.warning("%s stale, resetting to idle and requesting kill",
+                           agent_name)
             now = time.time()
             SysConfig.objects.update_or_create(
                 key=status_key,
@@ -1817,6 +1791,11 @@ def api_research_data(request):
         'completed': agent_keys.get('agent_research-agent_completed'),
         'tracking': agent_keys.get('agent_research-agent_tracking'),
         'current_entry': agent_keys.get('agent_research-agent_entry'),
+        'last_activity': agent_keys.get('agent_research-agent_last_activity'),
+        'process_alive': agent_keys.get('agent_research-agent_process_alive'),
+        'health': agent_keys.get('agent_research-agent_health'),
+        'last_error': agent_keys.get('agent_research-agent_last_error'),
+        'last_error_time': agent_keys.get('agent_research-agent_last_error_time'),
     }
 
     return JsonResponse({
@@ -2026,7 +2005,7 @@ def api_picks_data(request):
             'interval_hours': interval,
             'next_run': last_run + interval * 3600,
         }
-    # Running status from sysconfig (with stale detection + zombie killing)
+    # Running status from sysconfig (with stale detection)
     agent_status, agent_launched = _heal_stale_agent(
         'agent_picks-agent_status',
         'agent_picks-agent_launched',
@@ -2035,6 +2014,16 @@ def api_picks_data(request):
     if agent_launched:
         agent_info['launched'] = float(agent_launched)
     agent_info['status'] = agent_status or 'idle'
+
+    # Health/activity/error data from watchdog
+    picks_keys = {}
+    for sc in SysConfig.objects.filter(key__startswith='agent_picks-agent'):
+        picks_keys[sc.key] = sc.value
+    agent_info['last_activity'] = picks_keys.get('agent_picks-agent_last_activity')
+    agent_info['process_alive'] = picks_keys.get('agent_picks-agent_process_alive')
+    agent_info['health'] = picks_keys.get('agent_picks-agent_health')
+    agent_info['last_error'] = picks_keys.get('agent_picks-agent_last_error')
+    agent_info['last_error_time'] = picks_keys.get('agent_picks-agent_last_error_time')
 
     return JsonResponse({'runs': sorted_runs, 'agent': agent_info})
 

@@ -195,6 +195,31 @@
             color: #ffb74d;
             border-color: #ffb74d;
         }
+        .activity-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        .dot-active { background: #4caf50; animation: pulse 1.5s ease-in-out infinite; }
+        .dot-idle { background: #ff9800; }
+        .dot-stale { background: #ef5350; }
+        .dot-off { background: #555; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+        .error-section {
+            padding: 6px 24px;
+            font-size: 11px;
+            background: rgba(239, 83, 80, 0.08);
+            color: #ef5350;
+            border-bottom: 1px solid #333;
+            flex-shrink: 0;
+        }
+        .error-section:empty { display: none; }
         .loading {
             color: #8a8a8a;
             padding: 20px;
@@ -224,6 +249,7 @@
         <button class="btn-run" id="btn-abort" onclick="abortAgent()" style="display:none;background:#333;color:#ef5350;border:1px solid #ef5350;padding:2px 10px;border-radius:12px;cursor:pointer;font-family:inherit;font-size:11px;white-space:nowrap">Abort</button>
         <span class="stats" id="global-stats"></span>
     </div>
+    <div class="error-section" id="error-section"></div>
     <div class="content-area" id="picks-content">
         <div class="loading">Loading picks...</div>
     </div>
@@ -491,20 +517,44 @@
 
         let picksAgentRunning = false;
 
+        function timeAgo(ts) {
+            if (!ts) return '';
+            const sec = Math.floor(Date.now() / 1000 - ts);
+            if (sec < 60) return sec + 's ago';
+            if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
+            return Math.floor(sec / 3600) + 'h ' + Math.floor((sec % 3600) / 60) + 'm ago';
+        }
+
         function updateAgentInfo(agent) {
             const el = document.getElementById('next-run');
             const btn = document.getElementById('btn-run');
             const abortBtn = document.getElementById('btn-abort');
+            const errorDiv = document.getElementById('error-section');
             picksAgentRunning = agent.status === 'running';
             if (picksAgentRunning) {
-                let runText = 'Running...';
+                let runText = '';
+                // Activity dot
+                let dotClass = 'dot-idle';
+                if (agent.last_activity) {
+                    const actAge = Date.now() / 1000 - parseFloat(agent.last_activity);
+                    if (actAge < 30) dotClass = 'dot-active';
+                    else if (actAge < 300) dotClass = 'dot-idle';
+                    else dotClass = 'dot-stale';
+                } else if (agent.health === 'active') dotClass = 'dot-active';
+                else if (agent.health === 'stale') dotClass = 'dot-stale';
+                runText += `<span class="activity-dot ${dotClass}"></span>`;
                 if (agent.launched) {
                     const elapsed = Math.floor(Date.now() / 1000 - agent.launched);
                     const m = Math.floor(elapsed / 60);
                     const s = elapsed % 60;
-                    runText = m > 0 ? `Running ${m}m ${s}s` : `Running ${s}s`;
+                    runText += m > 0 ? `Running ${m}m ${s}s` : `Running ${s}s`;
+                } else {
+                    runText += 'Running...';
                 }
-                el.textContent = runText;
+                if (agent.last_activity) {
+                    runText += ` · activity ${timeAgo(parseFloat(agent.last_activity))}`;
+                }
+                el.innerHTML = runText;
                 btn.disabled = true;
                 btn.style.color = '#555';
                 btn.style.borderColor = '#444';
@@ -526,6 +576,13 @@
                 btn.disabled = false;
                 btn.style.color = '#64b5f6';
                 btn.style.borderColor = '#64b5f6';
+            }
+            // Error section
+            if (agent.last_error && agent.last_error.trim()) {
+                const errTime = agent.last_error_time ? timeAgo(parseFloat(agent.last_error_time)) : '';
+                errorDiv.innerHTML = `Error${errTime ? ' (' + errTime + ')' : ''}: ${esc(agent.last_error)}`;
+            } else {
+                errorDiv.innerHTML = '';
             }
         }
 

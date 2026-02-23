@@ -71,14 +71,15 @@ def sleep_until_next(trigger_filter=None):
     sleep_secs = max(MIN_SLEEP, min(MAX_SLEEP, earliest_due - now))
     deadline = now + sleep_secs
     last_sysconfig_check = 0
+    last_health_check = 0
 
     while time.time() < deadline:
         if shutdown_requested or wake_requested:
             break
+        now_loop = time.time()
         # Poll sysconfig for refresh requests from web UI
-        elapsed = time.time() - last_sysconfig_check
-        if elapsed >= SYSCONFIG_POLL_INTERVAL:
-            last_sysconfig_check = time.time()
+        if now_loop - last_sysconfig_check >= SYSCONFIG_POLL_INTERVAL:
+            last_sysconfig_check = now_loop
             from tjai_app.models import SysConfig
             # Check for kill request first (runs as admin, has permission)
             _check_kill_request()
@@ -91,6 +92,13 @@ def sleep_until_next(trigger_filter=None):
                     break
             if wake_requested:
                 break
+        # Periodic agent health check
+        if now_loop - last_health_check >= HEALTH_CHECK_INTERVAL:
+            last_health_check = now_loop
+            try:
+                _check_agent_health()
+            except Exception as e:
+                logger.error("Agent health check failed: %s", e)
         time.sleep(1)
 
     if wake_requested:
@@ -141,6 +149,119 @@ def _check_kill_request():
         except ProcessLookupError:
             pass
     logger.info("Kill request completed: %d process(es) killed", killed)
+
+
+HEALTH_CHECK_INTERVAL = 30  # seconds between agent health checks
+
+
+def _check_agent_health():
+    """Probe health of all running agents using tracking entry activity + /proc.
+
+    For each agent with sysconfig status='running':
+    1. Read tracking entry UUID from agent_{id}_tracking
+    2. Check tracking entry timestamp_modified (natural heartbeat from MCP tool calls)
+    3. Check process liveness via /proc scan
+    4. Write findings to sysconfig for UI consumption
+    """
+    from tjai_app.models import SysConfig, Entry
+
+    now = time.time()
+
+    # Find all agents with status='running'
+    running_agents = []
+    for sc in SysConfig.objects.filter(key__endswith='_status', key__startswith='agent_'):
+        if sc.value != 'running':
+            continue
+        # Extract action_id: agent_{action_id}_status
+        parts = sc.key.split('_', 1)  # ['agent', '{action_id}_status']
+        if len(parts) < 2:
+            continue
+        action_id = parts[1].rsplit('_status', 1)[0]
+        if not action_id or action_id == 'agent':
+            continue
+        running_agents.append(action_id)
+
+    if not running_agents:
+        return
+
+    # Check which claude agent processes are alive (single /proc scan for all)
+    alive_pids = _scan_agent_processes()
+
+    for action_id in running_agents:
+        tracking_uuid = SysConfig.objects.filter(
+            key=f'agent_{action_id}_tracking'
+        ).values_list('value', flat=True).first()
+
+        last_activity = None
+        if tracking_uuid:
+            tracking_entry = Entry.objects.filter(
+                id=tracking_uuid, deleted_at__isnull=True,
+            ).values_list('timestamp_modified', flat=True).first()
+            if tracking_entry:
+                last_activity = float(tracking_entry)
+
+        process_alive = len(alive_pids) > 0
+
+        # Determine health
+        activity_age = (now - last_activity) if last_activity else None
+        if activity_age is not None and activity_age < 120:
+            health = 'active'
+        elif activity_age is not None and activity_age < 600:
+            health = 'idle'
+        else:
+            health = 'stale'
+
+        # Write findings to sysconfig
+        updates = {
+            f'agent_{action_id}_process_alive': '1' if process_alive else '0',
+            f'agent_{action_id}_health': health,
+        }
+        if last_activity is not None:
+            updates[f'agent_{action_id}_last_activity'] = str(last_activity)
+
+        for key, value in updates.items():
+            SysConfig.objects.update_or_create(
+                key=key, defaults={'value': value, 'timestamp_modified': now})
+
+        # Recovery: stale + no process = dead agent, reset status
+        if health == 'stale' and not process_alive:
+            logger.warning("%s stale (no activity %.0fm, no process) — resetting to idle",
+                           action_id,
+                           activity_age / 60 if activity_age else 0)
+            SysConfig.objects.update_or_create(
+                key=f'agent_{action_id}_status',
+                defaults={'value': 'idle', 'timestamp_modified': now})
+            SysConfig.objects.update_or_create(
+                key=f'agent_{action_id}_last_error',
+                defaults={'value': 'Agent became stale and process died',
+                          'timestamp_modified': now})
+            SysConfig.objects.update_or_create(
+                key=f'agent_{action_id}_last_error_time',
+                defaults={'value': str(now), 'timestamp_modified': now})
+        elif health == 'stale' and process_alive:
+            # Process alive but idle > 10min — log warning, give one more cycle
+            logger.warning("%s stale but process alive (activity %.0fm ago) — monitoring",
+                           action_id,
+                           activity_age / 60 if activity_age else 0)
+
+
+def _scan_agent_processes():
+    """Scan /proc for claude agent processes (--output-format text).
+
+    Returns list of PIDs.
+    """
+    pids = []
+    for pid_dir in os.listdir('/proc'):
+        if not pid_dir.isdigit():
+            continue
+        try:
+            with open(f'/proc/{pid_dir}/cmdline', 'rb') as f:
+                cmdline = f.read().decode('utf-8', errors='replace')
+            if 'claude' in cmdline and '--output-format' in cmdline and 'text' in cmdline:
+                pids.append(int(pid_dir))
+        except (PermissionError, FileNotFoundError):
+            continue
+    return pids
 
 
 def _check_health_refresh():

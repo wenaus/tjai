@@ -303,7 +303,7 @@
                     for (const ag of tj.agents) {
                         const isIdle = ag.status === 'idle' || ag.status === 'completed';
                         const statusCls = ag.status === 'running' ? 'metric-value' : ag.status === 'stale' ? 'metric-warn' : isIdle ? 'metric-value' : 'metric-crit';
-                        const dotColor = ag.status === 'running' ? '#9ccc65' : ag.status === 'stale' ? '#ffd54f' : isIdle ? '#8a8a8a' : '#ef5350';
+                        const dotColor = ag.status === 'running' ? (ag.health === 'active' ? '#9ccc65' : ag.health === 'idle' ? '#ffd54f' : ag.health === 'stale' ? '#ef5350' : '#9ccc65') : ag.status === 'stale' ? '#ffd54f' : isIdle ? '#8a8a8a' : '#ef5350';
                         let detail = '';
                         if (ag.pid) {
                             detail = `PID ${ag.pid}`;
@@ -312,10 +312,16 @@
                             }
                         } else if (ag.running_min !== undefined) {
                             detail = `running ${ag.running_min}m`;
+                            if (ag.health) detail += `, health: ${ag.health}`;
+                            if (ag.last_activity_min !== undefined) detail += `, activity ${ag.last_activity_min}m ago`;
                         } else if (ag.completed_min !== undefined) {
                             detail = `last run ${Math.round(ag.completed_min)}m ago`;
                         }
-                        html += `<div class="process-row" style="max-width:500px"><span class="process-name"><span style="color:${dotColor}">&#9679;</span> ${ag.name}</span><span class="${statusCls}">${ag.status} <span style="color:#666;font-weight:normal">${detail}</span></span></div>`;
+                        html += `<div class="process-row" style="max-width:600px"><span class="process-name"><span style="color:${dotColor}">&#9679;</span> ${ag.name}</span><span class="${statusCls}">${ag.status} <span style="color:#666;font-weight:normal">${detail}</span></span></div>`;
+                        if (ag.last_error) {
+                            const errAge = ag.last_error_min !== undefined ? ` (${Math.round(ag.last_error_min)}m ago)` : '';
+                            html += `<div class="process-row" style="max-width:600px;background:rgba(239,83,80,0.08)"><span style="color:#ef5350;font-size:11px">Error${errAge}: ${ag.last_error}</span></div>`;
+                        }
                     }
                 }
 

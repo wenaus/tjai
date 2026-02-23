@@ -9,6 +9,7 @@ Writes two sysconfig keys:
 import json
 import os
 import time
+from pathlib import Path
 
 import bootstrap  # noqa: F401 - Django setup
 
@@ -252,26 +253,50 @@ def _collect_agents(now):
         'status': 'running' if alive and hb_min and hb_min < 10 else 'stale' if alive else 'down',
     })
 
-    # Research agent — status from sysconfig (subprocess of action agent, no PID)
-    ra_status = SysConfig.objects.filter(
-        key='agent_research-agent_status'
-    ).values_list('value', flat=True).first() or 'idle'
-    ra_launched = SysConfig.objects.filter(
-        key='agent_research-agent_launched'
-    ).values_list('value', flat=True).first()
-    ra_completed = SysConfig.objects.filter(
-        key='agent_research-agent_completed'
-    ).values_list('value', flat=True).first()
-    ra_detail = {}
-    if ra_status == 'running' and ra_launched:
-        ra_detail['running_min'] = round((now - float(ra_launched)) / 60, 1)
-    if ra_completed:
-        ra_detail['completed_min'] = round((now - float(ra_completed)) / 60, 1)
-    agents.append({
-        'name': 'Research Agent',
-        'status': ra_status,
-        **ra_detail,
-    })
+    # AI agents — status, health, errors from sysconfig
+    for agent_name, agent_id in [('Research Agent', 'research-agent'),
+                                  ('Picks Agent', 'picks-agent')]:
+        a_status = SysConfig.objects.filter(
+            key=f'agent_{agent_id}_status'
+        ).values_list('value', flat=True).first() or 'idle'
+        a_launched = SysConfig.objects.filter(
+            key=f'agent_{agent_id}_launched'
+        ).values_list('value', flat=True).first()
+        a_completed = SysConfig.objects.filter(
+            key=f'agent_{agent_id}_completed'
+        ).values_list('value', flat=True).first()
+        a_health = SysConfig.objects.filter(
+            key=f'agent_{agent_id}_health'
+        ).values_list('value', flat=True).first()
+        a_last_activity = SysConfig.objects.filter(
+            key=f'agent_{agent_id}_last_activity'
+        ).values_list('value', flat=True).first()
+        a_error = SysConfig.objects.filter(
+            key=f'agent_{agent_id}_last_error'
+        ).values_list('value', flat=True).first()
+        a_error_time = SysConfig.objects.filter(
+            key=f'agent_{agent_id}_last_error_time'
+        ).values_list('value', flat=True).first()
+
+        detail = {}
+        if a_status == 'running' and a_launched:
+            detail['running_min'] = round((now - float(a_launched)) / 60, 1)
+        if a_completed:
+            detail['completed_min'] = round((now - float(a_completed)) / 60, 1)
+        if a_health:
+            detail['health'] = a_health
+        if a_last_activity:
+            detail['last_activity_min'] = round((now - float(a_last_activity)) / 60, 1)
+        if a_error:
+            detail['last_error'] = a_error
+        if a_error_time:
+            detail['last_error_min'] = round((now - float(a_error_time)) / 60, 1)
+
+        agents.append({
+            'name': agent_name,
+            'status': a_status,
+            **detail,
+        })
 
     # Telegram bot and Supervisord — scan /proc instead of /tmp PID files
     # (Apache's PrivateTmp=yes makes /tmp PID files invisible to subprocesses)
@@ -289,8 +314,6 @@ def _collect_agents(now):
 
 def collect_backups():
     """Check tjai backup health in Dropbox."""
-    from pathlib import Path
-
     backup_root = Path.home() / 'Dropbox' / 'tjai-backups' / 'server'
     result = {
         'path': str(backup_root),
@@ -351,7 +374,7 @@ def collect_dropbox():
 
     try:
         proc = subprocess.run(
-            ['/home/admin/bin/dropbox.py', 'status'],
+            [str(Path.home() / 'bin' / 'dropbox.py'), 'status'],
             capture_output=True, text=True, timeout=10,
         )
         status_text = proc.stdout.strip()
@@ -365,7 +388,7 @@ def collect_dropbox():
     if not result['running']:
         try:
             subprocess.run(
-                ['/home/admin/bin/dropbox.py', 'start'],
+                [str(Path.home() / 'bin' / 'dropbox.py'), 'start'],
                 capture_output=True, text=True, timeout=15,
             )
             result['restarted'] = True
@@ -374,7 +397,7 @@ def collect_dropbox():
         return result
 
     # Backup directory freshness
-    backup_dir = '/home/admin/Dropbox/Current/tjai_backups'
+    backup_dir = str(Path.home() / 'Dropbox' / 'Current' / 'tjai_backups')
     try:
         files = os.listdir(backup_dir)
         if files:

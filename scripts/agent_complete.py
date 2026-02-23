@@ -7,7 +7,6 @@ Usage: agent_complete.py <action_entry_id> [exit_code] [stderr_file]
 All logging goes to AppLog via DbLogHandler (visible on dashboard).
 """
 import os
-import signal
 import sys
 import time
 
@@ -42,6 +41,7 @@ def main():
     logger.info("%s: exit_code=%d, status=%s", action_id, exit_code, status)
 
     # Log captured stderr from the claude subprocess
+    stderr_content = ''
     if stderr_file:
         try:
             stderr_content = open(stderr_file).read().strip()
@@ -58,6 +58,24 @@ def main():
     SysConfig.objects.update_or_create(
         key=f'agent_{action_id}_completed',
         defaults={'value': str(now), 'timestamp_modified': now})
+
+    # Structured error reporting
+    if exit_code != 0:
+        error_msg = f"Agent exited {exit_code}"
+        if stderr_content:
+            error_msg += f": {stderr_content[-200:]}"
+        SysConfig.objects.update_or_create(
+            key=f'agent_{action_id}_last_error',
+            defaults={'value': error_msg, 'timestamp_modified': now})
+        SysConfig.objects.update_or_create(
+            key=f'agent_{action_id}_last_error_time',
+            defaults={'value': str(now), 'timestamp_modified': now})
+    else:
+        # Clear error on success
+        SysConfig.objects.filter(key=f'agent_{action_id}_last_error').update(
+            value='', timestamp_modified=now)
+        SysConfig.objects.filter(key=f'agent_{action_id}_last_error_time').update(
+            value='', timestamp_modified=now)
 
     # Queue drain for research-agent: auto-chain to next pending item
     if action_id == 'research-agent' and exit_code == 0:

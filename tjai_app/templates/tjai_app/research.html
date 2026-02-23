@@ -115,6 +115,31 @@
             cursor: default;
             background: #2a2a2a;
         }
+        .activity-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        .dot-active { background: #4caf50; animation: pulse 1.5s ease-in-out infinite; }
+        .dot-idle { background: #ff9800; }
+        .dot-stale { background: #ef5350; }
+        .dot-off { background: #555; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+        .error-section {
+            padding: 6px 24px;
+            font-size: 11px;
+            background: rgba(239, 83, 80, 0.08);
+            color: #ef5350;
+            border-bottom: 1px solid #333;
+            flex-shrink: 0;
+        }
+        .error-section:empty { display: none; }
         .loading { color: #8a8a8a; padding: 20px; }
         .error { color: #ef5350; padding: 20px; }
         .empty { color: #8a8a8a; padding: 40px; text-align: center; }
@@ -133,6 +158,7 @@
         <span class="stats" id="stats"></span>
     </div>
     <div class="agent-banner agent-idle" id="agent-banner">Agent: loading...</div>
+    <div class="error-section" id="error-section"></div>
     <div class="content-area" id="content">
         <div class="loading">Loading research queue...</div>
     </div>
@@ -198,24 +224,44 @@
                 spEl.innerHTML = '<span style="color:#666">No system prompt</span>';
             }
 
-            // Agent status banner
+            // Agent status banner with activity dot
             const agent = data.agent || {};
             const banner = document.getElementById('agent-banner');
+            const errorDiv = document.getElementById('error-section');
             if (agent.status === 'running') {
                 banner.className = 'agent-banner agent-running';
                 const dur = agent.launched ? ' for ' + timeAgo(parseFloat(agent.launched)).replace(' ago', '') : '';
                 const logLink = agent.tracking ? ` <a href="${entryUrl(agent.tracking)}" style="color:#ffd54f">log</a>` : '';
-                banner.innerHTML = `Agent: <strong>running</strong>${dur}${logLink}`;
+                // Activity dot based on health/last_activity
+                let dotClass = 'dot-idle';
+                let activityInfo = '';
+                if (agent.last_activity) {
+                    const actAge = Date.now() / 1000 - parseFloat(agent.last_activity);
+                    if (actAge < 30) { dotClass = 'dot-active'; }
+                    else if (actAge < 300) { dotClass = 'dot-idle'; }
+                    else { dotClass = 'dot-stale'; }
+                    activityInfo = ` · activity ${timeAgo(parseFloat(agent.last_activity))}`;
+                } else if (agent.health === 'active') { dotClass = 'dot-active'; }
+                else if (agent.health === 'stale') { dotClass = 'dot-stale'; }
+                const procInfo = agent.process_alive === '0' ? ' · <span style="color:#ef5350">no process</span>' : '';
+                banner.innerHTML = `<span class="activity-dot ${dotClass}"></span>Agent: <strong>running</strong>${dur}${activityInfo}${procInfo}${logLink}`;
             } else if (agent.status === 'failed') {
                 banner.className = 'agent-banner agent-failed';
-                banner.innerHTML = 'Agent: <strong>failed</strong>';
+                banner.innerHTML = '<span class="activity-dot dot-stale"></span>Agent: <strong>failed</strong>';
             } else {
                 banner.className = 'agent-banner agent-idle';
-                let text = 'Agent: idle';
+                let text = '<span class="activity-dot dot-off"></span>Agent: idle';
                 if (agent.completed) {
                     text += ' — last completed ' + timeAgo(parseFloat(agent.completed));
                 }
                 banner.innerHTML = text;
+            }
+            // Error section
+            if (agent.last_error && agent.last_error.trim()) {
+                const errTime = agent.last_error_time ? timeAgo(parseFloat(agent.last_error_time)) : '';
+                errorDiv.innerHTML = `Error${errTime ? ' (' + errTime + ')' : ''}: ${esc(agent.last_error)}`;
+            } else {
+                errorDiv.innerHTML = '';
             }
 
             // Stats
