@@ -181,6 +181,12 @@ def dispatch_ai(action, entry_id=None):
     if entry_id:
         extra_vars['entry_id'] = entry_id
     prompt = resolve_prompt_template(ai_prompt, extra_vars=extra_vars)
+
+    # Prepend next_target info (ephemeral dispatch data from UI "Submit" button)
+    next_target = data.get('next_target')
+    if next_target:
+        prompt = f"{next_target}\n\n{prompt}"
+
     logger.info("Dispatching tj agent...")
 
     # Write launch status to sysconfig for real-time tracking
@@ -196,10 +202,41 @@ def dispatch_ai(action, entry_id=None):
         SysConfig.objects.update_or_create(
             key=f'agent_{action_id}_launched',
             defaults={'value': str(now), 'timestamp_modified': now})
+        # Track specific target entry for UI
+        next_target_entry = data.get('next_target_entry')
+        if next_target_entry:
+            SysConfig.objects.update_or_create(
+                key=f'agent_{action_id}_entry',
+                defaults={'value': next_target_entry, 'timestamp_modified': now})
 
     env = os.environ.copy()
     if action_id:
         env['TJAI_ACTION_ID'] = action_id
+
+    # Pass action config to tj agent via env vars
+    model = data.get('model')
+    if model:
+        env['TJAI_AGENT_MODEL'] = model
+    system_prompt_entry_id = data.get('system_prompt_entry')
+    if system_prompt_entry_id:
+        sp_entry = Entry.objects.filter(
+            data__entry_id=system_prompt_entry_id, deleted_at__isnull=True
+        ).first()
+        if sp_entry:
+            env['TJAI_SYSTEM_PROMPT'] = sp_entry.content
+    timeout_val = data.get('timeout')
+    if timeout_val:
+        env['TJAI_AGENT_TIMEOUT'] = str(timeout_val)
+
+    # Clear ephemeral keys from action data
+    ephemeral_changed = False
+    for key in ('next_target', 'next_target_entry'):
+        if key in data:
+            del data[key]
+            ephemeral_changed = True
+    if ephemeral_changed:
+        action.data = data
+        action.save(update_fields=['data'])
 
     proc = subprocess.Popen(
         [sys.executable, str(TJ_PY), 'agent', prompt],

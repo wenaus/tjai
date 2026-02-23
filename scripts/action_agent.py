@@ -15,7 +15,6 @@ import os
 import signal
 import sys
 import time
-import traceback
 
 import bootstrap  # noqa: F401 - Django setup
 from tjai_app.action_runner import (
@@ -81,8 +80,7 @@ def sleep_until_next(trigger_filter=None):
         if elapsed >= SYSCONFIG_POLL_INTERVAL:
             last_sysconfig_check = time.time()
             from tjai_app.models import SysConfig
-            for check_key in ('system_health_refresh_requested',
-                              'research_run_requested'):
+            for check_key in ('system_health_refresh_requested',):
                 req = SysConfig.objects.filter(
                     key=check_key
                 ).values_list('value', flat=True).first()
@@ -114,67 +112,6 @@ def _check_health_refresh():
         health_main()
     except Exception as e:
         logger.error("System health refresh failed: %s", e, exc_info=True)
-
-
-_research_proc = None  # Track the research runner subprocess
-_research_log_file = None
-
-
-def _reap_research():
-    """Collect finished research runner process to avoid zombies."""
-    global _research_proc, _research_log_file
-    if _research_proc is None:
-        return
-    ret = _research_proc.poll()
-    if ret is not None:
-        if ret != 0:
-            logger.warning("Research runner exited %d", ret)
-        _research_proc = None
-        if _research_log_file:
-            _research_log_file.close()
-            _research_log_file = None
-
-
-def _check_research_request():
-    """Run research_runner if requested via sysconfig flag."""
-    global _research_proc, _research_log_file
-    _reap_research()
-
-    from tjai_app.models import SysConfig
-    req = SysConfig.objects.filter(key='research_run_requested').first()
-    if not req or not req.value:
-        return
-    entry_id = req.value
-    # Clear the flag first to avoid re-runs
-    req.value = ''
-    req.timestamp_modified = time.time()
-    req.save(update_fields=['value', 'timestamp_modified'])
-
-    if _research_proc is not None:
-        logger.warning("Research runner already active (PID %d), ignoring request",
-                        _research_proc.pid)
-        return
-
-    logger.info("Running research (requested): %s", entry_id)
-    try:
-        import subprocess
-        scripts_dir = os.path.dirname(os.path.abspath(__file__))
-        cmd = [sys.executable, os.path.join(scripts_dir, 'research_runner.py')]
-        if entry_id != 'all':
-            cmd += ['--run', entry_id]
-        log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'logs')
-        os.makedirs(log_dir, exist_ok=True)
-        _research_log_file = open(os.path.join(log_dir, 'research_runner.log'), 'a')
-        _research_proc = subprocess.Popen(
-            cmd, stdout=_research_log_file, stderr=_research_log_file)
-        logger.info("Research runner launched (PID %d, log: logs/research_runner.log)",
-                     _research_proc.pid)
-    except Exception as e:
-        logger.error("Research request failed: %s", e, exc_info=True)
-        _research_proc = None
-        if _research_log_file:
-            _research_log_file.close()
-            _research_log_file = None
 
 
 def main():
@@ -225,11 +162,7 @@ def main():
     logger.info("Action agent started (PID %d)", pid)
     while not shutdown_requested:
         try:
-            # Reap finished research runner to avoid zombies
-            _reap_research()
-            # Check for on-demand requests
             _check_health_refresh()
-            _check_research_request()
 
             due = get_due_actions(trigger_filter=args.trigger)
             for action in due:

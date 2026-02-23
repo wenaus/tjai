@@ -1731,7 +1731,7 @@ def api_research_data(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_research_run(request):
-    """Request research run via sysconfig flag — action agent picks it up."""
+    """Trigger research run — same pattern as api_picks_run."""
     try:
         body = json.loads(request.body)
     except json.JSONDecodeError:
@@ -1741,18 +1741,57 @@ def api_research_run(request):
     if not entry_id:
         return JsonResponse({'error': 'entry_id required'}, status=400)
 
-    # Check not already running
+    # Find research-agent action entry
+    research_action = Entry.objects.filter(
+        kind='action', deleted_at__isnull=True,
+        data__entry_id='research-agent',
+    ).first()
+    if not research_action:
+        return JsonResponse({'error': 'research-agent action not found'}, status=404)
+
+    # Check if already running
     status = SysConfig.objects.filter(
         key='agent_research-agent_status'
     ).values_list('value', flat=True).first()
     if status == 'running':
         return JsonResponse({'error': 'Research agent already running'}, status=409)
 
-    now = time.time()
-    SysConfig.objects.update_or_create(
-        key='research_run_requested',
-        defaults={'value': entry_id, 'timestamp_modified': now},
-    )
+    data = research_action.data or {}
+
+    if entry_id != 'all':
+        # Specific item: look up the entry and store target info
+        target = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
+        if not target:
+            return JsonResponse({'error': 'Research entry not found'}, status=404)
+        data['next_target'] = (
+            f"SPECIFIC TARGET:\nEntry UUID: {entry_id}\n"
+            f"Topic: {target.content}"
+        )
+        data['next_target_entry'] = entry_id
+    else:
+        # Submit All: instruct agent to pick the highest-priority pending item
+        data['next_target'] = (
+            "QUEUE MODE: Pick the highest-priority pending research "
+            "item (lowest priority number, or oldest if equal)."
+        )
+
+    # Clear last_run so get_due_actions sees it as overdue
+    data['last_run'] = 0
+    research_action.data = data
+    research_action.timestamp_modified = time.time()
+    research_action.save(update_fields=['data', 'timestamp_modified'])
+
+    # Wake the action agent via SIGHUP
+    pid_val = SysConfig.objects.filter(
+        key='action_agent_pid'
+    ).values_list('value', flat=True).first()
+    if pid_val:
+        import signal
+        try:
+            os.kill(int(pid_val), signal.SIGHUP)
+        except (ProcessLookupError, ValueError):
+            pass
+
     return JsonResponse({'ok': True, 'entry_id': entry_id})
 
 

@@ -17,6 +17,7 @@ import shutil
 import sys
 import subprocess
 import uuid
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -94,8 +95,10 @@ def handle_ai_agent(args) -> None:
     print(f"Tracking: {entry_id[:8]}  [{prompt[:60]}]")
     print(f"TRACKING_ID={entry_id}")
 
-    # Build system prompt
-    system_prompt = _build_system_prompt(guidance_text, entry_id, prompt)
+    # Build system prompt (custom prompt overrides default agent behavior)
+    custom_prompt = os.environ.get('TJAI_SYSTEM_PROMPT')
+    system_prompt = _build_system_prompt(guidance_text, entry_id, prompt,
+                                         custom_prompt=custom_prompt)
 
     # Launch claude instance
     _launch_claude(claude_path, system_prompt, prompt, entry_id)
@@ -162,8 +165,23 @@ def _create_tracking_entry(prompt: str, context: Optional[str]) -> str:
     return entry_id
 
 
-def _build_system_prompt(guidance: str, entry_id: str, original_prompt: str) -> str:
-    """Build the system prompt for the claude instance."""
+def _build_system_prompt(guidance: str, entry_id: str, original_prompt: str,
+                         custom_prompt: str = None) -> str:
+    """Build the system prompt for the claude instance.
+
+    If custom_prompt is provided (e.g. research system prompt), it replaces the
+    default agent behavior. Guidance and operational rules are still included.
+    """
+    if custom_prompt:
+        return f"""{guidance}
+
+OPERATIONAL RULES:
+- Use mcp__tjai__ tools for all tjai data access.
+- Be concise and factual. No preamble.
+- If you encounter any error, report it visibly in tracking entry {entry_id} via mcp__tjai__edit_entry. Never fail silently.
+
+{custom_prompt}"""
+
     return f"""You are a tjai agent — a focused, single-task AI worker.
 
 {guidance}
@@ -186,12 +204,15 @@ def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: 
     """Launch claude -p in background. Logs all outcomes to the tjai entry."""
     import shlex
 
+    model = os.environ.get('TJAI_AGENT_MODEL', 'sonnet')
+    timeout_secs = int(os.environ.get('TJAI_AGENT_TIMEOUT', '0'))
+
     cmd = [
         claude_path,
         '-p', prompt,
         '--system-prompt', system_prompt,
         '--output-format', 'text',
-        '--model', 'sonnet',
+        '--model', model,
     ]
 
     env = os.environ.copy()
@@ -201,10 +222,13 @@ def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: 
 
     action_id = os.environ.get('TJAI_ACTION_ID')
     if action_id:
-        # Wrap claude command: run claude, then mark completion in sysconfig
+        # Wrap claude command: run claude, then mark completion with exit code
         scripts_dir = Path(__file__).resolve().parent.parent.parent / 'scripts'
         completion_cmd = f'{sys.executable} {scripts_dir}/agent_complete.py {shlex.quote(action_id)}'
-        shell_cmd = f'{shlex.join(cmd)} ; {completion_cmd}'
+        claude_cmd = shlex.join(cmd)
+        if timeout_secs > 0:
+            claude_cmd = f'timeout {timeout_secs} {claude_cmd}'
+        shell_cmd = f'{claude_cmd} ; {completion_cmd} $?'
         subprocess.Popen(
             ['bash', '-c', shell_cmd],
             stdin=subprocess.DEVNULL,
@@ -214,6 +238,8 @@ def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: 
             env=env,
         )
     else:
+        if timeout_secs > 0:
+            cmd = ['timeout', str(timeout_secs)] + cmd
         subprocess.Popen(
             cmd,
             stdin=subprocess.DEVNULL,
