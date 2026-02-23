@@ -282,6 +282,12 @@
                     setTimeout(() => { btn.textContent = 'Submit'; btn.disabled = false; }, 3000);
                     return;
                 }
+                if (data.warning) {
+                    btn.textContent = data.warning;
+                    btn.style.color = '#ff9800';
+                    setTimeout(() => { btn.textContent = 'Submit'; btn.disabled = false; btn.style.color = ''; }, 5000);
+                    return;
+                }
                 btn.textContent = 'Queued';
                 setTimeout(fetchData, 3000);
             } catch (e) {
@@ -329,6 +335,12 @@
                     if (data.error) {
                         btn.textContent = data.error;
                         setTimeout(updateAllBtn, 3000);
+                        return;
+                    }
+                    if (data.warning) {
+                        btn.textContent = data.warning;
+                        btn.style.color = '#ff9800';
+                        setTimeout(updateAllBtn, 5000);
                         return;
                     }
                 } catch (e) {

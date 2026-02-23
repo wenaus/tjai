@@ -495,7 +495,14 @@
             const btn = document.getElementById('btn-run');
             picksAgentRunning = agent.status === 'running';
             if (picksAgentRunning) {
-                el.textContent = 'Running...';
+                let runText = 'Running...';
+                if (agent.launched) {
+                    const elapsed = Math.floor(Date.now() / 1000 - agent.launched);
+                    const m = Math.floor(elapsed / 60);
+                    const s = elapsed % 60;
+                    runText = m > 0 ? `Running ${m}m ${s}s` : `Running ${s}s`;
+                }
+                el.textContent = runText;
                 btn.disabled = true;
                 btn.style.color = '#555';
                 btn.style.borderColor = '#444';
@@ -529,15 +536,37 @@
                     setTimeout(() => { btn.textContent = 'Run now'; btn.disabled = false; }, 3000);
                     return;
                 }
+                if (data.warning) {
+                    btn.textContent = data.warning;
+                    btn.style.color = '#ff9800';
+                    setTimeout(() => { btn.textContent = 'Run now'; btn.disabled = false; btn.style.color = '#64b5f6'; }, 5000);
+                    return;
+                }
                 btn.textContent = 'Queued';
-                setTimeout(fetchPicks, 5000);
+                startPolling();
             } catch (e) {
                 btn.textContent = 'Error';
                 setTimeout(() => { btn.textContent = 'Run now'; btn.disabled = false; }, 3000);
             }
         }
 
-        fetchPicks();
+        // Poll for status updates while agent is running
+        let pollTimer = null;
+        function startPolling() {
+            if (pollTimer) return;
+            pollTimer = setInterval(() => {
+                fetchPicks().then(() => {
+                    if (!picksAgentRunning && pollTimer) {
+                        clearInterval(pollTimer);
+                        pollTimer = null;
+                    }
+                });
+            }, 10000);
+        }
+
+        fetchPicks().then(() => {
+            if (picksAgentRunning) startPolling();
+        });
     </script>
 </body>
 </html>

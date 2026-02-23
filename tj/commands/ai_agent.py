@@ -82,8 +82,12 @@ def handle_ai_agent(args) -> None:
     # Find claude CLI
     claude_path = shutil.which('claude')
     if not claude_path:
-        print("Error: 'claude' CLI not found in PATH.", file=sys.stderr)
-        return
+        fallback = os.path.expanduser('~/.local/bin/claude')
+        if os.path.isfile(fallback) and os.access(fallback, os.X_OK):
+            claude_path = fallback
+        else:
+            print("Error: 'claude' CLI not found in PATH or ~/.local/bin", file=sys.stderr)
+            sys.exit(1)
 
     # Fetch AI guidance
     guidance_text = _fetch_guidance(context)

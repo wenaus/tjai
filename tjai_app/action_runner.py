@@ -224,9 +224,11 @@ def dispatch_ai(action, entry_id=None):
         ).first()
         if sp_entry:
             env['TJAI_SYSTEM_PROMPT'] = sp_entry.content
-    timeout_val = data.get('timeout')
-    if timeout_val:
-        env['TJAI_AGENT_TIMEOUT'] = str(timeout_val)
+        else:
+            logger.error("System prompt entry '%s' not found — agent will run without it",
+                         system_prompt_entry_id)
+    timeout_val = data.get('timeout', 7200)  # default 2 hours
+    env['TJAI_AGENT_TIMEOUT'] = str(timeout_val)
 
     # Clear ephemeral keys from action data
     ephemeral_changed = False

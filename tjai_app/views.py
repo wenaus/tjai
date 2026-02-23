@@ -1,8 +1,12 @@
 import json
+import logging
 import os
+import signal
 import time
 import uuid
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
@@ -17,6 +21,25 @@ from django.db.models.functions import Lower
 from django.http import Http404
 from django.conf import settings as django_settings
 from .models import AppLog, Context, Entry, RssItem, Tag, TagStats, SubNote, Machine, SysConfig
+
+
+def _wake_action_agent():
+    """Send SIGHUP to action agent daemon. Returns (ok, message)."""
+    pid_val = SysConfig.objects.filter(
+        key='action_agent_pid'
+    ).values_list('value', flat=True).first()
+    if not pid_val:
+        logger.error("_wake_action_agent: no action_agent_pid in sysconfig")
+        return False, "Action agent PID not found — agent may be down"
+    try:
+        os.kill(int(pid_val), signal.SIGHUP)
+        return True, None
+    except ProcessLookupError:
+        logger.error("_wake_action_agent: PID %s not found — agent is dead", pid_val)
+        return False, f"Action agent (PID {pid_val}) is dead — restart it"
+    except ValueError:
+        logger.error("_wake_action_agent: invalid PID value %r", pid_val)
+        return False, f"Invalid action agent PID: {pid_val}"
 
 
 def api_health(request):
@@ -1739,6 +1762,7 @@ def api_research_run(request):
 
     entry_id = body.get('entry_id')
     if not entry_id:
+        logger.error("api_research_run: no entry_id in request body")
         return JsonResponse({'error': 'entry_id required'}, status=400)
 
     # Find research-agent action entry
@@ -1747,6 +1771,7 @@ def api_research_run(request):
         data__entry_id='research-agent',
     ).first()
     if not research_action:
+        logger.error("api_research_run: research-agent action entry not found in DB")
         return JsonResponse({'error': 'research-agent action not found'}, status=404)
 
     # Check if already running
@@ -1754,26 +1779,41 @@ def api_research_run(request):
         key='agent_research-agent_status'
     ).values_list('value', flat=True).first()
     if status == 'running':
+        logger.warning("api_research_run: research agent already running, rejecting")
         return JsonResponse({'error': 'Research agent already running'}, status=409)
 
     data = research_action.data or {}
 
     if entry_id != 'all':
-        # Specific item: look up the entry and store target info
-        target = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
+        # Specific item: look up by data.entry_id (human-readable identifier)
+        target = Entry.objects.filter(
+            data__entry_id=entry_id, deleted_at__isnull=True
+        ).first()
         if not target:
-            return JsonResponse({'error': 'Research entry not found'}, status=404)
+            logger.error("api_research_run: no entry with data.entry_id=%r", entry_id)
+            return JsonResponse({'error': f'Research entry not found: {entry_id}'}, status=404)
         data['next_target'] = (
-            f"SPECIFIC TARGET:\nEntry UUID: {entry_id}\n"
+            f"SPECIFIC TARGET:\nEntry UUID: {target.id}\n"
             f"Topic: {target.content}"
         )
-        data['next_target_entry'] = entry_id
+        data['next_target_entry'] = str(target.id)
     else:
-        # Submit All: instruct agent to pick the highest-priority pending item
+        # Submit All: find the first pending item and use SPECIFIC TARGET
+        research_ids = Tag.objects.filter(
+            tag_name='research'
+        ).values_list('entry_id', flat=True)
+        first_item = Entry.objects.filter(
+            id__in=research_ids,
+            kind='memory',
+            deleted_at__isnull=True,
+        ).exclude(status='done').order_by('priority', 'timestamp_created').first()
+        if not first_item:
+            return JsonResponse({'error': 'No pending research items'}, status=400)
         data['next_target'] = (
-            "QUEUE MODE: Pick the highest-priority pending research "
-            "item (lowest priority number, or oldest if equal)."
+            f"SPECIFIC TARGET:\nEntry UUID: {first_item.id}\n"
+            f"Topic: {first_item.content}"
         )
+        data['next_target_entry'] = str(first_item.id)
 
     # Clear last_run so get_due_actions sees it as overdue
     data['last_run'] = 0
@@ -1782,16 +1822,11 @@ def api_research_run(request):
     research_action.save(update_fields=['data', 'timestamp_modified'])
 
     # Wake the action agent via SIGHUP
-    pid_val = SysConfig.objects.filter(
-        key='action_agent_pid'
-    ).values_list('value', flat=True).first()
-    if pid_val:
-        import signal
-        try:
-            os.kill(int(pid_val), signal.SIGHUP)
-        except (ProcessLookupError, ValueError):
-            pass
+    wake_ok, wake_msg = _wake_action_agent()
+    if not wake_ok:
+        return JsonResponse({'ok': True, 'warning': wake_msg})
 
+    logger.info("api_research_run: triggered for %s, action agent woken", entry_id)
     return JsonResponse({'ok': True, 'entry_id': entry_id})
 
 
@@ -1879,6 +1914,11 @@ def api_picks_data(request):
         key='agent_picks-agent_status'
     ).values_list('value', flat=True).first()
     agent_info['status'] = agent_status or 'idle'
+    agent_launched = SysConfig.objects.filter(
+        key='agent_picks-agent_launched'
+    ).values_list('value', flat=True).first()
+    if agent_launched:
+        agent_info['launched'] = float(agent_launched)
 
     return JsonResponse({'runs': sorted_runs, 'agent': agent_info})
 
@@ -1970,6 +2010,7 @@ def api_picks_run(request):
         data__entry_id='picks-agent',
     ).first()
     if not picks_action:
+        logger.error("api_picks_run: picks-agent action entry not found")
         return JsonResponse({'error': 'picks-agent action not found'}, status=404)
 
     # Check if already running
@@ -1977,6 +2018,7 @@ def api_picks_run(request):
         key='agent_picks-agent_status'
     ).values_list('value', flat=True).first()
     if status == 'running':
+        logger.warning("api_picks_run: picks agent already running, rejecting")
         return JsonResponse({'error': 'Picks agent already running'}, status=409)
 
     # Clear last_run so get_due_actions sees it as overdue
@@ -1987,16 +2029,11 @@ def api_picks_run(request):
     picks_action.save(update_fields=['data', 'timestamp_modified'])
 
     # Wake the action agent via SIGHUP
-    pid_val = SysConfig.objects.filter(
-        key='action_agent_pid'
-    ).values_list('value', flat=True).first()
-    if pid_val:
-        import signal
-        try:
-            os.kill(int(pid_val), signal.SIGHUP)
-        except (ProcessLookupError, ValueError):
-            pass
+    wake_ok, wake_msg = _wake_action_agent()
+    if not wake_ok:
+        return JsonResponse({'ok': True, 'warning': wake_msg})
 
+    logger.info("api_picks_run: triggered, action agent woken")
     return JsonResponse({'ok': True})
 
 
