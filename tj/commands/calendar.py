@@ -171,6 +171,7 @@ def handle_calendar_view(args) -> None:
 
         # Filter by event_date within timeframe and group by date (skip annual, handled below)
         entries_by_date = {}
+        today_str = (datetime.now(tz) if tz else datetime.now()).strftime('%Y%m%d')
         for entry in all_calendar:
             if entry.mmdd is not None:
                 continue  # Annual entries injected separately
@@ -183,6 +184,11 @@ def handle_calendar_view(args) -> None:
                     else:
                         event_dt = datetime.fromtimestamp(event_ts)
                     date_key = event_dt.strftime('%Y%m%d')
+
+                    # Daily synopsis only shows for today (matches dashboard)
+                    eid = entry.data.get('entry_id', '')
+                    if eid.startswith('daily-') and date_key != today_str:
+                        continue
 
                     if date_key not in entries_by_date:
                         entries_by_date[date_key] = []
@@ -376,12 +382,21 @@ def handle_calendar_view(args) -> None:
 
             # Print entries
             for event_ts, event_dt, entry in entries:
-                # Truncate content if needed (by lines, before colorizing)
-                # First line always shown + truncate_len additional lines
-                content = entry.content
-                lines = content.split('\n')
-                if len(lines) > (truncate_len + 1):
-                    content = '\n'.join(lines[:truncate_len + 1]) + " [...]"
+                # Daily briefings: single clickable line linking to synopsis
+                entry_id = entry.data.get('entry_id', '') if entry.data else ''
+                if entry_id.startswith('daily-'):
+                    from tj.server import DEFAULT_SERVER
+                    from tj.colors import BRIGHT_CYAN_BLUE, RESET
+                    title = entry.content.split('\n')[0]
+                    url = f"{DEFAULT_SERVER}/synopsis/?date={entry_id}"
+                    content = f"{BRIGHT_CYAN_BLUE}\x1B]8;;{url}\x1B\\{title}\x1B]8;;\x1B\\{RESET}"
+                else:
+                    # Truncate content if needed (by lines, before colorizing)
+                    # First line always shown + truncate_len additional lines
+                    content = entry.content
+                    lines = content.split('\n')
+                    if len(lines) > (truncate_len + 1):
+                        content = '\n'.join(lines[:truncate_len + 1]) + " [...]"
 
                 # Check if this is a clock entry for special coloring
                 clock_type = entry.data.get('clock') if entry.data else None
@@ -412,6 +427,9 @@ def handle_calendar_view(args) -> None:
                         display_text = f"{clock_color}{title}{RESET}\n{desc_text}"
                     else:
                         display_text = f"{clock_color}{title}{RESET}"
+                elif entry_id.startswith('daily-'):
+                    # Already formatted as hyperlink above, no further colorization
+                    display_text = content
                 elif entry.data and entry.data.get('annual'):
                     from tj.colors import LIGHT_PINK_PURPLE, RESET
                     display_text = f"{LIGHT_PINK_PURPLE}{content}{RESET}"

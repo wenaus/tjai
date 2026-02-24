@@ -217,8 +217,8 @@ def _merge_batch(cursor, response) -> int:
             if local["is_dirty"] == 1:
                 # Local has pending changes, skip server version
                 continue
-            if local["timestamp_modified"] >= entry["timestamp_modified"]:
-                # Local is same or newer, skip
+            if local["timestamp_modified"] > entry["timestamp_modified"]:
+                # Local is newer, skip
                 continue
 
         # Upsert server version
