@@ -669,7 +669,14 @@
                 time_display: null, week_num: 0, week_start_key: '0',
                 context: null, data: {_placeholder: true}
             });
-            entries.sort((a, b) => a.event_date - b.event_date);
+            // Re-sort: within same day, all-day items first, then by time
+            entries.sort((a, b) => {
+                if (a.date_key !== b.date_key) return a.date_key < b.date_key ? -1 : 1;
+                const aAllday = a.time_display ? 1 : 0;
+                const bAllday = b.time_display ? 1 : 0;
+                if (aAllday !== bAllday) return aAllday - bAllday;
+                return a.event_date - b.event_date;
+            });
         }
 
         let html = '';
@@ -687,11 +694,9 @@
             if (entry.date_key !== lastDay) {
                 lastDay = entry.date_key;
                 const isToday = entry.date_key === todayKey;
-                if (isToday && !todayAnchor) {
-                    html += `<div id="today-anchor"></div>`;
-                    todayAnchor = true;
-                }
-                html += `<div class="day-header${isToday ? ' day-today' : ''}">${escapeHtml(entry.date_display)}</div>`;
+                const todayId = (isToday && !todayAnchor) ? ' id="today-anchor"' : '';
+                if (isToday) todayAnchor = true;
+                html += `<div${todayId} class="day-header${isToday ? ' day-today' : ''}">${escapeHtml(entry.date_display)}</div>`;
             }
 
             if (entry.data?._placeholder) continue;
@@ -723,10 +728,15 @@
 
         panel.innerHTML = html || '<div class="loading">No events</div>';
 
-        // Scroll to today
+        // Scroll to today — anchor is on the day header; offset for sticky tabs + week header
         requestAnimationFrame(() => {
             const anchor = document.getElementById('today-anchor');
-            if (anchor) anchor.scrollIntoView({block: 'start'});
+            if (anchor) {
+                const tabs = document.querySelector('.tabs');
+                const tabsH = tabs ? tabs.offsetHeight : 0;
+                const y = anchor.getBoundingClientRect().top + window.scrollY - tabsH - 30;
+                window.scrollTo(0, Math.max(0, y));
+            }
         });
     }
 

@@ -354,8 +354,14 @@
                     context: null,
                     data: { _placeholder: true }
                 });
-                // Re-sort by event_date
-                entries.sort((a, b) => a.event_date - b.event_date);
+                // Re-sort: within same day, all-day items first, then by time
+                entries.sort((a, b) => {
+                    if (a.date_key !== b.date_key) return a.date_key < b.date_key ? -1 : 1;
+                    const aAllday = a.time_display ? 1 : 0;
+                    const bAllday = b.time_display ? 1 : 0;
+                    if (aAllday !== bAllday) return aAllday - bAllday;
+                    return a.event_date - b.event_date;
+                });
             }
 
             // Find next upcoming event (future, not clock entries)
@@ -363,6 +369,7 @@
             for (const entry of entries) {
                 if (entry.data?.clock) continue;
                 if (entry.data?._placeholder) continue;
+                if (entry.data?.entry_id?.startsWith('daily-')) continue;
                 if (entry.event_date > now) {
                     nextUpcomingTs = entry.event_date;
                     break;
@@ -409,7 +416,9 @@
 
                 // Countdown for next upcoming event (only if it's today)
                 let countdownStr = '';
-                if (entry.event_date === nextUpcomingTs && isToday) {
+                const calEid = entry.data && entry.data.entry_id;
+                const isDailyEntry = calEid?.startsWith('daily-');
+                if (entry.event_date === nextUpcomingTs && isToday && !isDailyEntry) {
                     const diffSec = entry.event_date - now;
                     const hours = Math.floor(diffSec / 3600);
                     const minutes = Math.floor((diffSec % 3600) / 60);
@@ -435,7 +444,6 @@
                     const firstLine = entry.content.split('\n')[0];
                     contentHtml = `<span class="${contentClass}">${linkifyContent(escapeHtml(firstLine))}</span>`;
                 }
-                const calEid = entry.data && entry.data.entry_id;
                 const calEntryUrl = calEid && calEid.startsWith('daily-') ? `/tjai/synopsis/?date=${encodeURIComponent(calEid)}` : calEid ? `/tjai/entry/?entry_id=${encodeURIComponent(calEid)}` : `/tjai/entry/?uuid=${entry.id}`;
                 html += `<div class="entry"><a href="${calEntryUrl}" style="color:inherit;text-decoration:none">${timeStr}${countdownStr}${contentHtml}</a></div>`;
             }

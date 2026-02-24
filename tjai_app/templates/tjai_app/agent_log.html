@@ -87,13 +87,14 @@
         </select>
         <label>Limit:</label>
         <select id="limit-select">
-            <option value="50">50</option>
-            <option value="200" selected>200</option>
+            <option value="200">200</option>
             <option value="500">500</option>
+            <option value="1000" selected>1000</option>
         </select>
         <button onclick="fetchLog()">Refresh</button>
         <span id="ref-filter"></span>
         <span id="log-count"></span>
+        <span id="refresh-ago" style="color:#666;margin-left:auto;font-size:11px;white-space:nowrap"></span>
     </div>
     <div id="log-container">Loading...</div>
 
@@ -146,9 +147,18 @@
             return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
 
+        let lastRefresh = 0;
+        const _fetchLogOrig = fetchLog;
+        fetchLog = async function() { await _fetchLogOrig(); lastRefresh = Date.now(); };
         document.getElementById('level-filter').addEventListener('change', fetchLog);
         document.getElementById('limit-select').addEventListener('change', fetchLog);
         fetchLog();
+        setInterval(fetchLog, 60000);
+        setInterval(() => {
+            if (!lastRefresh) return;
+            const s = Math.floor((Date.now() - lastRefresh) / 1000);
+            document.getElementById('refresh-ago').textContent = s + 's ago';
+        }, 1000);
     </script>
 </body>
 </html>

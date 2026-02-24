@@ -262,6 +262,37 @@ def _scan_agent_processes():
     return pids
 
 
+def _check_daily_rerun():
+    """Run daily-history action for a specific date if requested via sysconfig."""
+    from tjai_app.models import SysConfig
+    from datetime import datetime
+
+    req = SysConfig.objects.filter(key='daily_history_rerun_date').first()
+    if not req or not req.value:
+        return
+    date_str = req.value
+    req.value = ''
+    req.timestamp_modified = time.time()
+    req.save(update_fields=['value', 'timestamp_modified'])
+
+    try:
+        target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        logger.error("Invalid rerun date: %s", date_str)
+        return
+
+    action = Entry.objects.filter(
+        data__entry_id='daily-history', kind='action',
+        deleted_at__isnull=True,
+    ).first()
+    if not action:
+        logger.error("daily-history action not found for rerun")
+        return
+
+    logger.info("Rerunning daily-history for %s (requested)", date_str)
+    execute_action(action, target_date=target_date)
+
+
 def _check_health_refresh():
     """Run system health collection if requested via sysconfig flag."""
     from tjai_app.models import SysConfig
@@ -329,6 +360,7 @@ def main():
     while not shutdown_requested:
         try:
             _check_health_refresh()
+            _check_daily_rerun()
 
             due = get_due_actions(trigger_filter=args.trigger)
             for action in due:

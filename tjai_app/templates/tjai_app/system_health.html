@@ -297,6 +297,14 @@
                 if (kindStr) html += metric('By Kind', kindStr);
                 html += '</div>';
 
+                function fmtMin(m) {
+                    if (m < 1) return Math.round(m * 60) + 's';
+                    m = Math.round(m);
+                    if (m < 60) return m + 'm';
+                    const h = Math.floor(m / 60), r = m % 60;
+                    return r ? h + 'h ' + r + 'm' : h + 'h';
+                }
+
                 // Agents
                 if (tj.agents && tj.agents.length > 0) {
                     html += '<div style="margin-top:12px;margin-bottom:4px;color:#8a8a8a;font-size:12px">Agents</div>';
@@ -308,18 +316,18 @@
                         if (ag.pid) {
                             detail = `PID ${ag.pid}`;
                             if (ag.heartbeat_min !== undefined && ag.heartbeat_min !== null) {
-                                detail += `, heartbeat ${ag.heartbeat_min}m ago`;
+                                detail += `, heartbeat ${fmtMin(ag.heartbeat_min)} ago`;
                             }
                         } else if (ag.running_min !== undefined) {
-                            detail = `running ${ag.running_min}m`;
+                            detail = `running ${fmtMin(ag.running_min)}`;
                             if (ag.health) detail += `, health: ${ag.health}`;
-                            if (ag.last_activity_min !== undefined) detail += `, activity ${ag.last_activity_min}m ago`;
+                            if (ag.last_activity_min !== undefined) detail += `, activity ${fmtMin(ag.last_activity_min)} ago`;
                         } else if (ag.completed_min !== undefined) {
-                            detail = `last run ${Math.round(ag.completed_min)}m ago`;
+                            detail = `last run ${fmtMin(ag.completed_min)} ago`;
                         }
                         html += `<div class="process-row" style="max-width:600px"><span class="process-name"><span style="color:${dotColor}">&#9679;</span> ${ag.name}</span><span class="${statusCls}">${ag.status} <span style="color:#666;font-weight:normal">${detail}</span></span></div>`;
                         if (ag.last_error) {
-                            const errAge = ag.last_error_min !== undefined ? ` (${Math.round(ag.last_error_min)}m ago)` : '';
+                            const errAge = ag.last_error_min !== undefined ? ` (${fmtMin(ag.last_error_min)} ago)` : '';
                             html += `<div class="process-row" style="max-width:600px;background:rgba(239,83,80,0.08)"><span style="color:#ef5350;font-size:11px">Error${errAge}: ${ag.last_error}</span></div>`;
                         }
                     }
@@ -329,16 +337,16 @@
                 if (tj.actions && tj.actions.length > 0) {
                     html += '<table style="margin-top:12px"><tr><th>Action</th><th>Trigger</th><th style="text-align:right">Interval</th><th style="text-align:right">Last Run</th><th style="text-align:right">Agent</th></tr>';
                     for (const a of tj.actions) {
-                        const lr = a.last_run_min !== null ? Math.round(a.last_run_min) + 'm ago' : 'never';
+                        const lr = a.last_run_min !== null ? fmtMin(a.last_run_min) + ' ago' : 'never';
                         const link = a.id ? `<a href="/tjai/entry/?uuid=${a.id}" style="color:#64b5f6">${a.content}</a>` : a.content;
                         let agentCol = '';
                         if (a.agent_status === 'running') {
-                            const dur = a.agent_launched_min != null ? Math.round(a.agent_launched_min) + 'm' : '';
+                            const dur = a.agent_launched_min != null ? fmtMin(a.agent_launched_min) : '';
                             const logLink = a.agent_tracking ? `<a href="/tjai/entry/?uuid=${a.agent_tracking}" style="color:#64b5f6">log</a>` : '';
                             agentCol = `<span style="color:#ffd54f">running ${dur}</span> ${logLink}`;
                         } else if (a.agent_status === 'completed') {
-                            const ago = a.agent_completed_min != null ? Math.round(a.agent_completed_min) + 'm ago' : '';
-                            const dur = a.agent_duration_min != null ? '(' + a.agent_duration_min.toFixed(1) + 'm)' : '';
+                            const ago = a.agent_completed_min != null ? fmtMin(a.agent_completed_min) + ' ago' : '';
+                            const dur = a.agent_duration_min != null ? 'duration ' + fmtMin(a.agent_duration_min) : '';
                             const logLink = a.agent_tracking ? `<a href="/tjai/entry/?uuid=${a.agent_tracking}" style="color:#64b5f6">log</a>` : '';
                             agentCol = `<span style="color:#9ccc65">done ${ago} ${dur}</span> ${logLink}`;
                         } else if (a.agent_status === 'failed') {

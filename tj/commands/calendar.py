@@ -297,14 +297,17 @@ def handle_calendar_view(args) -> None:
         for date_key in sorted_dates:
             entries = entries_by_date[date_key]
             # Sort entries by time first
-            entries.sort(key=lambda x: x[0])
+            entries.sort(key=lambda x: (0 if (x[1].hour == 0 and x[1].minute == 0) or (x[2].data or {}).get('entry_id', '').startswith('daily-') else 1, x[0]))
             event_date = entries[0][1].date() if entries else None
             if event_date == today:
                 # Find earliest future event today, or event in progress
-                # Skip clock entries for NOW/countdown logic
+                # Skip clock entries and daily synopsis for NOW/countdown logic
                 for event_ts, event_dt, entry in entries:
                     if entry.data and entry.data.get('clock'):
                         continue  # Skip clock entries
+                    eid = entry.data.get('entry_id', '') if entry.data else ''
+                    if eid.startswith('daily-'):
+                        continue  # Skip daily synopsis
                     if event_dt.hour != 0 or event_dt.minute != 0:  # Not all-day
                         time_diff = event_dt - now_dt
                         seconds = time_diff.total_seconds()
@@ -319,7 +322,7 @@ def handle_calendar_view(args) -> None:
         all_entry_ids = []
         for date_key in sorted_dates:
             entries = entries_by_date[date_key]
-            entries.sort(key=lambda x: x[0])
+            entries.sort(key=lambda x: (0 if (x[1].hour == 0 and x[1].minute == 0) or (x[2].data or {}).get('entry_id', '').startswith('daily-') else 1, x[0]))
             for event_ts, event_dt, entry in entries:
                 all_entry_ids.append(entry.id)
 
@@ -335,7 +338,7 @@ def handle_calendar_view(args) -> None:
         for date_key in sorted_dates:
             entries = entries_by_date[date_key]
             # Sort entries within day by time
-            entries.sort(key=lambda x: x[0])
+            entries.sort(key=lambda x: (0 if (x[1].hour == 0 and x[1].minute == 0) or (x[2].data or {}).get('entry_id', '').startswith('daily-') else 1, x[0]))
 
             # Get date from entry or from date_key if no entries
             if entries:
@@ -459,8 +462,9 @@ def handle_calendar_view(args) -> None:
                 # Handle multi-line content
                 lines = display_text.split('\n')
 
-                # Show time if not midnight
-                if event_dt.hour != 0 or event_dt.minute != 0:
+                # Show time if not all-day (midnight or daily- entries)
+                is_allday = entry_id.startswith('daily-') or (event_dt.hour == 0 and event_dt.minute == 0)
+                if not is_allday:
                     time_str = colorize_timestamp(event_dt.strftime('%H:%M'))
 
                     # Add grey entry number after indent, 1 space before time

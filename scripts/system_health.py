@@ -481,10 +481,12 @@ def collect_tjai():
             if completed:
                 action_info['agent_completed_min'] = round(
                     (now - float(completed)) / 60, 1)
-            if launched and completed:
+            last_activity = agent_sysconfig.get(f'agent_{action_id}_last_activity')
+            if launched and (last_activity or completed):
                 try:
+                    end = float(last_activity) if last_activity else float(completed)
                     action_info['agent_duration_min'] = round(
-                        (float(completed) - float(launched)) / 60, 1)
+                        (end - float(launched)) / 60, 1)
                 except (ValueError, TypeError):
                     pass
             if tracking:

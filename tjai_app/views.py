@@ -570,7 +570,8 @@ def dashboard_calendar(request):
             if entry_id.startswith('daily-') and date_key != today_date_str:
                 continue
             date_display = event_dt.strftime('%a %b %-d')
-            time_display = event_dt.strftime('%H:%M') if (event_dt.hour or event_dt.minute) else None
+            is_allday = entry_id.startswith('daily-') or not (event_dt.hour or event_dt.minute)
+            time_display = None if is_allday else event_dt.strftime('%H:%M')
             week_num = event_dt.isocalendar()[1]
             week_start = event_dt - timedelta(days=event_dt.weekday())
             week_start_key = week_start.strftime('%Y%m%d')
@@ -625,7 +626,7 @@ def dashboard_calendar(request):
             'data': {'annual': True},
         })
 
-    result.sort(key=lambda r: r['event_date'])
+    result.sort(key=lambda r: (r['date_key'], 0 if r['time_display'] is None else 1, r['event_date']))
 
     return JsonResponse({
         'entries': result,
@@ -1040,6 +1041,34 @@ def daily_synopsis_content(request):
     )
 
     return JsonResponse({'content_html': content_html, 'entry_id': entry_id})
+
+
+@login_required
+def daily_synopsis_rerun(request):
+    """Request re-run of daily-history action via the action agent."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    entry_id = request.POST.get('entry_id', '')
+    if not entry_id.startswith('daily-'):
+        return JsonResponse({'error': 'Invalid entry_id'}, status=400)
+
+    date_str = entry_id.replace('daily-', '')
+    from datetime import datetime as dt
+    try:
+        dt.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return JsonResponse({'error': f'Cannot parse date from {entry_id}'}, status=400)
+
+    now = time.time()
+    SysConfig.objects.update_or_create(
+        key='daily_history_rerun_date',
+        defaults={'value': date_str, 'timestamp_modified': now})
+    SysConfig.objects.update_or_create(
+        key='action_agent_wake_requested',
+        defaults={'value': '1', 'timestamp_modified': now})
+
+    return JsonResponse({'success': True, 'date': date_str})
 
 
 @login_required
@@ -2231,6 +2260,15 @@ def api_picks_data(request):
     agent_info['last_error'] = picks_keys.get('agent_picks-agent_last_error')
     agent_info['last_error_time'] = picks_keys.get('agent_picks-agent_last_error_time')
 
+    # Override latest run duration with agent launched→last_activity
+    if sorted_runs and agent_info.get('last_activity') and agent_info.get('launched'):
+        try:
+            dur = round(float(agent_info['last_activity']) - float(agent_info['launched']))
+            if dur > 0:
+                sorted_runs[0]['duration_seconds'] = dur
+        except (ValueError, TypeError):
+            pass
+
     # Count total configured sources from picks-sources entry
     total_sources = 0
     sources_entry = Entry.objects.filter(
@@ -2435,14 +2473,73 @@ def system_health(request):
 
 
 @login_required
+def api_system_status(request):
+    """Return just the health status string — lightweight poll for menu color."""
+    status = SysConfig.objects.filter(
+        key='system_health_status'
+    ).values_list('value', flat=True).first()
+    return JsonResponse({'status': status or ''})
+
+
 def api_system_data(request):
-    """Return system health data from sysconfig as JSON."""
-    data = SysConfig.objects.filter(
+    """Return system health data from sysconfig as JSON.
+
+    Agent status fields are overlaid with live sysconfig values so the
+    Actions table reflects current state, not stale cached data.
+    """
+    raw = SysConfig.objects.filter(
         key='system_health_data'
     ).values_list('value', flat=True).first()
-    if data:
-        return JsonResponse(json.loads(data))
-    return JsonResponse({'error': 'No health data collected yet'}, status=404)
+    if not raw:
+        return JsonResponse({'error': 'No health data collected yet'}, status=404)
+
+    data = json.loads(raw)
+
+    # Overlay live agent status onto cached actions
+    actions = (data.get('tjai') or {}).get('actions', [])
+    if actions:
+        agent_keys = {sc.key: sc.value
+                      for sc in SysConfig.objects.filter(key__startswith='agent_')}
+        now = time.time()
+        for a in actions:
+            aid = a.get('id')
+            if not aid:
+                continue
+            # Find action_id from cached data or look it up
+            action_id = a.get('agent_tracking') and None  # need the entry_id
+            # Re-derive action_id: it's stored in the action entry's data.entry_id
+            # which is already in the cached action as the sysconfig key prefix
+            # Try to match by checking if agent_{x}_status exists
+            entry = Entry.objects.filter(
+                id=aid, deleted_at__isnull=True
+            ).values_list('data', flat=True).first()
+            if not entry:
+                continue
+            action_id = (entry or {}).get('entry_id')
+            if not action_id:
+                continue
+            status = agent_keys.get(f'agent_{action_id}_status')
+            launched = agent_keys.get(f'agent_{action_id}_launched')
+            completed = agent_keys.get(f'agent_{action_id}_completed')
+            last_activity = agent_keys.get(f'agent_{action_id}_last_activity')
+            tracking = agent_keys.get(f'agent_{action_id}_tracking')
+
+            a['agent_status'] = status
+            if tracking:
+                a['agent_tracking'] = tracking
+            if launched:
+                a['agent_launched_min'] = round((now - float(launched)) / 60, 1)
+            if completed:
+                a['agent_completed_min'] = round((now - float(completed)) / 60, 1)
+            if launched and (last_activity or completed):
+                try:
+                    end = float(last_activity) if last_activity else float(completed)
+                    a['agent_duration_min'] = round(
+                        (end - float(launched)) / 60, 1)
+                except (ValueError, TypeError):
+                    pass
+
+    return JsonResponse(data)
 
 
 @login_required

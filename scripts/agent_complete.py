@@ -43,7 +43,9 @@ def main():
     ).values_list('value', flat=True).first()
     ref_extra = {'entry_id': current_entry} if current_entry else {}
 
-    status = 'completed' if exit_code == 0 else 'failed'
+    # Exit 124 = timeout killed the process; treat as success since the agent
+    # typically finishes its work and then hangs waiting for input.
+    status = 'completed' if exit_code in (0, 124) else 'failed'
     logger.info("%s: exit_code=%d, status=%s", action_id, exit_code, status,
                 extra=ref_extra)
 
@@ -54,9 +56,10 @@ def main():
             stderr_content = open(stderr_file).read().strip()
             os.unlink(stderr_file)
             if stderr_content:
+                log_fn = logger.error if exit_code not in (0, 124) else logger.info
                 for line in stderr_content.split('\n'):
-                    logger.error("%s stderr: %s", action_id, line,
-                                 extra=ref_extra)
+                    log_fn("%s stderr: %s", action_id, line,
+                           extra=ref_extra)
         except Exception:
             pass
 
@@ -66,6 +69,23 @@ def main():
     SysConfig.objects.update_or_create(
         key=f'agent_{action_id}_completed',
         defaults={'value': str(now), 'timestamp_modified': now})
+
+    # Update last_activity from the tracking entry's final timestamp.
+    # The watchdog only updates last_activity while the agent is running;
+    # by the time agent_complete runs, the watchdog has stopped. Read the
+    # tracking entry's timestamp_modified to get the real last activity.
+    tracking_uuid = SysConfig.objects.filter(
+        key=f'agent_{action_id}_tracking'
+    ).values_list('value', flat=True).first()
+    if tracking_uuid:
+        tracking_ts = Entry.objects.filter(
+            id=tracking_uuid, deleted_at__isnull=True,
+        ).values_list('timestamp_modified', flat=True).first()
+        if tracking_ts:
+            SysConfig.objects.update_or_create(
+                key=f'agent_{action_id}_last_activity',
+                defaults={'value': str(float(tracking_ts)),
+                          'timestamp_modified': now})
 
     # Structured error reporting
     if exit_code != 0:

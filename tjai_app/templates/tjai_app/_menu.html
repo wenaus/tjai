@@ -9,5 +9,19 @@
     {% if current_page == "research" %}<span style="color:#e0e0e0">Research</span>{% else %}<a href="{% url 'research' %}">Research</a>{% endif %}
     {% if current_page == "archive" %}<span style="color:#e0e0e0">Archive</span>{% else %}<a href="{% url 'dashboard' %}?status=archive">Archive</a>{% endif %}
     {% if current_page == "agent_log" %}<span style="color:#e0e0e0">Agent Log</span>{% else %}<a href="{% url 'agent_log' %}">Agent Log</a>{% endif %}
-    {% if current_page == "system" %}<span style="color:{{ health_color }}">System</span>{% else %}<a href="{% url 'system_health' %}" style="color:{{ health_color }}">System</a>{% endif %}
+    {% if current_page == "system" %}<span id="menu-system" style="color:{{ health_color }}">System</span>{% else %}<a id="menu-system" href="{% url 'system_health' %}" style="color:{{ health_color }}">System</a>{% endif %}
 </div>
+<script>
+(function(){
+    const colors = {green:'#9ccc65', yellow:'#ffd54f', red:'#ef5350'};
+    setInterval(async () => {
+        try {
+            const r = await fetch('/tjai/api/system/status');
+            if (!r.ok) return;
+            const d = await r.json();
+            const el = document.getElementById('menu-system');
+            if (el && d.status) el.style.color = colors[d.status] || '#8a8a8a';
+        } catch(e) {}
+    }, 60000);
+})();
+</script>

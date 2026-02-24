@@ -165,6 +165,21 @@
         a.entry-link:hover {
             color: #e0e0e0;
         }
+        .btn-rerun {
+            display: inline-block;
+            background: #333;
+            color: #e0e0e0;
+            border: 1px solid #555;
+            padding: 2px 10px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 11px;
+            margin-left: 12px;
+            vertical-align: middle;
+        }
+        .btn-rerun:hover { background: #444; }
+        .btn-rerun:disabled { opacity: 0.5; cursor: default; }
         /* Dark mode scrollbars */
         ::-webkit-scrollbar {
             width: 8px;
@@ -215,7 +230,12 @@
                 renderDateList();
                 if (allDates.length > 0) {
                     const params = new URLSearchParams(window.location.search);
-                    const target = params.get('date') || allDates[0].entry_id;
+                    let target = params.get('date');
+                    if (!target && todayKey) {
+                        const todayEntry = allDates.find(d => d.date_key === todayKey);
+                        target = todayEntry ? todayEntry.entry_id : allDates[0].entry_id;
+                    }
+                    target = target || allDates[0].entry_id;
                     const found = allDates.find(d => d.entry_id === target);
                     selectDate(found ? target : allDates[0].entry_id);
                 }
@@ -257,8 +277,66 @@
                 const entryLink = `<a class="entry-link" href="/tjai/entry/?entry_id=${encodeURIComponent(entryId)}">[edit]</a>`;
                 document.getElementById('synopsis-panel').innerHTML =
                     `<div class="synopsis-content">${data.content_html}</div>${entryLink}`;
+                // Inject Rerun pill button at end of first line (header)
+                const firstEl = document.querySelector('#synopsis-panel .synopsis-content > :first-child');
+                if (firstEl) {
+                    const btn = document.createElement('button');
+                    btn.className = 'btn-rerun';
+                    btn.textContent = 'Rerun';
+                    btn.onclick = () => rerunSynopsis(entryId, btn);
+                    firstEl.appendChild(btn);
+                }
             } catch (e) {
                 document.getElementById('synopsis-panel').innerHTML = '<div class="error">Error loading synopsis</div>';
+            }
+        }
+
+        async function rerunSynopsis(entryId, btn) {
+            btn.disabled = true;
+            btn.textContent = 'Requesting...';
+            try {
+                const resp = await fetch('/tjai/api/synopsis/rerun', {
+                    method: 'POST',
+                    headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: 'entry_id=' + encodeURIComponent(entryId),
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.error) {
+                    btn.textContent = 'Failed';
+                    alert('Rerun failed: ' + (data.error || 'Unknown error'));
+                    return;
+                }
+                btn.textContent = 'Running...';
+                // Poll for content update (agent runs async)
+                let attempts = 0;
+                const poll = setInterval(async () => {
+                    attempts++;
+                    if (attempts > 120) { clearInterval(poll); btn.textContent = 'Timeout'; return; }
+                    try {
+                        const cr = await fetch(`/tjai/api/synopsis/content?entry_id=${encodeURIComponent(entryId)}`);
+                        if (cr.ok) {
+                            const cd = await cr.json();
+                            // Check if content has grown beyond just the header
+                            if (cd.content_html && cd.content_html.length > 100) {
+                                clearInterval(poll);
+                                const entryLink = `<a class="entry-link" href="/tjai/entry/?entry_id=${encodeURIComponent(entryId)}">[edit]</a>`;
+                                document.getElementById('synopsis-panel').innerHTML =
+                                    `<div class="synopsis-content">${cd.content_html}</div>${entryLink}`;
+                                const firstEl = document.querySelector('#synopsis-panel .synopsis-content > :first-child');
+                                if (firstEl) {
+                                    const newBtn = document.createElement('button');
+                                    newBtn.className = 'btn-rerun';
+                                    newBtn.textContent = 'Rerun';
+                                    newBtn.onclick = () => rerunSynopsis(entryId, newBtn);
+                                    firstEl.appendChild(newBtn);
+                                }
+                            }
+                        }
+                    } catch(e) {}
+                }, 5000);
+            } catch (e) {
+                btn.textContent = 'Error';
+                alert('Rerun failed: ' + e.message);
             }
         }
 

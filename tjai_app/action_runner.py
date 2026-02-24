@@ -83,9 +83,9 @@ def get_template_vars(target_date):
     }
 
 
-def resolve_prompt_template(prompt_template, extra_vars=None):
+def resolve_prompt_template(prompt_template, extra_vars=None, target_date=None):
     """Resolve placeholders in the AI prompt, including guidance from tjai."""
-    template_vars = get_template_vars(get_target_date())
+    template_vars = get_template_vars(target_date or get_target_date())
 
     entry = Entry.objects.filter(
         data__entry_id='history-selection-guidance',
@@ -99,7 +99,7 @@ def resolve_prompt_template(prompt_template, extra_vars=None):
     return prompt_template.format(**template_vars)
 
 
-def run_mechanical(action):
+def run_mechanical(action, target_date=None):
     """Run the action's mechanical script, if any. Returns True on success."""
     data = action.data or {}
     script_cmd = data.get('mechanical_script')
@@ -109,6 +109,8 @@ def run_mechanical(action):
     parts = script_cmd.split()
     script_name = parts[0]
     script_args = parts[1:]
+    if target_date:
+        script_args.append(target_date.strftime('%Y-%m-%d'))
 
     script_path = SCRIPTS_DIR / script_name
     if not script_path.exists():
@@ -132,7 +134,7 @@ def run_mechanical(action):
     return True
 
 
-def create_journal_entry(action):
+def create_journal_entry(action, target_date=None):
     """Find or create the journal entry specified in the action's data.
 
     Returns the entry_id string on success, None on failure, True if no journal config.
@@ -142,7 +144,7 @@ def create_journal_entry(action):
     if not journal:
         return True
 
-    template_vars = get_template_vars(get_target_date())
+    template_vars = get_template_vars(target_date or get_target_date())
     content = journal['content'].format(**template_vars)
     event_date = template_vars['yyyymmdd']
     tags = journal.get('tags')
@@ -170,7 +172,7 @@ def create_journal_entry(action):
     return entry_id
 
 
-def dispatch_ai(action, entry_id=None):
+def dispatch_ai(action, entry_id=None, target_date=None):
     """Dispatch the AI step via tj agent."""
     data = action.data or {}
     ai_prompt = data.get('ai_prompt')
@@ -180,7 +182,8 @@ def dispatch_ai(action, entry_id=None):
     extra_vars = {}
     if entry_id:
         extra_vars['entry_id'] = entry_id
-    prompt = resolve_prompt_template(ai_prompt, extra_vars=extra_vars)
+    prompt = resolve_prompt_template(ai_prompt, extra_vars=extra_vars,
+                                     target_date=target_date)
 
     # Prepend next_target info (ephemeral dispatch data from UI "Submit" button)
     next_target = data.get('next_target')
@@ -289,10 +292,11 @@ def update_last_run(action):
     action.save(update_fields=['data', 'timestamp_modified', 'is_dirty'])
 
 
-def execute_action(action):
+def execute_action(action, target_date=None):
     """Execute a single action's full pipeline: mechanical -> journal -> AI -> update.
 
     Returns True on success, False on failure.
+    target_date: optional date override (used by rerun). If None, uses get_target_date().
     """
     data = action.data or {}
     last_run = data.get('last_run')
@@ -307,18 +311,19 @@ def execute_action(action):
 
     action_id = data.get('entry_id')
 
-    if not run_mechanical(action):
+    if not run_mechanical(action, target_date=target_date):
         logger.error("Mechanical step failed, aborting")
         _write_agent_error(action_id, "Mechanical step failed")
         return False
 
-    entry_id = create_journal_entry(action)
+    entry_id = create_journal_entry(action, target_date=target_date)
     if entry_id is None:
         logger.error("Journal entry creation failed, aborting")
         _write_agent_error(action_id, "Journal entry creation failed")
         return False
 
-    if not dispatch_ai(action, entry_id=entry_id if isinstance(entry_id, str) else None):
+    if not dispatch_ai(action, entry_id=entry_id if isinstance(entry_id, str) else None,
+                       target_date=target_date):
         logger.error("AI dispatch failed")
         _write_agent_error(action_id, "AI dispatch failed")
         update_last_run(action)
