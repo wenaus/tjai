@@ -1535,6 +1535,70 @@ def api_add_journal(request):
 
 
 @csrf_exempt
+@require_http_methods(["POST"])
+def api_add_entry(request):
+    """Create a generic entry from an external source (Gmail addon).
+
+    Requires Bearer token matching SysConfig 'gmail_addon_api_key'.
+
+    Request body: {kind, content, tags, context, source}
+    """
+    auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+    if not auth_header.startswith('Bearer '):
+        return JsonResponse({"error": "Authorization required"}, status=401)
+    token = auth_header[7:]
+
+    try:
+        api_key = SysConfig.objects.get(key='gmail_addon_api_key').value
+    except SysConfig.DoesNotExist:
+        return JsonResponse({"error": "API key not configured"}, status=503)
+
+    if token != api_key:
+        return JsonResponse({"error": "Invalid API key"}, status=403)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    kind = data.get("kind", "memory").strip()
+    content = data.get("content", "").strip()
+    tags_str = data.get("tags", "").strip()
+    context_name = data.get("context", "").strip() or None
+    source = data.get("source", "gmail").strip()
+
+    if not content:
+        return JsonResponse({"error": "content is required"}, status=400)
+
+    context_obj = None
+    if context_name:
+        context_obj = Context.objects.filter(name=context_name).first()
+
+    now = time.time()
+    entry = Entry.objects.create(
+        id=str(uuid.uuid4()),
+        content=content,
+        kind=kind,
+        context=context_obj,
+        timestamp_created=now,
+        timestamp_modified=now,
+        is_dirty=1,
+    )
+    Tag.objects.create(tag_name=source, entry=entry)
+    if tags_str:
+        for tag in tags_str.split(','):
+            tag = tag.strip()
+            if tag:
+                Tag.objects.create(tag_name=tag, entry=entry)
+
+    return JsonResponse({
+        "status": "ok",
+        "entry_id": entry.id,
+        "content": content,
+    })
+
+
+@csrf_exempt
 @require_http_methods(["GET", "POST"])
 def api_dialog(request):
     """Record and retrieve Claude Code dialog turns.

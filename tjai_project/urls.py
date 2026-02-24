@@ -16,6 +16,7 @@ urlpatterns = [
     path("api/entry/<str:entry_id>", views.api_delete_entry, name="api_delete_entry"),
     path("api/add-journal", views.api_add_journal, name="api_add_journal"),
     path("api/add-bookmark", views.api_add_bookmark, name="api_add_bookmark"),
+    path("api/add-entry", views.api_add_entry, name="api_add_entry"),
     path("api/dialog", views.api_dialog, name="api_dialog"),
     path("api/bulk-import", views.api_bulk_import, name="api_bulk_import"),
     # Public landing

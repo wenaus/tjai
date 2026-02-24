@@ -4,9 +4,13 @@
  * Shows a card in the Gmail sidebar when viewing emails with .ics attachments
  * or meeting details in the email subject/body.
  * The user clicks "Add to tjai" to create a journal entry on etaverse.com.
+ *
+ * AI: After editing this file, give the user the Apps Script editor URL to paste it:
+ * https://script.google.com/home/projects/18IPT5WjVYnsecm_j9Sv8LSsgbYi9hDM49Pjxc48rWH9tGNLbaN4Fq4jO/edit
  */
 
 var TJAI_API_URL = 'https://etaverse.com/tjai/api/add-journal';
+var TJAI_ENTRY_URL = 'https://etaverse.com/tjai/api/add-entry';
 var DEFAULT_TIMEZONE = 'America/New_York';
 
 // Microsoft Windows timezone names → IANA. This is a finite, documented set
@@ -173,9 +177,14 @@ function extractMeetingTitle_(subject, body) {
     var title = subject.replace(/\[\[[^\]]*\]\]\s*/g, '');
     // Strip Re: Fwd: Fw: prefixes
     title = title.replace(/^(?:Re|Fwd|Fw)\s*:\s*/gi, '');
-    // Strip trailing date/time: ", Month DD..." or similar
+    // Strip trailing date/time: ", Month DD..." or " Month 24th at ..."
     var trailRegex = new RegExp(',\\s*(?:' + MONTH_PAT_ + ')\\s+\\d.*$', 'i');
-    title = title.replace(trailRegex, '');
+    var stripped = title.replace(trailRegex, '');
+    if (stripped === title) {
+      var trailRegex2 = new RegExp('\\s+(?:' + MONTH_PAT_ + ')\\s+\\d{1,2}(?:st|nd|rd|th)?\\s.*$', 'i');
+      stripped = title.replace(trailRegex2, '');
+    }
+    title = stripped;
     title = title.trim();
     if (title) return title;
   }
@@ -235,7 +244,7 @@ function parseDateTimeText_(text, fallbackYear) {
   var regex = new RegExp(
     '(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\\s*)?' +
     '(' + MONTH_PAT_ + ')' +                              // (1) month
-    '\\s+(\\d{1,2})' +                                     // (2) day
+    '\\s+(\\d{1,2})(?:st|nd|rd|th)?' +                       // (2) day + optional ordinal
     '(?:,?\\s*(\\d{4}))?' +                                // (3) optional year
     ',?\\s+(?:at\\s+)?' +                                  // separator
     '(\\d{1,2})(?::(\\d{2}))?\\s*' +                       // (4) hour (5) min
@@ -366,40 +375,45 @@ function onGmailMessage(e) {
       diag.push('parseICS returned 0 events');
     }
 
-    // --- Body-parse fallback: extract from subject + body ---
+    // --- Body-parse fallback: try current message, then original ---
     diag.push('Trying body parse');
-    var subject = message.getSubject();
-    var body = message.getPlainBody();
-    var msgYear = message.getDate().getFullYear();
-
-    var title = extractMeetingTitle_(subject, body);
-    if (!title) {
-      diag.push('No title found');
-      return [buildDiagCard_(diag)];
+    var tryMsgs = [message];
+    if (messages.length > 1 && messages[0].getId() !== message.getId()) {
+      tryMsgs.push(messages[0]);
     }
-    diag.push('Title: ' + title);
 
-    var dt = extractDateTime_(subject, body, msgYear);
-    if (!dt) {
-      diag.push('No datetime found');
-      return [buildDiagCard_(diag)];
+    for (var t = 0; t < tryMsgs.length; t++) {
+      var tryMsg = tryMsgs[t];
+      var subject = tryMsg.getSubject();
+      var body = tryMsg.getPlainBody();
+      var msgYear = tryMsg.getDate().getFullYear();
+
+      var title = extractMeetingTitle_(subject, body);
+      if (!title) { diag.push('msg[' + t + ']: no title'); continue; }
+
+      var dt = extractDateTime_(subject, body, msgYear);
+      if (!dt) { diag.push('msg[' + t + ']: no datetime'); continue; }
+
+      diag.push('msg[' + t + ']: ' + title + ' @ ' + dt.displayDate);
+      var zoomUrl = extractZoomUrl_(body) || extractZoomUrl_(subject);
+      var indicoUrl = extractIndicoUrl_(body) || extractIndicoUrl_(subject);
+
+      var ev = {
+        summary: title,
+        timestamp: dt.timestamp,
+        displayDate: dt.displayDate,
+        displayTime: dt.displayTime,
+        tzInfo: dt.tzInfo,
+        zoomUrl: zoomUrl,
+        indicoUrl: indicoUrl
+      };
+      return [buildEventCard_(ev, gmailUrl)];
     }
-    diag.push('DateTime: ' + dt.displayDate + ' ' + dt.displayTime);
 
-    var zoomUrl = extractZoomUrl_(body) || extractZoomUrl_(subject);
-    var indicoUrl = extractIndicoUrl_(body) || extractIndicoUrl_(subject);
-
-    var ev = {
-      summary: title,
-      timestamp: dt.timestamp,
-      displayDate: dt.displayDate,
-      displayTime: dt.displayTime,
-      tzInfo: dt.tzInfo,
-      zoomUrl: zoomUrl,
-      indicoUrl: indicoUrl
-    };
-
-    return [buildEventCard_(ev, gmailUrl)];
+    // No calendar event found — offer bookmark save
+    var subj = message.getSubject() || '';
+    var cleanTitle = subj.replace(/\[\[[^\]]*\]\]\s*/g, '').replace(/^(?:Re|Fwd|Fw)\s*:\s*/gi, '').trim();
+    return [buildBookmarkCard_(cleanTitle || subj, gmailUrl)];
   } catch (err) {
     diag.push('ERROR: ' + err.message);
     return [buildDiagCard_(diag)];
@@ -605,7 +619,7 @@ function pad_(n) {
 
 
 /**
- * Build a Card for one event.
+ * Build a Card for one event, with memory section at bottom.
  */
 function buildEventCard_(ev, gmailUrl) {
   var isBodyParse = !ev.location && !ev.description;
@@ -616,9 +630,10 @@ function buildEventCard_(ev, gmailUrl) {
   var section = CardService.newCardSection();
 
   section.addWidget(
-    CardService.newDecoratedText()
-      .setTopLabel('Event')
-      .setText(ev.summary)
+    CardService.newTextInput()
+      .setFieldName('title')
+      .setTitle('Event')
+      .setValue(ev.summary)
   );
 
   section.addWidget(
@@ -685,7 +700,95 @@ function buildEventCard_(ev, gmailUrl) {
   return CardService.newCardBuilder()
     .setHeader(header)
     .addSection(section)
+    .addSection(buildMemorySection_())
     .build();
+}
+
+
+/**
+ * Build a Card for saving an email as a bookmark (when no calendar event found).
+ */
+function buildBookmarkCard_(title, gmailUrl) {
+  var header = CardService.newCardHeader()
+    .setTitle('Save to tjai');
+
+  var section = CardService.newCardSection();
+
+  section.addWidget(
+    CardService.newTextInput()
+      .setFieldName('bm_title')
+      .setTitle('Title')
+      .setValue(title)
+  );
+
+  section.addWidget(
+    CardService.newTextInput()
+      .setFieldName('bm_tags')
+      .setTitle('Tags, context')
+      .setHint('e.g. :physics :meeting =epic')
+  );
+
+  var action = CardService.newAction()
+    .setFunctionName('addBookmark')
+    .setParameters({ gmail_url: gmailUrl || '' });
+
+  section.addWidget(
+    CardService.newTextButton()
+      .setText('Save bookmark')
+      .setOnClickAction(action)
+  );
+
+  return CardService.newCardBuilder()
+    .setHeader(header)
+    .addSection(section)
+    .addSection(buildMemorySection_())
+    .build();
+}
+
+
+/**
+ * Build the always-present memory section for the bottom of every card.
+ */
+function buildMemorySection_() {
+  var section = CardService.newCardSection()
+    .setHeader('Quick note');
+
+  section.addWidget(
+    CardService.newTextInput()
+      .setFieldName('mem_content')
+      .setTitle('Memory')
+      .setHint('note text :tag =context')
+      .setMultiline(true)
+  );
+
+  var action = CardService.newAction().setFunctionName('addMemory');
+  section.addWidget(
+    CardService.newTextButton()
+      .setText('Add memory')
+      .setOnClickAction(action)
+  );
+
+  return section;
+}
+
+
+/**
+ * Parse memory/tag input: extract :tags and =context from text.
+ * "some note :physics =epic" → {content: "some note", tags: ["physics"], context: "epic"}
+ */
+function parseTagsFromText_(text) {
+  var context = null;
+  var tags = [];
+
+  // Extract =context (take last one if multiple)
+  text = text.replace(/\s+=(\S+)/g, function(_, c) { context = c; return ''; });
+  // Extract :tags
+  text = text.replace(/\s+:(\S+)/g, function(_, t) { tags.push(t); return ''; });
+  // Also handle at start of string
+  text = text.replace(/^=(\S+)\s*/g, function(_, c) { context = c; return ''; });
+  text = text.replace(/^:(\S+)\s*/g, function(_, t) { tags.push(t); return ''; });
+
+  return { content: text.trim(), tags: tags, context: context };
 }
 
 
@@ -704,8 +807,13 @@ function addToTjai(e) {
       .build();
   }
 
+  // Read edited title from form input, fall back to action parameter
+  var formInputs = e.commonEventObject.formInputs || {};
+  var title = (formInputs.title && formInputs.title.stringInputs && formInputs.title.stringInputs.value[0])
+    || params.title;
+
   var payload = {
-    title: params.title,
+    title: title,
     event_timestamp: parseFloat(params.event_timestamp),
     zoom_url: params.zoom_url || '',
     indico_url: params.indico_url || '',
@@ -739,6 +847,111 @@ function addToTjai(e) {
     .setNotification(
       CardService.newNotification().setText(message)
     )
+    .build();
+}
+
+
+/**
+ * Action handler: save email as tjai bookmark.
+ */
+function addBookmark(e) {
+  var params = e.commonEventObject.parameters;
+  var formInputs = e.commonEventObject.formInputs || {};
+  var apiKey = getApiKey_();
+  if (!apiKey) {
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText('API key not set. Run setApiKey first.'))
+      .build();
+  }
+
+  var title = (formInputs.bm_title && formInputs.bm_title.stringInputs.value[0]) || '';
+  var tagsRaw = (formInputs.bm_tags && formInputs.bm_tags.stringInputs.value[0]) || '';
+  var gmailUrl = params.gmail_url || '';
+
+  if (!title.trim()) {
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText('Title is required'))
+      .build();
+  }
+
+  // Parse =context from tags field
+  var parsed = parseTagsFromText_(' ' + tagsRaw);  // leading space so regex matches
+  var content = '[' + title.trim() + '](' + gmailUrl + ')';
+
+  var payload = {
+    kind: 'bookmark',
+    content: content,
+    tags: parsed.tags.join(','),
+    context: parsed.context || '',
+    source: 'gmail'
+  };
+
+  return postToTjai_(TJAI_ENTRY_URL, payload);
+}
+
+
+/**
+ * Action handler: add a quick memory note.
+ */
+function addMemory(e) {
+  var formInputs = e.commonEventObject.formInputs || {};
+  var apiKey = getApiKey_();
+  if (!apiKey) {
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText('API key not set. Run setApiKey first.'))
+      .build();
+  }
+
+  var raw = (formInputs.mem_content && formInputs.mem_content.stringInputs.value[0]) || '';
+  if (!raw.trim()) {
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText('Enter some text first'))
+      .build();
+  }
+
+  var parsed = parseTagsFromText_(raw);
+
+  var payload = {
+    kind: 'memory',
+    content: parsed.content,
+    tags: parsed.tags.join(','),
+    context: parsed.context || '',
+    source: 'gmail'
+  };
+
+  return postToTjai_(TJAI_ENTRY_URL, payload);
+}
+
+
+/**
+ * Shared helper: POST payload to a tjai API endpoint.
+ */
+function postToTjai_(url, payload) {
+  var apiKey = getApiKey_();
+  var options = {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'Authorization': 'Bearer ' + apiKey },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  var response = UrlFetchApp.fetch(url, options);
+  var code = response.getResponseCode();
+  var message;
+  try {
+    var body = JSON.parse(response.getContentText());
+    if (code === 200 && body.status === 'ok') {
+      message = 'Added: ' + body.content;
+    } else {
+      message = 'Error: ' + (body.error || 'HTTP ' + code);
+    }
+  } catch (err) {
+    message = 'Error: HTTP ' + code + ' (non-JSON response)';
+  }
+
+  return CardService.newActionResponseBuilder()
+    .setNotification(CardService.newNotification().setText(message))
     .build();
 }
 
