@@ -41,6 +41,7 @@ Quick Telegram messages are raw intent — typed fast, no structure, no metadata
 
 The foremost design precept of dkbapp, and yet I haven't felt the need for it in this knowledge base so far. Not clear why. Maybe sparse content.
 Do it if/when it is worth it. Needs to be designed from real use cases. One may be research versioning — a v2 topic extends v1 with a new prompt direction.
+Another: task dependency tracking — `blocks`/`blocked_by` relations between todos, with a "ready" query (unblocked + active). This is what Beads (steveyegge/beads) does with a full DAG for coding agents. In tjai it's just another relation type on existing entries, no new infrastructure. Though honestly we burn through tasks so fast, including substantial ones, that formal dependency tracking may be over-engineering for a single-person workflow.
 Now that entries can be named with usable nicknames (entry_id), maybe less need for E-R. Just support inter-entry referencing by entry_id.
 
 ### Entry Relations (E-R Model)
