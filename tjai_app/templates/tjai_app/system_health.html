@@ -315,6 +315,9 @@
                         let detail = '';
                         if (ag.pid) {
                             detail = `PID ${ag.pid}`;
+                            if (ag.uptime_min !== undefined && ag.uptime_min !== null) {
+                                detail += `, up ${fmtMin(ag.uptime_min)}`;
+                            }
                             if (ag.heartbeat_min !== undefined && ag.heartbeat_min !== null) {
                                 detail += `, heartbeat ${fmtMin(ag.heartbeat_min)} ago`;
                             }
@@ -325,7 +328,8 @@
                         } else if (ag.completed_min !== undefined) {
                             detail = `last run ${fmtMin(ag.completed_min)} ago`;
                         }
-                        html += `<div class="process-row" style="max-width:600px"><span class="process-name"><span style="color:${dotColor}">&#9679;</span> ${ag.name}</span><span class="${statusCls}">${ag.status} <span style="color:#666;font-weight:normal">${detail}</span></span></div>`;
+                        const restartFlag = ag.restart_pending ? ' <span style="color:#ffd54f">[restart pending]</span>' : '';
+                        html += `<div class="process-row" style="max-width:600px"><span class="process-name"><span style="color:${dotColor}">&#9679;</span> ${ag.name}</span><span class="${statusCls}">${ag.status}${restartFlag} <span style="color:#666;font-weight:normal">${detail}</span></span></div>`;
                         if (ag.last_error) {
                             const errAge = ag.last_error_min !== undefined ? ` (${fmtMin(ag.last_error_min)} ago)` : '';
                             html += `<div class="process-row" style="max-width:600px;background:rgba(239,83,80,0.08)"><span style="color:#ef5350;font-size:11px">Error${errAge}: ${ag.last_error}</span></div>`;
@@ -445,6 +449,26 @@
                 html += '</div>';
             } else if (cw && cw.error) {
                 html += `<div class="section"><div class="section-title">CloudWatch 24h</div><div style="color:#ef5350">Error: ${cw.error}</div></div>`;
+            }
+
+            // SysConfig section
+            if (data.sysconfig && data.sysconfig.length > 0) {
+                html += '<div class="section"><div class="section-title">SysConfig</div>';
+                html += '<table style="max-width:800px"><tr><th>Key</th><th>Value</th><th style="text-align:right">Modified</th></tr>';
+                for (const sc of data.sysconfig) {
+                    let val = sc.value || '';
+                    // Format epoch timestamps as human-readable
+                    if (/^\d{10}(\.\d+)?$/.test(val)) {
+                        const ts = parseFloat(val);
+                        if (ts > 1700000000 && ts < 2000000000) {
+                            val = timeAgo(ts);
+                        }
+                    }
+                    if (val.length > 80) val = val.substring(0, 80) + '…';
+                    const mod = sc.modified ? timeAgo(sc.modified) : '-';
+                    html += `<tr><td style="color:#b0bec5;white-space:nowrap">${sc.key}</td><td style="word-break:break-all;max-width:400px">${val}</td><td class="num" style="white-space:nowrap">${mod}</td></tr>`;
+                }
+                html += '</table></div>';
             }
 
             document.getElementById('metrics-content').innerHTML = html;

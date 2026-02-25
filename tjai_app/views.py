@@ -2647,6 +2647,24 @@ def api_system_data(request):
                 ag['uptime_min'] = round((time.time() - float(started)) / 60, 1)
             break
 
+    # Include sysconfig dump (redact keys/secrets/tokens)
+    _secret_keywords = ('key', 'secret', 'token', 'password')
+    sysconfig_rows = list(
+        SysConfig.objects.all()
+        .order_by('key')
+        .values_list('key', 'value', 'timestamp_modified')
+    )
+    data['sysconfig'] = [
+        {
+            'key': k,
+            'value': '***' if any(s in k.lower() for s in _secret_keywords)
+                     else (v[:200] if v else ''),
+            'modified': m,
+        }
+        for k, v, m in sysconfig_rows
+        if k != 'system_health_data'
+    ]
+
     return JsonResponse(data)
 
 
