@@ -7,7 +7,10 @@ Writes two sysconfig keys:
   system_health_data   — JSON with full metrics + timestamp
 """
 import json
+import logging
 import os
+import socket
+import sys
 import time
 from pathlib import Path
 
@@ -15,9 +18,23 @@ import bootstrap  # noqa: F401 - Django setup
 
 from django.db import connection
 from django.db.models import Count
+from tjai_app.db_log_handler import DbLogHandler
 from tjai_app.models import Entry, Context, TagStats, Machine, SysConfig, AppLog
 
+logger = logging.getLogger('system_health')
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    _fmt = logging.Formatter('%(asctime)s %(levelname)s %(message)s',
+                             datefmt='%Y-%m-%d %H:%M:%S')
+    _db = DbLogHandler(source='system_health')
+    _db.setFormatter(_fmt)
+    logger.addHandler(_db)
+    _sh = logging.StreamHandler(sys.stdout)
+    _sh.setFormatter(_fmt)
+    logger.addHandler(_sh)
+
 INSTANCE_ID = 'i-0a5a34f8ccd4429df'
+CWAGENT_HOST = socket.gethostname()
 
 
 def collect_system():
@@ -156,6 +173,12 @@ def collect_cloudwatch():
     try:
         import boto3
         from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+
+        tz_et = ZoneInfo('America/New_York')
+
+        def hour_label(ts):
+            return ts.astimezone(tz_et).strftime('%H:%M')
 
         cw = boto3.client('cloudwatch', region_name='us-east-1')
         end = datetime.utcnow()
@@ -175,7 +198,7 @@ def collect_cloudwatch():
         )
         cpu_points = sorted(resp['Datapoints'], key=lambda d: d['Timestamp'])
         metrics['cpu_hourly'] = [
-            {'hour': d['Timestamp'].strftime('%H:%M'), 'avg': round(d['Average'], 1)}
+            {'hour': hour_label(d['Timestamp']), 'avg': round(d['Average'], 1)}
             for d in cpu_points
         ]
         if cpu_points:
@@ -183,13 +206,13 @@ def collect_cloudwatch():
                 sum(d['Average'] for d in cpu_points) / len(cpu_points), 1
             )
 
-        # Try CWAgent metrics (may not be publishing yet)
+        # CWAgent metrics — uses host dimension (not InstanceId)
         for metric_name in ['mem_used_percent', 'swap_used_percent', 'disk_used_percent']:
             try:
                 resp = cw.get_metric_statistics(
                     Namespace='CWAgent',
                     MetricName=metric_name,
-                    Dimensions=[{'Name': 'InstanceId', 'Value': INSTANCE_ID}],
+                    Dimensions=[{'Name': 'host', 'Value': CWAGENT_HOST}],
                     StartTime=start,
                     EndTime=end,
                     Period=3600,
@@ -198,11 +221,13 @@ def collect_cloudwatch():
                 points = sorted(resp['Datapoints'], key=lambda d: d['Timestamp'])
                 if points:
                     metrics[f'{metric_name}_hourly'] = [
-                        {'hour': d['Timestamp'].strftime('%H:%M'), 'avg': round(d['Average'], 1)}
+                        {'hour': hour_label(d['Timestamp']), 'avg': round(d['Average'], 1)}
                         for d in points
                     ]
-            except Exception:
-                pass
+                else:
+                    logger.warning("CWAgent %s: no datapoints returned", metric_name)
+            except Exception as e:
+                logger.error("CWAgent %s failed: %s", metric_name, e)
 
         return metrics
     except Exception as e:
@@ -240,16 +265,21 @@ def _collect_agents(now):
     """Check health of tjai agent processes."""
     agents = []
 
-    # Action agent — PID + heartbeat from sysconfig
+    # Action agent — PID + heartbeat + uptime + restart flag from sysconfig
     pid = SysConfig.objects.filter(key='action_agent_pid').values_list('value', flat=True).first()
     hb = SysConfig.objects.filter(key='action_agent_heartbeat').values_list('value', flat=True).first()
+    started = SysConfig.objects.filter(key='action_agent_started').values_list('value', flat=True).first()
+    restart_pending = bool(SysConfig.objects.filter(key='action_agent_restart_requested').exclude(value='').first())
     alive = _pid_alive(pid) if pid else False
     hb_min = round((now - float(hb)) / 60, 1) if hb else None
+    uptime_min = round((now - float(started)) / 60, 1) if started else None
     agents.append({
         'name': 'Action Agent',
         'pid': pid,
         'alive': alive,
         'heartbeat_min': hb_min,
+        'uptime_min': uptime_min,
+        'restart_pending': restart_pending,
         'status': 'running' if alive and hb_min and hb_min < 10 else 'stale' if alive else 'down',
     })
 
@@ -392,8 +422,9 @@ def collect_dropbox():
                 capture_output=True, text=True, timeout=15,
             )
             result['restarted'] = True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("Dropbox auto-restart failed: %s", e)
+            result['restart_error'] = str(e)
         return result
 
     # Backup directory freshness
@@ -404,8 +435,8 @@ def collect_dropbox():
             newest = max(os.path.getmtime(os.path.join(backup_dir, f)) for f in files)
             result['newest_backup_min'] = round((time.time() - newest) / 60, 1)
             result['backup_count'] = len(files)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error("Backup directory check failed (%s): %s", backup_dir, e)
 
     return result
 
@@ -487,8 +518,8 @@ def collect_tjai():
                     end = float(last_activity) if last_activity else float(completed)
                     action_info['agent_duration_min'] = round(
                         (end - float(launched)) / 60, 1)
-                except (ValueError, TypeError):
-                    pass
+                except (ValueError, TypeError) as e:
+                    logger.warning("Agent %s duration calc failed: %s", action_id, e)
             if tracking:
                 action_info['agent_tracking'] = tracking
         metrics['actions'].append(action_info)
@@ -566,8 +597,9 @@ def assess_health(system, postgres, tjai=None, dropbox=None, backups=None):
                     issues.append(('red', f'Latest backup is {age_days} days old'))
                 elif age_days > 1:
                     issues.append(('yellow', f'Latest backup is {age_days} days old'))
-            except ValueError:
-                pass
+            except ValueError as e:
+                logger.error("Cannot parse backup date %r: %s", latest['date'], e)
+                issues.append(('yellow', f'Cannot parse backup date: {latest["date"]}'))
             if not latest.get('all_present'):
                 missing = [k for k, v in latest.get('files', {}).items() if v is None]
                 if missing:
@@ -587,25 +619,25 @@ def assess_health(system, postgres, tjai=None, dropbox=None, backups=None):
 
 
 def main():
-    print("Collecting system metrics...")
+    logger.info("Collecting system metrics...")
     system = collect_system()
 
-    print("Collecting PostgreSQL metrics...")
+    logger.info("Collecting PostgreSQL metrics...")
     postgres = collect_postgres()
 
-    print("Collecting process info...")
+    logger.info("Collecting process info...")
     processes = collect_processes()
 
-    print("Collecting CloudWatch metrics...")
+    logger.info("Collecting CloudWatch metrics...")
     cloudwatch = collect_cloudwatch()
 
-    print("Collecting Dropbox status...")
+    logger.info("Collecting Dropbox status...")
     dropbox = collect_dropbox()
 
-    print("Collecting backup status...")
+    logger.info("Collecting backup status...")
     backups = collect_backups()
 
-    print("Collecting tjai stats...")
+    logger.info("Collecting tjai stats...")
     tjai = collect_tjai()
 
     status, issues = assess_health(system, postgres, tjai, dropbox, backups)
@@ -634,11 +666,11 @@ def main():
         defaults={'value': json.dumps(health_data), 'timestamp_modified': now},
     )
 
-    print(f"Health: {status.upper()}")
+    logger.info("Health: %s", status.upper())
     if issues:
         for issue in issues:
-            print(f"  - {issue}")
-    print("Written to sysconfig.")
+            logger.info("  - %s", issue)
+    logger.info("Written to sysconfig.")
 
 
 if __name__ == '__main__':

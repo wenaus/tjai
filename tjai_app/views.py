@@ -210,7 +210,9 @@ def sync_push(request):
         if isinstance(entry_data, str):
             try:
                 entry_data = json.loads(entry_data)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                logger.warning("Malformed JSON in entry %s data during sync: %s",
+                               entry.get("id", "?"), e)
                 entry_data = None
         Entry.objects.update_or_create(
             id=entry["id"],
@@ -252,7 +254,8 @@ def sync_push(request):
             try:
                 tag_bookmark(Entry.objects.get(id=entry["id"]))
             except Entry.DoesNotExist:
-                pass
+                logger.warning("tag_bookmark: entry %s not found after sync upsert",
+                               entry["id"])
 
     # Upsert sub_notes
     for note in data.get("sub_notes", []):
@@ -260,7 +263,9 @@ def sync_push(request):
         if isinstance(note_data, str):
             try:
                 note_data = json.loads(note_data)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                logger.warning("Malformed JSON in sub_note %s data during sync: %s",
+                               note.get("id", "?"), e)
                 note_data = None
         SubNote.objects.update_or_create(
             id=note["id"],
@@ -525,7 +530,8 @@ def dashboard_calendar(request):
     timezone_name = tz_config.value if tz_config else 'America/New_York'
     try:
         tz = zoneinfo.ZoneInfo(timezone_name)
-    except Exception:
+    except Exception as e:
+        logger.error("Invalid timezone %r in sysconfig: %s", timezone_name, e)
         tz = None
 
     # Go back 7 days, then to Monday of that week (to show full previous week)
@@ -989,7 +995,8 @@ def daily_synopsis_data(request):
     try:
         tz = zoneinfo.ZoneInfo(timezone_name)
         today_dt = datetime.now(tz)
-    except Exception:
+    except Exception as e:
+        logger.error("Invalid timezone %r in sysconfig: %s", timezone_name, e)
         today_dt = datetime.now()
     today_key = today_dt.strftime('%Y%m%d')
 
@@ -2351,8 +2358,8 @@ def api_picks_data(request):
             dur = round(float(agent_info['last_activity']) - float(agent_info['launched']))
             if dur > 0:
                 sorted_runs[0]['duration_seconds'] = dur
-        except (ValueError, TypeError):
-            pass
+        except (ValueError, TypeError) as e:
+            logger.warning("Picks agent duration calc failed: %s", e)
 
     # Count total configured sources from picks-sources entry
     total_sources = 0
@@ -2621,8 +2628,24 @@ def api_system_data(request):
                     end = float(last_activity) if last_activity else float(completed)
                     a['agent_duration_min'] = round(
                         (end - float(launched)) / 60, 1)
-                except (ValueError, TypeError):
-                    pass
+                except (ValueError, TypeError) as e:
+                    logger.warning("Agent duration calc failed for %s: %s",
+                                   a.get('content', '?'), e)
+
+    # Overlay live action agent state (restart flag, uptime)
+    agents = (data.get('tjai') or {}).get('agents', [])
+    for ag in agents:
+        if ag.get('name') == 'Action Agent':
+            restart_val = SysConfig.objects.filter(
+                key='action_agent_restart_requested'
+            ).values_list('value', flat=True).first()
+            ag['restart_pending'] = bool(restart_val)
+            started = SysConfig.objects.filter(
+                key='action_agent_started'
+            ).values_list('value', flat=True).first()
+            if started:
+                ag['uptime_min'] = round((time.time() - float(started)) / 60, 1)
+            break
 
     return JsonResponse(data)
 

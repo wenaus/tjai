@@ -141,8 +141,16 @@ LOGGING = {
             "class": "logging.StreamHandler",
             "formatter": "verbose",
         },
+        "db": {
+            "class": "tjai_app.db_log_handler.DbLogHandler",
+            "level": "WARNING",
+            "source": "django",
+        },
     },
     "root": {"handlers": ["console"], "level": LOG_LEVEL},
+    "loggers": {
+        "tjai_app": {"handlers": ["console", "db"], "level": "WARNING", "propagate": False},
+    },
 }
 
 # MCP (Model Context Protocol) Configuration

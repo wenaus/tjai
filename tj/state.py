@@ -151,8 +151,8 @@ def get_tgbot_status() -> dict:
             1 for e in all_entries
             if e.timestamp_created >= cutoff and not getattr(e, 'deleted_at', None)
         )
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Warning: tgbot exchange count failed: {e}", file=sys.stderr)
 
     return result
 

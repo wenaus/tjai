@@ -1,4 +1,8 @@
+import logging
+
 from .models import SysConfig
+
+logger = logging.getLogger(__name__)
 
 
 def health_status(request):
@@ -7,7 +11,8 @@ def health_status(request):
         status = SysConfig.objects.filter(
             key='system_health_status'
         ).values_list('value', flat=True).first()
-    except Exception:
+    except Exception as e:
+        logger.error("system_health_status query failed: %s", e)
         status = None
     colors = {'green': '#9ccc65', 'yellow': '#ffd54f', 'red': '#ef5350'}
     return {

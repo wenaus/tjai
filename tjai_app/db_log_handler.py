@@ -6,7 +6,8 @@ Used by action_runner and action_agent for visible, queryable logging.
 
 import logging
 import sys
-import time
+
+_FALLBACK_LOG = '/tmp/tjai_log_fallback.log'
 
 
 class DbLogHandler(logging.Handler):
@@ -35,4 +36,10 @@ class DbLogHandler(logging.Handler):
                 extra_data=extra_data,
             )
         except Exception as e:
-            sys.stderr.write(f"DbLogHandler: {e}\n")
+            msg = f"DbLogHandler emit failed ({e}): {self.format(record)}\n"
+            sys.stderr.write(msg)
+            try:
+                with open(_FALLBACK_LOG, 'a') as f:
+                    f.write(msg)
+            except Exception:
+                pass

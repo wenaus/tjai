@@ -116,7 +116,7 @@ def open_editor(initial_content: str = "", entry_type: Optional[str] = None, fil
         # Clean up temp file
         try:
             os.unlink(temp_path)
-        except:
+        except OSError:
             pass
 
 

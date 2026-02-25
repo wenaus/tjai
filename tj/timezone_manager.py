@@ -1,12 +1,14 @@
 """Timezone management for tjai."""
 
+import logging
 import sqlite3
-import traceback
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import Optional, Dict
 
 from tj.database import get_db_connection, DatabaseError
+
+logger = logging.getLogger(__name__)
 
 
 # Timezone mappings - use IANA standard names (America/*) not legacy US/* aliases
@@ -62,7 +64,7 @@ def get_timezone_object() -> Optional[ZoneInfo]:
     try:
         _cached_tz_object = ZoneInfo(tz_name)
     except Exception:
-        traceback.print_exc()
+        logger.error("Invalid timezone %r, returning None", tz_name, exc_info=True)
         _cached_tz_object = None
     return _cached_tz_object
 
@@ -116,8 +118,7 @@ def format_time_in_timezone(timestamp: float, timezone: str) -> str:
         dt = datetime.fromtimestamp(timestamp, tz=tz)
         return dt.strftime('%m/%d %I:%M%p').lower()
     except Exception:
-        traceback.print_exc()
-        # Fallback for any timezone errors - use local time
+        logger.error("format_time_in_timezone failed for tz=%r", timezone, exc_info=True)
         dt = datetime.fromtimestamp(timestamp)
         return dt.strftime('%m/%d %I:%M%p').lower()
 
@@ -134,7 +135,7 @@ def format_time_only(timestamp: float, timezone: str = None) -> str:
         time_str = dt.strftime('%I:%M%p').lower().lstrip('0')
         return time_str
     except Exception:
-        traceback.print_exc()
+        logger.error("format_time_only failed for tz=%r", timezone, exc_info=True)
         dt = datetime.fromtimestamp(timestamp)
         return dt.strftime('%I:%M%p').lower().lstrip('0')
 
@@ -150,8 +151,7 @@ def format_time_dashboard(timestamp: float) -> str:
             return entry_time.strftime("%a %Y/%m/%d %H:%M %Z")
         return entry_time.strftime("%a %m/%d/%H:%M %Z")
     except Exception:
-        traceback.print_exc()
-        # Fallback on any error
+        logger.error("format_time_dashboard failed", exc_info=True)
         return "--- --/--/--:--"
 
 
