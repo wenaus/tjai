@@ -352,10 +352,15 @@ def main():
 
     # Daemon mode (default)
     pid = os.getpid()
+    now = time.time()
     from tjai_app.models import SysConfig
     SysConfig.objects.update_or_create(
         key='action_agent_pid',
-        defaults={'value': str(pid), 'timestamp_modified': time.time()},
+        defaults={'value': str(pid), 'timestamp_modified': now},
+    )
+    SysConfig.objects.update_or_create(
+        key='action_agent_started',
+        defaults={'value': str(now), 'timestamp_modified': now},
     )
     logger.info("Action agent started (PID %d)", pid)
     while not shutdown_requested:

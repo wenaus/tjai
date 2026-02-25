@@ -405,6 +405,74 @@ def create_entry(content, kind="memory", context=None, name=None, tags=None,
     return _format_entry(entry)
 
 
+def copy_calendar_entry(entry_id, event_date, event_time=None):
+    """Copy a calendar/journal entry to a new date.
+
+    ALWAYS use this tool to copy calendar entries. Do NOT manually create a new
+    entry — this tool copies content, data (links etc.), context, and tags exactly.
+
+    Args:
+        entry_id: UUID of the source journal entry to copy.
+        event_date: Target date in YYYYMMDD format.
+        event_time: Optional new time in HHMM format. If omitted, preserves
+                    the original entry's time.
+    """
+    err = _validate_event_date(event_date)
+    if err:
+        return {"error": err}
+    if event_time:
+        err = _validate_event_time(event_time)
+        if err:
+            return {"error": err}
+
+    source = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
+    if not source:
+        return {"error": f"Entry '{entry_id}' not found"}
+    if source.kind != 'journal':
+        return {"error": f"Entry is kind='{source.kind}', not journal"}
+
+    # Determine time: use provided time, or preserve original time
+    if event_time:
+        hour, minute = int(event_time[:2]), int(event_time[2:])
+    elif source.data and source.data.get('event_date'):
+        orig_dt = datetime.fromtimestamp(source.data['event_date'], tz=_get_timezone())
+        hour, minute = orig_dt.hour, orig_dt.minute
+    else:
+        hour, minute = 12, 0
+
+    # Build new event_date timestamp
+    tz = _get_timezone()
+    dt = datetime.strptime(event_date, '%Y%m%d').replace(hour=hour, minute=minute, tzinfo=tz)
+
+    # Copy data, replacing event_date
+    new_data = source.data.copy() if source.data else {}
+    new_data['event_date'] = dt.timestamp()
+
+    now = time.time()
+    entry = Entry.objects.create(
+        id=str(uuid.uuid4()),
+        content=source.content,
+        kind='journal',
+        context=source.context,
+        data=new_data,
+        timestamp_created=now,
+        timestamp_modified=now,
+        is_dirty=1,
+    )
+
+    # Copy tags (except fromai, add it fresh)
+    source_tags = list(source.tags.values_list('tag_name', flat=True))
+    for tag_name in source_tags:
+        if tag_name != 'fromai':
+            Tag.objects.create(tag_name=tag_name, entry=entry)
+    Tag.objects.create(tag_name='fromai', entry=entry)
+
+    from .tag_stats import rebuild_tag_stats
+    rebuild_tag_stats()
+
+    return _format_entry(entry)
+
+
 def get_todos(context=None, status=None, include_done=False):
     if status is not None and status not in VALID_STATUSES:
         return {"error": f"Invalid status '{status}'. Must be one of: {', '.join(VALID_STATUSES)}"}

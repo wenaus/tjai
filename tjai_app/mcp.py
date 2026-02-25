@@ -17,6 +17,7 @@ Available tools:
     get_named_entries - Get entries by @name, or list all named entries
     get_entry         - Get a single entry by ID
     edit_entry        - Edit an existing entry
+    copy_calendar_entry - Copy a journal entry to a new date (preserves all fields)
     delete_entry      - Soft delete an entry (requires user approval)
 
 Entry types: memory, todo, journal, profile, bookmark, ai, list, action
@@ -466,6 +467,34 @@ async def run_action(entry_id: str) -> dict:
         Returns {"error": "..."} if entry not found or execution fails.
     """
     return await sync_to_async(services.run_action)(entry_id=entry_id)
+
+
+@mcp.tool()
+async def copy_calendar_entry(
+    entry_id: str,
+    event_date: str,
+    event_time: str = None,
+) -> dict:
+    """
+    Copy a calendar/journal entry to a new date.
+
+    ALWAYS use this tool when asked to copy a calendar entry. Do NOT manually
+    create a new entry — this tool copies content, data (links, zoom URLs, etc.),
+    context, and tags exactly from the source.
+
+    Args:
+        entry_id: UUID of the source journal entry to copy.
+        event_date: Target date in YYYYMMDD format (e.g., "20260228").
+        event_time: Optional new time in HHMM format (e.g., "0900", "1430").
+                    If omitted, preserves the original entry's time.
+
+    Returns:
+        The newly created journal entry with all fields copied.
+        Returns {"error": "..."} if source not found or not a journal entry.
+    """
+    return await sync_to_async(services.copy_calendar_entry)(
+        entry_id=entry_id, event_date=event_date, event_time=event_time,
+    )
 
 
 @mcp.tool()

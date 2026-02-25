@@ -4,6 +4,10 @@
 Called automatically after a tj agent claude process finishes.
 Usage: agent_complete.py <action_entry_id> [exit_code] [stderr_file]
 
+On timeout (exit 124), checks for live subagent reports. If subagents are
+still producing work, waits for them (up to HARD_KILL_HOURS from launch).
+Links subagent reports to the research entry.
+
 All logging goes to AppLog via DbLogHandler (visible on dashboard).
 """
 import os
@@ -26,6 +30,125 @@ if not logger.handlers:
     _db.setFormatter(_fmt)
     logger.addHandler(_db)
 
+HARD_KILL_HOURS = 4
+SUBAGENT_POLL_SECONDS = 300
+SUBAGENT_STABLE_SECONDS = 600
+
+
+def _count_subagent_entries(source_entry_id):
+    """Count subagent report entries for a given source_entry_id."""
+    return Entry.objects.filter(
+        data__source_entry_id=source_entry_id,
+        deleted_at__isnull=True,
+    ).count()
+
+
+def _link_subagent_reports(entry, source_entry_id, ref_extra):
+    """Ensure all subagent report links are present in the research entry.
+
+    Purely additive — never removes existing links. Only adds links for
+    reports not already referenced in the content.
+    """
+    reports = list(Entry.objects.filter(
+        data__source_entry_id=source_entry_id,
+        deleted_at__isnull=True,
+    ).order_by('timestamp_created'))
+
+    if not reports:
+        return 0
+
+    # Find which report UUIDs are already linked in the content
+    content = entry.content
+    existing_uuids = {str(r.id) for r in reports if str(r.id) in content}
+    new_reports = [r for r in reports if str(r.id) not in existing_uuids]
+
+    if not new_reports and '## Subagent Reports' in content:
+        # All already linked
+        return len(reports)
+
+    # Build full section with all reports (preserves order)
+    links = "\n\n## Subagent Reports\n\n"
+    for i, r in enumerate(reports, 1):
+        size = f"{len(r.content) // 1024}K" if len(r.content) > 1024 else f"{len(r.content)} chars"
+        links += f"{i}. [Report — {size}](/tjai/entry/?uuid={r.id})\n"
+
+    # Replace existing section or append
+    if '## Subagent Reports' in content:
+        content = content[:content.index('## Subagent Reports')]
+    entry.content = content.rstrip() + links
+    entry.save(update_fields=['content'])
+    logger.info("Linked %d subagent reports (%d new) to entry %s",
+                len(reports), len(new_reports), entry.id, extra=ref_extra)
+    return len(reports)
+
+
+def _wait_for_subagents(action_id, current_entry, ref_extra):
+    """On timeout, wait for subagent reports to finish arriving.
+
+    Returns the number of subagent reports found, or 0 if none/not applicable.
+    """
+    entry = Entry.objects.filter(
+        id=current_entry, deleted_at__isnull=True
+    ).first()
+    if not entry or not isinstance(entry.data, dict):
+        return 0
+
+    source_entry_id = entry.data.get('entry_id')
+    if not source_entry_id:
+        return 0
+
+    count = _count_subagent_entries(source_entry_id)
+    if count == 0:
+        return 0
+
+    # There are subagent reports — check if more are still coming
+    launched = SysConfig.objects.filter(
+        key=f'agent_{action_id}_launched'
+    ).values_list('value', flat=True).first()
+    if not launched:
+        return count
+
+    hard_kill_time = float(launched) + HARD_KILL_HOURS * 3600
+
+    # Signal that we're waiting
+    SysConfig.objects.update_or_create(
+        key=f'agent_{action_id}_status',
+        defaults={'value': 'waiting_subagents',
+                  'timestamp_modified': time.time()})
+    logger.info("%s: timeout with %d subagent reports, waiting for more",
+                action_id, count, extra=ref_extra)
+
+    stable_since = time.time()
+    last_count = count
+
+    while time.time() < hard_kill_time:
+        time.sleep(SUBAGENT_POLL_SECONDS)
+        now = time.time()
+        current_count = _count_subagent_entries(source_entry_id)
+
+        # Update sysconfig so System page shows progress
+        SysConfig.objects.update_or_create(
+            key=f'agent_{action_id}_subagent_count',
+            defaults={'value': str(current_count),
+                      'timestamp_modified': now})
+
+        if current_count > last_count:
+            last_count = current_count
+            stable_since = now
+            logger.info("%s: subagent count increased to %d, continuing to wait",
+                        action_id, current_count, extra=ref_extra)
+        elif now - stable_since > SUBAGENT_STABLE_SECONDS:
+            logger.info("%s: subagent count stable at %d, all done",
+                        action_id, current_count, extra=ref_extra)
+            break
+    else:
+        logger.warning("%s: hard kill limit (%dh) reached with %d subagent reports",
+                       action_id, HARD_KILL_HOURS, last_count, extra=ref_extra)
+
+    # Link all subagent reports to the research entry
+    final_count = _link_subagent_reports(entry, source_entry_id, ref_extra)
+    return final_count
+
 
 def main():
     if len(sys.argv) < 2:
@@ -43,8 +166,6 @@ def main():
     ).values_list('value', flat=True).first()
     ref_extra = {'entry_id': current_entry} if current_entry else {}
 
-    # Exit 124 = timeout killed the process; treat as success since the agent
-    # typically finishes its work and then hangs waiting for input.
     status = 'completed' if exit_code in (0, 124) else 'failed'
     logger.info("%s: exit_code=%d, status=%s", action_id, exit_code, status,
                 extra=ref_extra)
@@ -60,8 +181,16 @@ def main():
                 for line in stderr_content.split('\n'):
                     log_fn("%s stderr: %s", action_id, line,
                            extra=ref_extra)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("%s: failed to read stderr file %s: %s",
+                         action_id, stderr_file, e, extra=ref_extra)
+
+    # On timeout, wait for subagents before finalizing
+    subagent_count = 0
+    if exit_code == 124 and current_entry:
+        subagent_count = _wait_for_subagents(action_id, current_entry, ref_extra)
+
+    now = time.time()  # Refresh after possible wait
 
     SysConfig.objects.update_or_create(
         key=f'agent_{action_id}_status',
@@ -71,9 +200,6 @@ def main():
         defaults={'value': str(now), 'timestamp_modified': now})
 
     # Update last_activity from the tracking entry's final timestamp.
-    # The watchdog only updates last_activity while the agent is running;
-    # by the time agent_complete runs, the watchdog has stopped. Read the
-    # tracking entry's timestamp_modified to get the real last activity.
     tracking_uuid = SysConfig.objects.filter(
         key=f'agent_{action_id}_tracking'
     ).values_list('value', flat=True).first()
@@ -87,7 +213,7 @@ def main():
                 defaults={'value': str(float(tracking_ts)),
                           'timestamp_modified': now})
 
-    # Structured error reporting (124 = timeout, treated as success)
+    # Structured error reporting
     if exit_code not in (0, 124):
         error_msg = f"Agent exited {exit_code}"
         if stderr_content:
@@ -99,7 +225,6 @@ def main():
             key=f'agent_{action_id}_last_error_time',
             defaults={'value': str(now), 'timestamp_modified': now})
     else:
-        # Clear error on success
         SysConfig.objects.filter(key=f'agent_{action_id}_last_error').update(
             value='', timestamp_modified=now)
         SysConfig.objects.filter(key=f'agent_{action_id}_last_error_time').update(
@@ -121,21 +246,23 @@ def main():
                 data['run_completed_at'] = now
                 data['run_duration_seconds'] = duration
                 data['run_exit_code'] = exit_code
+                if subagent_count:
+                    data['subagent_count'] = subagent_count
                 if exit_code not in (0, 124) and stderr_content:
                     data['run_error'] = stderr_content[-200:]
                 elif 'run_error' in data:
                     del data['run_error']
                 entry.data = data
                 entry.save(update_fields=['data'])
-                logger.info("%s: wrote run result to entry %s (duration=%ss)",
+                logger.info("%s: wrote run result to entry %s (duration=%ss, subagents=%d)",
                             action_id, current_entry,
-                            duration, extra=ref_extra)
+                            duration, subagent_count, extra=ref_extra)
         except Exception as e:
             logger.error("%s: failed to write run result: %s",
                          action_id, e, extra=ref_extra)
 
     # Queue drain for research-agent: auto-chain to next pending item
-    if action_id == 'research-agent' and exit_code == 0:
+    if action_id == 'research-agent' and exit_code in (0, 124):
         _research_queue_drain(now)
 
 
