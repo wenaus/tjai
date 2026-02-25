@@ -10,13 +10,14 @@
             --bg: var(--tg-theme-bg-color, #1a1a1a);
             --fg: var(--tg-theme-text-color, #e0e0e0);
             --hint: var(--tg-theme-hint-color, #8a8a8a);
-            --link: var(--tg-theme-link-color, #64b5f6);
+            --link: #c8d8ff;
             --btn-bg: var(--tg-theme-button-color, #5288c1);
             --btn-fg: var(--tg-theme-button-text-color, #fff);
             --secondary-bg: var(--tg-theme-secondary-bg-color, #232323);
             --accent: #d8a070;
             --green: #9ccc65;
             --purple: #ce93d8;
+            --fs-body: 15px;  /* min body/narrative text — adjust this one value */
             --safe-top: env(safe-area-inset-top, 0px);
             --safe-bottom: env(safe-area-inset-bottom, 0px);
             --tabs-h: calc(41px + var(--safe-top));
@@ -124,7 +125,10 @@
             padding: 10px 0;
             border-bottom: 1px solid rgba(255,255,255,0.04);
             min-height: 44px;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
         }
+        .named-entry:active { background: rgba(255,255,255,0.04); }
         .named-name {
             color: #c0d8f0;
             font-weight: 600;
@@ -135,8 +139,118 @@
         }
         .named-content {
             color: var(--hint);
-            font-size: 13px;
+            font-size: var(--fs-body);
             margin-top: 2px;
+        }
+        .detail-header {
+            margin-bottom: 12px;
+        }
+        .detail-body {
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-size: var(--fs-body);
+            line-height: 1.6;
+        }
+        .detail-body a { color: var(--link); }
+        .detail-body.pretty {
+            white-space: normal;
+        }
+        .detail-body.pretty h1, .detail-body.pretty h2, .detail-body.pretty h3, .detail-body.pretty h4 {
+            color: var(--accent);
+            margin: 16px 0 8px;
+        }
+        .detail-body.pretty h1 { font-size: 18px; }
+        .detail-body.pretty h2 { font-size: 17px; }
+        .detail-body.pretty h3 { font-size: 16px; }
+        .detail-body.pretty h4 { font-size: 15px; }
+        .detail-body.research h1 { font-size: 20px; }
+        .detail-body.research h2 { font-size: 19px; }
+        .detail-body.research h3 { font-size: 18px; }
+        .detail-body.research h4 { font-size: 17px; }
+        .detail-body.research { font-size: 17px; }
+        .detail-body.pretty ul, .detail-body.pretty ol { padding-left: 20px; margin: 8px 0; }
+        .detail-body.pretty li { margin-bottom: 4px; }
+        .detail-body.pretty p { margin: 8px 0; }
+        .detail-body.pretty code {
+            background: var(--secondary-bg);
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-size: 14px;
+        }
+        .detail-body.pretty pre {
+            background: var(--secondary-bg);
+            padding: 10px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 8px 0;
+        }
+        .detail-body.pretty pre code { background: none; padding: 0; }
+        .detail-body.pretty blockquote {
+            border-left: 3px solid var(--hint);
+            padding-left: 12px;
+            color: var(--hint);
+            margin: 8px 0;
+        }
+        .detail-edit-area {
+            width: 100%;
+            min-height: 200px;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: var(--secondary-bg);
+            color: var(--fg);
+            font-size: var(--fs-body);
+            font-family: inherit;
+            line-height: 1.5;
+            resize: vertical;
+        }
+        .detail-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        .detail-actions button {
+            background: var(--secondary-bg);
+            color: var(--fg);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 6px;
+            padding: 8px 16px;
+            font-size: 14px;
+            cursor: pointer;
+            min-height: 36px;
+        }
+        .detail-actions button.primary {
+            background: var(--btn-bg);
+            color: var(--btn-fg);
+            border-color: var(--btn-bg);
+        }
+        .detail-actions button.active {
+            color: var(--link);
+            border-color: var(--link);
+        }
+        .detail-overlay {
+            position: fixed;
+            top: var(--tabs-h);
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--bg);
+            z-index: 50;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 12px 12px calc(12px + var(--safe-bottom));
+        }
+        .detail-close {
+            float: right;
+            font-size: 22px;
+            color: var(--hint);
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0 4px;
+            line-height: 1;
+            -webkit-tap-highlight-color: transparent;
         }
 
         /* Contexts */
@@ -216,7 +330,7 @@
             border-radius: 8px;
             white-space: pre-wrap;
             word-break: break-word;
-            font-size: 14px;
+            font-size: var(--fs-body);
             line-height: 1.5;
         }
         .entry-expanded a { color: var(--link); }
@@ -279,8 +393,8 @@
         .pick-item.kept { border-left: 3px solid var(--green); padding-left: 9px; }
         .pick-title a { color: var(--link); font-weight: 600; font-size: 15px; }
         .pick-source { font-size: 12px; color: var(--hint); margin-top: 2px; }
-        .pick-precis { font-size: 14px; margin-top: 4px; line-height: 1.4; }
-        .pick-rationale { font-size: 13px; color: var(--hint); margin-top: 4px; font-style: italic; }
+        .pick-precis { font-size: var(--fs-body); margin-top: 4px; line-height: 1.4; }
+        .pick-rationale { font-size: var(--fs-body); color: var(--hint); margin-top: 4px; font-style: italic; }
         .pick-actions {
             display: flex;
             gap: 8px;
@@ -322,7 +436,7 @@
             align-items: center;
             gap: 8px;
         }
-        .readme-title a { color: var(--link); font-weight: 600; flex: 1; }
+        .readme-title a { color: #c8d8ff; font-weight: 600; font-size: 17px; flex: 1; }
         .readme-title button {
             background: var(--secondary-bg);
             color: var(--hint);
@@ -333,8 +447,8 @@
             flex-shrink: 0;
             cursor: pointer;
         }
-        .readme-detail { font-size: 12px; color: var(--hint); margin-top: 2px; }
-        .readme-precis { font-size: 14px; margin-top: 4px; line-height: 1.4; }
+        .readme-detail { font-size: 12px; color: var(--fg); margin-top: 2px; }
+        .readme-precis { font-size: var(--fs-body); margin-top: 4px; line-height: 1.4; }
 
         /* Synopsis */
         .syn-dates {
@@ -430,7 +544,7 @@
             align-items: center;
             gap: 6px;
         }
-        .rss-title a { color: var(--link); flex: 1; }
+        .rss-title a { color: #c8d8ff; flex: 1; font-size: 17px; font-weight: 600; }
         .rss-title button {
             background: var(--secondary-bg);
             color: var(--fg);
@@ -442,8 +556,8 @@
             cursor: pointer;
         }
         .rss-title .active-readme { color: var(--accent); border-color: var(--accent); }
-        .rss-meta { font-size: 12px; color: var(--hint); margin-top: 2px; }
-        .rss-precis { font-size: 13px; color: var(--hint); margin-top: 2px; line-height: 1.3; }
+        .rss-meta { font-size: 12px; color: var(--fg); margin-top: 2px; }
+        .rss-precis { font-size: var(--fs-body); color: var(--fg); margin-top: 2px; line-height: 1.3; }
         .feed-bottom-btn {
             background: var(--secondary-bg);
             color: var(--fg);
@@ -453,18 +567,53 @@
             font-size: 11px;
             cursor: pointer;
         }
+
+        /* Research */
+        .research-item {
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            border-left: 3px solid #333;
+            background: var(--secondary-bg);
+            border-radius: 0 3px 3px 0;
+        }
+        .research-item.done { border-left-color: #4caf50; }
+        .research-item.pending { border-left-color: var(--link); }
+        .research-item.running { border-left-color: #ffd54f; }
+        .research-eid { color: var(--accent); font-size: 15px; font-weight: 600; }
+        .research-status {
+            font-size: 11px;
+            padding: 1px 6px;
+            border-radius: 3px;
+            margin-left: 8px;
+        }
+        .rstatus-pending { background: #1a3a5c; color: #64b5f6; }
+        .rstatus-running { background: rgba(255, 213, 79, 0.15); color: #ffd54f; }
+        .rstatus-done { background: #1a3c1a; color: #4caf50; }
+        .research-topic { color: var(--fg); font-size: var(--fs-body); margin-top: 4px; }
+        .research-meta { color: var(--hint); font-size: 12px; margin-top: 4px; }
+        .research-agent {
+            padding: 8px 12px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            border-radius: 6px;
+        }
+        .research-agent.idle { background: var(--secondary-bg); color: var(--hint); }
+        .research-agent.running { background: rgba(255, 213, 79, 0.1); color: #ffd54f; }
+        .research-stats { color: var(--hint); font-size: 12px; margin-bottom: 12px; }
     </style>
 </head>
 <body>
     <div class="tabs">
         <button class="tab active" data-tab="cal">Cal</button>
         <button class="tab" data-tab="syn">Daily</button>
+        <button class="tab" data-tab="all">All</button>
         <button class="tab" data-tab="picks">Pick</button>
         <button class="tab" data-tab="readme">Read</button>
         <button class="tab" data-tab="rss">RSS</button>
         <button class="tab" data-tab="named">@</button>
         <button class="tab" data-tab="ctx">=</button>
-        <button class="tab" data-tab="search">Search</button>
+        <button class="tab" data-tab="research">?</button>
+        <button class="tab" data-tab="search">&#x1F50D;</button>
     </div>
 
     <div id="panel-cal" class="panel active">
@@ -485,8 +634,14 @@
     <div id="panel-syn" class="panel">
         <div class="loading">Loading synopsis...</div>
     </div>
+    <div id="panel-all" class="panel">
+        <div class="loading">Loading entries...</div>
+    </div>
     <div id="panel-rss" class="panel">
         <div class="loading">Loading RSS...</div>
+    </div>
+    <div id="panel-research" class="panel">
+        <div class="loading">Loading research...</div>
     </div>
     <div id="panel-search" class="panel">
         <div class="search-box">
@@ -573,18 +728,29 @@
         }
 
         loadTab(id);
+
+        // Re-scroll to today when returning to calendar tab
+        if (id === 'cal' && loaded['cal']) {
+            scrollToToday_();
+        }
+
+        // Close any open detail overlay
+        const existing = document.getElementById('detail-overlay');
+        if (existing) existing.remove();
     }
 
     function loadTab(id) {
         if (loaded[id]) return;
         loaded[id] = true;
         if (id === 'cal') loadCalendar();
+        else if (id === 'all') loadAll();
         else if (id === 'named') loadNamed();
         else if (id === 'ctx') loadContextList();
         else if (id === 'picks') loadPicks();
         else if (id === 'readme') loadReadme();
         else if (id === 'syn') loadSynopsis();
         else if (id === 'rss') loadRss();
+        else if (id === 'research') loadResearch();
     }
 
     function showError(panelId, msg) {
@@ -640,6 +806,18 @@
     }
 
     // --- Calendar ---
+    function scrollToToday_() {
+        requestAnimationFrame(() => {
+            const anchor = document.getElementById('today-anchor');
+            if (anchor) {
+                const tabs = document.querySelector('.tabs');
+                const tabsH = tabs ? tabs.offsetHeight : 0;
+                const y = anchor.getBoundingClientRect().top + window.scrollY - tabsH - 30;
+                window.scrollTo(0, Math.max(0, y));
+            }
+        });
+    }
+
     async function loadCalendar() {
         const panel = document.getElementById('panel-cal');
         try {
@@ -728,16 +906,24 @@
 
         panel.innerHTML = html || '<div class="loading">No events</div>';
 
-        // Scroll to today — anchor is on the day header; offset for sticky tabs + week header
-        requestAnimationFrame(() => {
-            const anchor = document.getElementById('today-anchor');
-            if (anchor) {
-                const tabs = document.querySelector('.tabs');
-                const tabsH = tabs ? tabs.offsetHeight : 0;
-                const y = anchor.getBoundingClientRect().top + window.scrollY - tabsH - 30;
-                window.scrollTo(0, Math.max(0, y));
+        scrollToToday_();
+    }
+
+    // --- All entries ---
+    async function loadAll() {
+        const panel = document.getElementById('panel-all');
+        try {
+            const resp = await fetch('/tjai/api/dashboard/status');
+            const data = await resp.json();
+            const entries = data.recent_entries || [];
+            if (entries.length === 0) {
+                panel.innerHTML = '<div class="loading">No entries</div>';
+                return;
             }
-        });
+            panel.innerHTML = renderEntryList(entries, 'panel-all');
+        } catch (e) {
+            panel.innerHTML = '<div class="error-msg">Failed to load entries</div>';
+        }
     }
 
     // --- Named ---
@@ -757,7 +943,7 @@
         for (const entry of data.entries) {
             const ctx = entry.context ? ` <span class="named-context">=${entry.context}</span>` : '';
             const lines = entry.line_count > 1 ? ` <span class="entry-lines">[${entry.line_count}]</span>` : '';
-            html += `<div class="named-entry" onclick="toggleExpand(this,'${entry.id}')">`;
+            html += `<div class="named-entry" onclick="openEntryDetail('${entry.id}')">`;
             html += `<span class="named-name">@${escapeHtml(entry.name)}</span>${ctx}${lines}`;
             html += `<div class="named-content">${linkifyContent(escapeHtml(entry.content))}</div>`;
             html += `</div>`;
@@ -802,7 +988,7 @@
 
             let html = `<div class="context-back" onclick="backToContexts()">Contexts</div>`;
             html += `<div class="context-title">=${escapeHtml(name)}</div>`;
-            html += renderEntryList(data.entries);
+            html += renderEntryList(data.entries, 'panel-ctx');
             panel.innerHTML = html;
         } catch (e) {
             showError('panel-ctx', 'Failed to load entries');
@@ -817,6 +1003,73 @@
         loaded['ctx'] = true;
     }
 
+    // --- Research ---
+    async function loadResearch() {
+        const panel = document.getElementById('panel-research');
+        try {
+            const resp = await fetch('/tjai/api/research/data');
+            const data = await resp.json();
+            if (data.error) {
+                panel.innerHTML = `<div class="error-msg">${escapeHtml(data.error)}</div>`;
+                return;
+            }
+            renderResearch(panel, data);
+        } catch (e) {
+            panel.innerHTML = '<div class="error-msg">Error loading research</div>';
+        }
+    }
+
+    function renderResearch(panel, data) {
+        const agent = data.agent || {};
+        const items = data.items || [];
+        let html = '';
+
+        // Agent banner
+        if (agent.status === 'running') {
+            const currentItem = items.find(i => i.id === agent.current_entry);
+            const name = currentItem ? (currentItem.entry_id || currentItem.id.substring(0, 8)) : '...';
+            html += `<div class="research-agent running">Agent: running ${escapeHtml(name)}</div>`;
+        } else {
+            html += `<div class="research-agent idle">Agent: idle</div>`;
+        }
+
+        // Stats
+        const pending = items.filter(i => i.status !== 'done').length;
+        const done = items.filter(i => i.status === 'done').length;
+        html += `<div class="research-stats">${items.length} topics, ${pending} pending, ${done} completed</div>`;
+
+        // Items
+        for (const item of items) {
+            const isRunning = agent.status === 'running' && item.id === agent.current_entry && item.status !== 'done';
+            const cls = item.status === 'done' ? 'done' : isRunning ? 'running' : 'pending';
+            const statusCls = item.status === 'done' ? 'rstatus-done' : isRunning ? 'rstatus-running' : 'rstatus-pending';
+            const label = item.status === 'done' ? 'done' : isRunning ? 'running' : 'pending';
+
+            html += `<div class="research-item ${cls}" onclick="openEntryDetail('${item.id}')">`;
+            const eid = (item.entry_id || item.id.substring(0, 8)).replace(/^research-/, '');
+            html += `<span class="research-eid">${escapeHtml(eid)}</span>`;
+            html += `<span class="research-status ${statusCls}">${label}</span>`;
+            const topic = item.content.split('\n')[0];
+            html += `<div class="research-topic">${escapeHtml(topic)}</div>`;
+            let meta = '';
+            if (item.status === 'done' && item.modified) {
+                const d = new Date(item.modified * 1000);
+                meta = 'Completed ' + d.toLocaleDateString('en-US', {month: 'short', day: 'numeric'});
+            } else if (item.created) {
+                const d = new Date(item.created * 1000);
+                meta = 'Created ' + d.toLocaleDateString('en-US', {month: 'short', day: 'numeric'});
+            }
+            if (meta) html += `<div class="research-meta">${meta}</div>`;
+            html += `</div>`;
+        }
+
+        if (items.length === 0) {
+            html += '<div class="loading">No research topics queued.</div>';
+        }
+
+        panel.innerHTML = html;
+    }
+
     // --- Search ---
     async function doSearch() {
         const q = document.getElementById('search-input').value.trim();
@@ -828,7 +1081,7 @@
         try {
             const resp = await fetch(`/tjai/api/dashboard/search?q=${encodeURIComponent(q)}`);
             const data = await resp.json();
-            results.innerHTML = renderEntryList(data.entries);
+            results.innerHTML = renderEntryList(data.entries, 'search-results');
             if (!data.entries.length) {
                 results.innerHTML = '<div class="loading">No results</div>';
             }
@@ -838,7 +1091,7 @@
     }
 
     // --- Shared entry rendering ---
-    function renderEntryList(entries) {
+    function renderEntryList(entries, panelId) {
         let html = '';
         for (const e of entries) {
             const kind = e.kind !== 'memory' ? `<span class="entry-kind">[${e.kind}]</span> ` : '';
@@ -848,7 +1101,7 @@
             const tags = (e.tags || []).map(t => `<span class="entry-tag">:${escapeHtml(t)}</span>`).join(' ');
             const content = linkifyContent(escapeHtml(e.content));
 
-            html += `<div class="entry-item" onclick="toggleExpand(this,'${e.id}')">`;
+            html += `<div class="entry-item" onclick="openEntryDetail('${e.id}')">`;
             html += `<div class="entry-first-line">${name}${content}</div>`;
             html += `<div class="entry-meta">${kind}${ctx}${lines}${tags ? tags + ' ' : ''}${formatTimestamp(e.timestamp)}</div>`;
             html += `</div>`;
@@ -856,10 +1109,159 @@
         return html;
     }
 
+    // --- Detail overlay ---
+    let _detailEntry = null;  // current entry data for the overlay
+
+    function closeDetail() {
+        const ov = document.getElementById('detail-overlay');
+        if (ov) ov.remove();
+        _detailEntry = null;
+    }
+
+    async function openEntryDetail(entryId) {
+        // Remove any existing overlay
+        closeDetail();
+        // Create overlay with loading state
+        const ov = document.createElement('div');
+        ov.id = 'detail-overlay';
+        ov.className = 'detail-overlay';
+        ov.innerHTML = '<div class="loading">Loading...</div>';
+        document.body.appendChild(ov);
+        try {
+            const resp = await fetch(`/tjai/api/entry/${entryId}/content`);
+            if (!resp.ok) { closeDetail(); return; }
+            const data = await resp.json();
+            _detailEntry = data;
+            renderDetail(data);
+        } catch (e) {
+            closeDetail();
+        }
+    }
+
+    function renderDetail(data) {
+        const ov = document.getElementById('detail-overlay');
+        if (!ov) return;
+        const name = data.name ? `<span class="named-name">@${escapeHtml(data.name)}</span> ` : '';
+        const eid = (!data.name && data.entry_id) ? `<span class="research-eid">${escapeHtml(data.entry_id.replace(/^research-/, ''))}</span> ` : '';
+        const ctx = data.context ? `<span class="named-context">=${data.context}</span> ` : '';
+        const kind = data.kind !== 'memory' ? `<span class="entry-kind">[${data.kind}]</span> ` : '';
+        const tags = (data.tags || []).map(t => `<span class="entry-tag">:${escapeHtml(t)}</span>`).join(' ');
+
+        let html = `<button class="detail-close" onclick="closeDetail()">&times;</button>`;
+        html += `<div class="detail-header">${name}${eid}${ctx}${kind}${tags}</div>`;
+        html += `<div id="detail-content" class="detail-body">${linkifyContent(escapeHtml(data.content))}</div>`;
+        html += `<div class="detail-actions">`;
+        html += `<button onclick="editEntry('${data.id}')">Edit</button>`;
+        html += `<button id="btn-pretty" onclick="togglePretty()">Prettify</button>`;
+        html += `<button onclick="closeDetail()">Close</button>`;
+        html += `</div>`;
+        ov.innerHTML = html;
+        _detailEntry = data;
+        // Auto-prettify research items with larger fonts
+        if ((data.tags || []).includes('research')) {
+            togglePretty();
+            const dc = document.getElementById('detail-content');
+            if (dc) dc.classList.add('research');
+        }
+    }
+
+    function togglePretty() {
+        try {
+            const el = document.getElementById('detail-content');
+            const btn = document.getElementById('btn-pretty');
+            if (!el || !_detailEntry) { showToast('Prettify: no content'); return; }
+            if (el.classList.contains('pretty')) {
+                el.className = 'detail-body';
+                el.innerHTML = linkifyContent(escapeHtml(_detailEntry.content));
+                btn.classList.remove('active');
+                btn.textContent = 'Prettify';
+            } else {
+                el.className = 'detail-body pretty';
+                el.innerHTML = renderMarkdown(_detailEntry.content);
+                btn.classList.add('active');
+                btn.textContent = 'Markdown';
+            }
+        } catch (e) {
+            showToast('Prettify error: ' + e.message);
+        }
+    }
+
+    function renderMarkdown(text) {
+        let html = escapeHtml(text);
+        html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+        html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+        html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
+        html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+        html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+        html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+        html = html.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
+        html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+        html = html.replace(/\n\n/g, '</p><p>');
+        html = '<p>' + html + '</p>';
+        html = html.replace(/<p><(h[1234]|ul|pre|blockquote)/g, '<$1');
+        html = html.replace(/<\/(h[1234]|ul|pre|blockquote)><\/p>/g, '</$1>');
+        html = html.replace(/<p><\/p>/g, '');
+        return html;
+    }
+
+    function editEntry(entryId) {
+        if (!_detailEntry) return;
+        const ov = document.getElementById('detail-overlay');
+        if (!ov) return;
+
+        const contentEl = document.getElementById('detail-content');
+        const actionsEl = ov.querySelector('.detail-actions');
+
+        contentEl.outerHTML = `<textarea id="detail-edit-textarea" class="detail-edit-area">${escapeHtml(_detailEntry.content)}</textarea>`;
+        actionsEl.innerHTML = `<button class="primary" onclick="saveEntry('${entryId}')">Save</button><button onclick="renderDetail(_detailEntry)">Cancel</button>`;
+
+        const ta = document.getElementById('detail-edit-textarea');
+        ta.focus();
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+    }
+
+    async function saveEntry(entryId) {
+        const ta = document.getElementById('detail-edit-textarea');
+        if (!ta) return;
+        const content = ta.value;
+
+        try {
+            const resp = await fetch(`/tjai/api/entry/${entryId}/save`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                body: JSON.stringify({content: content})
+            });
+            if (!resp.ok) {
+                showToast('Save failed');
+                return;
+            }
+            showToast('Saved');
+            _detailEntry.content = content;
+            renderDetail(_detailEntry);
+            // Invalidate loaded tabs so lists refresh with updated content
+            Object.keys(loaded).forEach(k => delete loaded[k]);
+        } catch (e) {
+            showToast('Save failed');
+        }
+    }
+
     // --- Helpers ---
     function getCsrf() {
         const c = document.cookie.match(/csrftoken=([^;]+)/);
         return c ? c[1] : '';
+    }
+
+    function showToast(msg) {
+        const t = document.createElement('div');
+        t.textContent = msg;
+        t.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#2e7d32;color:#fff;padding:10px 20px;border-radius:6px;font-size:14px;z-index:9999;opacity:0;transition:opacity 0.3s';
+        document.body.appendChild(t);
+        requestAnimationFrame(() => t.style.opacity = '1');
+        setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 2000);
     }
 
     // --- Picks ---
@@ -1174,8 +1576,9 @@
             panel.innerHTML = '<div class="loading">No synopses found.</div>';
             return;
         }
+        const recent = synDates.slice(0, 7);
         let html = '<div class="syn-dates">';
-        for (const d of synDates) {
+        for (const d of recent) {
             const isToday = d.date_key === synTodayKey;
             html += `<div class="syn-date${isToday ? ' today' : ''}" data-entry-id="${escapeHtml(d.entry_id)}" onclick="selectSynopsis('${escapeHtml(d.entry_id)}')">${escapeHtml(d.date_display)}</div>`;
         }

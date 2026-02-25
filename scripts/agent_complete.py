@@ -87,8 +87,8 @@ def main():
                 defaults={'value': str(float(tracking_ts)),
                           'timestamp_modified': now})
 
-    # Structured error reporting
-    if exit_code != 0:
+    # Structured error reporting (124 = timeout, treated as success)
+    if exit_code not in (0, 124):
         error_msg = f"Agent exited {exit_code}"
         if stderr_content:
             error_msg += f": {stderr_content[-200:]}"

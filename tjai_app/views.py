@@ -1921,6 +1921,7 @@ def api_entry_content(request, entry_id):
         'kind': entry.kind,
         'context': entry.context_id,
         'name': entry.name,
+        'entry_id': data.get('entry_id') if data else None,
         'timestamp': entry.timestamp_modified,
         'tags': tags,
         'event_date': data.get('event_date') if data else None,
