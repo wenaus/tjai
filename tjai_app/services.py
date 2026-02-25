@@ -503,6 +503,27 @@ def get_entry(entry_id):
     return _format_entry(entry)
 
 
+def get_named_entries(name=None, context=None):
+    """Get entries that have a @name. If name given, return that specific entry."""
+    qs = Entry.objects.filter(
+        deleted_at__isnull=True,
+        name__isnull=False,
+    ).exclude(name='').select_related('context').prefetch_related('tags')
+
+    if context:
+        qs = qs.filter(context__name=context)
+
+    if name:
+        entry = qs.filter(name=name).first()
+        if not entry:
+            ctx_msg = f" in context '{context}'" if context else ""
+            return {"error": f"No entry named '{name}'{ctx_msg}"}
+        return _format_entry(entry)
+
+    qs = qs.order_by('name')
+    return [_format_entry(entry) for entry in qs]
+
+
 def get_entry_by_entry_id(entry_id):
     """Find an entry by its human-readable entry_id stored in data.entry_id."""
     if not entry_id:

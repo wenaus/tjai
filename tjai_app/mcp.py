@@ -14,6 +14,7 @@ Available tools:
     get_memories      - Get memory entries. Call unfiltered to see general activity
     get_bookmarks     - Get saved bookmark entries (URLs)
     search_entries    - Full-text search across all entries
+    get_named_entries - Get entries by @name, or list all named entries
     get_entry         - Get a single entry by ID
     edit_entry        - Edit an existing entry
     delete_entry      - Soft delete an entry (requires user approval)
@@ -324,6 +325,33 @@ async def search_entries(
     return await sync_to_async(services.search_entries)(
         query=query, kind=kind, context=context, limit=limit,
         start_date=start_date, end_date=end_date,
+    )
+
+
+@mcp.tool()
+async def get_named_entries(
+    name: str = None,
+    context: str = None,
+) -> list | dict:
+    """
+    Get entries that have an @name assigned.
+
+    Named entries are user-curated singletons with unique identifiers
+    (e.g., @shopping, @budget, @tjai). Use this to look up a specific
+    named entry or to list all named entries.
+
+    Args:
+        name: If provided, return the entry with this exact @name.
+              If omitted, return all named entries.
+        context: Filter to entries in this context/project only.
+
+    Returns:
+        If name provided: single entry dict with all fields.
+        If name omitted: list of all named entries, sorted alphabetically by name.
+        Returns {"error": "..."} if named entry not found.
+    """
+    return await sync_to_async(services.get_named_entries)(
+        name=name, context=context,
     )
 
 
