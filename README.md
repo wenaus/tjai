@@ -732,6 +732,7 @@ tj l actions          # List all action entries (numbered)
 tj run 1              # Execute action #1 (from last listing)
 tj run daily_history  # Execute by name or content match
 tj wake               # Send SIGHUP to daemon (check all now)
+tj restart-agent      # Graceful restart (after current action completes)
 ```
 
 **MCP tool:** `run_action(entry_id)` — executes a specific action immediately.
@@ -741,16 +742,18 @@ tj wake               # Send SIGHUP to daemon (check all now)
 **Management:**
 
 ```bash
-./deploy/restart_action_agent.sh   # Start/restart via supervisord
 tj wake                             # Wake daemon to check due actions
+tj restart-agent                    # Graceful restart after current action
 tj l actions                        # See what actions exist
 ```
+
+**Restarting after code changes:** After deploying changes to action agent code (`action_agent.py`, `action_runner.py`, `agent_complete.py`), run `tj restart-agent` to pick up the new code. This schedules a graceful restart — the agent finishes any in-progress action, then exits and supervisord auto-restarts with the deployed code. Never use `supervisorctl restart` directly as it kills in-progress actions.
 
 **Files:**
 
 - `scripts/action_agent.py` — The daemon (signal handlers, sleep loop, heartbeat)
 - `tjai_app/action_runner.py` — Shared execution logic (mechanical, journal, AI, templates)
-- `tj/commands/run_action.py` — CLI handlers for `tj run` and `tj wake`
+- `tj/commands/run_action.py` — CLI handlers for `tj run`, `tj wake`, and `tj restart-agent`
 - `deploy/supervisord.conf` — Supervisord configuration
 - `deploy/restart_action_agent.sh` — Convenience restart script
 

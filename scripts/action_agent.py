@@ -83,7 +83,8 @@ def sleep_until_next(trigger_filter=None):
             from tjai_app.models import SysConfig
             # Check for kill request first (runs as admin, has permission)
             _check_kill_request()
-            for check_key in ('action_agent_wake_requested', 'system_health_refresh_requested'):
+            for check_key in ('action_agent_wake_requested', 'system_health_refresh_requested',
+                              'action_agent_restart_requested'):
                 req = SysConfig.objects.filter(
                     key=check_key
                 ).values_list('value', flat=True).first()
@@ -372,6 +373,17 @@ def main():
                     logger.error("Action %s failed: %s", action.id, e,
                                  exc_info=True)
             write_heartbeat()
+            # Check for scheduled restart (e.g. after code deploy)
+            from tjai_app.models import SysConfig
+            restart_req = SysConfig.objects.filter(
+                key='action_agent_restart_requested'
+            ).values_list('value', flat=True).first()
+            if restart_req:
+                SysConfig.objects.filter(
+                    key='action_agent_restart_requested'
+                ).update(value='', timestamp_modified=time.time())
+                logger.info("Restart requested — exiting for supervisord restart")
+                break
             sleep_until_next(trigger_filter=args.trigger)
         except Exception as e:
             logger.error("Main loop: %s", e, exc_info=True)

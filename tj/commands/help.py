@@ -67,11 +67,11 @@ tj() { .../tj.py "$*"; }        tj admin agent sync      Full sync
 Add to ~/.bashrc                tj admin agent location  Get/set name
                                 tj admin agent interval  Get/set interval
 
-AI GUIDELINES
-tj ai           Show universal + context guidelines
-tj ai =ctx      Show universal + specific context
-tj ai <text>    Create universal guideline
-tj ai =ctx <text> Create context-specific guideline
+AI GUIDELINES                   ACTION AGENT
+tj ai           Show universal  tj run <n|name> Execute action now
+tj ai =ctx      + context       tj wake         Wake to check due actions
+tj ai <text>    Create univ.    tj restart-agent Graceful restart
+tj ai =ctx <text> Create ctx
 
 Examples:
   tj =tjai @roadmap v2 planning p=1 s=active :design

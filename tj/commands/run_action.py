@@ -1,9 +1,10 @@
-"""Run action and wake agent commands for tj CLI."""
+"""Run action, wake, and restart agent commands for tj CLI."""
 
 import os
 import signal
 import subprocess
 import sys
+import time
 
 from tj.state import get_state
 
@@ -102,3 +103,30 @@ def handle_wake_agent(args):
     except PermissionError:
         print(f"Error: Permission denied sending signal to PID {pid}",
               file=sys.stderr)
+
+
+def handle_restart_agent(args):
+    """Schedule a graceful action agent restart.
+
+    Sets a sysconfig flag that the action agent checks between runs.
+    The agent finishes any in-progress action, then exits.
+    Supervisord auto-restarts it with the new deployed code.
+
+    Use after deploying code changes to action_agent.py, action_runner.py,
+    or any scripts the action agent imports.
+    """
+    from tj.server import send_command
+
+    try:
+        resp = send_command("set_sysconfig",
+                            key="action_agent_restart_requested", value="1")
+    except Exception as e:
+        print(f"Error: Could not reach server: {e}", file=sys.stderr)
+        return
+
+    if resp.get("status") != "ok":
+        print(f"Error: Server returned: {resp}", file=sys.stderr)
+        return
+
+    print("Action agent restart scheduled.")
+    print("It will restart after completing any in-progress action.")

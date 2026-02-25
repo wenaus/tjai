@@ -105,6 +105,35 @@ def main():
         SysConfig.objects.filter(key=f'agent_{action_id}_last_error_time').update(
             value='', timestamp_modified=now)
 
+    # Write structured run result to the current entry's data field
+    if current_entry:
+        try:
+            entry = Entry.objects.filter(
+                id=current_entry, deleted_at__isnull=True
+            ).first()
+            if entry:
+                data = entry.data if isinstance(entry.data, dict) else {}
+                launched = SysConfig.objects.filter(
+                    key=f'agent_{action_id}_launched'
+                ).values_list('value', flat=True).first()
+                duration = round(now - float(launched)) if launched else None
+                data['run_status'] = status
+                data['run_completed_at'] = now
+                data['run_duration_seconds'] = duration
+                data['run_exit_code'] = exit_code
+                if exit_code not in (0, 124) and stderr_content:
+                    data['run_error'] = stderr_content[-200:]
+                elif 'run_error' in data:
+                    del data['run_error']
+                entry.data = data
+                entry.save(update_fields=['data'])
+                logger.info("%s: wrote run result to entry %s (duration=%ss)",
+                            action_id, current_entry,
+                            duration, extra=ref_extra)
+        except Exception as e:
+            logger.error("%s: failed to write run result: %s",
+                         action_id, e, extra=ref_extra)
+
     # Queue drain for research-agent: auto-chain to next pending item
     if action_id == 'research-agent' and exit_code == 0:
         _research_queue_drain(now)

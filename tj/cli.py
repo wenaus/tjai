@@ -296,13 +296,17 @@ def create_parser() -> argparse.ArgumentParser:
     p_ai_agent.set_defaults(func=handle_ai_agent)
 
     # Action runner
-    from tj.commands.run_action import handle_run_action, handle_wake_agent
+    from tj.commands.run_action import handle_run_action, handle_wake_agent, handle_restart_agent
     p_run = subparsers.add_parser('run', help="Execute an action entry now.")
     p_run.add_argument('target', help="Action number (from tj l actions) or entry name")
     p_run.set_defaults(func=handle_run_action)
 
     p_wake = subparsers.add_parser('wake', help="Wake the action agent to check for due actions.")
     p_wake.set_defaults(func=handle_wake_agent)
+
+    p_restart = subparsers.add_parser('restart-agent',
+        help="Schedule graceful action agent restart (after current action completes).")
+    p_restart.set_defaults(func=handle_restart_agent)
 
     # Help
     p_help = subparsers.add_parser('h', help="Show this help message.", add_help=False)
