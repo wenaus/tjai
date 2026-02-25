@@ -1153,7 +1153,7 @@ def entry_detail(request, entry_id=None):
     # Body content excludes first line (shown in summary header)
     body_lines = entry.content.split('\n')
     body_text = '\n'.join(body_lines[1:]).strip() if len(body_lines) > 1 else ''
-    content_html = markdown.markdown(body_text, extensions=['nl2br']) if body_text else ''
+    content_html = markdown.markdown(body_text, extensions=['tables', 'fenced_code'], tab_length=2) if body_text else ''
     # Linkify bare URLs not already in anchor tags
     import re
     content_html = re.sub(
