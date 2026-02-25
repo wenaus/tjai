@@ -146,6 +146,11 @@ function extractZoomUrl_(text) {
   var regex = /https?:\/\/[a-zA-Z0-9.-]*(?:zoom\.us|zoomgov\.com)\/[^\s<>"\\]+/gi;
   var matches = text.match(regex);
   if (!matches) return null;
+  // Clean Proofpoint URL Defense tracking suffixes (BNL email security)
+  // Pattern: __;!!<tracking>$ or __;!!<tracking>$  appended to URLs
+  for (var i = 0; i < matches.length; i++) {
+    matches[i] = matches[i].replace(/__;!![^]*$/, '');
+  }
   // Prefer the URL with query params (has the password)
   for (var i = 0; i < matches.length; i++) {
     if (matches[i].indexOf('?') !== -1) return matches[i];

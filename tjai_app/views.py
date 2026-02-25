@@ -1198,6 +1198,26 @@ def api_entry_save(request, entry_id):
     entry.content = content
     if 'name' in data:
         entry.name = data['name'] or None  # empty string → None
+    # Context: strip leading '=' if present, empty string clears context
+    if 'context' in data:
+        ctx = (data['context'] or '').strip().lstrip('=')
+        if ctx:
+            # Create context if it doesn't exist
+            Context.objects.get_or_create(
+                name=ctx,
+                defaults={'timestamp_created': time.time(), 'timestamp_modified': time.time()}
+            )
+            entry.context_id = ctx
+        else:
+            entry.context_id = None
+    # Sync tags from content — extract :tag tokens embedded in text
+    import re
+    tag_pattern = re.compile(r'(?:^|\s):([a-zA-Z][a-zA-Z0-9_-]*)')
+    content_tags = set(tag_pattern.findall(content))
+    if content_tags:
+        existing_tags = set(Tag.objects.filter(entry_id=entry.id).values_list('tag_name', flat=True))
+        for tag_name in content_tags - existing_tags:
+            Tag.objects.create(tag_name=tag_name, entry_id=entry.id)
     entry.timestamp_modified = time.time()
     entry.save()
     data_dict = entry.data if isinstance(entry.data, dict) else None
