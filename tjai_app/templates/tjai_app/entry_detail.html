@@ -109,7 +109,8 @@
                 return val > 1e9 && val < 2e10;
             }
             function escHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-            var SCRIPTS_DIR = '/var/www/tjai/scripts/';
+            var GITHUB_URL = '{{ github_url|escapejs }}';
+            var SCRIPT_PATH = 'blob/master/tjai/scripts/';
             function fmtVal(key, val) {
                 if (isTimestamp(key, val)) {
                     var d = new Date(val * 1000);
@@ -117,7 +118,10 @@
                 }
                 if (typeof val === 'object' && val !== null) return '<span>' + escHtml(JSON.stringify(val)) + '</span>';
                 var s = String(val);
-                if (key === 'mechanical_script') s = SCRIPTS_DIR + s;
+                if (key === 'mechanical_script' && GITHUB_URL) {
+                    var url = GITHUB_URL + '/' + SCRIPT_PATH + encodeURIComponent(val);
+                    return '<a href="' + url + '" style="color:#64b5f6">' + escHtml(val) + '</a>';
+                }
                 if (s.length > 120) {
                     return '<div style="margin-top:4px;padding:8px 12px;background:#222;border-radius:3px;white-space:pre-wrap;line-height:1.5">' + escHtml(s) + '</div>';
                 }

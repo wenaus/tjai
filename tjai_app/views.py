@@ -1180,6 +1180,9 @@ def entry_detail(request, entry_id=None):
             'poem_body': poem_body,
             'tags': tags,
         })
+    github_url = SysConfig.objects.filter(
+        key='config_github_url'
+    ).values_list('value', flat=True).first() or ''
     return render(request, 'tjai_app/entry_detail.html', {
         'entry': entry,
         'content_html': content_html,
@@ -1187,6 +1190,7 @@ def entry_detail(request, entry_id=None):
         'line_count': len(lines),
         'first_line': first_line,
         'event_date': data.get('event_date') if data else None,
+        'github_url': github_url,
     })
 
 
