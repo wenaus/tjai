@@ -531,6 +531,8 @@
             if (activeStatus) params.set('status', activeStatus);
             if (excludedContexts.size > 0) params.set('exclude', [...excludedContexts].sort().join(','));
             if (activeDate) params.set('date', activeDate);
+            const searchVal = document.getElementById('entry-search').value.trim();
+            if (searchVal && isSearchActive) params.set('search', searchVal);
             const qs = params.toString();
             const url = qs ? `${location.pathname}?${qs}` : location.pathname;
             history.replaceState(null, '', url);
@@ -548,6 +550,11 @@
             if (excl) excl.split(',').forEach(c => excludedContexts.add(c));
             activeDate = params.get('date') || null;
             isFilterActive = !!(activeTags.size > 0 || activeKind || activeContext || activeMachine || activeStatus || activeDate || excludedContexts.size > 0);
+            const searchParam = params.get('search');
+            if (searchParam) {
+                document.getElementById('entry-search').value = searchParam;
+                document.getElementById('search-clear').style.display = 'inline';
+            }
         }
 
         function entriesLabel() {
@@ -601,10 +608,12 @@
         async function searchEntries(query) {
             isSearchActive = true;
             try {
-                const resp = await fetch(`/tjai/api/dashboard/search?q=${encodeURIComponent(query)}`);
+                const params = [`q=${encodeURIComponent(query)}`, ...buildFilterParams()];
+                const resp = await fetch(`/tjai/api/dashboard/search?${params.join('&')}`);
                 const data = await resp.json();
                 const count = data.entries ? data.entries.length : 0;
-                document.getElementById('entries-label').innerHTML = `Search: "${escapeHtml(query)}" <span style="color:#8a8a8a">(${count} results)</span>`;
+                const filterNote = buildFilterParams().length > 0 ? ' + filters' : '';
+                document.getElementById('entries-label').innerHTML = `Search: "${escapeHtml(query)}"${filterNote} <span style="color:#8a8a8a">(${count} results)</span>`;
                 document.getElementById('entries-list').innerHTML = renderEntries(data.entries || [], dashboardTimezone);
             } catch (err) {
                 document.getElementById('entries-list').innerHTML = `<div style="color:#f44">Search error: ${escapeHtml(err.message)}</div>`;
@@ -612,6 +621,15 @@
         }
 
         async function fetchFilteredEntries() {
+            // If search is active, re-run search with current filters
+            if (isSearchActive) {
+                const q = document.getElementById('entry-search').value.trim();
+                if (q) {
+                    syncStateToUrl();
+                    searchEntries(q);
+                    return;
+                }
+            }
             const params = buildFilterParams();
             isFilterActive = params.length > 0;
             if (!isFilterActive) {
@@ -909,6 +927,7 @@
                 searchInput.value = '';
                 searchClear.style.display = 'none';
             }
+            isSearchActive = false;
             // Clear all filters
             activeMachine = null;
             activeTags.clear();
@@ -942,13 +961,16 @@
                 const q = this.value.trim();
                 if (q) {
                     searchEntries(q);
+                    syncStateToUrl();
                 } else {
                     restoreFromSearch();
+                    syncStateToUrl();
                 }
             } else if (e.key === 'Escape') {
                 this.value = '';
                 searchClear.style.display = 'none';
                 restoreFromSearch();
+                syncStateToUrl();
             }
         });
         searchInput.addEventListener('input', function() {
@@ -959,13 +981,17 @@
             searchClear.style.display = 'none';
             searchInput.focus();
             restoreFromSearch();
+            syncStateToUrl();
         });
 
         // Load filter state from URL params (for bookmarks / programmatic URLs)
         loadStateFromUrl();
 
         // Initial load
-        refresh();
+        refresh().then(() => {
+            const searchParam = new URLSearchParams(location.search).get('search');
+            if (searchParam) searchEntries(searchParam);
+        });
 
         // Refresh every 20 seconds
         setInterval(refresh, 20000);

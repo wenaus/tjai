@@ -912,10 +912,48 @@ def dashboard_search(request):
     qs = Entry.objects.filter(
         content__icontains=q,
         deleted_at__isnull=True,
-    ).exclude(status='archive')
-    context = request.GET.get('context', '').strip()
-    if context:
-        qs = qs.filter(context_id=context)
+    )
+
+    # Apply same filters as dashboard_status
+    filter_status = request.GET.get('status')
+    if filter_status:
+        qs = qs.filter(status=filter_status)
+    else:
+        qs = qs.exclude(status='archive')
+
+    filter_kind = request.GET.get('kind')
+    if filter_kind:
+        qs = qs.filter(kind=filter_kind)
+
+    filter_context = request.GET.get('context', '').strip()
+    if filter_context:
+        qs = qs.filter(context_id=filter_context)
+
+    exclude_contexts = [c for c in request.GET.get('exclude_context', '').split(',') if c]
+    if exclude_contexts:
+        qs = qs.exclude(context_id__in=exclude_contexts)
+
+    filter_tag = request.GET.get('tag')
+    if filter_tag:
+        for t in [t for t in filter_tag.split(',') if t]:
+            tagged_ids = Tag.objects.filter(tag_name=t).values_list('entry_id', flat=True)
+            qs = qs.filter(id__in=tagged_ids)
+
+    filter_machine = request.GET.get('machine')
+    if filter_machine:
+        qs = qs.filter(data__hostname=filter_machine)
+
+    filter_date = request.GET.get('date')
+    if filter_date:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo('America/New_York')
+        day_start = datetime.strptime(filter_date, '%Y-%m-%d').replace(tzinfo=tz)
+        day_end = day_start + timedelta(days=1)
+        qs = qs.filter(
+            timestamp_modified__gte=day_start.timestamp(),
+            timestamp_modified__lt=day_end.timestamp(),
+        )
+
     entries = qs.order_by('-timestamp_modified')[:200]
 
     # Batch fetch tags
