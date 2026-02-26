@@ -13,6 +13,43 @@ var TJAI_API_URL = 'https://etaverse.com/tjai/api/add-journal';
 var TJAI_ENTRY_URL = 'https://etaverse.com/tjai/api/add-entry';
 var DEFAULT_TIMEZONE = 'America/New_York';
 
+// Country-code TLD → default timezone for sender (when no explicit tz in text).
+// Only single-timezone countries. Multi-tz countries (US, CA, AU, BR, RU) omitted.
+var COUNTRY_TLD_TZ_ = {
+  'ch': 'Europe/Zurich',
+  'fr': 'Europe/Paris',
+  'uk': 'Europe/London',
+  'de': 'Europe/Berlin',
+  'it': 'Europe/Rome',
+  'es': 'Europe/Madrid',
+  'nl': 'Europe/Amsterdam',
+  'be': 'Europe/Brussels',
+  'se': 'Europe/Stockholm',
+  'no': 'Europe/Oslo',
+  'dk': 'Europe/Copenhagen',
+  'pl': 'Europe/Warsaw',
+  'cz': 'Europe/Prague',
+  'at': 'Europe/Vienna',
+  'jp': 'Asia/Tokyo',
+  'kr': 'Asia/Seoul',
+  'in': 'Asia/Kolkata',
+  'il': 'Asia/Jerusalem',
+  'nz': 'Pacific/Auckland',
+};
+
+/**
+ * Extract default timezone from sender email domain's country TLD.
+ * Returns IANA timezone or DEFAULT_TIMEZONE if no match.
+ */
+function senderTimezone_(fromEmail) {
+  if (!fromEmail) return DEFAULT_TIMEZONE;
+  var match = fromEmail.match(/@[^>]*\.([a-z]{2})(?:\s*>?\s*)$/i);
+  if (match && COUNTRY_TLD_TZ_[match[1].toLowerCase()]) {
+    return COUNTRY_TLD_TZ_[match[1].toLowerCase()];
+  }
+  return DEFAULT_TIMEZONE;
+}
+
 // Microsoft Windows timezone names → IANA. This is a finite, documented set
 // (https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/default-time-zones).
 // Outlook/Exchange calendar invites use these in VTIMEZONE TZID fields.
@@ -121,7 +158,8 @@ var TZ_ABBREV_ = {
   'CST': 'America/Chicago', 'CDT': 'America/Chicago', 'CT': 'America/Chicago',
   'MST': 'America/Denver', 'MDT': 'America/Denver', 'MT': 'America/Denver',
   'PST': 'America/Los_Angeles', 'PDT': 'America/Los_Angeles', 'PT': 'America/Los_Angeles',
-  'UTC': 'Etc/UTC', 'GMT': 'Etc/GMT'
+  'UTC': 'Etc/UTC', 'GMT': 'Etc/GMT',
+  'CET': 'Europe/Zurich', 'CEST': 'Europe/Zurich'
 };
 
 var MONTH_PAT_ = 'January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec';
@@ -189,6 +227,11 @@ function extractMeetingTitle_(subject, body) {
       var trailRegex2 = new RegExp('\\s+(?:' + MONTH_PAT_ + ')\\s+\\d{1,2}(?:st|nd|rd|th)?\\s.*$', 'i');
       stripped = title.replace(trailRegex2, '');
     }
+    // European date order: " - Monday 2 March..." or " - 2 March..."
+    if (stripped === title) {
+      var trailEu = new RegExp('[\\s-]+(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)[,\\s-]+)?\\d{1,2}(?:st|nd|rd|th)?\\s+(?:' + MONTH_PAT_ + ')\\b.*$', 'i');
+      stripped = title.replace(trailEu, '');
+    }
     title = stripped;
     title = title.trim();
     if (title) return title;
@@ -216,9 +259,10 @@ function extractMeetingTitle_(subject, body) {
  * "Wednesday, February 25, at 11:00 a.m. (EST)".
  * Returns {timestamp, displayDate, displayTime, tzInfo} or null.
  */
-function extractDateTime_(subject, body, msgYear) {
+function extractDateTime_(subject, body, msgYear, senderTz) {
+  var defaultTz = senderTz || DEFAULT_TIMEZONE;
   // Try subject first
-  var result = parseDateTimeText_(subject, msgYear);
+  var result = parseDateTimeText_(subject, msgYear, defaultTz);
   if (result) return result;
 
   // Body: prefer lines with "Date" label
@@ -226,12 +270,12 @@ function extractDateTime_(subject, body, msgYear) {
     var lines = body.split(/\n/);
     for (var i = 0; i < lines.length; i++) {
       if (/^\s*Date/i.test(lines[i])) {
-        result = parseDateTimeText_(lines[i], msgYear);
+        result = parseDateTimeText_(lines[i], msgYear, defaultTz);
         if (result) return result;
       }
     }
     // Fall back to any line in body
-    result = parseDateTimeText_(body, msgYear);
+    result = parseDateTimeText_(body, msgYear, defaultTz);
   }
 
   return result;
@@ -243,8 +287,9 @@ function extractDateTime_(subject, body, msgYear) {
  * Handles: [Dayname, ]Month DD[, YYYY][,] [at ]H[:MM] a.m./p.m. [(TZ)]
  * Returns {timestamp, displayDate, displayTime, tzInfo} or null.
  */
-function parseDateTimeText_(text, fallbackYear) {
+function parseDateTimeText_(text, fallbackYear, defaultTz) {
   if (!text) return null;
+  defaultTz = defaultTz || DEFAULT_TIMEZONE;
 
   var regex = new RegExp(
     '(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\\s*)?' +
@@ -254,11 +299,34 @@ function parseDateTimeText_(text, fallbackYear) {
     ',?\\s+(?:at\\s+)?' +                                  // separator
     '(\\d{1,2})(?::(\\d{2}))?\\s*' +                       // (4) hour (5) min
     '(a\\.?m\\.?|p\\.?m\\.?|AM|PM)' +                     // (6) am/pm
-    '(?:\\s*\\(?(E[SD]T|C[SD]T|M[SD]T|P[SD]T|ET|CT|MT|PT|UTC|GMT)\\)?)?',  // (7) tz
+    '(?:\\s*\\(?(E[SD]T|C[SD]T|M[SD]T|P[SD]T|ET|CT|MT|PT|UTC|GMT|CES?T)\\)?)?',  // (7) tz
     'i'
   );
 
   var match = text.match(regex);
+
+  // European date order fallback: [Dayname] DD[ordinal] Month [YYYY] ... H[:MM] am/pm [(TZ)]
+  if (!match) {
+    var euRegex = new RegExp(
+      '(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\\s*)?' +
+      '(\\d{1,2})(?:st|nd|rd|th)?\\s+' +                      // (1) day + optional ordinal
+      '(' + MONTH_PAT_ + ')' +                                 // (2) month
+      '(?:,?\\s*(\\d{4}))?' +                                  // (3) optional year
+      '(?:[,\\s\\-]+|\\s+(?:at\\s+))' +                        // separator (comma, dash, or "at")
+      '(\\d{1,2})(?::(\\d{2}))?\\s*' +                         // (4) hour (5) min
+      '(a\\.?m\\.?|p\\.?m\\.?|AM|PM)' +                       // (6) am/pm
+      '(?:\\s*\\(?(E[SD]T|C[SD]T|M[SD]T|P[SD]T|ET|CT|MT|PT|UTC|GMT|CES?T)\\)?)?',  // (7) tz
+      'i'
+    );
+    match = text.match(euRegex);
+    if (match) {
+      // Swap day/month groups to normalize to same layout as US regex
+      var dayStr = match[1];
+      match[1] = match[2];  // month
+      match[2] = dayStr;    // day
+    }
+  }
+
   if (!match) return null;
 
   var month = MONTHS_[match[1].toLowerCase()];
@@ -274,8 +342,8 @@ function parseDateTimeText_(text, fallbackYear) {
   if (ampm === 'pm' && hour < 12) hour += 12;
   if (ampm === 'am' && hour === 12) hour = 0;
 
-  // Resolve timezone
-  var tzName = DEFAULT_TIMEZONE;
+  // Resolve timezone: explicit in text > sender-based default
+  var tzName = defaultTz;
   if (match[7] && TZ_ABBREV_[match[7].toUpperCase()]) {
     tzName = TZ_ABBREV_[match[7].toUpperCase()];
   }
@@ -392,11 +460,12 @@ function onGmailMessage(e) {
       var subject = tryMsg.getSubject();
       var body = tryMsg.getPlainBody();
       var msgYear = tryMsg.getDate().getFullYear();
+      var senderTz = senderTimezone_(tryMsg.getFrom());
 
       var title = extractMeetingTitle_(subject, body);
       if (!title) { diag.push('msg[' + t + ']: no title'); continue; }
 
-      var dt = extractDateTime_(subject, body, msgYear);
+      var dt = extractDateTime_(subject, body, msgYear, senderTz);
       if (!dt) { diag.push('msg[' + t + ']: no datetime'); continue; }
 
       diag.push('msg[' + t + ']: ' + title + ' @ ' + dt.displayDate);
