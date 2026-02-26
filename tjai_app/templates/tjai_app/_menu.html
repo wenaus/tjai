@@ -7,6 +7,8 @@
     {% if current_page == "rss" %}<span style="color:#e0e0e0">RSS</span>{% else %}<a href="{% url 'rss' %}">RSS</a>{% endif %}
     {% if current_page == "readme" %}<span style="color:#e0e0e0">ReadMe</span>{% else %}<a href="{% url 'readme' %}">ReadMe</a>{% endif %}
     {% if current_page == "research" %}<span style="color:#e0e0e0">Research</span>{% else %}<a href="{% url 'research' %}">Research</a>{% endif %}
+    {% if current_page == "recipes" %}<span style="color:#e0e0e0">Recipes</span>{% else %}<a href="{% url 'context_entries' 'recipe' %}">Recipes</a>{% endif %}
+    {% if current_page == "poetry" %}<span style="color:#e0e0e0">Poetry</span>{% else %}<a href="{% url 'context_entries' 'poetry' %}">Poetry</a>{% endif %}
     {% if current_page == "archive" %}<span style="color:#e0e0e0">Archive</span>{% else %}<a href="{% url 'dashboard' %}?status=archive">Archive</a>{% endif %}
     {% if current_page == "agent_log" %}<span style="color:#e0e0e0">Agent Log</span>{% else %}<a href="{% url 'agent_log' %}">Agent Log</a>{% endif %}
     {% if current_page == "system" %}<span id="menu-system" style="color:{{ health_color }}">System</span>{% else %}<a id="menu-system" href="{% url 'system_health' %}" style="color:{{ health_color }}">System</a>{% endif %}

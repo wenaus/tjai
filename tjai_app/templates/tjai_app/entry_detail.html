@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>tjai - Entry</title>
+    <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/theme/material-darker.min.css">
     <style>
@@ -12,10 +13,10 @@
             font-size: 13px;
             background: #1a1a1a;
             color: #e0e0e0;
-            padding: 16px;
-            max-width: 900px;
-            margin: 0 auto;
+            margin: 0;
+            padding: 0;
         }
+        .page-content { padding: 16px; }
         .summary {
             border-bottom: 1px solid #333;
             padding-bottom: 12px;
@@ -65,7 +66,8 @@
     </style>
 </head>
 <body>
-    <div class="back"><a href="{% url 'dashboard' %}">&larr; Dashboard</a></div>
+    {% with current_page="entry" %}{% include "tjai_app/_menu.html" %}{% endwith %}
+    <div class="page-content">
     <div class="summary">
         <span class="timestamp">{{ entry.timestamp_modified|date:"D m/d/Y H:i" }}</span>
         <span class="kind">[{{ entry.kind }}]</span>
@@ -238,5 +240,6 @@
         document.getElementById('cancelBtn').addEventListener('click', cancelEdit);
         document.getElementById('deleteBtn').addEventListener('click', doDelete);
     </script>
+    </div>
 </body>
 </html>

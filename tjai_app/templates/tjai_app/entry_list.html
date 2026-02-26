@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>tjai - {{ title }}</title>
+    <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
     <script>
         (function() {
             var key = 'scroll_' + location.pathname + location.search;
@@ -29,10 +30,10 @@
             font-size: 13px;
             background: #1a1a1a;
             color: #e0e0e0;
-            padding: 16px;
-            max-width: 900px;
-            margin: 0 auto;
+            margin: 0;
+            padding: 0;
         }
+        .page-content { padding: 16px; }
         h1 { color: #d8a070; font-size: 16px; margin-bottom: 16px; }
         .tag-bar {
             margin-bottom: 16px;
@@ -106,11 +107,23 @@
         .back { margin-bottom: 12px; }
         .back a { color: #64b5f6; }
         #countDisplay { color: #8a8a8a; }
+        .search-btn {
+            background: #333; color: #e0e0e0; border: 1px solid #555;
+            padding: 2px 8px; border-radius: 3px; cursor: pointer;
+            font-family: inherit; font-size: 12px; vertical-align: middle;
+        }
+        .search-btn:hover { background: #444; }
     </style>
 </head>
 <body>
-    <div class="back"><a href="{% url 'dashboard' %}">&larr; Dashboard</a></div>
-    <h1>{{ title }} <span id="countDisplay">({{ entries|length }} entries)</span></h1>
+    {% if context_name == "recipe" %}{% with current_page="recipes" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% elif context_name == "poetry" %}{% with current_page="poetry" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% else %}{% include "tjai_app/_menu.html" %}{% endif %}
+    <div class="page-content">
+    <h1>{{ title }} <span id="countDisplay">({{ entries|length }} entries)</span>
+        <input type="text" id="entry-search" placeholder="Search..." style="background:#2a2a2a; color:#e0e0e0; border:1px solid #555; padding:2px 6px; font-family:inherit; font-size:13px; width:180px; border-radius:3px; margin-left:12px; vertical-align:middle;">
+        <button class="search-btn" id="searchTitle">title</button>
+        <button class="search-btn" id="searchBody">body</button>
+        <span id="search-clear" style="display:none; cursor:pointer; color:#999; font-size:14px;" title="Clear search (Esc)">&times;</span>
+    </h1>
     {% if contexts %}
     <div class="tag-bar" id="context-bar">
         {% for name, count in contexts %}<span class="ctx-chip" data-ctx="{{ name }}">{{ name }} <span class="count">{{ count }}</span></span> {% endfor %}<button class="clear-btn" id="clearCtxBtn">clear</button>
@@ -171,8 +184,10 @@
             applyFilter();
         }
 
+        var searchQuery = '';
+
         function applyFilter() {
-            var hasFilters = activeTags.size > 0 || activeCtx.size > 0;
+            var hasFilters = activeTags.size > 0 || activeCtx.size > 0 || searchQuery;
             // Update tag chips
             allChips.forEach(chip => {
                 chip.classList.toggle('active', activeTags.has(chip.dataset.tag));
@@ -185,23 +200,23 @@
             document.querySelectorAll('.entry .tag[data-tag]').forEach(t => {
                 t.classList.toggle('active', activeTags.has(t.dataset.tag));
             });
-            // Show/hide entries (context = OR, tags = AND)
+            // Show/hide entries (context = OR, tags = AND, search = AND)
             var shown = 0;
-            if (!hasFilters) {
-                allEntries.forEach(el => { el.style.display = ''; });
-                shown = totalCount;
-            } else {
-                allEntries.forEach(el => {
-                    var ctxMatch = activeCtx.size === 0 || activeCtx.has(el.dataset.ctx);
-                    var tagMatch = true;
-                    if (activeTags.size > 0) {
-                        var entryTags = el.dataset.tags ? el.dataset.tags.split(',') : [];
-                        activeTags.forEach(t => { if (entryTags.indexOf(t) === -1) tagMatch = false; });
-                    }
-                    el.style.display = (ctxMatch && tagMatch) ? '' : 'none';
-                    if (ctxMatch && tagMatch) shown++;
-                });
-            }
+            allEntries.forEach(el => {
+                var ctxMatch = activeCtx.size === 0 || activeCtx.has(el.dataset.ctx);
+                var tagMatch = true;
+                if (activeTags.size > 0) {
+                    var entryTags = el.dataset.tags ? el.dataset.tags.split(',') : [];
+                    activeTags.forEach(t => { if (entryTags.indexOf(t) === -1) tagMatch = false; });
+                }
+                var searchMatch = true;
+                if (searchQuery) {
+                    var text = (el.textContent || '').toLowerCase();
+                    searchMatch = text.indexOf(searchQuery) >= 0;
+                }
+                el.style.display = (ctxMatch && tagMatch && searchMatch) ? '' : 'none';
+                if (ctxMatch && tagMatch && searchMatch) shown++;
+            });
             // Compute available tags/contexts from visible entries
             var availableTags = new Set();
             var availableCtx = new Set();
@@ -219,7 +234,6 @@
             allCtxChips.forEach(chip => {
                 chip.classList.toggle('available', hasFilters && !activeCtx.has(chip.dataset.ctx) && availableCtx.has(chip.dataset.ctx));
             });
-            // Update count and clear buttons
             countDisplay.textContent = hasFilters
                 ? '(' + shown + ' of ' + totalCount + ')'
                 : '(' + totalCount + ' entries)';
@@ -245,6 +259,74 @@
         // Apply on load if URL has filters
         if (activeTags.size > 0 || activeCtx.size > 0) applyFilter();
 
+        // Search — title (client-side) and body (server-side)
+        var searchInput = document.getElementById('entry-search');
+        var searchClear = document.getElementById('search-clear');
+        var isBodySearch = false;
+
+        function clearSearch() {
+            searchInput.value = '';
+            searchQuery = '';
+            searchClear.style.display = 'none';
+            if (isBodySearch) {
+                isBodySearch = false;
+                allEntries.forEach(el => { el.style.display = ''; });
+                document.querySelectorAll('.body-result').forEach(el => el.remove());
+            }
+            applyFilter();
+        }
+
+        function doTitleSearch() {
+            if (isBodySearch) {
+                isBodySearch = false;
+                allEntries.forEach(el => { el.style.display = ''; });
+                document.querySelectorAll('.body-result').forEach(el => el.remove());
+            }
+            searchQuery = searchInput.value.trim().toLowerCase();
+            searchClear.style.display = searchQuery ? 'inline' : 'none';
+            applyFilter();
+        }
+
+        function doBodySearch() {
+            var q = searchInput.value.trim();
+            if (!q) return;
+            searchClear.style.display = 'inline';
+            isBodySearch = true;
+            allEntries.forEach(el => { el.style.display = 'none'; });
+            document.querySelectorAll('.body-result').forEach(el => el.remove());
+            var context = '{{ context_name|default:"" }}';
+            var url = '/tjai/api/dashboard/search?q=' + encodeURIComponent(q);
+            if (context) url += '&context=' + encodeURIComponent(context);
+            fetch(url).then(r => r.json()).then(function(data) {
+                var entries = data.entries || [];
+                var container = document.querySelector('.entry, .back').parentElement;
+                countDisplay.textContent = '(' + entries.length + ' body results)';
+                entries.forEach(function(e) {
+                    var div = document.createElement('div');
+                    div.className = 'entry body-result';
+                    var slug = e.entry_id || e.nickname || e.name || e.id;
+                    var tags = (e.all_tags || []).filter(t => ['tjweb','dynalist','chrome','test'].indexOf(t) < 0);
+                    div.innerHTML = '<a href="/tjai/entry/' + slug + '/">'
+                        + '<span class="entry-num">===</span> '
+                        + '<span class="content">' + (e.content || '').replace(/</g, '&lt;') + '</span>'
+                        + '</a> '
+                        + (e.line_count ? '<span class="lines">[' + e.line_count + ' lines]</span> ' : '')
+                        + tags.map(t => '<span class="tag">:' + t + '</span>').join(' ');
+                    container.appendChild(div);
+                });
+            }).catch(function(err) {
+                countDisplay.textContent = '(search error)';
+            });
+        }
+
+        document.getElementById('searchTitle').addEventListener('click', doTitleSearch);
+        document.getElementById('searchBody').addEventListener('click', doBodySearch);
+        searchInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') clearSearch();
+            if (e.key === 'Enter') doTitleSearch();
+        });
+        searchClear.addEventListener('click', function() { clearSearch(); searchInput.focus(); });
+
         // Linkify content
         document.querySelectorAll('.content[data-content]').forEach(el => {
             var content = el.dataset.content;
@@ -266,5 +348,6 @@
             }
         });
     </script>
+    </div>
 </body>
 </html>

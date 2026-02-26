@@ -909,12 +909,14 @@ def dashboard_search(request):
     if not q:
         return JsonResponse({'entries': []})
 
-    entries = Entry.objects.filter(
+    qs = Entry.objects.filter(
         content__icontains=q,
         deleted_at__isnull=True,
-    ).exclude(
-        status='archive'
-    ).order_by('-timestamp_modified')[:200]
+    ).exclude(status='archive')
+    context = request.GET.get('context', '').strip()
+    if context:
+        qs = qs.filter(context_id=context)
+    entries = qs.order_by('-timestamp_modified')[:200]
 
     # Batch fetch tags
     entry_ids = [e.id for e in entries]
@@ -1349,6 +1351,7 @@ def context_entries(request, context_name):
             'title': f'={context_name}',
             'entries': _entries_for_list(entries),
             'authors': authors,
+            'context_name': context_name,
         })
 
     META_TAGS = {'tjweb', 'dynalist', 'chrome', 'test', 'fave', 'cool', 'readme'}
@@ -1359,6 +1362,7 @@ def context_entries(request, context_name):
         'title': f'={context_name}',
         'entries': _entries_for_list(entries),
         'tags': tags,
+        'context_name': context_name,
     })
 
 
@@ -1372,6 +1376,7 @@ def poetry_author_entries(request, author_name):
     return render(request, 'tjai_app/entry_list_poetry.html', {
         'title': f'=poetry — {author_name}',
         'entries': _entries_for_list(entries),
+        'context_name': 'poetry',
     })
 
 
