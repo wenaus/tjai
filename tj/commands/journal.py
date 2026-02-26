@@ -76,6 +76,7 @@ def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
     - mon/tue/wed/thu/fri/sat/sun (next occurrence of weekday)
     - mmdd (4 digits, date in current year)
     - YYYYMMDD (8 digits, full date)
+    - jan/feb/.../dec + day (month abbrev + day number)
     - Any of above + HH:MM as second arg
 
     Args:
@@ -411,6 +412,40 @@ def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
             return dt.timestamp(), remaining
         except ValueError as e:
             print(f"Error: Invalid date in YYYYMMDD format '{first}': {e}", file=sys.stderr)
+            return now.timestamp(), args_list
+
+    # Check for month abbreviation + day (e.g., "mar 4", "jan 15")
+    month_abbrs = {
+        'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+        'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+    }
+    if first in month_abbrs and remaining and remaining[0].isdigit():
+        try:
+            month = month_abbrs[first]
+            day = int(remaining[0])
+            remaining = remaining[1:]
+            year = now.year
+            event_date = date(year, month, day)
+
+            # Check for time as next arg
+            if remaining and (':' in remaining[0] or remaining[0].lower().endswith(('am', 'pm'))):
+                try:
+                    hour, minute = parse_time(remaining[0])
+                    remaining = remaining[1:]
+                except ValueError as e:
+                    print(f"Warning: {e}, using midnight", file=sys.stderr)
+                    hour, minute = 0, 0
+            else:
+                hour, minute = 0, 0
+
+            if tz:
+                dt = datetime.combine(event_date, time(hour, minute, tzinfo=tz))
+            else:
+                dt = datetime.combine(event_date, time(hour, minute))
+
+            return dt.timestamp(), remaining
+        except ValueError as e:
+            print(f"Error: Invalid date '{first} {args_list[1]}': {e}", file=sys.stderr)
             return now.timestamp(), args_list
 
     # No date spec recognized, default to all-day event today (midnight)
