@@ -1160,7 +1160,15 @@ def entry_detail(request, entry_id=None):
     # Body content excludes first line (shown in summary header)
     body_lines = entry.content.split('\n')
     body_text = '\n'.join(body_lines[1:]).strip() if len(body_lines) > 1 else ''
-    content_html = markdown.markdown(body_text, extensions=['tables', 'fenced_code'], tab_length=2) if body_text else ''
+    # Determine content format: explicit data.format overrides auto-detection
+    fmt = (data.get('format') if data else None)
+    if not fmt:
+        if entry.context_id == 'recipe':
+            fmt = 'txt'
+        else:
+            fmt = 'md'
+    md_exts = ['nl2br', 'tables', 'fenced_code'] if fmt == 'txt' else ['tables', 'fenced_code']
+    content_html = markdown.markdown(body_text, extensions=md_exts, tab_length=2) if body_text else ''
     # Linkify bare URLs not already in anchor tags
     import re
     content_html = re.sub(
@@ -1191,6 +1199,8 @@ def entry_detail(request, entry_id=None):
         'first_line': first_line,
         'event_date': data.get('event_date') if data else None,
         'github_url': github_url,
+        'content_format': fmt,
+        'explicit_format': bool(data.get('format')) if data else False,
     })
 
 
@@ -1229,6 +1239,15 @@ def api_entry_save(request, entry_id):
         existing_tags = set(Tag.objects.filter(entry_id=entry.id).values_list('tag_name', flat=True))
         for tag_name in content_tags - existing_tags:
             Tag.objects.create(tag_name=tag_name, entry_id=entry.id)
+    # Content format: md/txt/None (auto)
+    if 'format' in data:
+        fmt_val = data['format'] if data['format'] in ('md', 'txt') else None
+        if not isinstance(entry.data, dict):
+            entry.data = {}
+        if fmt_val:
+            entry.data['format'] = fmt_val
+        else:
+            entry.data.pop('format', None)
     entry.timestamp_modified = time.time()
     entry.save()
     data_dict = entry.data if isinstance(entry.data, dict) else None

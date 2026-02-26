@@ -84,6 +84,12 @@
             <input id="nameField" type="text" value="{{ entry.name|default:'' }}" placeholder="(none)">
             <label style="margin-left:16px">=context</label>
             <input id="contextField" type="text" value="{{ entry.context_id|default:'' }}" placeholder="(none)" style="width:160px">
+            <label style="margin-left:16px">format</label>
+            <select id="formatField" style="background:#111;color:#c0d8f0;border:1px solid #555;padding:3px 6px;font-family:inherit;font-size:13px;border-radius:3px;">
+                <option value="">auto</option>
+                <option value="md"{% if explicit_format and content_format == 'md' %} selected{% endif %}>md</option>
+                <option value="txt"{% if explicit_format and content_format == 'txt' %} selected{% endif %}>txt</option>
+            </select>
         </div>
         <textarea id="editor">{{ entry.content }}</textarea>
         <div class="edit-toolbar" style="display:flex; align-items:center;">
@@ -193,10 +199,11 @@
             var content = cm ? cm.getValue() : document.getElementById('editor').value;
             var name = document.getElementById('nameField').value.trim();
             var context = document.getElementById('contextField').value.trim().replace(/^=/, '');
+            var fmt = document.getElementById('formatField').value || null;
             fetch(saveUrl, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-                body: JSON.stringify({content: content, name: name, context: context})
+                body: JSON.stringify({content: content, name: name, context: context, format: fmt})
             }).then(function(r) { return r.json(); }).then(function(data) {
                 if (data.ok) {
                     var st = document.getElementById('saveStatus');
