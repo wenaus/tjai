@@ -719,6 +719,31 @@ def edit_entry(entry_id, content, context=None, clear_context=False,
     return _format_entry(entry)
 
 
+def change_entry_kind(entry_id, kind):
+    if not entry_id:
+        return {"error": "entry_id is required"}
+    if not kind:
+        return {"error": "kind is required"}
+    if kind not in VALID_KINDS:
+        return {"error": f"Invalid kind '{kind}'. Must be one of: {', '.join(VALID_KINDS)}"}
+
+    entry = Entry.objects.select_related('context').filter(
+        id=entry_id,
+        deleted_at__isnull=True,
+    ).prefetch_related('tags').first()
+    if not entry:
+        return {"error": f"Entry '{entry_id}' not found or already deleted"}
+
+    if entry.kind == kind:
+        return {"error": f"Entry is already kind '{kind}'"}
+
+    entry.kind = kind
+    entry.is_dirty = 1
+    entry.save(update_fields=['kind', 'is_dirty'])
+
+    return _format_entry(entry)
+
+
 def delete_entry(entry_id, content):
     if not entry_id:
         return {"error": "entry_id is required"}

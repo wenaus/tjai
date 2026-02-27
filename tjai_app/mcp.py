@@ -16,8 +16,11 @@ Available tools:
     search_entries    - Full-text search across all entries
     get_named_entries - Get entries by @name, or list all named entries
     get_entry         - Get a single entry by ID
+    get_entry_by_entry_id - Find entry by human-readable entry_id
     edit_entry        - Edit an existing entry
+    run_action        - Execute an action entry immediately
     copy_calendar_entry - Copy a journal entry to a new date (preserves all fields)
+    change_entry_kind - Change an entry's type without modifying content or timestamp
     delete_entry      - Soft delete an entry (requires user approval)
 
 Entry types: memory, todo, journal, profile, bookmark, ai, list, action
@@ -494,6 +497,29 @@ async def copy_calendar_entry(
     """
     return await sync_to_async(services.copy_calendar_entry)(
         entry_id=entry_id, event_date=event_date, event_time=event_time,
+    )
+
+
+@mcp.tool()
+async def change_entry_kind(entry_id: str, kind: str) -> dict:
+    """
+    Change the kind (type) of an existing entry without modifying its content
+    or timestamp.
+
+    Use this to correct an entry's type (e.g., from 'ai' to 'memory') without
+    altering anything else. The modification timestamp is NOT updated.
+
+    Args:
+        entry_id: The UUID of the entry to change (required).
+        kind: The new kind. One of: memory, todo, journal, profile, ai,
+              bookmark, list, action.
+
+    Returns:
+        The updated entry with all fields.
+        Returns {"error": "..."} if validation fails.
+    """
+    return await sync_to_async(services.change_entry_kind)(
+        entry_id=entry_id, kind=kind,
     )
 
 

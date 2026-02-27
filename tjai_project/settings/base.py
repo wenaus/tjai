@@ -168,13 +168,25 @@ Tools:
 - get_calendar(start_date, end_date, context, days): Get calendar entries
   for a date range. Dates in ISO or YYYYMMDD format.
 - list_contexts(): List all projects/topics to discover what contexts exist.
+- get_memories(context, limit, start_date, end_date): Get memory entries.
+  Call unfiltered to see recent activity.
+- get_bookmarks(context, limit, start_date, end_date): Get saved bookmarks.
 - search_entries(query, kind, context, limit): Full-text search across entries.
+- get_named_entries(name, context): Get entries by @name, or list all named.
+- get_entry(entry_id): Get a single entry by UUID.
+- get_entry_by_entry_id(entry_id): Find entry by human-readable entry_id.
 - create_entry(content, kind, context, name, tags, event_date, priority, status,
   create_context): Add new entries. Context must exist unless create_context=True.
+- edit_entry(entry_id, content, ...): Edit an existing entry.
+- copy_calendar_entry(entry_id, event_date, event_time): Copy a journal entry
+  to a new date, preserving all fields.
+- change_entry_kind(entry_id, kind): Change entry type without modifying
+  content or timestamp.
+- run_action(entry_id): Execute an action entry immediately.
 - delete_entry(entry_id): Soft delete an entry. Requires user approval.
 
 Entry types: memory (notes), todo (tasks), journal (calendar events), profile
-(user facts), ai (AI instructions), bookmark (URLs), list (lists).
+(user facts), ai (AI instructions), bookmark (URLs), list (lists), action.
 Valid statuses: active, done, blocked, archive. Priority: positive integers (1=highest).
 
 Error handling: All tools return {"error": "message"} on validation failures.

@@ -270,6 +270,9 @@ cd /home/admin/github/tjrepo/tjai
 - `/tjai/api/add-journal` - Journal entry from Gmail add-on (Bearer token auth)
 - `/tjai/api/dialog` - Claude Code dialog turns GET/POST (Bearer token auth)
 - `/tjai/api/command` - Server commands (sysconfig)
+- `/tjai/context/<name>/` - Browse entries in a context
+- `/tjai/tag/<name>/` - Browse entries with a tag
+- `/tjai/kind/<name>/` - Browse entries by type
 - `/tjai/mcp/` - MCP (Model Context Protocol) server for AI assistants
 
 ### Claude Code MCP Integration
@@ -316,16 +319,23 @@ Full `~/.claude/settings.json` with tjai MCP server, permissions, and status lin
       "Bash(ls:*)",
       "Bash(wc:*)",
       "Bash(grep:*)",
+      "mcp__tjai__get_server_instructions",
       "mcp__tjai__get_calendar",
       "mcp__tjai__get_profile",
       "mcp__tjai__get_ai_guidance",
+      "mcp__tjai__list_contexts",
       "mcp__tjai__get_todos",
       "mcp__tjai__get_memories",
-      "mcp__tjai__list_contexts",
+      "mcp__tjai__get_bookmarks",
       "mcp__tjai__search_entries",
-      "mcp__tjai__create_entry",
+      "mcp__tjai__get_named_entries",
       "mcp__tjai__get_entry",
-      "mcp__tjai__get_server_instructions",
+      "mcp__tjai__get_entry_by_entry_id",
+      "mcp__tjai__create_entry",
+      "mcp__tjai__edit_entry",
+      "mcp__tjai__copy_calendar_entry",
+      "mcp__tjai__change_entry_kind",
+      "mcp__tjai__run_action",
       "WebSearch",
       "WebFetch"
     ],
@@ -662,6 +672,7 @@ An in-app RSS feed reader with source-grouped triage UI matching the Picks page 
 - Each item: title (link to article), published date, precis (description)
 - **Click title** — opens article, marks as read (goes grey)
 - **ReadMe** — adds to the ReadMe reading list
+- **▲ Clear** — marks this item and all items above it as read, removing them from the page (for incremental review)
 - **Mark Read** (per source) — marks all items from that source as read, with green toast confirmation
 - **Mark All Read** (global) — marks everything as read
 - **Fetch Now** — triggers immediate feed fetch
@@ -688,7 +699,7 @@ RssItem(
 
 - `scripts/fetch_rss.py` — Feed fetcher using `feedparser`
 - `tjai_app/models.py` — `RssItem` model
-- `tjai_app/views.py` — `rss_page`, `api_rss_data`, `api_rss_mark_read`, `api_rss_mark_item_read`, `api_rss_mark_all_read`, `api_rss_fetch`, `api_rss_add_source`, `api_rss_readme`
+- `tjai_app/views.py` — `rss_page`, `api_rss_data`, `api_rss_mark_read`, `api_rss_mark_item_read`, `api_rss_mark_guids_read`, `api_rss_mark_all_read`, `api_rss_fetch`, `api_rss_add_source`, `api_rss_readme`
 - `tjai_app/templates/tjai_app/rss.html` — RSS triage page
 
 ### Action Agent

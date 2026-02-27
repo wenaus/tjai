@@ -1,11 +1,32 @@
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
+
+_LIST_RE = re.compile(r'[-*+] |\d+\. ')
+
+
+def _fix_md_list_spacing(text):
+    """Insert blank line before list items that follow a non-list, non-blank line.
+
+    AI-generated markdown often omits the required blank line before a list,
+    causing the Python markdown library to render bullets as a paragraph blob.
+    """
+    lines = text.split('\n')
+    result = []
+    for i, line in enumerate(lines):
+        if (i > 0
+                and _LIST_RE.match(line.lstrip())
+                and lines[i - 1].strip()
+                and not _LIST_RE.match(lines[i - 1].lstrip())):
+            result.append('')
+        result.append(line)
+    return '\n'.join(result)
 
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
@@ -1064,7 +1085,6 @@ def daily_synopsis_data(request):
 def daily_synopsis_content(request):
     """Return rendered markdown content for a specific daily synopsis."""
     import markdown
-    import re
 
     entry_id = request.GET.get('entry_id')
     if not entry_id:
@@ -1078,7 +1098,7 @@ def daily_synopsis_content(request):
         return JsonResponse({'error': 'Synopsis not found'}, status=404)
 
     content_html = markdown.markdown(
-        entry.content,
+        _fix_md_list_spacing(entry.content),
         extensions=['nl2br', 'tables', 'fenced_code'],
     )
     content_html = re.sub(
@@ -1184,7 +1204,6 @@ def entry_detail(request, entry_id=None):
         entry = base.filter(name=request.GET['name']).first()
     elif entry_id:
         # Legacy path arg — detect UUID by format
-        import re
         if re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-', entry_id):
             entry = base.filter(id=entry_id).first()
         else:
@@ -1208,9 +1227,8 @@ def entry_detail(request, entry_id=None):
         else:
             fmt = 'md'
     md_exts = ['nl2br', 'tables', 'fenced_code'] if fmt == 'txt' else ['tables', 'fenced_code']
-    content_html = markdown.markdown(body_text, extensions=md_exts, tab_length=2) if body_text else ''
+    content_html = markdown.markdown(_fix_md_list_spacing(body_text), extensions=md_exts, tab_length=2) if body_text else ''
     # Linkify bare URLs not already in anchor tags
-    import re
     content_html = re.sub(
         r'(?<!["\'>])(https?://[^\s<]+)',
         r'<a href="\1">\1</a>',
@@ -1272,7 +1290,6 @@ def api_entry_save(request, entry_id):
         else:
             entry.context_id = None
     # Sync tags from content — extract :tag tokens embedded in text
-    import re
     tag_pattern = re.compile(r'(?:^|\s):([a-zA-Z][a-zA-Z0-9_-]*)')
     content_tags = set(tag_pattern.findall(content))
     if content_tags:
@@ -1766,7 +1783,6 @@ def api_dialog(request):
 
     # Detect research subagent products
     if content.startswith('<task-notification>'):
-        import re
         summary_m = re.search(r'<summary>(.*?)</summary>', content, re.DOTALL)
         if summary_m:
             summary_text = summary_m.group(1).strip()
@@ -2863,6 +2879,25 @@ def api_rss_mark_item_read(request):
 @login_required
 @csrf_exempt
 @require_http_methods(["POST"])
+def api_rss_mark_guids_read(request):
+    """Mark multiple RSS items as read by a list of guids."""
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    guids = body.get('guids')
+    if not guids or not isinstance(guids, list):
+        return JsonResponse({'error': 'guids list required'}, status=400)
+
+    count = RssItem.objects.filter(guid__in=guids, read=False).update(read=True)
+    total_unread = RssItem.objects.filter(read=False).count()
+    return JsonResponse({'ok': True, 'marked': count, 'total_unread': total_unread})
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
 def api_rss_mark_all_read(request):
     """Mark all unread RSS items as read, only those fetched before a cutoff time."""
     try:
@@ -2990,7 +3025,6 @@ def api_rss_add_source(request):
             resp.raise_for_status()
             html = resp.text
             # Look for RSS/Atom feed links
-            import re
             feed_links = re.findall(
                 r'<link[^>]+type=["\']application/(?:rss\+xml|atom\+xml)["\'][^>]*href=["\']([^"\']+)["\']',
                 html, re.IGNORECASE,

@@ -325,7 +325,7 @@
 
                     for (const item of src.items) {
                         html += `<div class="rss-item" data-guid="${esc(item.guid)}">`;
-                        html += `<div class="rss-title"><a href="${esc(item.url)}" target="_blank" rel="noopener" onclick="markItemRead(this)">${esc(item.title)}</a> <span class="rss-actions"><button class="${item.readme ? 'active-readme' : ''}" data-url="${esc(item.url)}" data-title="${esc(item.title)}" onclick="toggleReadme(this)">ReadMe</button></span></div>`;
+                        html += `<div class="rss-title"><a href="${esc(item.url)}" target="_blank" rel="noopener" onclick="markItemRead(this)">${esc(item.title)}</a> <span class="rss-actions"><button class="${item.readme ? 'active-readme' : ''}" data-url="${esc(item.url)}" data-title="${esc(item.title)}" onclick="toggleReadme(this)">ReadMe</button><button onclick="markAboveRead(this)" title="Mark all items above as read">▲ Clear</button></span></div>`;
                         if (item.published) {
                             const d = new Date(item.published);
                             html += `<div class="rss-meta">${d.toLocaleDateString('en-US', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</div>`;
@@ -408,6 +408,47 @@
                     document.getElementById('global-stats').textContent = `${data.total_unread} unread`;
                 }
             });
+        }
+
+        async function markAboveRead(btn) {
+            const thisItem = btn.closest('.rss-item');
+            if (!thisItem) return;
+            const allItems = Array.from(document.querySelectorAll('.rss-item'));
+            const idx = allItems.indexOf(thisItem);
+            if (idx <= 0) return;
+            const above = allItems.slice(0, idx + 1).filter(el => !el.classList.contains('read'));
+            if (above.length === 0) return;
+            const guids = above.map(el => el.dataset.guid);
+            btn.textContent = '...';
+            btn.disabled = true;
+            try {
+                const resp = await fetch('/tjai/api/rss/mark-guids-read', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                    body: JSON.stringify({guids}),
+                });
+                const data = await resp.json();
+                if (data.ok) {
+                    above.forEach(el => el.remove());
+                    document.querySelectorAll('.source-block').forEach(sb => {
+                        if (sb.querySelectorAll('.rss-item').length === 0) sb.remove();
+                    });
+                    document.querySelectorAll('.category-block').forEach(cb => {
+                        if (cb.querySelectorAll('.source-block').length === 0) cb.remove();
+                    });
+                    if (data.total_unread !== undefined) {
+                        document.getElementById('global-stats').textContent = `${data.total_unread} unread`;
+                    }
+                    if (document.querySelectorAll('.rss-item').length === 0) {
+                        document.getElementById('rss-content').innerHTML =
+                            '<div class="empty">All caught up.</div>';
+                    }
+                }
+            } catch (e) {
+                console.error('Mark above read failed:', e);
+            }
+            btn.textContent = '▲ Clear';
+            btn.disabled = false;
         }
 
         function showToast(msg) {

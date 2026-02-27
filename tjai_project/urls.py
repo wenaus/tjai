@@ -53,6 +53,7 @@ urlpatterns = [
     path("api/rss/data", views.api_rss_data, name="api_rss_data"),
     path("api/rss/mark-read", views.api_rss_mark_read, name="api_rss_mark_read"),
     path("api/rss/mark-item-read", views.api_rss_mark_item_read, name="api_rss_mark_item_read"),
+    path("api/rss/mark-guids-read", views.api_rss_mark_guids_read, name="api_rss_mark_guids_read"),
     path("api/rss/mark-all-read", views.api_rss_mark_all_read, name="api_rss_mark_all_read"),
     path("api/rss/readme", views.api_rss_readme, name="api_rss_readme"),
     path("api/rss/fetch", views.api_rss_fetch, name="api_rss_fetch"),
