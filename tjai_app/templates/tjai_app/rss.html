@@ -415,7 +415,7 @@
             if (!thisItem) return;
             const allItems = Array.from(document.querySelectorAll('.rss-item'));
             const idx = allItems.indexOf(thisItem);
-            if (idx <= 0) return;
+            if (idx < 0) return;
             const above = allItems.slice(0, idx + 1).filter(el => !el.classList.contains('read'));
             if (above.length === 0) return;
             const guids = above.map(el => el.dataset.guid);

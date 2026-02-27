@@ -1426,14 +1426,24 @@
     }
 
     async function archiveRun(runId) {
-        const resp = await fetch('/tjai/api/picks/archive-run', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
-            body: JSON.stringify({run_id: runId}),
-        });
-        const data = await resp.json();
-        if (data.error) {
-            console.error('Archive run failed:', data.error);
+        const block = document.querySelector(`.run-block[data-run="${CSS.escape(runId)}"]`);
+        const btns = block ? block.querySelectorAll('.run-header button') : [];
+        btns.forEach(b => { b.textContent = '...'; b.disabled = true; });
+        try {
+            const resp = await fetch('/tjai/api/picks/archive-run', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                body: JSON.stringify({run_id: runId}),
+            });
+            const data = await resp.json();
+            if (data.error) {
+                alert('Archive failed: ' + data.error);
+                btns.forEach(b => { b.textContent = 'Archive All'; b.disabled = false; });
+                return;
+            }
+        } catch (e) {
+            alert('Archive failed: ' + e.message);
+            btns.forEach(b => { b.textContent = 'Archive All'; b.disabled = false; });
             return;
         }
         const run = allRuns.find(r => r.run === runId);
