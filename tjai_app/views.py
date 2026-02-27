@@ -1289,13 +1289,18 @@ def api_entry_save(request, entry_id):
             entry.context_id = ctx
         else:
             entry.context_id = None
-    # Sync tags from content — extract :tag tokens embedded in text
-    tag_pattern = re.compile(r'(?:^|\s):([a-zA-Z][a-zA-Z0-9_-]*)')
-    content_tags = set(tag_pattern.findall(content))
-    if content_tags:
-        existing_tags = set(Tag.objects.filter(entry_id=entry.id).values_list('tag_name', flat=True))
-        for tag_name in content_tags - existing_tags:
-            Tag.objects.create(tag_name=tag_name, entry_id=entry.id)
+    # Sync tags: explicit field takes precedence, then extract from content
+    if 'tags' in data:
+        raw_tags = data['tags'] or ''
+        desired_tags = set(t.strip().lstrip(':') for t in raw_tags.split(',') if t.strip())
+    else:
+        tag_pattern = re.compile(r'(?:^|\s):([a-zA-Z][a-zA-Z0-9_-]*)')
+        desired_tags = set(tag_pattern.findall(content))
+    existing_tags = set(Tag.objects.filter(entry_id=entry.id).values_list('tag_name', flat=True))
+    for tag_name in desired_tags - existing_tags:
+        Tag.objects.create(tag_name=tag_name, entry_id=entry.id)
+    for tag_name in existing_tags - desired_tags:
+        Tag.objects.filter(entry_id=entry.id, tag_name=tag_name).delete()
     # Content format: md/txt/None (auto)
     if 'format' in data:
         fmt_val = data['format'] if data['format'] in ('md', 'txt') else None
@@ -2789,8 +2794,9 @@ def api_rss_data(request):
         else:
             readme_urls.add(content.strip())
 
-    # Group by category → source
+    # Group by category → source, dedup by title within source
     categories = {}
+    seen_titles = {}
     for item in items:
         cat = item.category or 'uncategorized'
         if cat not in categories:
@@ -2798,6 +2804,10 @@ def api_rss_data(request):
         src = item.source
         if src not in categories[cat]:
             categories[cat][src] = []
+        title_key = (src, item.title)
+        if title_key in seen_titles:
+            continue
+        seen_titles[title_key] = True
         categories[cat][src].append({
             'guid': item.guid,
             'title': item.title,

@@ -99,6 +99,10 @@ def fetch_feed(feed_url, category):
 
         title = getattr(fe, 'title', '(no title)') or '(no title)'
         link = getattr(fe, 'link', '') or ''
+
+        # Skip duplicate titles from same source (e.g. CERN publishes via two domains)
+        if RssItem.objects.filter(source=source_name, title=title).exists():
+            continue
         summary = getattr(fe, 'summary', '') or ''
         # Truncate long summaries
         if len(summary) > 500:

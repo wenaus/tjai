@@ -520,8 +520,11 @@
         }
 
         async function fetchNow() {
+            const btn = document.querySelector('.rss-header button[onclick="fetchNow()"]');
             const statsEl = document.getElementById('global-stats');
-            statsEl.textContent = 'Fetching...';
+            btn.textContent = 'Fetching...';
+            btn.disabled = true;
+            statsEl.textContent = 'Fetching feeds...';
             try {
                 const resp = await fetch('/tjai/api/rss/fetch', {
                     method: 'POST',
@@ -536,6 +539,8 @@
             } catch (e) {
                 statsEl.textContent = 'Fetch error';
             }
+            btn.textContent = 'Fetch Now';
+            btn.disabled = false;
         }
 
         function showAddModal() {
