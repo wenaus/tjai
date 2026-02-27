@@ -233,6 +233,8 @@ function extractMeetingTitle_(subject, body) {
       stripped = title.replace(trailEu, '');
     }
     title = stripped;
+    // Strip trailing prepositions left after date removal ("... on", "... for")
+    title = title.replace(/\s+(?:on|for|at|from|-+)\s*$/i, '');
     title = title.trim();
     if (title) return title;
   }
@@ -327,6 +329,44 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
     }
   }
 
+  // 24-hour time: EU date order: [Dayname] DD Month [YYYY] [at ]HH:MM [(TZ)]
+  var is24h = false;
+  if (!match) {
+    var eu24Regex = new RegExp(
+      '(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\\s*)?' +
+      '(\\d{1,2})(?:st|nd|rd|th)?\\s+' +                      // (1) day
+      '(' + MONTH_PAT_ + ')' +                                 // (2) month
+      '(?:,?\\s*(\\d{4}))?' +                                  // (3) optional year
+      '(?:[,\\s\\-]+|\\s+(?:at\\s+))' +                        // separator
+      '(\\d{1,2}):(\\d{2})' +                                  // (4) hour (5) min — colon required
+      '(?:\\s*\\(?(E[SD]T|C[SD]T|M[SD]T|P[SD]T|ET|CT|MT|PT|UTC|GMT|CES?T)\\)?)?',  // (6) tz
+      'i'
+    );
+    match = text.match(eu24Regex);
+    if (match) {
+      var dayStr24 = match[1];
+      match[1] = match[2];  // month
+      match[2] = dayStr24;  // day
+      is24h = true;
+    }
+  }
+
+  // 24-hour time: US date order: [Dayname, ]Month DD[, YYYY] [at ]HH:MM [(TZ)]
+  if (!match) {
+    var us24Regex = new RegExp(
+      '(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\\s*)?' +
+      '(' + MONTH_PAT_ + ')' +                                 // (1) month
+      '\\s+(\\d{1,2})(?:st|nd|rd|th)?' +                       // (2) day
+      '(?:,?\\s*(\\d{4}))?' +                                  // (3) optional year
+      ',?\\s+(?:at\\s+)?' +                                    // separator
+      '(\\d{1,2}):(\\d{2})' +                                  // (4) hour (5) min — colon required
+      '(?:\\s*\\(?(E[SD]T|C[SD]T|M[SD]T|P[SD]T|ET|CT|MT|PT|UTC|GMT|CES?T)\\)?)?',  // (6) tz
+      'i'
+    );
+    match = text.match(us24Regex);
+    if (match) is24h = true;
+  }
+
   if (!match) return null;
 
   var month = MONTHS_[match[1].toLowerCase()];
@@ -335,17 +375,19 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
   var day = parseInt(match[2]);
   var year = match[3] ? parseInt(match[3]) : fallbackYear;
   var hour = parseInt(match[4]);
-  var minute = match[5] ? parseInt(match[5]) : 0;
-  var ampm = match[6].replace(/\./g, '').toLowerCase();
+  var minute = parseInt(match[5] || '0');
 
-  // 12-hour → 24-hour
-  if (ampm === 'pm' && hour < 12) hour += 12;
-  if (ampm === 'am' && hour === 12) hour = 0;
+  if (!is24h) {
+    var ampm = match[6].replace(/\./g, '').toLowerCase();
+    if (ampm === 'pm' && hour < 12) hour += 12;
+    if (ampm === 'am' && hour === 12) hour = 0;
+  }
 
   // Resolve timezone: explicit in text > sender-based default
+  var tzGroup = is24h ? match[6] : match[7];
   var tzName = defaultTz;
-  if (match[7] && TZ_ABBREV_[match[7].toUpperCase()]) {
-    tzName = TZ_ABBREV_[match[7].toUpperCase()];
+  if (tzGroup && TZ_ABBREV_[tzGroup.toUpperCase()]) {
+    tzName = TZ_ABBREV_[tzGroup.toUpperCase()];
   }
 
   var timestamp = dateInTimezone_(year, month, day, hour, minute, tzName);
