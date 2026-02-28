@@ -2260,6 +2260,77 @@ def api_research_abort(request):
 @login_required
 @csrf_exempt
 @require_http_methods(["POST"])
+def api_research_rerun(request):
+    """Create a versioned copy of a completed research entry for re-research."""
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    entry_id = body.get('entry_id')  # human-readable, e.g. "research-agent-context-paradox"
+    if not entry_id:
+        return JsonResponse({'error': 'entry_id required'}, status=400)
+
+    # Find original entry
+    original = Entry.objects.filter(
+        data__entry_id=entry_id, deleted_at__isnull=True,
+    ).first()
+    if not original:
+        return JsonResponse({'error': f'Entry not found: {entry_id}'}, status=404)
+
+    # Extract topic (first line of content, before any report)
+    topic = original.content.split('\n')[0].strip()
+
+    # Determine next version number by searching for existing versions
+    base_id = re.sub(r'-v\d+$', '', entry_id)  # strip existing -vN suffix
+    existing = Entry.objects.filter(
+        deleted_at__isnull=True,
+        data__entry_id__startswith=base_id + '-v',
+    ).values_list('data__entry_id', flat=True)
+    max_ver = 1  # original is implicitly v1
+    for eid in existing:
+        m = re.search(r'-v(\d+)$', eid or '')
+        if m:
+            max_ver = max(max_ver, int(m.group(1)))
+    next_ver = max_ver + 1
+    new_entry_id = f'{base_id}-v{next_ver}'
+
+    # Create the new versioned entry
+    now = time.time()
+    context_obj = original.context
+    new_entry = Entry.objects.create(
+        id=str(uuid.uuid4()),
+        content=topic,
+        kind='memory',
+        context=context_obj,
+        timestamp_created=now,
+        timestamp_modified=now,
+        is_dirty=1,
+        data={
+            'entry_id': new_entry_id,
+            'source': 'rerun',
+            'original_entry_id': entry_id,
+            'original_uuid': str(original.id),
+            'version': next_ver,
+        },
+    )
+    Tag.objects.create(tag_name='research', entry=new_entry)
+
+    _log_research(logging.INFO,
+                  f"Rerun created: {new_entry_id} from {entry_id}",
+                  entry_id=str(new_entry.id))
+
+    return JsonResponse({
+        'ok': True,
+        'new_entry_id': new_entry_id,
+        'new_uuid': str(new_entry.id),
+        'version': next_ver,
+    })
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
 def api_picks_abort(request):
     """Hard abort: kill processes immediately and reset status."""
     return _abort_agent('agent_picks-agent_status', 'picks agent')

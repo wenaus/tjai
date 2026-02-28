@@ -41,6 +41,7 @@ urlpatterns = [
     path("api/research/run", views.api_research_run, name="api_research_run"),
     path("api/research/stop", views.api_research_stop, name="api_research_stop"),
     path("api/research/abort", views.api_research_abort, name="api_research_abort"),
+    path("api/research/rerun", views.api_research_rerun, name="api_research_rerun"),
     path("research/studies/", views.research_studies, name="research_studies"),
     path("api/research/studies", views.api_research_studies, name="api_research_studies"),
     path("picks/", views.picks, name="picks"),

@@ -300,7 +300,9 @@
                 }
                 if (isRunning) {
                     html += `<button class="btn-submit" style="color:#ef5350;border-color:#ef5350" onclick="abortAgent(this)">Abort</button>`;
-                } else if (item.status !== 'done') {
+                } else if (item.status === 'done') {
+                    html += `<button class="btn-submit" onclick="rerunItem('${esc(item.entry_id)}', this)">Rerun</button>`;
+                } else {
                     const disabled = agentRunning ? ' disabled' : '';
                     html += `<button class="btn-submit"${disabled} onclick="submitItem('${esc(item.entry_id)}', this)">Submit</button>`;
                 }
@@ -357,6 +359,30 @@
             } catch (e) {
                 btn.textContent = 'Error';
                 setTimeout(() => { btn.textContent = 'Submit'; btn.disabled = false; }, 3000);
+            }
+        }
+
+        async function rerunItem(entryId, btn) {
+            btn.disabled = true;
+            btn.textContent = 'Creating...';
+            try {
+                const resp = await fetch('/tjai/api/research/rerun', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                    body: JSON.stringify({entry_id: entryId}),
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    btn.textContent = data.error;
+                    setTimeout(() => { btn.textContent = 'Rerun'; btn.disabled = false; }, 3000);
+                    return;
+                }
+                btn.textContent = data.new_entry_id;
+                btn.style.color = '#4caf50';
+                setTimeout(fetchData, 2000);
+            } catch (e) {
+                btn.textContent = 'Error';
+                setTimeout(() => { btn.textContent = 'Rerun'; btn.disabled = false; }, 3000);
             }
         }
 

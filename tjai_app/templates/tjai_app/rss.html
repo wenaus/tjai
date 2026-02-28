@@ -320,7 +320,7 @@
                     html += `<div class="source-header">`;
                     html += `<span class="source-name">${esc(src.source)}</span>`;
                     html += `<span class="source-count">${count}</span>`;
-                    html += `<button onclick="markAllRead('${esc(src.source)}', this)">Mark All Read</button>`;
+                    html += `<button onclick="markAllRead(this.closest('.source-block').dataset.source, this)">Mark All Read</button>`;
                     html += `</div>`;
 
                     for (const item of src.items) {
@@ -341,7 +341,7 @@
                         }
                         html += `</div>`;
                     }
-                    html += `<div style="margin-top:6px"><button class="feed-bottom-btn" onclick="markAllRead('${esc(src.source)}', this)">Mark All Read</button></div>`;
+                    html += `<div style="margin-top:6px"><button class="feed-bottom-btn" onclick="markAllRead(this.closest('.source-block').dataset.source, this)">Mark All Read</button></div>`;
                     html += `<hr style="border:none;border-top:1px solid #333;margin:10px 0">`;
                     html += `</div>`;
                 }
@@ -383,13 +383,21 @@
                     headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
                     body: JSON.stringify({before: pageBuiltAt}),
                 });
+                if (!resp.ok) {
+                    alert('Mark all read failed: HTTP ' + resp.status);
+                    btn.textContent = 'Mark All Read';
+                    btn.disabled = false;
+                    return;
+                }
                 const data = await resp.json();
                 if (data.ok) {
                     document.getElementById('rss-content').innerHTML =
                         '<div class="empty">All caught up.</div>';
                     document.getElementById('global-stats').textContent = '0 unread';
                 }
-            } catch (e) {}
+            } catch (e) {
+                alert('Mark all read failed: ' + e.message);
+            }
             btn.textContent = 'Mark All Read';
             btn.disabled = false;
         }
@@ -445,7 +453,7 @@
                     }
                 }
             } catch (e) {
-                console.error('Mark above read failed:', e);
+                alert('Mark above read failed: ' + e.message);
             }
             btn.textContent = '▲ Clear';
             btn.disabled = false;
@@ -463,28 +471,41 @@
         async function markAllRead(source, btn) {
             btn.textContent = '...';
             btn.disabled = true;
-            const resp = await fetch('/tjai/api/rss/mark-read', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
-                body: JSON.stringify({source, before: pageBuiltAt}),
-            });
-            const data = await resp.json();
-            if (data.ok) {
-                showToast(`Marked ${source} as read`);
-                const block = btn.closest('.source-block');
-                if (block) block.remove();
-                document.querySelectorAll('.category-block').forEach(cb => {
-                    if (cb.querySelectorAll('.source-block').length === 0) cb.remove();
+            try {
+                const resp = await fetch('/tjai/api/rss/mark-read', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                    body: JSON.stringify({source, before: pageBuiltAt}),
                 });
-                const statsEl = document.getElementById('global-stats');
-                const current = parseInt(statsEl.textContent) || 0;
-                const newCount = Math.max(0, current - (data.marked || 0));
-                statsEl.textContent = `${newCount} unread`;
-                if (document.querySelectorAll('.source-block').length === 0) {
-                    document.getElementById('rss-content').innerHTML =
-                        '<div class="empty">All caught up.</div>';
+                if (!resp.ok) {
+                    alert('Mark read failed: HTTP ' + resp.status);
+                    btn.textContent = 'Mark All Read';
+                    btn.disabled = false;
+                    return;
                 }
-            } else {
+                const data = await resp.json();
+                if (data.ok) {
+                    showToast(`Marked ${source} as read`);
+                    const block = btn.closest('.source-block');
+                    if (block) block.remove();
+                    document.querySelectorAll('.category-block').forEach(cb => {
+                        if (cb.querySelectorAll('.source-block').length === 0) cb.remove();
+                    });
+                    const statsEl = document.getElementById('global-stats');
+                    const current = parseInt(statsEl.textContent) || 0;
+                    const newCount = Math.max(0, current - (data.marked || 0));
+                    statsEl.textContent = `${newCount} unread`;
+                    if (document.querySelectorAll('.source-block').length === 0) {
+                        document.getElementById('rss-content').innerHTML =
+                            '<div class="empty">All caught up.</div>';
+                    }
+                } else {
+                    alert('Mark read failed: ' + (data.error || 'unknown error'));
+                    btn.textContent = 'Mark All Read';
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                alert('Mark read failed: ' + e.message);
                 btn.textContent = 'Mark All Read';
                 btn.disabled = false;
             }
@@ -507,7 +528,9 @@
                     });
                     const data = await resp.json();
                     if (data.ok) totalMarked += (data.marked || 0);
-                } catch (e) {}
+                } catch (e) {
+                    alert('Mark category read failed: ' + e.message);
+                }
             }
             catBlock.remove();
             const statsEl = document.getElementById('global-stats');
