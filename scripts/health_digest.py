@@ -605,17 +605,18 @@ def format_journal_snapshot(target_date, metrics, averages, notes):
     """
     lines = ['## System Health', '']
 
-    # --- Entries ---
-    kind_order = ['memory', 'journal', 'bookmark', 'todo', 'action',
-                  'ai', 'profile', 'log', 'list']
+    # --- Entries (sorted by count, descending) ---
     total = metrics.get('entries_total', '?')
     lines.append(f'**Entries:** {total} active')
-    kind_parts = []
-    for k in kind_order:
-        val = metrics.get(f'entries_{k}')
-        if val:
-            kind_parts.append(f'- {k}: {val:,}')
-    lines.extend(kind_parts)
+    kind_counts = []
+    for key, val in metrics.items():
+        if key.startswith('entries_') and key != 'entries_total' \
+                and not key.endswith('_24h') and isinstance(val, int):
+            kind = key[len('entries_'):]
+            kind_counts.append((kind, val))
+    kind_counts.sort(key=lambda x: x[0])
+    for kind, count in kind_counts:
+        lines.append(f'- {kind}: {count:,}')
     lines.append('')
 
     # --- Storage ---
