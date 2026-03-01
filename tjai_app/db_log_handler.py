@@ -22,10 +22,11 @@ class DbLogHandler(logging.Handler):
             from django.utils import timezone
             from .models import AppLog
 
-            extra_data = None
-            entry_id = getattr(record, 'entry_id', None)
-            if entry_id:
-                extra_data = {'entry_id': entry_id}
+            extra_data = {}
+            for key in self.EXTRA_KEYS:
+                val = getattr(record, key, None)
+                if val is not None:
+                    extra_data[key] = val
 
             AppLog.objects.create(
                 source=self.source,
@@ -33,7 +34,7 @@ class DbLogHandler(logging.Handler):
                 level=record.levelno,
                 levelname=record.levelname,
                 message=self.format(record),
-                extra_data=extra_data,
+                extra_data=extra_data or None,
             )
         except Exception as e:
             msg = f"DbLogHandler emit failed ({e}): {self.format(record)}\n"
@@ -43,3 +44,9 @@ class DbLogHandler(logging.Handler):
                     f.write(msg)
             except Exception:
                 pass
+
+    # Keys from logging extra={} to persist in AppLog.extra_data
+    EXTRA_KEYS = (
+        'entry_id', 'action_id', 'model', 'tracking',
+        'run_status', 'exit_code', 'duration_sec',
+    )

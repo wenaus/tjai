@@ -226,9 +226,10 @@
     }
 
     function actionLink(item) {
-        const name = escHtml(item.action_id);
-        if (item.action_uuid) return '<a href="' + entryUrl(item.action_uuid) + '">' + name + '</a>';
-        return name;
+        let name = escHtml(item.action_id);
+        let html = '<a href="' + entryUrl(item.action_id) + '">' + name + '</a>';
+        if (item.model) html += '<br><span style="color:#666;font-size:11px">' + escHtml(item.model) + '</span>';
+        return html;
     }
 
     function renderRow(item, now) {

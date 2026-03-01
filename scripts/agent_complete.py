@@ -165,6 +165,9 @@ def main():
     current_entry = SysConfig.objects.filter(
         key=f'agent_{action_id}_entry'
     ).values_list('value', flat=True).first()
+    tracking_uuid = SysConfig.objects.filter(
+        key=f'agent_{action_id}_tracking'
+    ).values_list('value', flat=True).first()
     launched_ts = SysConfig.objects.filter(
         key=f'agent_{action_id}_launched'
     ).values_list('value', flat=True).first()
@@ -175,6 +178,8 @@ def main():
                  'exit_code': exit_code}
     if current_entry:
         ref_extra['entry_id'] = current_entry
+    if tracking_uuid:
+        ref_extra['tracking'] = tracking_uuid
     if duration_sec is not None:
         ref_extra['duration_sec'] = duration_sec
     logger.info("%s: exit_code=%d, status=%s", action_id, exit_code, status,

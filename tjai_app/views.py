@@ -3421,12 +3421,13 @@ def api_agent_queue_data(request):
         if entry_uuid:
             entry_ids_needed.add(entry_uuid)
 
-        tracking = ''
-        if aid in latest_completions and abs(
+        # Prefer tracking from AppLog extra_data, fall back to SysConfig latest
+        tracking = ed.get('tracking', '')
+        if not tracking and aid in latest_completions and abs(
                 latest_completions[aid]['completed_at'] - completed_at) < 60:
             tracking = latest_completions[aid].get('tracking', '')
 
-        timeline.append({
+        item = {
             'type': 'completed',
             'action_id': aid,
             'action_uuid': action_uuid_map.get(aid, ''),
@@ -3436,28 +3437,39 @@ def api_agent_queue_data(request):
             'entry_id': entry_uuid,
             'tracking': tracking,
             '_event_time': completed_at,
-        })
+        }
+        model = ed.get('model')
+        if model:
+            item['model'] = model
+        timeline.append(item)
 
     # Add SysConfig fallback for actions with no AppLog history yet
     for aid, lc in latest_completions.items():
         if aid not in seen_from_applog:
             timeline.append(lc)
 
-    # ── Batch-fetch entry titles ──
+    # ── Batch-fetch entry titles and entry_ids ──
     if entry_ids_needed:
-        titles = dict(
-            Entry.objects.filter(
+        entry_info = {
+            str(row['id']): row
+            for row in Entry.objects.filter(
                 id__in=list(entry_ids_needed)
-            ).values_list('id', 'content')
-        )
+            ).values('id', 'content', 'data')
+        }
         for item in timeline:
             eid = item.get('current_entry') or item.get('entry_id')
-            if eid and eid in titles:
-                topic = titles[eid].split('\n')[0][:100]
+            if eid and eid in entry_info:
+                info = entry_info[eid]
+                topic = info['content'].split('\n')[0][:100]
+                # Use data.entry_id for URLs when available, fall back to UUID
+                data_eid = (info['data'] or {}).get('entry_id') if isinstance(info['data'], dict) else None
+                url_id = data_eid or eid
                 if item['type'] == 'running':
                     item['current_topic'] = topic
+                    item['current_entry'] = url_id
                 elif item['type'] == 'completed':
                     item['message'] = topic
+                    item['entry_id'] = url_id
 
     # ── Sort: event_time descending (future → now → past) ──
     timeline.sort(key=lambda x: x.get('_event_time', 0), reverse=True)

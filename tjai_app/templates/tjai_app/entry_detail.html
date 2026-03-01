@@ -17,11 +17,6 @@
             padding: 0;
         }
         .page-content { padding: 16px; }
-        .summary {
-            border-bottom: 1px solid #333;
-            padding-bottom: 12px;
-            margin-bottom: 16px;
-        }
         .entry-num { color: #daa520; }
         .timestamp { color: #8a8a8a; }
         .kind { color: #daa520; }
@@ -32,8 +27,7 @@
         }
         a { color: #64b5f6; text-decoration: none; }
         a:hover { text-decoration: underline; }
-        .meta { color: #888; margin-top: 16px; padding-top: 12px; border-top: 1px solid #333; }
-        .back { margin-bottom: 12px; }
+        .meta { color: #888; margin-top: 16px; padding-top: 12px; border-top: 1px solid #333; font-size: 12px; }
         .toolbar-btn {
             background: #333;
             color: #e0e0e0;
@@ -68,18 +62,19 @@
 <body>
     {% with current_page="entry" %}{% include "tjai_app/_menu.html" %}{% endwith %}
     <div class="page-content">
-    <div class="summary">
-        <span class="timestamp">{{ entry.timestamp_modified|date:"D m/d/Y H:i" }}</span>
-        <span class="kind">[{{ entry.kind }}]</span>
-        {% if entry.context_id %}<span class="context">={{ entry.context_id }}</span>{% endif %}
-        {% if entry.name %}<strong>@{{ entry.name }}</strong>{% endif %}
+
+    <!-- Title + edit -->
+    <div style="margin-bottom: 12px;">
         <span id="first-line"></span>
-        {% for t in tags %}<span class="tag">:{{ t }}</span> {% endfor %}
-        <button class="toolbar-btn" id="editBtn">edit</button>
+        <button class="toolbar-btn" id="editBtn" style="margin-left: 8px;">edit</button>
     </div>
+
+    <!-- Content (view mode) -->
     <div id="viewMode">
         <div class="content">{{ content_html|safe }}</div>
     </div>
+
+    <!-- Content (edit mode) -->
     <div id="editMode">
         <div class="field-row">
             <label>@name</label>
@@ -104,55 +99,70 @@
             </span>
         </div>
     </div>
-    {% if entry.data %}
-    <div id="entry-data" style="margin-top: 16px; padding-top: 12px; font-size: 12px;"></div>
-    {{ entry.data|json_script:"entry-data-json" }}
-    <script>
-        (function() {
-            var raw = JSON.parse(document.getElementById('entry-data-json').textContent);
-            var el = document.getElementById('entry-data');
-            var TIMESTAMP_KEYS = ['event_date', 'last_run', 'timestamp', 'created', 'modified', 'start', 'end'];
-            function isTimestamp(key, val) {
-                if (typeof val !== 'number') return false;
-                if (TIMESTAMP_KEYS.indexOf(key) >= 0) return true;
-                // Heuristic: unix timestamps are large numbers in a plausible range
-                return val > 1e9 && val < 2e10;
-            }
-            function escHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-            var GITHUB_URL = '{{ github_url|escapejs }}';
-            var SCRIPT_PATH = 'blob/master/tjai/scripts/';
-            var ENTRY_REF_LINKS = JSON.parse('{{ linked_entry_ids_json|escapejs }}');
-            function fmtVal(key, val) {
-                if (isTimestamp(key, val)) {
-                    var d = new Date(val * 1000);
-                    return '<span>' + d.toLocaleDateString('en-US', {weekday:'short', year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) + '</span>';
+
+    <!-- All metadata at bottom -->
+    <div class="meta">
+        <div style="margin-bottom: 8px;">
+            <span class="timestamp">{{ entry.timestamp_modified|date:"D m/d/Y H:i" }}</span>
+            <span class="kind">[{{ entry.kind }}]</span>
+            {% if entry.context_id %}<span class="context">={{ entry.context_id }}</span>{% endif %}
+            {% if entry.name %}<strong>@{{ entry.name }}</strong>{% endif %}
+            {% for t in tags %}<span class="tag">:{{ t }}</span> {% endfor %}
+            <span style="color: #666;">{{ line_count }} lines</span>
+        </div>
+        {% if entry.data %}
+        <div id="entry-data"></div>
+        {{ entry.data|json_script:"entry-data-json" }}
+        <script>
+            (function() {
+                var raw = JSON.parse(document.getElementById('entry-data-json').textContent);
+                var el = document.getElementById('entry-data');
+                var TIMESTAMP_KEYS = ['event_date', 'last_run', 'timestamp', 'created', 'modified', 'start', 'end'];
+                function isTimestamp(key, val) {
+                    if (typeof val !== 'number') return false;
+                    if (TIMESTAMP_KEYS.indexOf(key) >= 0) return true;
+                    return val > 1e9 && val < 2e10;
                 }
-                if (typeof val === 'object' && val !== null) return '<span>' + escHtml(JSON.stringify(val)) + '</span>';
-                var s = String(val);
-                if (key === 'mechanical_script' && GITHUB_URL) {
-                    var url = GITHUB_URL + '/' + SCRIPT_PATH + encodeURIComponent(val);
-                    return '<a href="' + url + '" style="color:#64b5f6">' + escHtml(val) + '</a>';
+                function escHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+                var GITHUB_URL = '{{ github_url|escapejs }}';
+                var SCRIPT_PATH = 'blob/master/tjai/scripts/';
+                var ENTRY_REF_LINKS = JSON.parse('{{ linked_entry_ids_json|escapejs }}');
+                function fmtVal(key, val) {
+                    if (isTimestamp(key, val)) {
+                        var d = new Date(val * 1000);
+                        return '<span>' + d.toLocaleDateString('en-US', {weekday:'short', year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) + '</span>';
+                    }
+                    if (typeof val === 'object' && val !== null) return '<span>' + escHtml(JSON.stringify(val)) + '</span>';
+                    var s = String(val);
+                    if (key === 'mechanical_script' && GITHUB_URL) {
+                        var url = GITHUB_URL + '/' + SCRIPT_PATH + encodeURIComponent(val);
+                        return '<a href="' + url + '" style="color:#64b5f6">' + escHtml(val) + '</a>';
+                    }
+                    if (ENTRY_REF_LINKS[key]) {
+                        return '<a href="' + ENTRY_REF_LINKS[key] + '" style="color:#64b5f6">' + escHtml(s) + '</a>';
+                    }
+                    var lineCount = (s.match(/\n/g) || []).length + 1;
+                    if (lineCount >= 3) {
+                        return '<div style="margin-top:4px;padding:8px 12px;background:#222;border-radius:3px;white-space:pre-wrap;line-height:1.5;color:#e0e0e0">' + escHtml(s) + '</div>';
+                    }
+                    if (s.length > 120) {
+                        return '<div style="margin-top:4px;padding:8px 12px;background:#222;border-radius:3px;white-space:pre-wrap;line-height:1.5">' + escHtml(s) + '</div>';
+                    }
+                    return '<span>' + escHtml(s) + '</span>';
                 }
-                if (ENTRY_REF_LINKS[key]) {
-                    return '<a href="' + ENTRY_REF_LINKS[key] + '" style="color:#64b5f6">' + escHtml(s) + '</a>';
+                var html = '';
+                for (var key in raw) {
+                    html += '<div style="margin: 3px 0;"><span style="color:#7a7a7a">' + escHtml(key) + '</span> ' + fmtVal(key, raw[key]) + '</div>';
                 }
-                if (s.length > 120) {
-                    return '<div style="margin-top:4px;padding:8px 12px;background:#222;border-radius:3px;white-space:pre-wrap;line-height:1.5">' + escHtml(s) + '</div>';
-                }
-                return '<span>' + escHtml(s) + '</span>';
-            }
-            var html = '';
-            for (var key in raw) {
-                html += '<div style="margin: 3px 0;"><span style="color:#7a7a7a">' + escHtml(key) + '</span> ' + fmtVal(key, raw[key]) + '</div>';
-            }
-            el.innerHTML = html;
-        })();
-    </script>
-    {% endif %}
-    <div class="meta" style="display:flex; align-items:center;">
-        <span class="delete-link" id="deleteBtn">delete</span>
-        <span style="margin-left:auto">Lines: {{ line_count }}</span>
+                el.innerHTML = html;
+            })();
+        </script>
+        {% endif %}
+        <div style="margin-top: 8px;">
+            <span class="delete-link" id="deleteBtn">delete</span>
+        </div>
     </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/mode/markdown/markdown.min.js"></script>
     <script>

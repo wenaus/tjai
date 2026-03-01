@@ -290,7 +290,9 @@ def main():
         logger.error("Invalid model: %s (must be 'gemini' or 'chatgpt')", model)
         sys.exit(1)
 
-    ref_extra = {'entry_id': entry_uuid}
+    ref_extra = {'entry_id': entry_uuid, 'action_id': 'research-agent',
+                 'model': model}
+    start_time = time.time()
 
     # Load the target entry
     entry = Entry.objects.filter(id=entry_uuid, deleted_at__isnull=True).first()
@@ -304,6 +306,17 @@ def main():
     # Mark as active
     entry.status = 'active'
     entry.save(update_fields=['status'])
+
+    # Separate logger for completion events — goes to source='agent_complete'
+    # so all agent completions are in one queryable source
+    completion_logger = logging.getLogger('agent_complete_multimodel')
+    completion_logger.setLevel(logging.INFO)
+    if not completion_logger.handlers:
+        _cfmt = logging.Formatter('%(asctime)s %(levelname)s %(message)s',
+                                   datefmt='%Y-%m-%d %H:%M:%S')
+        _cdb = DbLogHandler(source='agent_complete')
+        _cdb.setFormatter(_cfmt)
+        completion_logger.addHandler(_cdb)
 
     try:
         # Build the prompt
@@ -321,14 +334,26 @@ def main():
         entry.content = f"{topic}\n\n{result}"
         entry.status = 'done'
         entry.save(update_fields=['content', 'status'])
-        logger.info("%s research complete: %d chars", model, len(result), extra=ref_extra)
+
+        duration_sec = round(time.time() - start_time)
+        ref_extra.update({'run_status': 'completed', 'exit_code': 0,
+                          'duration_sec': duration_sec})
+        logger.info("%s research complete: %d chars, %ds",
+                     model, len(result), duration_sec, extra=ref_extra)
+        completion_logger.info("research-agent/%s: exit_code=0, status=completed",
+                                model, extra=ref_extra)
 
         # Check if synthesis is ready
         _check_and_trigger_synthesis(entry)
 
     except Exception as e:
+        duration_sec = round(time.time() - start_time)
+        ref_extra.update({'run_status': 'failed', 'exit_code': 1,
+                          'duration_sec': duration_sec})
         error_msg = f"{model} research failed: {e}\n{traceback.format_exc()}"
         logger.error(error_msg, extra=ref_extra)
+        completion_logger.info("research-agent/%s: exit_code=1, status=failed",
+                                model, extra=ref_extra)
         entry.content = f"{topic}\n\nERROR: {error_msg}"
         entry.status = 'blocked'
         entry.save(update_fields=['content', 'status'])
