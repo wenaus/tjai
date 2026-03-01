@@ -162,20 +162,30 @@ def collect_backups(since_ts):
 
 
 def collect_agents(since_ts):
-    """Agent run stats from AppLog (past 24h)."""
+    """Agent run stats from AppLog (past 24h).
+
+    Only counts actual completion summary lines (containing 'exit_code='),
+    not individual stderr output lines which also log under agent_complete.
+    """
     metrics = {}
     notes = {}
     since_dt = datetime.fromtimestamp(since_ts, tz=UTC)
 
+    # Only completion summary lines have exit_code in the message
     completions = AppLog.objects.filter(
         source='agent_complete',
         timestamp__gte=since_dt,
+        message__contains='exit_code=',
     )
 
     action_stats = {}
     for log in completions:
         extra = log.extra_data or {}
-        action_id = extra.get('action_id', 'unknown')
+        action_id = extra.get('action_id')
+        if not action_id:
+            logger.warning("agent_complete log missing action_id: %s",
+                           log.message[:100])
+            continue
         if action_id not in action_stats:
             action_stats[action_id] = {
                 'runs': 0, 'total_duration': 0, 'errors': 0}
@@ -575,6 +585,149 @@ def format_markdown(target_date, metrics, averages, notes):
 
 
 # ---------------------------------------------------------------------------
+# Mechanical journal snapshot — appended to the daily synopsis entry
+# ---------------------------------------------------------------------------
+
+def format_journal_snapshot(target_date, metrics, averages, notes):
+    """Format the mechanical health snapshot for the daily journal entry.
+
+    Pure facts, no AI. This is the time-capsule record.
+    """
+    lines = ['## System Health', '']
+
+    # Entry counts by kind
+    kind_order = ['memory', 'journal', 'bookmark', 'todo', 'action',
+                  'ai', 'profile', 'log', 'list']
+    kind_parts = []
+    for k in kind_order:
+        val = metrics.get(f'entries_{k}')
+        if val:
+            kind_parts.append(f'{val} {k}')
+    total = metrics.get('entries_total', '?')
+    lines.append(f'Entries: {total} active ({", ".join(kind_parts)})')
+
+    # DB and backup
+    db = metrics.get('db_size_mb', '?')
+    backup_dump = metrics.get('backup_dump_mb', '?')
+    backup_gz = metrics.get('backup_gz_mb', '?')
+    lines.append(f'DB: {db} MB | Backup: {backup_dump} MB '
+                 f'(compressed {backup_gz} MB)')
+
+    # System
+    mem = metrics.get('mem_used_pct', '?')
+    disk_gb = metrics.get('disk_used_gb', '?')
+    disk_pct = metrics.get('disk_used_pct', '?')
+    swap = metrics.get('swap_used_pct', '?')
+    uptime = metrics.get('uptime_days', '?')
+    lines.append(f'Memory: {mem}% | Disk: {disk_gb} GB ({disk_pct}%) '
+                 f'| Swap: {swap}% | Uptime: {uptime} days')
+
+    # Agent runs
+    action_stats = notes.get('action_stats', {})
+    if action_stats:
+        parts = []
+        for aid, stats in sorted(action_stats.items()):
+            dur = stats['total_duration']
+            dur_str = f'{dur / 60:.0f}m' if dur >= 60 else f'{dur:.0f}s'
+            part = f'{aid} {stats["runs"]}x'
+            if dur > 0:
+                part += f' ({dur_str})'
+            if stats['errors']:
+                part += f' [{stats["errors"]} err]'
+            parts.append(part)
+        lines.append(f'Agents: {", ".join(parts)}')
+    else:
+        lines.append(f'Agents: {metrics.get("agent_runs_total", 0)} runs')
+
+    # Activity
+    created = metrics.get('entries_created_24h', 0)
+    modified = metrics.get('entries_modified_24h', 0)
+    picks = metrics.get('picks_created_24h', 0)
+    research_done = metrics.get('research_completed_24h', 0)
+    research_q = metrics.get('research_queue_depth', 0)
+    log_entries = metrics.get('applog_entries_24h', 0)
+    log_errors = metrics.get('applog_errors_24h', 0)
+    lines.append(f'Activity: {created} entries created, '
+                 f'{modified} modified, '
+                 f'{picks} picks, '
+                 f'{research_done} research done '
+                 f'({research_q} queued)')
+    lines.append(f'Logs: {log_entries} entries, {log_errors} errors')
+
+    # Process status
+    procs_down = []
+    proc_names = {
+        'proc_apache': 'Apache', 'proc_supervisord': 'Supervisord',
+        'proc_action_agent': 'Action Agent',
+        'proc_cloudwatch': 'CloudWatch',
+    }
+    for key, name in proc_names.items():
+        if not metrics.get(key, 0):
+            procs_down.append(name)
+    if procs_down:
+        lines.append(f'PROCESSES DOWN: {", ".join(procs_down)}')
+
+    # Errors
+    recent_errors = notes.get('recent_errors', [])
+    if recent_errors:
+        lines.append(f'Errors: {len(recent_errors)} in past 24h')
+
+    lines.append('')
+    lines.append('[Full system status](/tjai/system/)')
+    lines.append('')
+    return '\n'.join(lines)
+
+
+def write_journal_snapshot(target_date, snapshot_text):
+    """Append the health snapshot to tomorrow's daily synopsis entry.
+
+    The overnight action targets tomorrow. The daily entry is created by
+    action_runner.create_journal_entry() before this script runs.
+    We find it by entry_id and append the snapshot.
+    """
+    # Tomorrow's entry (overnight target)
+    tomorrow = target_date + timedelta(days=1)
+    entry_id = f'daily-{tomorrow.isoformat()}'
+
+    entry = Entry.objects.filter(
+        data__entry_id=entry_id,
+        deleted_at__isnull=True,
+    ).first()
+
+    if not entry:
+        logger.warning("Daily entry '%s' not found — skipping journal write",
+                       entry_id)
+        return False
+
+    content = entry.content or ''
+
+    # Replace existing ## System Health section, or append
+    marker = '## System Health'
+    if marker in content:
+        # Find start of section and next ## heading
+        idx = content.index(marker)
+        rest = content[idx + len(marker):]
+        # Find next ## heading (but not the marker itself)
+        next_section = rest.find('\n## ')
+        if next_section >= 0:
+            content = content[:idx] + snapshot_text + rest[next_section + 1:]
+        else:
+            content = content[:idx] + snapshot_text
+    else:
+        # Append after existing content
+        if not content.endswith('\n'):
+            content += '\n'
+        content += '\n' + snapshot_text
+
+    entry.content = content
+    entry.timestamp_modified = time.time()
+    entry.is_dirty = 1
+    entry.save(update_fields=['content', 'timestamp_modified', 'is_dirty'])
+    logger.info("Wrote health snapshot to %s", entry_id)
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -635,6 +788,11 @@ def main():
     md_content = format_markdown(target, all_metrics, averages, all_notes)
     md_path.write_text(md_content)
     logger.info("Wrote %s", md_path)
+
+    # Write mechanical snapshot to daily journal entry
+    snapshot = format_journal_snapshot(target, all_metrics, averages,
+                                      all_notes)
+    write_journal_snapshot(target, snapshot)
 
     logger.info("Digest complete: %d metrics, %d-day averages, %d errors",
                 len(all_metrics), len(prior),
