@@ -177,12 +177,12 @@ def collect_cloudwatch():
 
         tz_et = ZoneInfo('America/New_York')
 
-        def hour_label(ts):
-            return ts.astimezone(tz_et).strftime('%H:%M')
+        def day_label(ts):
+            return ts.astimezone(tz_et).strftime('%m/%d')
 
         cw = boto3.client('cloudwatch', region_name='us-east-1')
         end = datetime.utcnow()
-        start = end - timedelta(hours=24)
+        start = datetime(2026, 2, 1, tzinfo=None)
 
         metrics = {}
 
@@ -193,12 +193,12 @@ def collect_cloudwatch():
             Dimensions=[{'Name': 'InstanceId', 'Value': INSTANCE_ID}],
             StartTime=start,
             EndTime=end,
-            Period=3600,
+            Period=86400,
             Statistics=['Average'],
         )
         cpu_points = sorted(resp['Datapoints'], key=lambda d: d['Timestamp'])
         metrics['cpu_hourly'] = [
-            {'hour': hour_label(d['Timestamp']), 'avg': round(d['Average'], 1)}
+            {'hour': day_label(d['Timestamp']), 'avg': round(d['Average'], 1)}
             for d in cpu_points
         ]
         if cpu_points:
@@ -215,13 +215,13 @@ def collect_cloudwatch():
                     Dimensions=[{'Name': 'host', 'Value': CWAGENT_HOST}],
                     StartTime=start,
                     EndTime=end,
-                    Period=3600,
+                    Period=86400,
                     Statistics=['Average'],
                 )
                 points = sorted(resp['Datapoints'], key=lambda d: d['Timestamp'])
                 if points:
                     metrics[f'{metric_name}_hourly'] = [
-                        {'hour': hour_label(d['Timestamp']), 'avg': round(d['Average'], 1)}
+                        {'hour': day_label(d['Timestamp']), 'avg': round(d['Average'], 1)}
                         for d in points
                     ]
                 else:
@@ -350,6 +350,7 @@ def collect_backups():
         'exists': backup_root.exists(),
         'total_days': 0,
         'latest': None,
+        'recent': [],
     }
 
     if not backup_root.exists():
@@ -365,24 +366,48 @@ def collect_backups():
     if not day_dirs:
         return result
 
-    latest = day_dirs[0]
+    # Last 30 days of backups
+    for day_dir in day_dirs[:30]:
+        day_info = {'date': day_dir.name}
+        gz_path = day_dir / 'tjai-db.sql.gz'
+        if gz_path.exists():
+            gz_size = gz_path.stat().st_size
+            day_info['gz_mb'] = round(gz_size / (1024 * 1024), 1)
+            # Get uncompressed size from gzip trailer (last 4 bytes = size mod 2^32)
+            try:
+                with open(gz_path, 'rb') as f:
+                    f.seek(-4, 2)
+                    raw_size = int.from_bytes(f.read(4), 'little')
+                    # gzip trailer stores size mod 2^32; for files > 4GB this wraps
+                    day_info['raw_mb'] = round(raw_size / (1024 * 1024), 1)
+            except Exception:
+                day_info['raw_mb'] = None
+            # Check other expected files
+            expected = ['env-www.env', 'env-home.env', 'etaverse.conf']
+            day_info['files_ok'] = all((day_dir / f).exists() for f in expected)
+            data_dir = day_dir / 'data'
+            day_info['data_files'] = sum(1 for _ in data_dir.rglob('*') if _.is_file()) if data_dir.is_dir() else 0
+        else:
+            day_info['gz_mb'] = None
+            day_info['raw_mb'] = None
+            day_info['files_ok'] = False
+            day_info['data_files'] = 0
+        result['recent'].append(day_info)
+
+    # Keep 'latest' for backward compat with health assessment
+    latest_dir = day_dirs[0]
     expected_files = ['tjai-db.sql.gz', 'env-www.env', 'env-home.env', 'etaverse.conf']
     found = {}
     for name in expected_files:
-        p = latest / name
-        if p.exists():
-            found[name] = p.stat().st_size
-        else:
-            found[name] = None
+        p = latest_dir / name
+        found[name] = p.stat().st_size if p.exists() else None
 
-    # Check data directory
-    data_dir = latest / 'data'
-    data_files = list(data_dir.rglob('*')) if data_dir.is_dir() else []
-    data_file_count = sum(1 for f in data_files if f.is_file())
+    data_dir = latest_dir / 'data'
+    data_file_count = sum(1 for f in data_dir.rglob('*') if f.is_file()) if data_dir.is_dir() else 0
 
     db_size = found.get('tjai-db.sql.gz')
     result['latest'] = {
-        'date': latest.name,
+        'date': latest_dir.name,
         'files': found,
         'data_files': data_file_count,
         'db_size_mb': round(db_size / (1024 * 1024), 1) if db_size else None,
@@ -495,6 +520,7 @@ def collect_tjai():
         action_id = data.get('entry_id')
         action_info = {
             'id': str(a.id),
+            'entry_id': action_id,
             'content': a.content[:60],
             'trigger': data.get('trigger', '?'),
             'interval_h': data.get('interval_hours', 24),

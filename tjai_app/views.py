@@ -1161,7 +1161,11 @@ def agent_log_data(request):
     if ref:
         # Filter by entry reference: tagged in extra_data OR mentioned in message
         from django.db.models import Q
-        qs = qs.filter(Q(extra_data__entry_id=ref) | Q(message__icontains=ref[:8]))
+        qs = qs.filter(
+            Q(extra_data__entry_id=ref) |
+            Q(extra_data__action_id=ref) |
+            Q(message__icontains=ref[:8])
+        )
     qs = qs[:limit]
 
     from zoneinfo import ZoneInfo

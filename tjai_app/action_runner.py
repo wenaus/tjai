@@ -7,6 +7,7 @@ All functions use Django ORM directly — must be called in a Django context.
 import logging
 import subprocess
 import sys
+import threading
 import time
 import traceback
 from datetime import datetime, timedelta
@@ -20,6 +21,19 @@ SCRIPTS_DIR = Path(__file__).resolve().parent.parent / 'scripts'
 TJAI_DIR = SCRIPTS_DIR.parent
 TJ_PY = TJAI_DIR / 'tj.py'
 
+# Thread-local for auto-tagging log lines with the current action's entry_id
+_log_context = threading.local()
+
+
+class _ActionContextFilter(logging.Filter):
+    """Auto-inject action_id into log records during execute_action."""
+    def filter(self, record):
+        action_id = getattr(_log_context, 'action_id', None)
+        if action_id and not getattr(record, 'action_id', None):
+            record.action_id = action_id
+        return True
+
+
 # Logger: writes to DB (visible on dashboard) + stdout (for supervisord)
 logger = logging.getLogger('action_agent')
 logger.setLevel(logging.INFO)
@@ -32,6 +46,7 @@ if not logger.handlers:
     _sh = logging.StreamHandler(sys.stdout)
     _sh.setFormatter(_fmt)
     logger.addHandler(_sh)
+logger.addFilter(_ActionContextFilter())
 
 
 def get_due_actions(trigger_filter=None):
@@ -75,11 +90,16 @@ def get_target_date():
 
 def get_template_vars(target_date):
     """Build template variables from target date."""
+    from datetime import date as date_type
+    today = date_type.today()
     return {
         'mm-dd': target_date.strftime('%m-%d'),
         'yyyymmdd': target_date.strftime('%Y%m%d'),
         'yyyy-mm-dd': target_date.strftime('%Y-%m-%d'),
         'date_str': target_date.strftime('%a %b %-d, %Y'),
+        # Today's date (for health reports that look backward, not forward)
+        'today-yyyy-mm-dd': today.isoformat(),
+        'today-yyyymmdd': today.strftime('%Y%m%d'),
     }
 
 
@@ -364,28 +384,31 @@ def execute_action(action, target_date=None):
                 data.get('trigger', '?'), last_run_str)
 
     action_id = data.get('entry_id')
+    _log_context.action_id = action_id
+    try:
+        if not run_mechanical(action, target_date=target_date):
+            logger.error("Mechanical step failed, aborting")
+            _write_agent_error(action_id, "Mechanical step failed")
+            return False
 
-    if not run_mechanical(action, target_date=target_date):
-        logger.error("Mechanical step failed, aborting")
-        _write_agent_error(action_id, "Mechanical step failed")
-        return False
+        entry_id = create_journal_entry(action, target_date=target_date)
+        if entry_id is None:
+            logger.error("Journal entry creation failed, aborting")
+            _write_agent_error(action_id, "Journal entry creation failed")
+            return False
 
-    entry_id = create_journal_entry(action, target_date=target_date)
-    if entry_id is None:
-        logger.error("Journal entry creation failed, aborting")
-        _write_agent_error(action_id, "Journal entry creation failed")
-        return False
+        if not dispatch_ai(action, entry_id=entry_id if isinstance(entry_id, str) else None,
+                           target_date=target_date):
+            logger.error("AI dispatch failed")
+            _write_agent_error(action_id, "AI dispatch failed")
+            update_last_run(action)
+            return False
 
-    if not dispatch_ai(action, entry_id=entry_id if isinstance(entry_id, str) else None,
-                       target_date=target_date):
-        logger.error("AI dispatch failed")
-        _write_agent_error(action_id, "AI dispatch failed")
         update_last_run(action)
-        return False
-
-    update_last_run(action)
-    logger.info("Done.")
-    return True
+        logger.info("Done.")
+        return True
+    finally:
+        _log_context.action_id = None
 
 
 def _write_agent_error(action_id, error_msg):
