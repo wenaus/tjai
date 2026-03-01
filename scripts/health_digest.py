@@ -226,11 +226,21 @@ def collect_logs(since_ts):
     metrics['applog_entries_24h'] = AppLog.objects.filter(
         timestamp__gte=since_dt).count()
 
+    # Counts by level
+    level_counts = dict(
+        AppLog.objects.filter(timestamp__gte=since_dt)
+        .values_list('levelname').annotate(c=Count('id'))
+    )
+    metrics['applog_info_24h'] = level_counts.get('INFO', 0)
+    metrics['applog_warning_24h'] = level_counts.get('WARNING', 0)
+    metrics['applog_error_24h'] = level_counts.get('ERROR', 0)
+    metrics['applog_errors_24h'] = (level_counts.get('ERROR', 0)
+                                    + level_counts.get('CRITICAL', 0))
+
     errors = AppLog.objects.filter(
         timestamp__gte=since_dt,
         level__gte=logging.ERROR,
     )
-    metrics['applog_errors_24h'] = errors.count()
 
     error_msgs = list(errors.order_by('-timestamp').values_list(
         'timestamp', 'source', 'message'
@@ -595,84 +605,105 @@ def format_journal_snapshot(target_date, metrics, averages, notes):
     """
     lines = ['## System Health', '']
 
-    # Entry counts by kind
+    # --- Entries ---
     kind_order = ['memory', 'journal', 'bookmark', 'todo', 'action',
                   'ai', 'profile', 'log', 'list']
+    total = metrics.get('entries_total', '?')
+    lines.append(f'**Entries:** {total} active')
     kind_parts = []
     for k in kind_order:
         val = metrics.get(f'entries_{k}')
         if val:
-            kind_parts.append(f'{val} {k}')
-    total = metrics.get('entries_total', '?')
-    lines.append(f'Entries: {total} active ({", ".join(kind_parts)})')
+            kind_parts.append(f'- {k}: {val:,}')
+    lines.extend(kind_parts)
+    lines.append('')
 
-    # DB and backup
+    # --- Storage ---
     db = metrics.get('db_size_mb', '?')
     backup_dump = metrics.get('backup_dump_mb', '?')
     backup_gz = metrics.get('backup_gz_mb', '?')
-    lines.append(f'DB: {db} MB | Backup: {backup_dump} MB '
-                 f'(compressed {backup_gz} MB)')
+    backup_ok = metrics.get('backup_config_ok', 0)
+    backup_files = metrics.get('backup_data_files', 0)
+    lines.append(f'**Storage:** DB {db} MB | '
+                 f'Backup {backup_dump} MB raw, '
+                 f'{backup_gz} MB compressed | '
+                 f'{backup_files} data files | '
+                 f'config {"OK" if backup_ok else "MISSING"}')
+    lines.append('')
 
-    # System
+    # --- System ---
     mem = metrics.get('mem_used_pct', '?')
     disk_gb = metrics.get('disk_used_gb', '?')
     disk_pct = metrics.get('disk_used_pct', '?')
     swap = metrics.get('swap_used_pct', '?')
     uptime = metrics.get('uptime_days', '?')
-    lines.append(f'Memory: {mem}% | Disk: {disk_gb} GB ({disk_pct}%) '
-                 f'| Swap: {swap}% | Uptime: {uptime} days')
+    load1 = metrics.get('cpu_load_1m', '?')
+    load5 = metrics.get('cpu_load_5m', '?')
+    lines.append(f'**System:** CPU load {load1}/{load5} (1m/5m) | '
+                 f'Memory {mem}% | Swap {swap}% | '
+                 f'Disk {disk_gb} GB ({disk_pct}%) | '
+                 f'Uptime {uptime} days')
+    lines.append('')
 
-    # Agent runs
+    # --- Agents ---
     action_stats = notes.get('action_stats', {})
+    total_runs = metrics.get('agent_runs_total', 0)
+    total_errors = metrics.get('agent_errors_total', 0)
+    lines.append(f'**Agents:** {total_runs} runs, {total_errors} errors')
     if action_stats:
-        parts = []
         for aid, stats in sorted(action_stats.items()):
             dur = stats['total_duration']
             dur_str = f'{dur / 60:.0f}m' if dur >= 60 else f'{dur:.0f}s'
-            part = f'{aid} {stats["runs"]}x'
-            if dur > 0:
-                part += f' ({dur_str})'
-            if stats['errors']:
-                part += f' [{stats["errors"]} err]'
-            parts.append(part)
-        lines.append(f'Agents: {", ".join(parts)}')
-    else:
-        lines.append(f'Agents: {metrics.get("agent_runs_total", 0)} runs')
+            err_str = f' [{stats["errors"]} errors]' if stats['errors'] else ''
+            lines.append(f'- {aid}: {stats["runs"]}x, {dur_str}{err_str}')
+    lines.append('')
 
-    # Activity
+    # --- Activity ---
     created = metrics.get('entries_created_24h', 0)
     modified = metrics.get('entries_modified_24h', 0)
     picks = metrics.get('picks_created_24h', 0)
     research_done = metrics.get('research_completed_24h', 0)
     research_q = metrics.get('research_queue_depth', 0)
-    log_entries = metrics.get('applog_entries_24h', 0)
-    log_errors = metrics.get('applog_errors_24h', 0)
-    lines.append(f'Activity: {created} entries created, '
-                 f'{modified} modified, '
-                 f'{picks} picks, '
-                 f'{research_done} research done '
+    cc = metrics.get('dialog_cc_turns_24h', 0)
+    tg = metrics.get('dialog_tg_turns_24h', 0)
+    lines.append(f'**Activity (24h):** {created} entries created, '
+                 f'{modified} modified | '
+                 f'{cc} CC dialog, {tg} TG dialog | '
+                 f'{picks} picks | '
+                 f'{research_done} research completed '
                  f'({research_q} queued)')
-    lines.append(f'Logs: {log_entries} entries, {log_errors} errors')
+    lines.append('')
 
-    # Process status
-    procs_down = []
+    # --- Logs ---
+    log_total = metrics.get('applog_entries_24h', 0)
+    log_info = metrics.get('applog_info_24h', 0)
+    log_warn = metrics.get('applog_warning_24h', 0)
+    log_err = metrics.get('applog_error_24h', 0)
+    lines.append(f'**Logs (24h):** {log_total} total — '
+                 f'{log_info} info, {log_warn} warning, {log_err} error')
+
+    recent_errors = notes.get('recent_errors', [])
+    if recent_errors:
+        lines.append('')
+        lines.append(f'**Errors ({len(recent_errors)}):**')
+        for err in recent_errors[:10]:
+            lines.append(
+                f'- [{err["time"]}] {err["source"]}: '
+                f'{err["message"][:120]}')
+    lines.append('')
+
+    # --- Processes ---
     proc_names = {
         'proc_apache': 'Apache', 'proc_supervisord': 'Supervisord',
         'proc_action_agent': 'Action Agent',
         'proc_cloudwatch': 'CloudWatch',
     }
-    for key, name in proc_names.items():
-        if not metrics.get(key, 0):
-            procs_down.append(name)
+    procs_down = [name for key, name in proc_names.items()
+                  if not metrics.get(key, 0)]
     if procs_down:
-        lines.append(f'PROCESSES DOWN: {", ".join(procs_down)}')
+        lines.append(f'**PROCESSES DOWN:** {", ".join(procs_down)}')
+        lines.append('')
 
-    # Errors
-    recent_errors = notes.get('recent_errors', [])
-    if recent_errors:
-        lines.append(f'Errors: {len(recent_errors)} in past 24h')
-
-    lines.append('')
     lines.append('[Full system status](/tjai/system/)')
     lines.append('')
     return '\n'.join(lines)
@@ -701,20 +732,19 @@ def write_journal_snapshot(target_date, snapshot_text):
 
     content = entry.content or ''
 
-    # Replace existing ## System Health section, or append
+    # Replace existing ## System Health section, or insert after content
     marker = '## System Health'
     if marker in content:
-        # Find start of section and next ## heading
+        # Replace existing section up to next ## heading
         idx = content.index(marker)
         rest = content[idx + len(marker):]
-        # Find next ## heading (but not the marker itself)
         next_section = rest.find('\n## ')
         if next_section >= 0:
             content = content[:idx] + snapshot_text + rest[next_section + 1:]
         else:
             content = content[:idx] + snapshot_text
     else:
-        # Append after existing content
+        # Append at end — after Today in History if present, else at end
         if not content.endswith('\n'):
             content += '\n'
         content += '\n' + snapshot_text
