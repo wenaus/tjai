@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from .db_log_handler import DbLogHandler
-from .models import Entry, SysConfig
+from .models import Entry, SysConfig, Tag
 from . import services
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / 'scripts'
@@ -280,6 +280,60 @@ def dispatch_ai(action, entry_id=None, target_date=None):
     thread = threading.Thread(target=_monitor, args=(proc, action_id), daemon=True)
     thread.start()
     return True
+
+
+def dispatch_multimodel(topic_text, base_entry_id, base_uuid, context_obj):
+    """Create gemini/chatgpt entries and launch background processes.
+
+    Called from views.py api_research_run() alongside the Claude dispatch.
+    Creates a research entry for each model and launches research_multimodel.py
+    in a detached subprocess.
+    """
+    import uuid
+
+    now = time.time()
+    script_path = SCRIPTS_DIR / 'research_multimodel.py'
+
+    for model in ('gemini', 'chatgpt'):
+        model_entry_id = f'{base_entry_id}-{model}'
+
+        # Check if entry already exists (idempotent)
+        existing = Entry.objects.filter(
+            data__entry_id=model_entry_id, deleted_at__isnull=True,
+        ).first()
+        if existing:
+            logger.info("Multimodel: %s entry already exists, skipping", model_entry_id)
+            continue
+
+        # Create the model-specific entry
+        entry = Entry.objects.create(
+            id=str(uuid.uuid4()),
+            content=topic_text,
+            kind='memory',
+            context=context_obj,
+            timestamp_created=now,
+            timestamp_modified=now,
+            is_dirty=1,
+            data={
+                'entry_id': model_entry_id,
+                'source': 'multimodel',
+                'base_entry_id': base_entry_id,
+                'base_uuid': base_uuid,
+                'model': model,
+                'started_at': now,
+            },
+        )
+        Tag.objects.create(tag_name='research', entry=entry)
+
+        # Launch research_multimodel.py in a detached subprocess.
+        # Use DEVNULL — script logs via DbLogHandler, no need for pipe I/O.
+        proc = subprocess.Popen(
+            [sys.executable, str(script_path), model, str(entry.id)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        logger.info("Multimodel: launched %s (PID %d, entry %s)",
+                     model, proc.pid, model_entry_id)
 
 
 def update_last_run(action):

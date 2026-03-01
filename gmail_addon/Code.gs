@@ -367,7 +367,77 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
     if (match) is24h = true;
   }
 
+  // Numeric date: [Dayname] [(]MM.DD[.YYYY][)] [at ]H[:MM] AM/PM [(TZ)]
+  // Handles "Monday (03.02) at 11 AM ET", "03/02 at 2:30 PM", "3-2-2026 at 10am"
+  var isNumeric = false;
+  if (!match) {
+    var numRegex = new RegExp(
+      '(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\\s*)?' +
+      '\\(?' +                                                   // optional opening paren
+      '(\\d{1,2})[./\\-](\\d{1,2})' +                           // (1) MM (2) DD
+      '(?:[./\\-](\\d{2,4}))?' +                                // (3) optional year
+      '\\)?' +                                                   // optional closing paren
+      '(?:[,\\s]+|\\s+)(?:at\\s+)?' +                            // separator
+      '(\\d{1,2})(?::(\\d{2}))?\\s*' +                           // (4) hour (5) min
+      '(a\\.?m\\.?|p\\.?m\\.?|AM|PM)' +                         // (6) am/pm
+      '(?:\\s*\\(?(E[SD]T|C[SD]T|M[SD]T|P[SD]T|ET|CT|MT|PT|UTC|GMT|CES?T)\\)?)?',  // (7) tz
+      'i'
+    );
+    match = text.match(numRegex);
+    if (match) isNumeric = true;
+  }
+
+  // Numeric date with 24-hour time: [Dayname] [(]MM.DD[.YYYY][)] [at ]HH:MM [(TZ)]
+  if (!match) {
+    var num24Regex = new RegExp(
+      '(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\\s*)?' +
+      '\\(?' +                                                   // optional opening paren
+      '(\\d{1,2})[./\\-](\\d{1,2})' +                           // (1) MM (2) DD
+      '(?:[./\\-](\\d{2,4}))?' +                                // (3) optional year
+      '\\)?' +                                                   // optional closing paren
+      '(?:[,\\s]+|\\s+)(?:at\\s+)?' +                            // separator
+      '(\\d{1,2}):(\\d{2})' +                                   // (4) hour (5) min — colon required
+      '(?:\\s*\\(?(E[SD]T|C[SD]T|M[SD]T|P[SD]T|ET|CT|MT|PT|UTC|GMT|CES?T)\\)?)?',  // (6) tz
+      'i'
+    );
+    match = text.match(num24Regex);
+    if (match) { isNumeric = true; is24h = true; }
+  }
+
   if (!match) return null;
+
+  // Numeric date: month and day are already numeric, no MONTHS_ lookup needed
+  if (isNumeric) {
+    var numMonth = parseInt(match[1]) - 1;  // 0-indexed
+    var numDay = parseInt(match[2]);
+    var numYear = match[3] ? parseInt(match[3]) : fallbackYear;
+    if (numYear < 100) numYear += 2000;  // handle 2-digit year
+    if (numMonth < 0 || numMonth > 11 || numDay < 1 || numDay > 31) return null;
+
+    var numHour = parseInt(match[4]);
+    var numMinute = parseInt(match[5] || '0');
+
+    if (!is24h) {
+      var numAmpm = match[6].replace(/\./g, '').toLowerCase();
+      if (numAmpm === 'pm' && numHour < 12) numHour += 12;
+      if (numAmpm === 'am' && numHour === 12) numHour = 0;
+    }
+
+    var numTzGroup = is24h ? match[6] : match[7];
+    var numTzName = defaultTz;
+    if (numTzGroup && TZ_ABBREV_[numTzGroup.toUpperCase()]) {
+      numTzName = TZ_ABBREV_[numTzGroup.toUpperCase()];
+    }
+
+    var numTimestamp = dateInTimezone_(numYear, numMonth, numDay, numHour, numMinute, numTzName);
+    var numDisplayD = new Date(numTimestamp * 1000);
+    return {
+      timestamp: numTimestamp,
+      displayDate: Utilities.formatDate(numDisplayD, DEFAULT_TIMEZONE, 'EEE MMM d, yyyy'),
+      displayTime: Utilities.formatDate(numDisplayD, DEFAULT_TIMEZONE, 'HH:mm'),
+      tzInfo: Utilities.formatDate(numDisplayD, DEFAULT_TIMEZONE, 'z')
+    };
+  }
 
   var month = MONTHS_[match[1].toLowerCase()];
   if (month === undefined) return null;

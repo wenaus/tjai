@@ -2227,6 +2227,23 @@ def api_research_run(request):
         return JsonResponse({'ok': True, 'warning': wake_msg})
 
     _log_research(logging.INFO, "Action agent woken", entry_id=target_uuid)
+
+    # Dispatch Gemini and ChatGPT in parallel (single-item only)
+    if entry_id != 'all' and target_uuid:
+        target_entry = Entry.objects.filter(id=target_uuid).first()
+        if target_entry:
+            tdata = target_entry.data or {}
+            base_entry_id = tdata.get('entry_id')
+            topic_text = target_entry.content.split('\n')[0].strip()
+            if base_entry_id and topic_text:
+                from .action_runner import dispatch_multimodel
+                dispatch_multimodel(
+                    topic_text=topic_text,
+                    base_entry_id=base_entry_id,
+                    base_uuid=str(target_entry.id),
+                    context_obj=target_entry.context,
+                )
+
     return JsonResponse({'ok': True, 'entry_id': entry_id})
 
 

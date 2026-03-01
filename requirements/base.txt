@@ -7,3 +7,5 @@ markdown>=3.5
 django-mcp-server>=0.1.0
 python-jose[cryptography]>=3.3.0
 feedparser>=6.0
+openai>=1.0.0
+google-genai>=1.0.0

@@ -13,6 +13,7 @@ All logging goes to AppLog via DbLogHandler (visible on dashboard).
 import os
 import sys
 import time
+from pathlib import Path
 
 import bootstrap  # noqa: F401 - Django setup
 
@@ -264,6 +265,9 @@ def main():
     # Queue drain for research-agent: auto-chain to next pending item
     if action_id == 'research-agent' and exit_code in (0, 124):
         _research_queue_drain(now)
+        # Check if multimodel synthesis should be triggered
+        if current_entry:
+            _check_and_trigger_synthesis(current_entry)
 
 
 def _research_queue_drain(now):
@@ -319,6 +323,68 @@ def _research_queue_drain(now):
     SysConfig.objects.update_or_create(
         key='action_agent_wake_requested',
         defaults={'value': '1', 'timestamp_modified': now})
+
+
+def _check_and_trigger_synthesis(current_entry_uuid):
+    """Check if all 3 models are done and trigger synthesis.
+
+    Called after Claude finishes a research item. Delegates to the shared
+    implementation in research_multimodel.py to avoid duplicating logic.
+    """
+    entry = Entry.objects.filter(
+        id=current_entry_uuid, deleted_at__isnull=True,
+    ).first()
+    if not entry:
+        return
+
+    data = entry.data if isinstance(entry.data, dict) else {}
+    entry_id = data.get('entry_id')
+    if not entry_id:
+        return
+
+    # Only applies to base research entries (not -gemini, -chatgpt, -synthesis)
+    if any(entry_id.endswith(suffix) for suffix in ('-gemini', '-chatgpt', '-synthesis')):
+        return
+
+    # Check if gemini and chatgpt entries exist at all — if they don't,
+    # this topic wasn't submitted with multimodel dispatch
+    gemini = Entry.objects.filter(
+        data__entry_id=f'{entry_id}-gemini', deleted_at__isnull=True,
+    ).first()
+    chatgpt = Entry.objects.filter(
+        data__entry_id=f'{entry_id}-chatgpt', deleted_at__isnull=True,
+    ).first()
+
+    if not gemini or not chatgpt:
+        return  # No multimodel dispatch for this topic
+
+    if not all(e.status == 'done' for e in [entry, gemini, chatgpt]):
+        logger.info("Synthesis check: not all models done (base=%s, gemini=%s, chatgpt=%s)",
+                     entry.status, gemini.status, chatgpt.status)
+        return
+
+    # Check if synthesis already exists
+    synth_entry_id = f'{entry_id}-synthesis'
+    existing = Entry.objects.filter(
+        data__entry_id=synth_entry_id, deleted_at__isnull=True,
+    ).first()
+    if existing:
+        logger.info("Synthesis entry %s already exists", synth_entry_id)
+        return
+
+    # Delegate to research_multimodel's synthesis creation
+    logger.info("All 3 models done for %s — triggering synthesis", entry_id)
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            'research_multimodel',
+            str(Path(__file__).parent / 'research_multimodel.py'),
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod._create_and_dispatch_synthesis(entry_id, entry, synth_entry_id)
+    except Exception as e:
+        logger.error("Failed to trigger synthesis for %s: %s", entry_id, e)
 
 
 try:
