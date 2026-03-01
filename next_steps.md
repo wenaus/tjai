@@ -8,11 +8,21 @@ ccusage is a nice tool for tracking usage but it operates only locally. build a 
 
 Make todo's actually work. Introduce vision items, with associated todos. tick off the todos as they get done. will really surface the plan much more than a next steps in github. also a good replacement/ancillary to claude's own planning system which is useless because it doesn't persist past restart and it is hidden even from claude.
 
-Migration underway: gradually moving plans and design specs from next_steps.md into tjai todos with priority, context, and references to associated prompt entries (e.g. research-system-prompt-v2, research-synthesis-prompt, research-ideation-prompt). Todos are becoming the live planning system; next_steps.md is becoming the archive/backlog.
+Migration underway: gradually moving plans and design specs from next_steps.md into tjai todos with priority, context, and references to associated prompt entries (e.g. research-system-prompt-v2, research-synthesis-prompt). Prompts are moving inline into action entry ai_prompt fields. Todos are becoming the live planning system; next_steps.md is becoming the archive/backlog.
 
 ## Always-On Intellectual Agent
 
 Transform tjai from a reactive knowledge base into a proactive thinking system that works while you're away, synthesizing your knowledge, finding deep connections, and bringing world awareness — then presenting the results when you return.
+
+**Implemented so far:**
+- **Research agent** — Claude-driven deep research on queued topics, with auto-chaining through the queue
+- **Multi-model research** — parallel Gemini + ChatGPT research alongside Claude, with automated synthesis when all three complete. Completions logged to agent_complete with model metadata.
+- **Ideation agent** — overnight review of daily activity (picks, dialog, entries) to propose research-worthy questions
+- **Picks agent** — AI-curated article selection from RSS feeds
+- **Daily history** — "on this day" historical events and birthdays
+- **Agent queue page** — observability dashboard showing all agent activity (upcoming, running, completed with model/duration/links)
+
+**Not yet implemented:** Reflection Agent, Deep Connection Finder, Dialog Synthesis (see below).
 
 ## dialog management
 
@@ -129,7 +139,7 @@ Project planning moves from next_steps.md (a file) to tjai (a database) for prio
 
 ## AI ideas on Always-On Intellectual Agent applications
 
-I don't sign on to all of them. Some are implemented and so not included here anymore (AI picks, research queue).
+I don't sign on to all of them. Some are implemented: AI picks (picks-agent), research queue (research-agent + multimodel dispatch), ideation (ideation-agent), daily history (daily-history).
 
 ### Agent 1: Reflection Agent (the core)
 
