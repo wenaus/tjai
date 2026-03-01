@@ -121,6 +121,7 @@
             function escHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
             var GITHUB_URL = '{{ github_url|escapejs }}';
             var SCRIPT_PATH = 'blob/master/tjai/scripts/';
+            var ENTRY_REF_LINKS = JSON.parse('{{ linked_entry_ids_json|escapejs }}');
             function fmtVal(key, val) {
                 if (isTimestamp(key, val)) {
                     var d = new Date(val * 1000);
@@ -131,6 +132,9 @@
                 if (key === 'mechanical_script' && GITHUB_URL) {
                     var url = GITHUB_URL + '/' + SCRIPT_PATH + encodeURIComponent(val);
                     return '<a href="' + url + '" style="color:#64b5f6">' + escHtml(val) + '</a>';
+                }
+                if (ENTRY_REF_LINKS[key]) {
+                    return '<a href="' + ENTRY_REF_LINKS[key] + '" style="color:#64b5f6">' + escHtml(s) + '</a>';
                 }
                 if (s.length > 120) {
                     return '<div style="margin-top:4px;padding:8px 12px;background:#222;border-radius:3px;white-space:pre-wrap;line-height:1.5">' + escHtml(s) + '</div>';

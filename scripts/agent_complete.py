@@ -165,9 +165,18 @@ def main():
     current_entry = SysConfig.objects.filter(
         key=f'agent_{action_id}_entry'
     ).values_list('value', flat=True).first()
-    ref_extra = {'entry_id': current_entry} if current_entry else {}
+    launched_ts = SysConfig.objects.filter(
+        key=f'agent_{action_id}_launched'
+    ).values_list('value', flat=True).first()
+    duration_sec = round(now - float(launched_ts)) if launched_ts else None
 
     status = 'completed' if exit_code in (0, 124) else 'failed'
+    ref_extra = {'action_id': action_id, 'run_status': status,
+                 'exit_code': exit_code}
+    if current_entry:
+        ref_extra['entry_id'] = current_entry
+    if duration_sec is not None:
+        ref_extra['duration_sec'] = duration_sec
     logger.info("%s: exit_code=%d, status=%s", action_id, exit_code, status,
                 extra=ref_extra)
 
@@ -310,19 +319,31 @@ def _research_queue_drain(now):
         f"SPECIFIC TARGET:\nEntry UUID: {next_item.id}\n"
         f"Topic: {next_item.content}"
     )
-    data['next_target_entry'] = str(next_item.id)
+    data['next_target_entry_id'] = str(next_item.id)
     research_action.data = data
     research_action.timestamp_modified = now
     research_action.save(update_fields=['data', 'timestamp_modified'])
 
+    next_entry_id = (next_item.data or {}).get('entry_id', str(next_item.id)[:8])
     logger.info("research-agent: chaining to %s — %s",
-                (next_item.data or {}).get('entry_id', str(next_item.id)[:8]),
-                next_item.content[:60])
+                next_entry_id, next_item.content[:60])
 
     # Wake action agent via sysconfig flag
     SysConfig.objects.update_or_create(
         key='action_agent_wake_requested',
         defaults={'value': '1', 'timestamp_modified': now})
+
+    # Also dispatch Gemini and ChatGPT in parallel
+    topic_text = next_item.content.split('\n')[0].strip()
+    base_entry_id = (next_item.data or {}).get('entry_id')
+    if base_entry_id and topic_text:
+        from tjai_app.action_runner import dispatch_multimodel
+        dispatch_multimodel(
+            topic_text=topic_text,
+            base_entry_id=base_entry_id,
+            base_uuid=str(next_item.id),
+            context_obj=next_item.context,
+        )
 
 
 def _check_and_trigger_synthesis(current_entry_uuid):

@@ -1249,6 +1249,12 @@ def entry_detail(request, entry_id=None):
     github_url = SysConfig.objects.filter(
         key='config_github_url'
     ).values_list('value', flat=True).first() or ''
+    # Convention: any data key containing 'entry_id' holds an entry reference
+    linked_entry_ids = {}
+    if data:
+        for k, v in data.items():
+            if 'entry_id' in k and isinstance(v, str) and v:
+                linked_entry_ids[k] = f'/tjai/entry/{v}/'
     return render(request, 'tjai_app/entry_detail.html', {
         'entry': entry,
         'content_html': content_html,
@@ -1259,6 +1265,7 @@ def entry_detail(request, entry_id=None):
         'github_url': github_url,
         'content_format': fmt,
         'explicit_format': bool(data.get('format')) if data else False,
+        'linked_entry_ids_json': json.dumps(linked_entry_ids),
     })
 
 
@@ -2165,7 +2172,7 @@ def api_research_run(request):
             f"SPECIFIC TARGET:\nEntry UUID: {target.id}\n"
             f"Topic: {target.content}"
         )
-        data['next_target_entry'] = str(target.id)
+        data['next_target_entry_id'] = str(target.id)
     else:
         # Submit All: find the first pending item and use SPECIFIC TARGET
         research_ids = Tag.objects.filter(
@@ -2182,9 +2189,9 @@ def api_research_run(request):
             f"SPECIFIC TARGET:\nEntry UUID: {first_item.id}\n"
             f"Topic: {first_item.content}"
         )
-        data['next_target_entry'] = str(first_item.id)
+        data['next_target_entry_id'] = str(first_item.id)
 
-    target_uuid = data.get('next_target_entry')
+    target_uuid = data.get('next_target_entry_id')
     topic_line = data.get('next_target', '').split('\n')[-1]  # "Topic: ..."
 
     # Record start time on the target entry for duration tracking
@@ -2337,11 +2344,61 @@ def api_research_rerun(request):
                   f"Rerun created: {new_entry_id} from {entry_id}",
                   entry_id=str(new_entry.id))
 
+    # Auto-submit: trigger research on the new entry immediately
+    research_action = Entry.objects.filter(
+        kind='action', deleted_at__isnull=True,
+        data__entry_id='research-agent',
+    ).first()
+    auto_submitted = False
+    if research_action:
+        status = SysConfig.objects.filter(
+            key='agent_research-agent_status'
+        ).values_list('value', flat=True).first()
+        if status != 'running':
+            rdata = research_action.data or {}
+            rdata['last_run'] = 0
+            rdata['next_target'] = (
+                f"SPECIFIC TARGET:\nEntry UUID: {new_entry.id}\n"
+                f"Topic: {new_entry.content}"
+            )
+            rdata['next_target_entry_id'] = str(new_entry.id)
+            research_action.data = rdata
+            research_action.timestamp_modified = now
+            research_action.save(update_fields=['data', 'timestamp_modified'])
+
+            # Record start time on the new entry
+            edata = new_entry.data or {}
+            edata['started_at'] = now
+            new_entry.data = edata
+            new_entry.save(update_fields=['data'])
+
+            # Single item: prevent queue drain chaining
+            SysConfig.objects.update_or_create(
+                key='research_stop_requested',
+                defaults={'value': '1', 'timestamp_modified': now})
+
+            _wake_action_agent()
+
+            # Dispatch Gemini and ChatGPT in parallel
+            from .action_runner import dispatch_multimodel
+            dispatch_multimodel(
+                topic_text=topic,
+                base_entry_id=new_entry_id,
+                base_uuid=str(new_entry.id),
+                context_obj=context_obj,
+            )
+
+            _log_research(logging.INFO,
+                          f"Rerun auto-submitted: {new_entry_id}",
+                          entry_id=str(new_entry.id))
+            auto_submitted = True
+
     return JsonResponse({
         'ok': True,
         'new_entry_id': new_entry_id,
         'new_uuid': str(new_entry.id),
         'version': next_ver,
+        'auto_submitted': auto_submitted,
     })
 
 
@@ -3192,3 +3249,239 @@ def api_rss_add_source(request):
         'category': category,
         'entry_count': len(feed.entries),
     })
+
+
+# ── Agent Queue Observability ──────────────────────────────────────────
+
+@login_required
+def agent_queue(request):
+    """Agent queue observability page."""
+    return render(request, 'tjai_app/agent_queue.html')
+
+
+@login_required
+def api_agent_queue_data(request):
+    """Build unified agent timeline from structured SysConfig + Entry data.
+
+    Each action produces up to two timeline items:
+    - An upcoming/running item (what it will do / is doing next)
+    - A completed item (its most recent finished run, from SysConfig)
+    Click-through to agent-log for full history per action.
+    """
+    now = time.time()
+    timeline = []
+    latest_completions = {}  # action_id -> latest completion from SysConfig
+
+    # ── Load all action entries ──
+    actions = Entry.objects.filter(
+        kind='action', deleted_at__isnull=True,
+    ).exclude(status='done').exclude(status='blocked')
+
+    # ── Load all sysconfig keys in one query ──
+    from django.db.models import Q
+    sc_all = {
+        sc.key: sc.value
+        for sc in SysConfig.objects.filter(
+            Q(key__startswith='agent_') | Q(key__startswith='action_agent_')
+        )
+    }
+
+    # Collect entry UUIDs we'll need titles for (batch-fetch later)
+    entry_ids_needed = set()
+
+    # ── Per-action: build upcoming/running + latest completion ──
+    action_uuid_map = {}  # action_id -> entry UUID for linking
+    for action in actions:
+        data = action.data or {}
+        action_id = data.get('entry_id', '')
+        if not action_id:
+            continue
+
+        action_uuid = action.id
+        action_uuid_map[action_id] = action_uuid
+        prefix = f'agent_{action_id}_'
+        last_run = data.get('last_run', 0)
+        interval_hours = data.get('interval_hours', 24)
+        next_due = (last_run + interval_hours * 3600) if last_run else 0
+        sc_status = sc_all.get(f'{prefix}status', '')
+        label = action.content.split('\n')[0][:80]
+
+        # ── Running ──
+        if sc_status in ('running', 'waiting_subagents'):
+            launched = sc_all.get(f'{prefix}launched', '')
+            entry_uuid = sc_all.get(f'{prefix}entry', '')
+            tracking = sc_all.get(f'{prefix}tracking', '')
+            health = sc_all.get(f'{prefix}health', '')
+            if entry_uuid:
+                entry_ids_needed.add(entry_uuid)
+
+            timeline.append({
+                'type': 'running',
+                'action_id': action_id,
+                'action_uuid': action_uuid,
+                'content': label,
+                'started_at': float(launched) if launched else now,
+                'running_sec': round(now - float(launched)) if launched else 0,
+                'health': health or sc_status,
+                'tracking': tracking,
+                'current_entry': entry_uuid,
+                '_event_time': now,
+            })
+        # ── Upcoming (or overdue) ──
+        else:
+            overdue = next_due <= now
+            timeline.append({
+                'type': 'upcoming',
+                'action_id': action_id,
+                'action_uuid': action_uuid,
+                'content': label,
+                'due_at': next_due,
+                'due_in_sec': round(next_due - now),
+                'interval_h': interval_hours,
+                'trigger': data.get('trigger', ''),
+                # Overdue items sort just above "Now"; future items sort by due time
+                '_event_time': now + 0.5 if overdue else next_due,
+            })
+
+        # ── Latest completion (from SysConfig structured fields) ──
+        completed_ts = sc_all.get(f'{prefix}completed', '')
+        launched_ts = sc_all.get(f'{prefix}launched', '')
+        if completed_ts:
+            try:
+                completed_f = float(completed_ts)
+            except (ValueError, TypeError):
+                completed_f = None
+            if completed_f:
+                entry_uuid = sc_all.get(f'{prefix}entry', '')
+                tracking = sc_all.get(f'{prefix}tracking', '')
+                last_error = sc_all.get(f'{prefix}last_error', '')
+
+                duration_sec = None
+                if launched_ts:
+                    try:
+                        duration_sec = round(completed_f - float(launched_ts))
+                    except (ValueError, TypeError):
+                        pass
+
+                run_status = sc_all.get(f'{prefix}status', 'completed')
+                if run_status in ('running', 'waiting_subagents'):
+                    run_status = 'completed'
+
+                if entry_uuid:
+                    entry_ids_needed.add(entry_uuid)
+
+                latest_completions[action_id] = {
+                    'type': 'completed',
+                    'action_id': action_id,
+                    'action_uuid': action_uuid,
+                    'completed_at': completed_f,
+                    'duration_sec': duration_sec,
+                    'status': run_status,
+                    'entry_id': entry_uuid,
+                    'tracking': tracking,
+                    'error': last_error if last_error else None,
+                    '_event_time': completed_f,
+                }
+
+    # ── Build completed history from AppLog (structured extra_data) ──
+    # AppLog entries with extra_data.action_id give us per-completion records.
+    # Fall back to SysConfig latest_completions for actions without AppLog history.
+    from zoneinfo import ZoneInfo
+    cutoff = datetime.now(tz=ZoneInfo('UTC')) - timedelta(hours=48)
+    completion_logs = AppLog.objects.filter(
+        source='agent_complete',
+        timestamp__gte=cutoff,
+        level=20,  # INFO only — the exit_code summary line
+        extra_data__action_id__isnull=False,
+        message__contains='exit_code=',
+    ).order_by('-timestamp')[:100]
+
+    seen_from_applog = set()  # action_ids that have AppLog history
+    for log_entry in completion_logs:
+        ed = log_entry.extra_data or {}
+        aid = ed.get('action_id', '')
+        if not aid:
+            continue
+        seen_from_applog.add(aid)
+        entry_uuid = ed.get('entry_id', '')
+        completed_at = log_entry.timestamp.timestamp()
+
+        # Duration + status: prefer structured extra_data, fall back to
+        # SysConfig for the latest run
+        duration_sec = ed.get('duration_sec')
+        status = ed.get('run_status', '')
+        if not status:
+            status = 'completed'
+
+        if duration_sec is None and aid in latest_completions:
+            lc = latest_completions[aid]
+            if abs(lc['completed_at'] - completed_at) < 60:
+                duration_sec = lc.get('duration_sec')
+
+        if entry_uuid:
+            entry_ids_needed.add(entry_uuid)
+
+        tracking = ''
+        if aid in latest_completions and abs(
+                latest_completions[aid]['completed_at'] - completed_at) < 60:
+            tracking = latest_completions[aid].get('tracking', '')
+
+        timeline.append({
+            'type': 'completed',
+            'action_id': aid,
+            'action_uuid': action_uuid_map.get(aid, ''),
+            'completed_at': completed_at,
+            'duration_sec': duration_sec,
+            'status': status,
+            'entry_id': entry_uuid,
+            'tracking': tracking,
+            '_event_time': completed_at,
+        })
+
+    # Add SysConfig fallback for actions with no AppLog history yet
+    for aid, lc in latest_completions.items():
+        if aid not in seen_from_applog:
+            timeline.append(lc)
+
+    # ── Batch-fetch entry titles ──
+    if entry_ids_needed:
+        titles = dict(
+            Entry.objects.filter(
+                id__in=list(entry_ids_needed)
+            ).values_list('id', 'content')
+        )
+        for item in timeline:
+            eid = item.get('current_entry') or item.get('entry_id')
+            if eid and eid in titles:
+                topic = titles[eid].split('\n')[0][:100]
+                if item['type'] == 'running':
+                    item['current_topic'] = topic
+                elif item['type'] == 'completed':
+                    item['message'] = topic
+
+    # ── Sort: event_time descending (future → now → past) ──
+    timeline.sort(key=lambda x: x.get('_event_time', 0), reverse=True)
+
+    for item in timeline:
+        item.pop('_event_time', None)
+
+    # ── Daemon status ──
+    daemon = {
+        'pid': sc_all.get('action_agent_pid', ''),
+        'restart_pending': bool(
+            sc_all.get('action_agent_restart_requested', '')),
+    }
+    hb = sc_all.get('action_agent_heartbeat', '')
+    if hb:
+        try:
+            daemon['heartbeat_sec_ago'] = round(now - float(hb))
+        except (ValueError, TypeError):
+            pass
+    started = sc_all.get('action_agent_started', '')
+    if started:
+        try:
+            daemon['uptime_sec'] = round(now - float(started))
+        except (ValueError, TypeError):
+            pass
+
+    return JsonResponse({'timeline': timeline, 'daemon': daemon})

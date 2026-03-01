@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Queue - tjai</title>
+    <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 13px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .daemon-bar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 6px 16px;
+            border-bottom: 1px solid #333;
+            background: #222;
+            font-size: 12px;
+            color: #8a8a8a;
+            flex-shrink: 0;
+        }
+        .daemon-bar .label { color: #aaa; }
+        .daemon-bar .val { color: #e0e0e0; }
+        .daemon-bar .warn { color: #ffd54f; }
+        .daemon-bar .ok { color: #9ccc65; }
+        .daemon-bar .err { color: #ef5350; }
+        #timeline-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0 16px 16px;
+        }
+        .section-divider {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 16px 0 8px;
+            color: #666;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .section-divider::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px solid #333;
+        }
+        .section-divider.now { color: #ffd54f; }
+        .section-divider.now::after { border-color: #554400; }
+        .tl-row {
+            display: grid;
+            grid-template-columns: 100px 180px 1fr;
+            gap: 8px;
+            padding: 5px 8px;
+            border-bottom: 1px solid #252525;
+            align-items: baseline;
+            line-height: 1.6;
+        }
+        .tl-row:hover { background: #252525; }
+        .tl-time { color: #8a8a8a; text-align: right; white-space: nowrap; }
+        .tl-action { color: #ce93d8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .tl-detail { color: #bbb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+        .dot-green { background: #9ccc65; }
+        .dot-yellow { background: #ffd54f; animation: pulse 1.5s ease-in-out infinite; }
+        .dot-red { background: #ef5350; }
+        .dot-gray { background: #666; }
+        .dot-blue { background: #64b5f6; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .status-ok { color: #9ccc65; }
+        .status-fail { color: #ef5350; }
+        .status-running { color: #ffd54f; }
+        .muted { color: #666; }
+        .topic { color: #aaa; font-style: italic; }
+        a { color: #64b5f6; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        #refresh-info { color: #555; font-size: 11px; margin-left: auto; white-space: nowrap; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1a1a1a; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+        * { scrollbar-width: thin; scrollbar-color: #444 #1a1a1a; }
+        .overdue { color: #ef5350; }
+    </style>
+</head>
+<body>
+    {% with current_page="agent_queue" %}{% include "tjai_app/_menu.html" %}{% endwith %}
+    <div class="daemon-bar" id="daemon-bar">
+        <span class="label">Agent daemon:</span>
+        <span id="daemon-status">loading...</span>
+        <span id="refresh-info"></span>
+    </div>
+    <div id="timeline-container">Loading...</div>
+
+    <script>
+    let lastData = null;
+    let lastFetch = 0;
+    let runningStartTimes = {};
+
+    function escHtml(s) {
+        if (!s) return '';
+        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function fmtDuration(sec) {
+        if (sec == null) return '';
+        sec = Math.abs(Math.round(sec));
+        if (sec < 60) return sec + 's';
+        if (sec < 3600) return Math.floor(sec/60) + 'm ' + (sec%60) + 's';
+        const h = Math.floor(sec/3600);
+        const m = Math.floor((sec%3600)/60);
+        return h + 'h ' + (m ? m + 'm' : '');
+    }
+
+    function fmtRelTime(sec) {
+        sec = Math.round(sec);
+        const abs = Math.abs(sec);
+        if (abs < 60) return 'now';
+        if (abs < 3600) {
+            const m = Math.floor(abs / 60);
+            return sec > 0 ? 'in ' + m + 'm' : m + 'm ago';
+        }
+        if (abs < 86400) {
+            const h = Math.floor(abs / 3600);
+            const m = Math.floor((abs % 3600) / 60);
+            const s = h + 'h' + (m ? ' ' + m + 'm' : '');
+            return sec > 0 ? 'in ' + s : s + ' ago';
+        }
+        // >24h: show date
+        const d = new Date((Date.now() / 1000 + sec) * 1000);
+        const mon = d.toLocaleString('en-US', {month:'short'});
+        const day = d.getDate();
+        const hh = String(d.getHours()).padStart(2,'0');
+        const mm = String(d.getMinutes()).padStart(2,'0');
+        return mon + ' ' + day + ' ' + hh + ':' + mm;
+    }
+
+    function fmtUptime(sec) {
+        if (sec == null) return '?';
+        const d = Math.floor(sec / 86400);
+        const h = Math.floor((sec % 86400) / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        if (d > 0) return d + 'd ' + h + 'h';
+        if (h > 0) return h + 'h ' + m + 'm';
+        return m + 'm';
+    }
+
+    function renderDaemon(d) {
+        if (!d || !d.pid) {
+            document.getElementById('daemon-status').innerHTML =
+                '<span class="err">not running</span>';
+            return;
+        }
+        const parts = [];
+        parts.push('PID ' + d.pid);
+        if (d.uptime_sec != null) parts.push('up ' + fmtUptime(d.uptime_sec));
+        if (d.heartbeat_sec_ago != null) {
+            const cls = d.heartbeat_sec_ago < 120 ? 'ok' : d.heartbeat_sec_ago < 600 ? 'warn' : 'err';
+            parts.push('heartbeat <span class="' + cls + '">' + fmtDuration(d.heartbeat_sec_ago) + ' ago</span>');
+        }
+        if (d.restart_pending) parts.push('<span class="warn">restart pending</span>');
+        document.getElementById('daemon-status').innerHTML = parts.join(' &middot; ');
+    }
+
+    function entryUrl(id) {
+        return '/tjai/entry/' + id + '/';
+    }
+    function logUrl(id) {
+        return '/tjai/agent-log/?ref=' + id;
+    }
+
+    function renderTimeline(items) {
+        if (!items || !items.length) {
+            document.getElementById('timeline-container').innerHTML =
+                '<div style="padding:16px;color:#666">No agent activity</div>';
+            return;
+        }
+
+        let html = '';
+        let currentSection = '';
+        const now = Date.now() / 1000;
+
+        for (const item of items) {
+            // Insert section dividers on type transitions
+            let section;
+            if (item.type === 'upcoming') section = 'upcoming';
+            else if (item.type === 'running') section = 'now';
+            else section = 'completed';
+
+            if (section !== currentSection) {
+                // If transitioning from upcoming to completed (no running), insert "Now" divider
+                if (currentSection === 'upcoming' && section === 'completed') {
+                    html += '<div class="section-divider now">Now</div>';
+                }
+                if (section === 'upcoming') {
+                    html += '<div class="section-divider">Upcoming</div>';
+                } else if (section === 'now') {
+                    html += '<div class="section-divider now">Now</div>';
+                } else if (section === 'completed' && currentSection !== 'upcoming') {
+                    html += '<div class="section-divider">Completed</div>';
+                }
+                currentSection = section;
+            }
+
+            html += renderRow(item, now);
+        }
+
+        // If we only had upcoming items, still show the Now and Completed dividers
+        if (currentSection === 'upcoming') {
+            html += '<div class="section-divider now">Now</div>';
+            html += '<div class="section-divider">Completed</div>';
+            html += '<div style="padding:8px;color:#555">No recent completions</div>';
+        } else if (currentSection === 'now') {
+            html += '<div class="section-divider">Completed</div>';
+            html += '<div style="padding:8px;color:#555">No recent completions</div>';
+        }
+
+        document.getElementById('timeline-container').innerHTML = html;
+    }
+
+    function actionLink(item) {
+        const name = escHtml(item.action_id);
+        if (item.action_uuid) return '<a href="' + entryUrl(item.action_uuid) + '">' + name + '</a>';
+        return name;
+    }
+
+    function renderRow(item, now) {
+        let time, action, detail;
+
+        if (item.type === 'upcoming') {
+            if (item.due_in_sec < 0) {
+                time = '<span class="overdue">overdue ' + fmtDuration(-item.due_in_sec) + '</span>';
+            } else {
+                time = fmtRelTime(item.due_in_sec);
+            }
+            action = '<span class="dot dot-gray"></span>' + actionLink(item);
+            const triggerInfo = item.trigger ? item.trigger + ', ' + item.interval_h + 'h' : item.interval_h + 'h interval';
+            detail = '<span class="muted">' + escHtml(triggerInfo) + '</span>';
+        }
+        else if (item.type === 'running') {
+            // Live duration: compute from started_at
+            const elapsed = Math.round(now - item.started_at);
+            runningStartTimes[item.action_id] = item.started_at;
+            const healthClass = item.health === 'active' ? 'dot-yellow' :
+                                item.health === 'stale' ? 'dot-red' : 'dot-yellow';
+            time = '<span class="status-running" data-running="' + item.action_id + '">' +
+                   fmtDuration(elapsed) + '</span>';
+            action = '<span class="dot ' + healthClass + '"></span>' + actionLink(item);
+            const parts = [];
+            if (item.health) parts.push('<span class="status-running">[' + item.health + ']</span>');
+            if (item.current_topic) parts.push('<span class="topic">' + escHtml(item.current_topic) + '</span>');
+            const links = [];
+            if (item.current_entry) links.push('<a href="' + entryUrl(item.current_entry) + '">entry</a>');
+            if (item.tracking) links.push('<a href="' + logUrl(item.tracking) + '">log</a>');
+            if (links.length) parts.push(links.join(' '));
+            detail = parts.join(' &nbsp; ');
+        }
+        else if (item.type === 'completed') {
+            const ago = Math.round(now - item.completed_at);
+            time = fmtRelTime(-ago);
+            const ok = item.status === 'completed';
+            const dot = ok ? 'dot-green' : 'dot-red';
+            const sym = ok ? '<span class="status-ok">&#10003;</span>' : '<span class="status-fail">&#10007;</span>';
+            action = '<span class="dot ' + dot + '"></span>' + actionLink(item);
+            const parts = [];
+            parts.push(sym + ' ' + item.status);
+            if (item.duration_sec != null) parts.push(fmtDuration(item.duration_sec));
+            if (item.message) parts.push('<span class="topic">' + escHtml(item.message) + '</span>');
+            const links = [];
+            if (item.entry_id) links.push('<a href="' + entryUrl(item.entry_id) + '">result</a>');
+            if (item.tracking) links.push('<a href="' + logUrl(item.tracking) + '">log</a>');
+            if (links.length) parts.push(links.join(' '));
+            detail = parts.join(' &nbsp; ');
+        }
+
+        return '<div class="tl-row">' +
+            '<div class="tl-time">' + time + '</div>' +
+            '<div class="tl-action">' + action + '</div>' +
+            '<div class="tl-detail">' + detail + '</div>' +
+            '</div>';
+    }
+
+    async function fetchData() {
+        try {
+            const resp = await fetch('/tjai/api/agent-queue/data');
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            lastData = await resp.json();
+            lastFetch = Date.now();
+            renderDaemon(lastData.daemon);
+            renderTimeline(lastData.timeline);
+        } catch (e) {
+            document.getElementById('timeline-container').innerHTML =
+                '<div style="padding:16px;color:#ef5350">Error loading: ' + escHtml(String(e)) + '</div>';
+        }
+    }
+
+    // Update running durations and refresh-ago counter every second
+    function tick() {
+        const now = Date.now() / 1000;
+        document.querySelectorAll('[data-running]').forEach(el => {
+            const aid = el.getAttribute('data-running');
+            const started = runningStartTimes[aid];
+            if (started) el.textContent = fmtDuration(Math.round(now - started));
+        });
+        if (lastFetch) {
+            const s = Math.floor((Date.now() - lastFetch) / 1000);
+            document.getElementById('refresh-info').textContent = s + 's ago';
+        }
+    }
+
+    fetchData();
+    setInterval(fetchData, 10000);
+    setInterval(tick, 1000);
+    </script>
+</body>
+</html>

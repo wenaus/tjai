@@ -265,7 +265,7 @@ def _create_and_dispatch_synthesis(base_entry_id, base_entry, synth_entry_id):
         f"SYNTHESIS TASK — use the following prompt instead of normal research:\n\n"
         f"{synthesis_prompt}"
     )
-    data['next_target_entry'] = str(synth.id)
+    data['next_target_entry_id'] = str(synth.id)
     research_action.data = data
     research_action.timestamp_modified = now
     research_action.save(update_fields=['data', 'timestamp_modified'])

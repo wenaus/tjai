@@ -187,7 +187,7 @@ def dispatch_ai(action, entry_id=None, target_date=None):
 
     # Prepend next_target info (ephemeral dispatch data from UI "Submit" button)
     next_target = data.get('next_target')
-    target_entry = data.get('next_target_entry')
+    target_entry = data.get('next_target_entry_id')
     if next_target:
         prompt = f"{next_target}\n\n{prompt}"
 
@@ -208,11 +208,11 @@ def dispatch_ai(action, entry_id=None, target_date=None):
             key=f'agent_{action_id}_launched',
             defaults={'value': str(now), 'timestamp_modified': now})
         # Track specific target entry for UI
-        next_target_entry = data.get('next_target_entry')
-        if next_target_entry:
+        next_target_entry_id = data.get('next_target_entry_id')
+        if next_target_entry_id:
             SysConfig.objects.update_or_create(
                 key=f'agent_{action_id}_entry',
-                defaults={'value': next_target_entry, 'timestamp_modified': now})
+                defaults={'value': next_target_entry_id, 'timestamp_modified': now})
 
     env = os.environ.copy()
     if action_id:
@@ -222,22 +222,22 @@ def dispatch_ai(action, entry_id=None, target_date=None):
     model = data.get('model')
     if model:
         env['TJAI_AGENT_MODEL'] = model
-    system_prompt_entry_id = data.get('system_prompt_entry')
-    if system_prompt_entry_id:
+    system_prompt_entry_id_id = data.get('system_prompt_entry_id')
+    if system_prompt_entry_id_id:
         sp_entry = Entry.objects.filter(
-            data__entry_id=system_prompt_entry_id, deleted_at__isnull=True
+            data__entry_id=system_prompt_entry_id_id, deleted_at__isnull=True
         ).first()
         if sp_entry:
             env['TJAI_SYSTEM_PROMPT'] = sp_entry.content
         else:
             logger.error("System prompt entry '%s' not found — agent will run without it",
-                         system_prompt_entry_id)
+                         system_prompt_entry_id_id)
     timeout_val = data.get('timeout', 7200)  # default 2 hours
     env['TJAI_AGENT_TIMEOUT'] = str(timeout_val)
 
     # Clear ephemeral keys from action data
     ephemeral_changed = False
-    for key in ('next_target', 'next_target_entry'):
+    for key in ('next_target', 'next_target_entry_id'):
         if key in data:
             del data[key]
             ephemeral_changed = True
