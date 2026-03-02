@@ -788,8 +788,12 @@ def dashboard_status(request):
     if filter_tag:
         filter_tags = [t for t in filter_tag.split(',') if t]
         for t in filter_tags:
-            tagged_ids = Tag.objects.filter(tag_name=t).values_list('entry_id', flat=True)
-            base_qs = base_qs.filter(id__in=tagged_ids)
+            if t == '_none':
+                tagged_ids = Tag.objects.values_list('entry_id', flat=True)
+                base_qs = base_qs.exclude(id__in=tagged_ids)
+            else:
+                tagged_ids = Tag.objects.filter(tag_name=t).values_list('entry_id', flat=True)
+                base_qs = base_qs.filter(id__in=tagged_ids)
     if filter_machine:
         base_qs = base_qs.filter(data__hostname=filter_machine)
 
@@ -881,9 +885,10 @@ def dashboard_status(request):
     from .tag_stats import rebuild_tag_stats
     rebuild_tag_stats()
 
-    # Tags (alpha sorted, excluding context-only tags)
-    all_tags = list(TagStats.objects.filter(is_context_only=False)
-        .values_list('tag_name', flat=True).order_by('tag_name'))
+    # Tags (alpha sorted, excluding context-only tags) with counts for sparse tags
+    tag_stats = TagStats.objects.filter(is_context_only=False).order_by('tag_name')
+    all_tags = list(tag_stats.values_list('tag_name', flat=True))
+    tag_counts = {ts.tag_name: ts.entry_count for ts in tag_stats if ts.entry_count <= 3}
 
     # Open todos by context
     todos_by_ctx = list(Entry.objects.filter(
@@ -920,6 +925,7 @@ def dashboard_status(request):
         'timezone': timezone_name,
         'contexts': contexts,
         'all_tags': all_tags,
+        'tag_counts': tag_counts,
         'open_todos': open_todos,
         'machines': machines,
         'oldest_sync': {'machine': oldest_machine, 'age_min': sync_age_min} if oldest_machine else None,

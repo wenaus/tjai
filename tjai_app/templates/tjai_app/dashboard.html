@@ -185,7 +185,7 @@
         {% if not is_archive and not is_dialog %}
         <div class="panel panel-left" id="calendar-panel">
             <div id="calendar-section">
-                <div class="panel-header">Calendar <span id="calendar-time" style="color:#8a8a8a;font-weight:normal"></span></div>
+                <div class="panel-header">Calendar <span id="calendar-time" style="color:#fff;font-weight:normal"></span></div>
                 <div id="calendar-content">Loading...</div>
             </div>
             <div id="named-section">
@@ -685,11 +685,14 @@
 
             // Tags (suppress in dialog mode)
             if (!isDialogMode && data.all_tags && data.all_tags.length > 0) {
+                const tc = data.tag_counts || {};
                 const tagLinks = data.all_tags.map(t => {
                     const activeClass = activeTags.has(t) ? ' active' : '';
-                    return `<a href="#" class="tag-link${activeClass}" data-tag="${t}" style="color:#9ccc65;text-decoration:none">${t}</a>`;
+                    const count = tc[t] ? ` <span style="color:#8a8a8a;font-size:11px">${tc[t]}</span>` : '';
+                    return `<a href="#" class="tag-link${activeClass}" data-tag="${t}" style="color:#9ccc65;text-decoration:none">${t}${count}</a>`;
                 }).join(', ');
-                html += `<div class="status-line">Tags: ${tagLinks}, <a href="/tjai/tag/_none/" style="color:#888;text-decoration:none">(none)</a></div>`;
+                const noneActive = activeTags.has('_none') ? ' active' : '';
+                html += `<div class="status-line">Tags: ${tagLinks}, <a href="#" class="tag-link${noneActive}" data-tag="_none" style="color:#888;text-decoration:none">(none)</a></div>`;
             }
 
             // Entry types
@@ -820,9 +823,14 @@
             const calTime = document.getElementById('calendar-time');
             if (calTime) {
                 const now = new Date();
+                const etOpts = {timeZone: 'America/New_York'};
                 const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                const timeStr = `${days[now.getDay()]} ${months[now.getMonth()]} ${now.getDate()} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+                const etParts = new Intl.DateTimeFormat('en-US', {...etOpts, year:'numeric', month:'numeric', day:'numeric', hour:'numeric', minute:'2-digit', hour12:false, weekday:'short'}).formatToParts(now);
+                const p = {};
+                etParts.forEach(x => p[x.type] = x.value);
+                const etLabel = now.toLocaleString('en-US', {...etOpts, timeZoneName:'short'}).match(/[A-Z]{2,4}$/)?.[0] || 'ET';
+                const timeStr = `${p.weekday} ${months[parseInt(p.month)-1]} ${p.day} ${p.hour.padStart(2,'0')}:${p.minute} ${etLabel}`;
                 calTime.textContent = timeStr;
             }
         }

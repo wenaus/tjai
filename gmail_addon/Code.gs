@@ -472,6 +472,96 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
 
 
 // ============================================================
+// All-day event extraction (date without time)
+// ============================================================
+
+/**
+ * Extract a date (no time) from subject, then body.
+ * Returns {timestamp (noon), displayDate} or null.
+ */
+function extractDateOnly_(subject, body, fallbackYear) {
+  var result = parseDateOnly_(subject, fallbackYear);
+  if (result) return result;
+
+  if (body) {
+    var lines = body.split(/\n/);
+    // Prefer lines with "Date" label
+    for (var i = 0; i < lines.length; i++) {
+      if (/^\s*Date/i.test(lines[i])) {
+        result = parseDateOnly_(lines[i], fallbackYear);
+        if (result) return result;
+      }
+    }
+    result = parseDateOnly_(body, fallbackYear);
+  }
+  return result;
+}
+
+
+/**
+ * Parse a date (no time required) from text.
+ * Handles: Month DD[, YYYY] / DD Month [YYYY]
+ * Returns {timestamp (noon Eastern), displayDate} or null.
+ */
+function parseDateOnly_(text, fallbackYear) {
+  if (!text) return null;
+
+  var month, day, year;
+
+  // US order: [Dayname, ]Month DD[, YYYY]
+  var usRegex = new RegExp(
+    '(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\\s*)?' +
+    '(' + MONTH_PAT_ + ')' +
+    '\\s+(\\d{1,2})(?:st|nd|rd|th)?' +
+    '(?:,?\\s*(\\d{4}))?',
+    'i'
+  );
+  var match = text.match(usRegex);
+  if (match) {
+    month = MONTHS_[match[1].toLowerCase()];
+    if (month !== undefined) {
+      day = parseInt(match[2]);
+      year = match[3] ? parseInt(match[3]) : fallbackYear;
+      return buildDateOnlyResult_(year, month, day);
+    }
+  }
+
+  // EU order: [Dayname, ]DD Month [YYYY]
+  var euRegex = new RegExp(
+    '(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\\s*)?' +
+    '(\\d{1,2})(?:st|nd|rd|th)?\\s+' +
+    '(' + MONTH_PAT_ + ')' +
+    '(?:,?\\s*(\\d{4}))?',
+    'i'
+  );
+  match = text.match(euRegex);
+  if (match) {
+    month = MONTHS_[match[2].toLowerCase()];
+    if (month !== undefined) {
+      day = parseInt(match[1]);
+      year = match[3] ? parseInt(match[3]) : fallbackYear;
+      return buildDateOnlyResult_(year, month, day);
+    }
+  }
+
+  return null;
+}
+
+
+/**
+ * Build an all-day date result with timestamp at noon Eastern.
+ */
+function buildDateOnlyResult_(year, month, day) {
+  var timestamp = dateInTimezone_(year, month, day, 12, 0, DEFAULT_TIMEZONE);
+  var displayD = new Date(timestamp * 1000);
+  return {
+    timestamp: timestamp,
+    displayDate: Utilities.formatDate(displayD, DEFAULT_TIMEZONE, 'EEE MMM d, yyyy')
+  };
+}
+
+
+// ============================================================
 // ICS extraction
 // ============================================================
 
@@ -594,6 +684,34 @@ function onGmailMessage(e) {
         indicoUrl: indicoUrl
       };
       return [buildEventCard_(ev, gmailUrl)];
+    }
+
+    // --- All-day event fallback: Indico link + date (no time) ---
+    diag.push('Trying all-day fallback');
+    for (var a = 0; a < tryMsgs.length; a++) {
+      var aMsg = tryMsgs[a];
+      var aSubject = aMsg.getSubject();
+      var aBody = aMsg.getPlainBody();
+      var aMsgYear = aMsg.getDate().getFullYear();
+
+      var aIndicoUrl = extractIndicoUrl_(aBody) || extractIndicoUrl_(aSubject);
+      if (!aIndicoUrl) { diag.push('allday msg[' + a + ']: no indico'); continue; }
+
+      var aDateOnly = extractDateOnly_(aSubject, aBody, aMsgYear);
+      if (!aDateOnly) { diag.push('allday msg[' + a + ']: no date'); continue; }
+
+      var aTitle = extractMeetingTitle_(aSubject, aBody);
+      if (!aTitle) { diag.push('allday msg[' + a + ']: no title'); continue; }
+
+      diag.push('allday msg[' + a + ']: ' + aTitle + ' @ ' + aDateOnly.displayDate);
+      var aEv = {
+        summary: aTitle,
+        timestamp: aDateOnly.timestamp,
+        displayDate: aDateOnly.displayDate,
+        displayTime: 'All day',
+        indicoUrl: aIndicoUrl
+      };
+      return [buildEventCard_(aEv, gmailUrl)];
     }
 
     // No calendar event found — offer bookmark save

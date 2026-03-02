@@ -16,6 +16,6 @@ def rebuild_tag_stats():
                      AND MAX(e.context) IS NOT NULL THEN MAX(e.context) ELSE NULL END,
                 EXTRACT(EPOCH FROM NOW())
             FROM tags t JOIN entries e ON t.entry_id = e.id
-            WHERE e.deleted_at IS NULL
+            WHERE e.deleted_at IS NULL AND COALESCE(e.status, '') != 'archive'
             GROUP BY t.tag_name
         """)
