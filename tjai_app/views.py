@@ -1100,6 +1100,7 @@ def daily_synopsis_content(request):
     content_html = markdown.markdown(
         _fix_md_list_spacing(entry.content),
         extensions=['nl2br', 'tables', 'fenced_code'],
+        tab_length=2,
     )
     content_html = re.sub(
         r'(?<!["\'>])(https?://[^\s<]+)',

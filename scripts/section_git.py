@@ -48,14 +48,15 @@ def build(since_ts, target_date):
         url = f'{GITHUB_URL}/commit/{sha}'
         lines.append(f'- [{subject}]({url})')
 
-        # Include body lines that have substance (not just Co-Authored-By)
+        # First substantive body line as a nested sub-item
         if body:
-            substantive = [
-                l.strip() for l in body.split('\n')
-                if l.strip() and not l.strip().startswith('Co-Authored-By:')
-            ]
-            for bl in substantive:
-                lines.append(f'  - {bl}')
+            for bl in body.split('\n'):
+                bl = bl.strip()
+                if bl and not bl.startswith('Co-Authored-By:'):
+                    if len(bl) > 90:
+                        bl = bl[:87] + '...'
+                    lines.append(f'  - {bl}')
+                    break
 
     return '\n'.join(lines) if lines else None
 
