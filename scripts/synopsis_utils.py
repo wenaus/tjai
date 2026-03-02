@@ -1,8 +1,15 @@
 """Shared utilities for daily synopsis section scripts.
 
+Section scripts live in scripts/ and append ## headings to the daily entry.
+Each script defines build(since_ts, target_date) -> str|None and calls
+main_section('Heading', build) at the bottom. See docs/agents.md for full docs.
+
+To add a new section: create scripts/section_foo.py, add it to the
+daily-synopsis action's mechanical_script list in the DB.
+
 Provides:
-    find_daily_entry(target_date) — find existing daily-{YYYY-MM-DD} entry
-    append_section(entry, heading, body) — idempotent section insert/replace
+    find_daily_entry(target_date) — find daily-{YYYY-MM-DD} entry
+    append_section(entry, heading, body) — idempotent section upsert
     main_section(heading, build_fn) — standard main() for section scripts
 """
 import argparse
@@ -10,7 +17,7 @@ import logging
 import re
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import bootstrap  # noqa: F401 - Django setup
 
@@ -37,18 +44,15 @@ def get_logger(name):
 def find_daily_entry(target_date):
     """Find the daily synopsis entry for a target date.
 
-    The entry has data.entry_id = 'daily-{YYYY-MM-DD}' where the date
-    is tomorrow (the synopsis covers today, is dated tomorrow).
+    The entry has data.entry_id = 'daily-{YYYY-MM-DD}'.
 
     Args:
-        target_date: date object — the "today" being reported on.
-                     The entry is filed under tomorrow.
+        target_date: date object — the date of the synopsis.
 
     Returns:
         Entry or None.
     """
-    tomorrow = target_date + timedelta(days=1)
-    entry_id = f'daily-{tomorrow.isoformat()}'
+    entry_id = f'daily-{target_date.isoformat()}'
     return Entry.objects.filter(
         data__entry_id=entry_id,
         deleted_at__isnull=True,
@@ -116,8 +120,7 @@ def main_section(heading, build_fn):
 
     entry = find_daily_entry(target)
     if not entry:
-        tomorrow = target + timedelta(days=1)
-        logger.error("Daily entry 'daily-%s' not found", tomorrow.isoformat())
+        logger.error("Daily entry 'daily-%s' not found", target.isoformat())
         sys.exit(1)
 
     since_ts = time.time() - 86400

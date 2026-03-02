@@ -1,4 +1,4 @@
-# tjai Architecture & Design Decisions
+# Architecture & Design Decisions
 
 ## Multi-Device Sync Architecture
 
@@ -63,13 +63,6 @@ tjai-agent (persistent daemon):
 - Server detects conflict during bulk sync
 - Creates conflict entry (Dropbox-style)
 - User resolves manually (has all data)
-
-**Implementation Path:**
-1. Build Django REST API on EC2 (PostgreSQL backend)
-2. Implement tjai-agent (Python daemon)
-3. Add agent health check to tj commands
-4. Implement MCP server interface in agent
-5. Integrate with ActiveMQ agent infrastructure
 
 **Why This Works:**
 Personal app with single user, fast internet when available makes conflicts extremely rare. Agent becomes foundation for AI integration (MCP server) and fits existing agent architecture.
@@ -155,4 +148,4 @@ The agent serves dual purpose: keeps local SQLite fresh (sync) AND provides MCP 
 
 ## Local State
 
-Numbered entry mappings (`tj 3 d` → which entry?) stored in `~/.tjai/state.json`, local to each machine. Not synced. Each machine's query context is independent—no cross-machine confusion about entry numbers. Multiple terminals on same machine share state (acceptable trade-off).
+Numbered entry mappings (`tj 3 d` → which entry?) stored in `~/.tjai/state.json`, local to each machine. Not synced. Each machine's query context is independent — no cross-machine confusion about entry numbers. Multiple terminals on same machine share state (acceptable trade-off).
