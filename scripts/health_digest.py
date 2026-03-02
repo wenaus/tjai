@@ -303,12 +303,28 @@ def collect_dialog(since_ts):
 def collect_picks(since_ts):
     """Picks curation stats."""
     metrics = {}
+    notes = {}
+
+    # Picks kept in the last 24h (bookmarks with data.kept=true, modified recently)
+    kept = list(Entry.objects.filter(
+        timestamp_modified__gte=since_ts,
+        deleted_at__isnull=True,
+        kind='bookmark',
+        data__kept=True,
+    ).order_by('-timestamp_modified').values_list('content', flat=True))
+    metrics['picks_kept_24h'] = len(kept)
+    if kept:
+        notes['picks_kept'] = kept
+
+    # New picks created (bookmarks from picks source)
     metrics['picks_created_24h'] = Entry.objects.filter(
         timestamp_created__gte=since_ts,
         deleted_at__isnull=True,
-        tags__tag_name='picks',
-    ).distinct().count()
-    return metrics
+        kind='bookmark',
+        data__source__isnull=False,
+    ).exclude(data__source='').count()
+
+    return metrics, notes
 
 
 def collect_research(since_ts):
@@ -332,6 +348,64 @@ def collect_research(since_ts):
     ).distinct().count()
 
     return metrics
+
+
+REPO_DIR = Path('/home/admin/github/tjrepo')
+GITHUB_URL = 'https://github.com/wenaus/tjrepo'
+
+
+def collect_git(since_ts):
+    """Git commits and PRs from the last 24h."""
+    import subprocess
+    metrics = {}
+    notes = {}
+
+    since_dt = datetime.fromtimestamp(since_ts, tz=UTC)
+    since_iso = since_dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    # Commits
+    try:
+        result = subprocess.run(
+            ['git', 'log', f'--since={since_iso}', '--format=%H|%s'],
+            capture_output=True, text=True, timeout=10, cwd=REPO_DIR,
+        )
+        commits = []
+        for line in result.stdout.strip().split('\n'):
+            if not line:
+                continue
+            sha, msg = line.split('|', 1)
+            commits.append({'sha': sha, 'message': msg})
+        metrics['git_commits_24h'] = len(commits)
+        if commits:
+            notes['git_commits'] = commits
+    except Exception as e:
+        logger.error("Git commit collection failed: %s", e)
+        metrics['git_commits_24h'] = 0
+
+    # PRs (merged in last 24h)
+    try:
+        result = subprocess.run(
+            ['gh', 'pr', 'list', '--state=merged', '--json=number,title,mergedAt,url',
+             '--limit=20'],
+            capture_output=True, text=True, timeout=15, cwd=REPO_DIR,
+        )
+        if result.returncode == 0:
+            import json as json_mod
+            prs = json_mod.loads(result.stdout)
+            recent_prs = [
+                pr for pr in prs
+                if pr.get('mergedAt', '') >= since_iso
+            ]
+            metrics['git_prs_merged_24h'] = len(recent_prs)
+            if recent_prs:
+                notes['git_prs'] = recent_prs
+        else:
+            metrics['git_prs_merged_24h'] = 0
+    except Exception as e:
+        logger.error("GitHub PR collection failed: %s", e)
+        metrics['git_prs_merged_24h'] = 0
+
+    return metrics, notes
 
 
 def collect_processes(since_ts):
@@ -374,8 +448,9 @@ COLLECTORS = [
     ('processes', collect_processes, False),
     ('entries',   collect_entries,   False),
     ('dialog',    collect_dialog,    False),
-    ('picks',     collect_picks,     False),
+    ('picks',     collect_picks,     True),
     ('research',  collect_research,  False),
+    ('git',       collect_git,       True),
     ('agents',    collect_agents,    True),
     ('logs',      collect_logs,      True),
 ]
@@ -431,14 +506,18 @@ def _metric_row(label, key, metrics, averages, fmt='.1f', suffix=''):
     val = metrics.get(key)
     if val is None:
         return None
-    val_str = f'{val:{fmt}}{suffix}'
+    val_fmt = round(val) if fmt == 'd' and isinstance(val, float) else val
+    val_str = f'{val_fmt:{fmt}}{suffix}'
     avg = averages.get(key)
-    if avg is not None and avg != 0:
-        pct_change = (val - avg) / avg * 100
-        sign = '+' if pct_change > 0 else ''
-        avg_str = f'{avg:{fmt}}{suffix} ({sign}{pct_change:.1f}%)'
-    elif avg is not None:
-        avg_str = f'{avg:{fmt}}{suffix}'
+    if avg is not None:
+        # Averages are always float; round for integer formats
+        avg_fmt = round(avg) if fmt == 'd' else avg
+        if avg != 0:
+            pct_change = (val - avg) / avg * 100
+            sign = '+' if pct_change > 0 else ''
+            avg_str = f'{avg_fmt:{fmt}}{suffix} ({sign}{pct_change:.1f}%)'
+        else:
+            avg_str = f'{avg_fmt:{fmt}}{suffix}'
     else:
         avg_str = '\u2014'
     return f'| {label} | {val_str} | {avg_str} |'
@@ -582,6 +661,24 @@ def format_markdown(target_date, metrics, averages, notes):
         lines.append(f'- {name}: **{status}**')
     lines.append('')
 
+    # --- Git ---
+    git_commits = notes.get('git_commits', [])
+    git_prs = notes.get('git_prs', [])
+    lines.append('## Git (past 24h)')
+    lines.append(
+        f'Commits: {metrics.get("git_commits_24h", 0)}, '
+        f'PRs merged: {metrics.get("git_prs_merged_24h", 0)}')
+    lines.append('')
+    if git_commits:
+        for c in git_commits:
+            url = f'{GITHUB_URL}/commit/{c["sha"]}'
+            lines.append(f'- [{c["message"]}]({url})')
+        lines.append('')
+    if git_prs:
+        for pr in git_prs:
+            lines.append(f'- [{pr["title"]}]({pr["url"]})')
+        lines.append('')
+
     # --- Errors ---
     recent_errors = notes.get('recent_errors', [])
     if recent_errors:
@@ -605,7 +702,7 @@ def format_journal_snapshot(target_date, metrics, averages, notes):
     """
     lines = ['## System Health', '']
 
-    # --- Entries (sorted by count, descending) ---
+    # --- Entries (sorted alphabetically) ---
     total = metrics.get('entries_total', '?')
     lines.append(f'**Entries:** {total} active')
     kind_counts = []
@@ -710,12 +807,42 @@ def format_journal_snapshot(target_date, metrics, averages, notes):
     return '\n'.join(lines)
 
 
-def write_journal_snapshot(target_date, snapshot_text):
-    """Append the health snapshot to tomorrow's daily synopsis entry.
+def format_keeps_section(notes):
+    """Format the Keeps section — kept picks as links."""
+    picks_kept = notes.get('picks_kept', [])
+    if not picks_kept:
+        return None
+    lines = ['## Keeps', '']
+    for item in picks_kept:
+        lines.append(f'- {item}')
+    lines.append('')
+    return '\n'.join(lines)
 
+
+def format_git_section(notes):
+    """Format the Git section — standalone ## section with commits and PRs."""
+    git_commits = notes.get('git_commits', [])
+    git_prs = notes.get('git_prs', [])
+    if not git_commits and not git_prs:
+        return None
+    lines = ['## Git', '']
+    for c in git_commits:
+        url = f'{GITHUB_URL}/commit/{c["sha"]}'
+        lines.append(f'- [{c["message"]}]({url})')
+    for pr in git_prs:
+        lines.append(f'- [{pr["title"]}]({pr["url"]})')
+    lines.append('')
+    return '\n'.join(lines)
+
+
+def write_journal_snapshot(target_date, snapshot_text, keeps_text=None,
+                           git_text=None):
+    """Append mechanical sections to tomorrow's daily synopsis entry.
+
+    Section order: Keeps, Git, System Health.
     The overnight action targets tomorrow. The daily entry is created by
     action_runner.create_journal_entry() before this script runs.
-    We find it by entry_id and append the snapshot.
+    We find it by entry_id and append the sections.
     """
     # Tomorrow's entry (overnight target)
     tomorrow = target_date + timedelta(days=1)
@@ -733,19 +860,55 @@ def write_journal_snapshot(target_date, snapshot_text):
 
     content = entry.content or ''
 
-    # Replace existing ## System Health section, or insert after content
-    marker = '## System Health'
-    if marker in content:
-        # Replace existing section up to next ## heading
-        idx = content.index(marker)
-        rest = content[idx + len(marker):]
-        next_section = rest.find('\n## ')
-        if next_section >= 0:
-            content = content[:idx] + snapshot_text + rest[next_section + 1:]
+    # Helper: replace a ## section or return None
+    def _replace_section(text, heading, new_text):
+        if heading in text:
+            idx = text.index(heading)
+            rest = text[idx + len(heading):]
+            next_h2 = rest.find('\n## ')
+            if next_h2 >= 0:
+                return text[:idx] + new_text + rest[next_h2 + 1:]
+            else:
+                return text[:idx] + new_text
+        return None
+
+    # Helper: insert new_text before anchor heading, or append
+    def _insert_before(text, new_text, anchor):
+        if anchor and anchor in text:
+            idx = text.index(anchor)
+            return text[:idx] + new_text + '\n' + text[idx:]
+        if not text.endswith('\n'):
+            text += '\n'
+        return text + '\n' + new_text
+
+    # --- Keeps (before Git, before System Health) ---
+    if keeps_text:
+        replaced = _replace_section(content, '## Keeps', keeps_text)
+        if replaced is not None:
+            content = replaced
         else:
-            content = content[:idx] + snapshot_text
+            content = _insert_before(
+                content, keeps_text,
+                '## Git' if '## Git' in content
+                else '## System Health' if '## System Health' in content
+                else None)
+
+    # --- Git (after Keeps, before System Health) ---
+    if git_text:
+        replaced = _replace_section(content, '## Git', git_text)
+        if replaced is not None:
+            content = replaced
+        else:
+            content = _insert_before(
+                content, git_text,
+                '## System Health' if '## System Health' in content
+                else None)
+
+    # --- System Health (after Git) ---
+    replaced = _replace_section(content, '## System Health', snapshot_text)
+    if replaced is not None:
+        content = replaced
     else:
-        # Append at end — after Today in History if present, else at end
         if not content.endswith('\n'):
             content += '\n'
         content += '\n' + snapshot_text
@@ -773,7 +936,8 @@ def main():
     if args.date:
         target = datetime.strptime(args.date, '%Y-%m-%d').date()
     else:
-        target = date.today()
+        from tjai_app.services import get_timezone
+        target = datetime.now(get_timezone()).date()
 
     logger.info("Generating health digest for %s", target.isoformat())
 
@@ -823,7 +987,10 @@ def main():
     # Write mechanical snapshot to daily journal entry
     snapshot = format_journal_snapshot(target, all_metrics, averages,
                                       all_notes)
-    write_journal_snapshot(target, snapshot)
+    keeps = format_keeps_section(all_notes)
+    git = format_git_section(all_notes)
+    write_journal_snapshot(target, snapshot, keeps_text=keeps,
+                           git_text=git)
 
     logger.info("Digest complete: %d metrics, %d-day averages, %d errors",
                 len(all_metrics), len(prior),
