@@ -119,9 +119,9 @@ def get_all_actions():
 
 
 def get_target_date():
-    """Return the target date (tomorrow) for overnight actions, in configured timezone."""
+    """Return the target date (today) for daily actions, in configured timezone."""
     tz = services.get_timezone()
-    return (datetime.now(tz) + timedelta(days=1)).date()
+    return datetime.now(tz).date()
 
 
 def get_template_vars(target_date):

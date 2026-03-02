@@ -1,17 +1,5 @@
 # Next Steps
 
-## The claude-created garbage to fix in the daily synopsis architecture
-
-The daily synopsis entry is built by multiple overnight actions that append sections. The current implementation is a mess:
-
-1. **Health data mixed with non-health data.** `format_journal_snapshot()` is supposed to be a "health snapshot" but was generating git commits, keeps — things unrelated to system health. These have been partially extracted into separate functions (`format_git_section`, `format_keeps_section`) but the separation is incomplete and the naming is misleading.
-
-2. **Baroque section-replacement logic.** `write_journal_snapshot()` uses `_replace_section()` and `_insert_before()` to surgically insert/replace individual `## ` sections in the entry content. This is fragile — it searches for heading strings, slices content, finds next headings, restitches. It's hard to reason about and breaks when sections are missing or reordered.
-
-3. **What it should be.** Each mechanical section (Keeps, Git, System Health) should be generated independently by its own function. The writer should compose them in order and write once, not do piecemeal surgical insertion. For idempotency on re-runs, replace the entire mechanical block (everything after the AI-generated content like Today in History) rather than replacing individual sections one at a time.
-
-4. **Single responsibility.** `health_digest.py` currently owns Keeps and Git section formatting — these have nothing to do with health. Each should either be its own script or the composition should happen in a separate orchestrator that calls formatters.
-
 ## claude usage
 
 ccusage is a nice tool for tracking usage but it operates only locally. build a usage gathering system that aggregates ccusage information from machines I work on into a comprehensive tjai report.

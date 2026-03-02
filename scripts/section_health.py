@@ -2,7 +2,7 @@
 """Appends ## System Health to the daily synopsis entry.
 
 Reads the health digest JSON written by health_digest.py (run as a
-prerequisite via mechanical_script list in the daily-health action).
+prerequisite in the daily-synopsis mechanical_script list).
 """
 import json
 import logging
