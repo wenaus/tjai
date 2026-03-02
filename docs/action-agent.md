@@ -1,5 +1,7 @@
 # Action Agent System
 
+**Entry references: when an entry has a human-readable `entry_id` (in `data.entry_id`), ALWAYS use it in URLs instead of the UUID.** Example: `/tjai/entry/daily-history`.
+
 The action agent is a supervised daemon (`scripts/action_agent.py`) that executes scheduled tasks defined as `kind=action` entries. Each action carries its full configuration in the `data` JSON field.
 
 ### Architecture
@@ -58,6 +60,24 @@ tj restart-agent      # Graceful restart (after current action completes)
 ### AI Dispatch
 
 Actions needing intelligence use `tj agent` to launch a detached Claude instance. Runs on Claude subscription (not API credits), has MCP tool access, writes results to a tjai tracking entry.
+
+**XML delimiters in `ai_prompt` templates:** When a prompt templates in variable content (e.g. `{guidance}`, entry content, data), wrap the injected content in XML tags to separate instructions from data. Without delimiters, Claude can confuse injected content with prompt instructions — especially when the injected text itself contains directive-like language.
+
+```
+# Good — clear boundary between injected content and instructions
+<guidance>
+{guidance}
+</guidance>
+
+Now do the task...
+
+# Bad — guidance text bleeds into instructions
+{guidance}
+
+Now do the task...
+```
+
+This applies to any `ai_prompt` that uses template variables. Prompts that tell Claude to fetch its own data via MCP calls (e.g. `get_entry()`, `get_memories()`) don't have this problem since nothing is injected.
 
 ### Date Convention
 
