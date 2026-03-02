@@ -877,6 +877,10 @@ def dashboard_status(request):
         deleted_at__isnull=True, context_id__isnull=False
     ).values_list('context_id', flat=True).distinct().order_by('context_id'))
 
+    # Rebuild tag stats on full page load to purge orphans
+    from .tag_stats import rebuild_tag_stats
+    rebuild_tag_stats()
+
     # Tags (alpha sorted, excluding context-only tags)
     all_tags = list(TagStats.objects.filter(is_context_only=False)
         .values_list('tag_name', flat=True).order_by('tag_name'))
