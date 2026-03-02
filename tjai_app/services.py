@@ -87,7 +87,7 @@ def _extract_time_from_content(content):
         return content, None, None
 
 
-def _get_timezone():
+def get_timezone():
     """Get configured timezone with fallback to America/New_York."""
     tz_config = SysConfig.objects.filter(key='timezone').first()
     tz_name = tz_config.value if tz_config else 'America/New_York'
@@ -125,7 +125,7 @@ def _strip_punct(s):
 
 def _apply_date_filter(qs, start_date, end_date):
     """Apply date range filter to queryset. Both dates optional; None means no filter."""
-    tz = _get_timezone()
+    tz = get_timezone()
     if start_date is not None:
         start_ts, err = parse_date_filter(start_date, tz=tz)
         if err:
@@ -195,7 +195,7 @@ def get_calendar(start_date=None, end_date=None, context=None, days=None):
 
     start_ts = start.timestamp()
     end_ts = (end + timedelta(days=1)).timestamp()
-    tz = _get_timezone()
+    tz = get_timezone()
 
     results = []
     for entry in qs:
@@ -357,7 +357,7 @@ def create_entry(content, kind="memory", context=None, name=None, tags=None,
 
     entry_data = data.copy() if data else {}
     if event_date:
-        tz = _get_timezone()
+        tz = get_timezone()
         dt = datetime.strptime(event_date, '%Y%m%d').replace(hour=hour, minute=minute, tzinfo=tz)
         entry_data['event_date'] = dt.timestamp()
     if not entry_data:
@@ -435,13 +435,13 @@ def copy_calendar_entry(entry_id, event_date, event_time=None):
     if event_time:
         hour, minute = int(event_time[:2]), int(event_time[2:])
     elif source.data and source.data.get('event_date'):
-        orig_dt = datetime.fromtimestamp(source.data['event_date'], tz=_get_timezone())
+        orig_dt = datetime.fromtimestamp(source.data['event_date'], tz=get_timezone())
         hour, minute = orig_dt.hour, orig_dt.minute
     else:
         hour, minute = 12, 0
 
     # Build new event_date timestamp
-    tz = _get_timezone()
+    tz = get_timezone()
     dt = datetime.strptime(event_date, '%Y%m%d').replace(hour=hour, minute=minute, tzinfo=tz)
 
     # Copy data, replacing event_date
@@ -665,7 +665,7 @@ def edit_entry(entry_id, content, context=None, clear_context=False,
         if clear_event_date:
             entry.data.pop('event_date', None)
         else:
-            tz = _get_timezone()
+            tz = get_timezone()
             if event_time:
                 h, m = int(event_time[:2]), int(event_time[2:])
             elif hour is not None:

@@ -207,7 +207,7 @@
                 renderDateList();
                 if (allDates.length > 0) {
                     const params = new URLSearchParams(window.location.search);
-                    let target = params.get('date');
+                    let target = params.get('entry_id');
                     if (!target && todayKey) {
                         const todayEntry = allDates.find(d => d.date_key === todayKey);
                         target = todayEntry ? todayEntry.entry_id : allDates[0].entry_id;
@@ -240,6 +240,11 @@
 
         async function selectDate(entryId) {
             selectedEntryId = entryId;
+            // Update browser URL to reflect selection
+            const url = new URL(window.location);
+            url.searchParams.set('entry_id', entryId);
+            history.replaceState(null, '', url);
+
             document.querySelectorAll('.date-item').forEach(el => {
                 el.classList.toggle('selected', el.dataset.entryId === entryId);
             });

@@ -300,32 +300,6 @@ def collect_dialog(since_ts):
     return metrics
 
 
-def collect_picks(since_ts):
-    """Picks curation stats."""
-    metrics = {}
-    notes = {}
-
-    # Picks kept in the last 24h (bookmarks with data.kept=true, modified recently)
-    kept = list(Entry.objects.filter(
-        timestamp_modified__gte=since_ts,
-        deleted_at__isnull=True,
-        kind='bookmark',
-        data__kept=True,
-    ).order_by('-timestamp_modified').values_list('content', flat=True))
-    metrics['picks_kept_24h'] = len(kept)
-    if kept:
-        notes['picks_kept'] = kept
-
-    # New picks created (bookmarks from picks source)
-    metrics['picks_created_24h'] = Entry.objects.filter(
-        timestamp_created__gte=since_ts,
-        deleted_at__isnull=True,
-        kind='bookmark',
-        data__source__isnull=False,
-    ).exclude(data__source='').count()
-
-    return metrics, notes
-
 
 def collect_research(since_ts):
     """Research pipeline stats."""
@@ -349,63 +323,6 @@ def collect_research(since_ts):
 
     return metrics
 
-
-REPO_DIR = Path('/home/admin/github/tjrepo')
-GITHUB_URL = 'https://github.com/wenaus/tjrepo'
-
-
-def collect_git(since_ts):
-    """Git commits and PRs from the last 24h."""
-    import subprocess
-    metrics = {}
-    notes = {}
-
-    since_dt = datetime.fromtimestamp(since_ts, tz=UTC)
-    since_iso = since_dt.strftime('%Y-%m-%dT%H:%M:%S')
-
-    # Commits
-    try:
-        result = subprocess.run(
-            ['git', 'log', f'--since={since_iso}', '--format=%H|%s'],
-            capture_output=True, text=True, timeout=10, cwd=REPO_DIR,
-        )
-        commits = []
-        for line in result.stdout.strip().split('\n'):
-            if not line:
-                continue
-            sha, msg = line.split('|', 1)
-            commits.append({'sha': sha, 'message': msg})
-        metrics['git_commits_24h'] = len(commits)
-        if commits:
-            notes['git_commits'] = commits
-    except Exception as e:
-        logger.error("Git commit collection failed: %s", e)
-        metrics['git_commits_24h'] = 0
-
-    # PRs (merged in last 24h)
-    try:
-        result = subprocess.run(
-            ['gh', 'pr', 'list', '--state=merged', '--json=number,title,mergedAt,url',
-             '--limit=20'],
-            capture_output=True, text=True, timeout=15, cwd=REPO_DIR,
-        )
-        if result.returncode == 0:
-            import json as json_mod
-            prs = json_mod.loads(result.stdout)
-            recent_prs = [
-                pr for pr in prs
-                if pr.get('mergedAt', '') >= since_iso
-            ]
-            metrics['git_prs_merged_24h'] = len(recent_prs)
-            if recent_prs:
-                notes['git_prs'] = recent_prs
-        else:
-            metrics['git_prs_merged_24h'] = 0
-    except Exception as e:
-        logger.error("GitHub PR collection failed: %s", e)
-        metrics['git_prs_merged_24h'] = 0
-
-    return metrics, notes
 
 
 def collect_processes(since_ts):
@@ -448,9 +365,7 @@ COLLECTORS = [
     ('processes', collect_processes, False),
     ('entries',   collect_entries,   False),
     ('dialog',    collect_dialog,    False),
-    ('picks',     collect_picks,     True),
     ('research',  collect_research,  False),
-    ('git',       collect_git,       True),
     ('agents',    collect_agents,    True),
     ('logs',      collect_logs,      True),
 ]
@@ -620,12 +535,11 @@ def format_markdown(target_date, metrics, averages, notes):
             lines.append(row)
     lines.append('')
 
-    # --- Picks & Research ---
-    lines.append('## Picks & Research')
+    # --- Research ---
+    lines.append('## Research')
     lines.append('| Metric | Today | 7-day avg |')
     lines.append('|---|---|---|')
     for label, key, fmt, suffix in [
-        ('Picks created', 'picks_created_24h', 'd', ''),
         ('Research completed', 'research_completed_24h', 'd', ''),
         ('Research queue', 'research_queue_depth', 'd', ''),
     ]:
@@ -661,24 +575,6 @@ def format_markdown(target_date, metrics, averages, notes):
         lines.append(f'- {name}: **{status}**')
     lines.append('')
 
-    # --- Git ---
-    git_commits = notes.get('git_commits', [])
-    git_prs = notes.get('git_prs', [])
-    lines.append('## Git (past 24h)')
-    lines.append(
-        f'Commits: {metrics.get("git_commits_24h", 0)}, '
-        f'PRs merged: {metrics.get("git_prs_merged_24h", 0)}')
-    lines.append('')
-    if git_commits:
-        for c in git_commits:
-            url = f'{GITHUB_URL}/commit/{c["sha"]}'
-            lines.append(f'- [{c["message"]}]({url})')
-        lines.append('')
-    if git_prs:
-        for pr in git_prs:
-            lines.append(f'- [{pr["title"]}]({pr["url"]})')
-        lines.append('')
-
     # --- Errors ---
     recent_errors = notes.get('recent_errors', [])
     if recent_errors:
@@ -691,250 +587,18 @@ def format_markdown(target_date, metrics, averages, notes):
     return '\n'.join(lines)
 
 
-# ---------------------------------------------------------------------------
-# Mechanical journal snapshot — appended to the daily synopsis entry
-# ---------------------------------------------------------------------------
-
-def format_journal_snapshot(target_date, metrics, averages, notes):
-    """Format the mechanical health snapshot for the daily journal entry.
-
-    Pure facts, no AI. This is the time-capsule record.
-    """
-    lines = ['## System Health', '']
-
-    # --- Entries (sorted alphabetically) ---
-    total = metrics.get('entries_total', '?')
-    lines.append(f'**Entries:** {total} active')
-    kind_counts = []
-    for key, val in metrics.items():
-        if key.startswith('entries_') and key != 'entries_total' \
-                and not key.endswith('_24h') and isinstance(val, int):
-            kind = key[len('entries_'):]
-            kind_counts.append((kind, val))
-    kind_counts.sort(key=lambda x: x[0])
-    for kind, count in kind_counts:
-        lines.append(f'- {kind}: {count:,}')
-    lines.append('')
-
-    # --- Storage ---
-    db = metrics.get('db_size_mb', '?')
-    backup_dump = metrics.get('backup_dump_mb', '?')
-    backup_gz = metrics.get('backup_gz_mb', '?')
-    backup_ok = metrics.get('backup_config_ok', 0)
-    backup_files = metrics.get('backup_data_files', 0)
-    lines.append(f'**Storage:** DB {db} MB | '
-                 f'Backup {backup_dump} MB raw, '
-                 f'{backup_gz} MB compressed | '
-                 f'{backup_files} data files | '
-                 f'config {"OK" if backup_ok else "MISSING"}')
-    lines.append('')
-
-    # --- System ---
-    mem = metrics.get('mem_used_pct', '?')
-    disk_gb = metrics.get('disk_used_gb', '?')
-    disk_pct = metrics.get('disk_used_pct', '?')
-    swap = metrics.get('swap_used_pct', '?')
-    uptime = metrics.get('uptime_days', '?')
-    load1 = metrics.get('cpu_load_1m', '?')
-    load5 = metrics.get('cpu_load_5m', '?')
-    lines.append(f'**System:** CPU load {load1}/{load5} (1m/5m) | '
-                 f'Memory {mem}% | Swap {swap}% | '
-                 f'Disk {disk_gb} GB ({disk_pct}%) | '
-                 f'Uptime {uptime} days')
-    lines.append('')
-
-    # --- Agents ---
-    action_stats = notes.get('action_stats', {})
-    total_runs = metrics.get('agent_runs_total', 0)
-    total_errors = metrics.get('agent_errors_total', 0)
-    lines.append(f'**Agents:** {total_runs} runs, {total_errors} errors')
-    if action_stats:
-        for aid, stats in sorted(action_stats.items()):
-            dur = stats['total_duration']
-            dur_str = f'{dur / 60:.0f}m' if dur >= 60 else f'{dur:.0f}s'
-            err_str = f' [{stats["errors"]} errors]' if stats['errors'] else ''
-            lines.append(f'- {aid}: {stats["runs"]}x, {dur_str}{err_str}')
-    lines.append('')
-
-    # --- Activity ---
-    created = metrics.get('entries_created_24h', 0)
-    modified = metrics.get('entries_modified_24h', 0)
-    picks = metrics.get('picks_created_24h', 0)
-    research_done = metrics.get('research_completed_24h', 0)
-    research_q = metrics.get('research_queue_depth', 0)
-    cc = metrics.get('dialog_cc_turns_24h', 0)
-    tg = metrics.get('dialog_tg_turns_24h', 0)
-    lines.append(f'**Activity (24h):** {created} entries created, '
-                 f'{modified} modified | '
-                 f'{cc} CC dialog, {tg} TG dialog | '
-                 f'{picks} picks | '
-                 f'{research_done} research completed '
-                 f'({research_q} queued)')
-    lines.append('')
-
-    # --- Logs ---
-    log_total = metrics.get('applog_entries_24h', 0)
-    log_info = metrics.get('applog_info_24h', 0)
-    log_warn = metrics.get('applog_warning_24h', 0)
-    log_err = metrics.get('applog_error_24h', 0)
-    lines.append(f'**Logs (24h):** {log_total} total — '
-                 f'{log_info} info, {log_warn} warning, {log_err} error')
-
-    recent_errors = notes.get('recent_errors', [])
-    if recent_errors:
-        lines.append('')
-        lines.append(f'**Errors ({len(recent_errors)}):**')
-        for err in recent_errors[:10]:
-            lines.append(
-                f'- [{err["time"]}] {err["source"]}: '
-                f'{err["message"][:120]}')
-    lines.append('')
-
-    # --- Processes ---
-    proc_names = {
-        'proc_apache': 'Apache', 'proc_supervisord': 'Supervisord',
-        'proc_action_agent': 'Action Agent',
-        'proc_cloudwatch': 'CloudWatch',
-    }
-    procs_down = [name for key, name in proc_names.items()
-                  if not metrics.get(key, 0)]
-    if procs_down:
-        lines.append(f'**PROCESSES DOWN:** {", ".join(procs_down)}')
-        lines.append('')
-
-    lines.append('[Full system status](/tjai/system/)')
-    lines.append('')
-    return '\n'.join(lines)
-
-
-def format_keeps_section(notes):
-    """Format the Keeps section — kept picks as links."""
-    picks_kept = notes.get('picks_kept', [])
-    if not picks_kept:
-        return None
-    lines = ['## Keeps', '']
-    for item in picks_kept:
-        lines.append(f'- {item}')
-    lines.append('')
-    return '\n'.join(lines)
-
-
-def format_git_section(notes):
-    """Format the Git section — standalone ## section with commits and PRs."""
-    git_commits = notes.get('git_commits', [])
-    git_prs = notes.get('git_prs', [])
-    if not git_commits and not git_prs:
-        return None
-    lines = ['## Git', '']
-    for c in git_commits:
-        url = f'{GITHUB_URL}/commit/{c["sha"]}'
-        lines.append(f'- [{c["message"]}]({url})')
-    for pr in git_prs:
-        lines.append(f'- [{pr["title"]}]({pr["url"]})')
-    lines.append('')
-    return '\n'.join(lines)
-
-
-def write_journal_snapshot(target_date, snapshot_text, keeps_text=None,
-                           git_text=None):
-    """Append mechanical sections to tomorrow's daily synopsis entry.
-
-    Section order: Keeps, Git, System Health.
-    The overnight action targets tomorrow. The daily entry is created by
-    action_runner.create_journal_entry() before this script runs.
-    We find it by entry_id and append the sections.
-    """
-    # Tomorrow's entry (overnight target)
-    tomorrow = target_date + timedelta(days=1)
-    entry_id = f'daily-{tomorrow.isoformat()}'
-
-    entry = Entry.objects.filter(
-        data__entry_id=entry_id,
-        deleted_at__isnull=True,
-    ).first()
-
-    if not entry:
-        logger.warning("Daily entry '%s' not found — skipping journal write",
-                       entry_id)
-        return False
-
-    content = entry.content or ''
-
-    # Helper: replace a ## section or return None
-    def _replace_section(text, heading, new_text):
-        if heading in text:
-            idx = text.index(heading)
-            rest = text[idx + len(heading):]
-            next_h2 = rest.find('\n## ')
-            if next_h2 >= 0:
-                return text[:idx] + new_text + rest[next_h2 + 1:]
-            else:
-                return text[:idx] + new_text
-        return None
-
-    # Helper: insert new_text before anchor heading, or append
-    def _insert_before(text, new_text, anchor):
-        if anchor and anchor in text:
-            idx = text.index(anchor)
-            return text[:idx] + new_text + '\n' + text[idx:]
-        if not text.endswith('\n'):
-            text += '\n'
-        return text + '\n' + new_text
-
-    # --- Keeps (before Git, before System Health) ---
-    if keeps_text:
-        replaced = _replace_section(content, '## Keeps', keeps_text)
-        if replaced is not None:
-            content = replaced
-        else:
-            content = _insert_before(
-                content, keeps_text,
-                '## Git' if '## Git' in content
-                else '## System Health' if '## System Health' in content
-                else None)
-
-    # --- Git (after Keeps, before System Health) ---
-    if git_text:
-        replaced = _replace_section(content, '## Git', git_text)
-        if replaced is not None:
-            content = replaced
-        else:
-            content = _insert_before(
-                content, git_text,
-                '## System Health' if '## System Health' in content
-                else None)
-
-    # --- System Health (after Git) ---
-    replaced = _replace_section(content, '## System Health', snapshot_text)
-    if replaced is not None:
-        content = replaced
-    else:
-        if not content.endswith('\n'):
-            content += '\n'
-        content += '\n' + snapshot_text
-
-    entry.content = content
-    entry.timestamp_modified = time.time()
-    entry.is_dirty = 1
-    entry.save(update_fields=['content', 'timestamp_modified', 'is_dirty'])
-    logger.info("Wrote health snapshot to %s", entry_id)
-    return True
-
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
-def main():
-    parser = argparse.ArgumentParser(
-        description='Generate daily health digest')
-    parser.add_argument(
-        'date', nargs='?', default=None,
-        help='Target date YYYY-MM-DD (default: today)')
-    args = parser.parse_args()
+def run(date_str=None):
+    """Collect health metrics and write JSON + MD files.
 
-    if args.date:
-        target = datetime.strptime(args.date, '%Y-%m-%d').date()
+    Called by daily_sections.py or directly via CLI.
+    """
+    if date_str:
+        target = datetime.strptime(date_str, '%Y-%m-%d').date()
     else:
         from tjai_app.services import get_timezone
         target = datetime.now(get_timezone()).date()
@@ -963,7 +627,7 @@ def main():
     prior = load_prior_days(target)
     averages = compute_averages(prior)
 
-    # Write JSON (for future averaging)
+    # Write JSON (for future averaging and daily_sections consumption)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     json_path = DATA_DIR / f'{target.isoformat()}.json'
     json_data = {
@@ -984,17 +648,18 @@ def main():
     md_path.write_text(md_content)
     logger.info("Wrote %s", md_path)
 
-    # Write mechanical snapshot to daily journal entry
-    snapshot = format_journal_snapshot(target, all_metrics, averages,
-                                      all_notes)
-    keeps = format_keeps_section(all_notes)
-    git = format_git_section(all_notes)
-    write_journal_snapshot(target, snapshot, keeps_text=keeps,
-                           git_text=git)
+    logger.info("Digest complete: %d metrics, %d-day averages",
+                len(all_metrics), len(prior))
 
-    logger.info("Digest complete: %d metrics, %d-day averages, %d errors",
-                len(all_metrics), len(prior),
-                all_metrics.get('applog_errors_24h', 0))
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Generate daily health digest')
+    parser.add_argument(
+        'date', nargs='?', default=None,
+        help='Target date YYYY-MM-DD (default: today)')
+    args = parser.parse_args()
+    run(date_str=args.date)
 
 
 if __name__ == '__main__':

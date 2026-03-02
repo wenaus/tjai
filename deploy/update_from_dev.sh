@@ -8,7 +8,7 @@ VENV=$TARGET_DIR/.venv
 
 # rsync code (preserve .env in target)
 rsync -av --delete \
-  --exclude '.venv' --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' --exclude '.env' \
+  --exclude '.venv' --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' --exclude '.env' --exclude 'data/' \
   "$REPO_ROOT/" "$TARGET_DIR/"
 
 # Fix permissions for Apache (exclude .venv which has different ownership)

@@ -242,7 +242,14 @@
                 time = fmtRelTime(item.due_in_sec);
             }
             action = '<span class="dot dot-gray"></span>' + actionLink(item);
-            const triggerInfo = item.trigger ? item.trigger + ', ' + item.interval_h + 'h' : item.interval_h + 'h interval';
+            let triggerInfo;
+            if (item.scheduled_time) {
+                const hh = item.scheduled_time.substring(0, 2);
+                const mm = item.scheduled_time.substring(2, 4);
+                triggerInfo = (item.trigger || 'scheduled') + ' @ ' + hh + ':' + mm + ' ET';
+            } else {
+                triggerInfo = item.trigger ? item.trigger + ', ' + item.interval_h + 'h' : item.interval_h + 'h interval';
+            }
             detail = '<span class="muted">' + escHtml(triggerInfo) + '</span>';
         }
         else if (item.type === 'running') {

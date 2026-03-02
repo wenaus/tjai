@@ -3304,9 +3304,9 @@ def api_agent_queue_data(request):
         action_uuid = action.id
         action_uuid_map[action_id] = action_uuid
         prefix = f'agent_{action_id}_'
-        last_run = data.get('last_run', 0)
+        from .action_runner import get_next_scheduled_time
+        next_due = get_next_scheduled_time(action)
         interval_hours = data.get('interval_hours', 24)
-        next_due = (last_run + interval_hours * 3600) if last_run else 0
         sc_status = sc_all.get(f'{prefix}status', '')
         label = action.content.split('\n')[0][:80]
 
@@ -3334,7 +3334,7 @@ def api_agent_queue_data(request):
         # ── Upcoming (or overdue) ──
         else:
             overdue = next_due <= now
-            timeline.append({
+            item = {
                 'type': 'upcoming',
                 'action_id': action_id,
                 'action_uuid': action_uuid,
@@ -3345,7 +3345,11 @@ def api_agent_queue_data(request):
                 'trigger': data.get('trigger', ''),
                 # Overdue items sort just above "Now"; future items sort by due time
                 '_event_time': now + 0.5 if overdue else next_due,
-            })
+            }
+            scheduled_time = data.get('scheduled_time')
+            if scheduled_time:
+                item['scheduled_time'] = scheduled_time
+            timeline.append(item)
 
         # ── Latest completion (from SysConfig structured fields) ──
         completed_ts = sc_all.get(f'{prefix}completed', '')

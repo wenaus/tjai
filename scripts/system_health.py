@@ -526,6 +526,9 @@ def collect_tjai():
             'interval_h': data.get('interval_hours', 24),
             'last_run_min': round((now - last_run) / 60, 1) if last_run else None,
         }
+        scheduled_time = data.get('scheduled_time')
+        if scheduled_time:
+            action_info['scheduled_time'] = scheduled_time
         if action_id:
             agent_status = agent_sysconfig.get(f'agent_{action_id}_status')
             launched = agent_sysconfig.get(f'agent_{action_id}_launched')

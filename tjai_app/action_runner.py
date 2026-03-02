@@ -13,6 +13,8 @@ import traceback
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from zoneinfo import ZoneInfo
+
 from .db_log_handler import DbLogHandler
 from .models import Entry, SysConfig, Tag
 from . import services
@@ -49,6 +51,40 @@ if not logger.handlers:
 logger.addFilter(_ActionContextFilter())
 
 
+def get_next_scheduled_time(action):
+    """Return the next scheduled run time (epoch) for an action.
+
+    For actions with data.scheduled_time (HHMM string):
+        Computes today's scheduled moment in the configured timezone.
+        If last_run >= that moment, returns tomorrow's scheduled moment.
+        Otherwise returns today's (due now or overdue).
+
+    For actions without scheduled_time:
+        Falls back to last_run + interval_hours * 3600.
+    """
+    data = action.data or {}
+    scheduled_time = data.get('scheduled_time')
+
+    if scheduled_time:
+        tz = services.get_timezone()
+        now_local = datetime.now(tz)
+        hour = int(scheduled_time[:2])
+        minute = int(scheduled_time[2:])
+        scheduled_today = now_local.replace(
+            hour=hour, minute=minute, second=0, microsecond=0)
+        scheduled_moment = scheduled_today.timestamp()
+        last_run = data.get('last_run', 0)
+        if last_run >= scheduled_moment:
+            # Already ran today — next is tomorrow
+            scheduled_tomorrow = (scheduled_today + timedelta(days=1))
+            return scheduled_tomorrow.timestamp()
+        return scheduled_moment
+    else:
+        last_run = data.get('last_run', 0)
+        interval_hours = data.get('interval_hours', 24)
+        return last_run + interval_hours * 3600
+
+
 def get_due_actions(trigger_filter=None):
     """Return action entries that are due to run."""
     actions = Entry.objects.filter(
@@ -65,9 +101,8 @@ def get_due_actions(trigger_filter=None):
         if trigger_filter and data.get('trigger') != trigger_filter:
             continue
 
-        last_run = data.get('last_run')
-        interval_hours = data.get('interval_hours', 24)
-        if last_run and (now - last_run) < interval_hours * 3600:
+        next_due = get_next_scheduled_time(action)
+        if next_due > now:
             continue
 
         due.append(action)
@@ -84,14 +119,15 @@ def get_all_actions():
 
 
 def get_target_date():
-    """Return the target date (tomorrow) for overnight actions."""
-    return (datetime.now() + timedelta(days=1)).date()
+    """Return the target date (tomorrow) for overnight actions, in configured timezone."""
+    tz = services.get_timezone()
+    return (datetime.now(tz) + timedelta(days=1)).date()
 
 
 def get_template_vars(target_date):
     """Build template variables from target date."""
-    from datetime import date as date_type
-    today = date_type.today()
+    tz = services.get_timezone()
+    today = datetime.now(tz).date()
     return {
         'mm-dd': target_date.strftime('%m-%d'),
         'yyyymmdd': target_date.strftime('%Y%m%d'),
@@ -119,13 +155,8 @@ def resolve_prompt_template(prompt_template, extra_vars=None, target_date=None):
     return prompt_template.format(**template_vars)
 
 
-def run_mechanical(action, target_date=None):
-    """Run the action's mechanical script, if any. Returns True on success."""
-    data = action.data or {}
-    script_cmd = data.get('mechanical_script')
-    if not script_cmd:
-        return True
-
+def _run_one_script(script_cmd, target_date=None):
+    """Run a single mechanical script. Returns True on success."""
     parts = script_cmd.split()
     script_name = parts[0]
     script_args = parts[1:]
@@ -152,6 +183,26 @@ def run_mechanical(action, target_date=None):
         return False
 
     return True
+
+
+def run_mechanical(action, target_date=None):
+    """Run the action's mechanical script(s), if any. Returns True on success.
+
+    mechanical_script can be a single string or a list of strings.
+    If a list, scripts run in order; abort on first failure.
+    """
+    data = action.data or {}
+    script_cmd = data.get('mechanical_script')
+    if not script_cmd:
+        return True
+
+    if isinstance(script_cmd, list):
+        for cmd in script_cmd:
+            if not _run_one_script(cmd, target_date=target_date):
+                return False
+        return True
+    else:
+        return _run_one_script(script_cmd, target_date=target_date)
 
 
 def create_journal_entry(action, target_date=None):
@@ -357,9 +408,20 @@ def dispatch_multimodel(topic_text, base_entry_id, base_uuid, context_obj):
 
 
 def update_last_run(action):
-    """Update the action's last_run timestamp."""
+    """Update the action's last_run timestamp.
+
+    If scheduled_time_config exists (force-run in progress), restore
+    scheduled_time from it and clear the temporary key.
+    """
     data = action.data or {}
     data['last_run'] = time.time()
+
+    # Restore scheduled_time after a force-run
+    if 'scheduled_time_config' in data:
+        data['scheduled_time'] = data.pop('scheduled_time_config')
+        logger.info("Force-run complete, restored scheduled_time to %s",
+                     data['scheduled_time'])
+
     action.data = data
     action.timestamp_modified = time.time()
     action.is_dirty = 0
@@ -386,15 +448,16 @@ def execute_action(action, target_date=None):
     action_id = data.get('entry_id')
     _log_context.action_id = action_id
     try:
-        if not run_mechanical(action, target_date=target_date):
-            logger.error("Mechanical step failed, aborting")
-            _write_agent_error(action_id, "Mechanical step failed")
-            return False
-
+        # Journal entry must exist before mechanical scripts (they may append to it)
         entry_id = create_journal_entry(action, target_date=target_date)
         if entry_id is None:
             logger.error("Journal entry creation failed, aborting")
             _write_agent_error(action_id, "Journal entry creation failed")
+            return False
+
+        if not run_mechanical(action, target_date=target_date):
+            logger.error("Mechanical step failed, aborting")
+            _write_agent_error(action_id, "Mechanical step failed")
             return False
 
         if not dispatch_ai(action, entry_id=entry_id if isinstance(entry_id, str) else None,
@@ -425,9 +488,13 @@ def _write_agent_error(action_id, error_msg):
 
 
 def run_action(entry_id):
-    """Execute a specific action entry by ID. Returns result dict.
+    """Queue a specific action for immediate execution via the scheduler.
 
-    Used by MCP run_action tool and CLI tj run.
+    Instead of executing directly, modifies scheduled_time so the daemon's
+    normal scheduler loop picks it up. This ensures a single code path for
+    all runs (scheduled and forced).
+
+    Used by MCP run_action tool.
     """
     if not entry_id:
         return {"error": "entry_id is required"}
@@ -440,16 +507,52 @@ def run_action(entry_id):
     if not action:
         return {"error": f"Action entry '{entry_id}' not found"}
 
+    data = action.data or {}
+
+    # Save original scheduled_time so it can be restored after the run
+    original_scheduled = data.get('scheduled_time')
+    if original_scheduled:
+        data['scheduled_time_config'] = original_scheduled
+
+    # Set scheduled_time to current HHMM so scheduler sees it as due
+    tz = services.get_timezone()
+    now_local = datetime.now(tz)
+    data['scheduled_time'] = now_local.strftime('%H%M')
+    data['last_run'] = 0  # Clear so scheduler sees it as due
+    action.data = data
+    action.timestamp_modified = time.time()
+    action.is_dirty = 0
+    action.save(update_fields=['data', 'timestamp_modified', 'is_dirty'])
+
+    # Wake agent via SIGHUP
+    _wake_agent()
+
+    return {
+        "success": True,
+        "action": action.content[:80],
+        "entry_id": str(action.id),
+        "message": "Action queued for immediate execution",
+    }
+
+
+def _wake_agent():
+    """Send SIGHUP to the action agent daemon."""
+    import os
+    import signal
+
+    pid_str = SysConfig.objects.filter(
+        key='action_agent_pid'
+    ).values_list('value', flat=True).first()
+    if not pid_str or not pid_str.isdigit():
+        logger.warning("Cannot wake agent: no PID in sysconfig")
+        return
     try:
-        success = execute_action(action)
-        return {
-            "success": success,
-            "action": action.content[:80],
-            "entry_id": str(action.id),
-        }
-    except Exception as e:
-        logger.error("Action execution failed: %s", e, exc_info=True)
-        return {"error": f"Action execution failed: {e}"}
+        os.kill(int(pid_str), signal.SIGHUP)
+        logger.info("Agent woken (PID %s)", pid_str)
+    except ProcessLookupError:
+        logger.warning("Agent PID %s not found (stale)", pid_str)
+    except PermissionError:
+        logger.warning("Permission denied waking agent PID %s", pid_str)
 
 
 def write_heartbeat():

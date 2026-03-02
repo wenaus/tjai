@@ -18,7 +18,8 @@ import time
 
 import bootstrap  # noqa: F401 - Django setup
 from tjai_app.action_runner import (
-    get_due_actions, execute_action, write_heartbeat, logger,
+    get_due_actions, get_next_scheduled_time, execute_action, write_heartbeat,
+    logger,
 )
 from tjai_app.models import Entry
 
@@ -62,9 +63,7 @@ def sleep_until_next(trigger_filter=None):
         data = action.data or {}
         if trigger_filter and data.get('trigger') != trigger_filter:
             continue
-        last_run = data.get('last_run', 0)
-        interval_hours = data.get('interval_hours', 24)
-        next_due = last_run + interval_hours * 3600
+        next_due = get_next_scheduled_time(action)
         if next_due < earliest_due:
             earliest_due = next_due
 
@@ -321,7 +320,18 @@ def main():
     parser.add_argument('--trigger', help='Only run actions with this trigger type')
     parser.add_argument('--dry-run', action='store_true', help='Show what would run')
     parser.add_argument('--run', help='Execute a single action by entry ID, then exit')
+    parser.add_argument('--queue', help='Queue an action for immediate execution via scheduler, then exit')
     args = parser.parse_args()
+
+    # --queue: modify scheduled_time and wake agent, then exit
+    if args.queue:
+        from tjai_app.action_runner import run_action
+        result = run_action(args.queue)
+        if 'error' in result:
+            logger.error("Queue failed: %s", result['error'])
+            sys.exit(1)
+        logger.info("Queued: %s", result.get('action', args.queue))
+        return
 
     # --dry-run: show due actions and exit
     if args.dry_run:

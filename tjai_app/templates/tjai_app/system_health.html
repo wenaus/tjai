@@ -327,7 +327,7 @@
 
                 // Actions list
                 if (tj.actions && tj.actions.length > 0) {
-                    html += '<table style="margin-top:12px"><tr><th>Action</th><th>Trigger</th><th style="text-align:right">Interval</th><th style="text-align:right">Last Run</th><th style="text-align:right">Agent</th></tr>';
+                    html += '<table style="margin-top:12px"><tr><th>Action</th><th>Trigger</th><th style="text-align:right">Schedule</th><th style="text-align:right">Last Run</th><th style="text-align:right">Agent</th></tr>';
                     for (const a of tj.actions) {
                         const lr = a.last_run_min !== null ? fmtMin(a.last_run_min) + ' ago' : 'never';
                         const entryUrl = a.entry_id ? `/tjai/entry/?entry_id=${a.entry_id}` : `/tjai/entry/?uuid=${a.id}`;
@@ -348,7 +348,15 @@
                         } else if (a.agent_status) {
                             agentCol = a.agent_status;
                         }
-                        html += `<tr><td>${link}</td><td>${a.trigger}</td><td class="num">${a.interval_h}h</td><td class="num">${lr}</td><td class="num">${agentCol}</td></tr>`;
+                        let scheduleCol;
+                        if (a.scheduled_time) {
+                            const hh = a.scheduled_time.substring(0, 2);
+                            const mm = a.scheduled_time.substring(2, 4);
+                            scheduleCol = hh + ':' + mm + ' ET';
+                        } else {
+                            scheduleCol = a.interval_h + 'h';
+                        }
+                        html += `<tr><td>${link}</td><td>${a.trigger}</td><td class="num">${scheduleCol}</td><td class="num">${lr}</td><td class="num">${agentCol}</td></tr>`;
                     }
                     html += '</table>';
                 }
