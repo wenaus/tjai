@@ -640,6 +640,7 @@ def edit_entry(entry_id, content, context=None, clear_context=False,
     hour, minute = None, None
     if event_date and not event_time:
         actual_content, hour, minute = _extract_time_from_content(content)
+    old_content = entry.content
     entry.content = actual_content
 
     if context is not None:
@@ -703,12 +704,19 @@ def edit_entry(entry_id, content, context=None, clear_context=False,
     elif clear_name:
         entry.name = None
 
-    if not keep_time:
+    # Auto-preserve mod time if only tags and/or context changed
+    metadata_only = (actual_content == old_content and
+                     not event_date and not clear_event_date and
+                     not data and
+                     priority is None and not clear_priority and
+                     status is None and not clear_status and
+                     name is None and not clear_name)
+    if not keep_time and not metadata_only:
         entry.timestamp_modified = time.time()
 
     entry.is_dirty = 1
     update_fields = ['content', 'context', 'data', 'priority', 'status', 'name', 'is_dirty']
-    if not keep_time:
+    if not keep_time and not metadata_only:
         update_fields.append('timestamp_modified')
     entry.save(update_fields=update_fields)
 

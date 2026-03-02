@@ -1296,6 +1296,7 @@ def api_entry_save(request, entry_id):
         content = data.get('content', '')
     except (json.JSONDecodeError, KeyError):
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    old_content = entry.content
     entry.content = content
     if 'name' in data:
         entry.name = data['name'] or None  # empty string → None
@@ -1324,6 +1325,7 @@ def api_entry_save(request, entry_id):
     for tag_name in existing_tags - desired_tags:
         Tag.objects.filter(entry_id=entry.id, tag_name=tag_name).delete()
     # Content format: md/txt/None (auto)
+    fmt_changed = False
     if 'format' in data:
         fmt_val = data['format'] if data['format'] in ('md', 'txt') else None
         if not isinstance(entry.data, dict):
@@ -1332,7 +1334,12 @@ def api_entry_save(request, entry_id):
             entry.data['format'] = fmt_val
         else:
             entry.data.pop('format', None)
-    entry.timestamp_modified = time.time()
+        fmt_changed = True
+    # Preserve mod time if only tags/context changed (content and other fields unchanged)
+    metadata_only = (content == old_content and
+                     'name' not in data and not fmt_changed)
+    if not metadata_only:
+        entry.timestamp_modified = time.time()
     entry.save()
     data_dict = entry.data if isinstance(entry.data, dict) else None
     if data_dict and data_dict.get('entry_id'):
