@@ -56,7 +56,7 @@ No agent restart needed — section scripts run as subprocesses.
 
 | Script | Heading | Data Source |
 |--------|---------|-------------|
-| `section_keeps.py` | Keeps | DB: bookmarks with `data.kept=True`, last 24h |
+| `section_keeps.py` | Keeps | DB: saved bookmarks + kept picks, last 24h |
 | `section_git.py` | Git | `git log --since` on `/home/admin/github/tjrepo` |
 | `section_backup.py` | Backups | `~/Dropbox/tjai-backups/server/` directory scan, 7-day table |
 | `section_health.py` | System Health | `data/health-digest/{date}.json` (written by `health_digest.py`) |
