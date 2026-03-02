@@ -55,7 +55,7 @@ def build(since_ts, target_date):
                 if l.strip() and not l.strip().startswith('Co-Authored-By:')
             ]
             for bl in substantive:
-                lines.append(f'  {bl}')
+                lines.append(f'  - {bl}')
 
     return '\n'.join(lines) if lines else None
 
