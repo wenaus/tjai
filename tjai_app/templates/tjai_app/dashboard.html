@@ -389,10 +389,20 @@
                 else if (clockType === 'start') contentClass = 'clock-start';
                 else if (clockType === 'stop') contentClass = 'clock-stop';
 
-                // Use server-provided time_display
-                const timeStr = entry.time_display
-                    ? `<span class="entry-time">${entry.time_display}</span> `
-                    : '';
+                // Use server-provided time_display (Eastern), add local time if different
+                let timeStr = '';
+                if (entry.time_display) {
+                    let localSuffix = '';
+                    const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                    if (localTz !== 'America/New_York') {
+                        const evD = new Date(entry.event_date * 1000);
+                        const localTime = evD.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12:false});
+                        if (localTime !== entry.time_display) {
+                            localSuffix = ` <span style="color:#8a8a8a">(${localTime})</span>`;
+                        }
+                    }
+                    timeStr = `<span class="entry-time">${entry.time_display}</span>${localSuffix} `;
+                }
 
                 // Countdown for next upcoming event (only if it's today)
                 let countdownStr = '';
@@ -830,8 +840,15 @@
                 const p = {};
                 etParts.forEach(x => p[x.type] = x.value);
                 const etLabel = now.toLocaleString('en-US', {...etOpts, timeZoneName:'short'}).match(/[A-Z]{2,4}$/)?.[0] || 'ET';
+                let localSuffix = '';
+                const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                if (localTz !== 'America/New_York') {
+                    const localTime = now.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12:false});
+                    const localLabel = now.toLocaleString('en-US', {timeZoneName:'short'}).match(/[A-Z]{2,4}$/)?.[0] || 'Local';
+                    localSuffix = ` (${localTime} ${localLabel})`;
+                }
                 const timeStr = `${p.weekday} ${months[parseInt(p.month)-1]} ${p.day} ${p.hour.padStart(2,'0')}:${p.minute} ${etLabel}`;
-                calTime.textContent = timeStr;
+                calTime.innerHTML = timeStr + (localSuffix ? `<span style="color:#8a8a8a">${localSuffix}</span>` : '');
             }
         }
 
