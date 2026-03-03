@@ -15,14 +15,22 @@ def build(since_ts, target_date):
         kind='bookmark',
     ).exclude(
         Q(context_id='picks') & ~Q(data__kept=True)
-    ).order_by('-timestamp_modified').values_list('id', 'content'))
+    ).prefetch_related('tags').order_by('-timestamp_modified'))
     if not entries:
         return None
     lines = []
-    for entry_id, content in entries:
-        first, *rest = content.split('\n', 1)
-        pill = f' <a href="/tjai/entry/{entry_id}" class="entry-pill">Entry</a>'
-        lines.append(f'- {first}{pill}')
+    for entry in entries:
+        first, *rest = entry.content.split('\n', 1)
+        # Append tags/context not already visible in content text
+        tag_strs = []
+        if entry.context_id and f':{entry.context_id}' not in first:
+            tag_strs.append(f':{entry.context_id}')
+        for tag in entry.tags.all():
+            if f':{tag.tag_name}' not in first:
+                tag_strs.append(f':{tag.tag_name}')
+        tag_suffix = '   ' + ' '.join(tag_strs) if tag_strs else ''
+        pill = f' <a href="/tjai/entry/{entry.id}" class="entry-pill">Entry</a>'
+        lines.append(f'- {first}{tag_suffix}{pill}')
         if rest and rest[0].strip():
             lines.append(f'  - {rest[0].strip()}')
     return '\n'.join(lines)
