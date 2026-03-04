@@ -3490,7 +3490,7 @@ def api_agent_queue_data(request):
                         pass
 
                 run_status = sc_all.get(f'{prefix}status', 'completed')
-                if run_status in ('running', 'waiting_subagents'):
+                if run_status in ('running', 'waiting_subagents', 'idle'):
                     run_status = 'completed'
 
                 if entry_uuid:
