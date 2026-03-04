@@ -18,6 +18,8 @@ from django.db.models import Q
 
 from .models import Entry, Context, Tag, SysConfig, Relation
 from .tagger import tag_bookmark
+
+_DEFAULT_TZ = ZoneInfo('America/New_York')
 from tj.commands.journal import parse_time
 from tj.date_utils import parse_date_filter
 
@@ -94,15 +96,15 @@ def get_timezone():
     return ZoneInfo(tz_name)
 
 
-def _format_entry(entry):
+def _format_entry(entry, tz=_DEFAULT_TZ):
     """Format an Entry object for API response."""
     result = {
         "id": entry.id,
         "content": entry.content,
         "kind": entry.kind,
         "context": entry.context.name if entry.context else None,
-        "created": datetime.fromtimestamp(entry.timestamp_created).isoformat(),
-        "modified": datetime.fromtimestamp(entry.timestamp_modified).isoformat(),
+        "created": datetime.fromtimestamp(entry.timestamp_created, tz=tz).isoformat(),
+        "modified": datetime.fromtimestamp(entry.timestamp_modified, tz=tz).isoformat(),
     }
     if entry.name:
         result["name"] = entry.name
@@ -528,6 +530,37 @@ def get_todos(context=None, status=None, include_done=False):
     return [_format_entry(entry) for entry in qs]
 
 
+def get_goals(context=None, status=None, include_done=False):
+    """Get all goal entries with relation counts."""
+    if status is not None and status not in VALID_STATUSES:
+        return {"error": f"Invalid status '{status}'. Must be one of: {', '.join(VALID_STATUSES)}"}
+
+    qs = Entry.objects.filter(
+        kind='goal',
+        deleted_at__isnull=True,
+    ).select_related('context').prefetch_related('tags')
+
+    if context:
+        qs = qs.filter(context__name=context)
+    if status:
+        qs = qs.filter(status=status)
+    elif not include_done:
+        qs = qs.exclude(status='done')
+
+    qs = qs.order_by(models.F('priority').asc(nulls_last=True), '-timestamp_modified')
+
+    goals = []
+    for entry in qs:
+        g = _format_entry(entry)
+        # Count relations for this entry (cheap aggregate, not N+1)
+        rel_count = Relation.objects.filter(
+            Q(entry1_id=entry.id) | Q(entry2_id=entry.id)
+        ).count()
+        g['relation_count'] = rel_count
+        goals.append(g)
+    return goals
+
+
 def get_memories(context=None, limit=50, start_date=None, end_date=None):
     if not isinstance(limit, int) or limit < 1:
         return {"error": f"limit must be a positive integer, got {limit}"}
@@ -836,7 +869,11 @@ def create_goal(content, context=None, name=None, tags=None,
 
 
 def get_goal(entry_id):
-    """Get a goal entry with all its relations."""
+    """Get a goal entry with all its relations and tagged entries.
+
+    Returns relations (from the relations table) and tagged_entries
+    (entries with data.rel_goal matching this goal's entry_id).
+    """
     if not entry_id:
         return {"error": "entry_id is required"}
     entry = Entry.objects.select_related('context').filter(
@@ -848,6 +885,18 @@ def get_goal(entry_id):
         return {"error": f"Entry is kind='{entry.kind}', not goal"}
     result = _format_entry(entry)
     result["relations"] = _get_relations_for_entry(entry_id)
+
+    # Also return entries tagged with data.rel_goal = this goal's entry_id
+    goal_entry_id = (entry.data or {}).get('entry_id')
+    if goal_entry_id:
+        tagged = Entry.objects.filter(
+            data__rel_goal=goal_entry_id,
+            deleted_at__isnull=True,
+        ).select_related('context').prefetch_related('tags').order_by('timestamp_modified')
+        result["tagged_entries"] = [_format_entry(e) for e in tagged]
+    else:
+        result["tagged_entries"] = []
+
     return result
 
 

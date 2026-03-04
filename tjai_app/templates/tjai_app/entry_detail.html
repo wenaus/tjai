@@ -57,6 +57,15 @@
         .delete-link:hover { text-decoration: underline; }
         .CodeMirror-selected { background: #264f78 !important; }
         .CodeMirror-focused .CodeMirror-selected { background: #264f78 !important; }
+        .rel-section { margin-top: 16px; padding-top: 12px; border-top: 1px solid #333; }
+        .rel-section h3 { color: #8a8a8a; font-size: 12px; text-transform: uppercase; margin-bottom: 8px; font-weight: normal; }
+        .rel-row { display: flex; align-items: baseline; gap: 8px; padding: 3px 0; font-size: 12px; }
+        .rel-row .rel-type { color: #888; font-size: 11px; min-width: 80px; }
+        .rel-row .rel-link { color: #64b5f6; }
+        .rel-row .rel-link:hover { text-decoration: underline; }
+        .rel-row .rel-kind { font-size: 10px; padding: 1px 4px; border-radius: 2px; background: #2a2a3a; color: #777; }
+        .dialog-speaker { font-size: 11px; min-width: 50px; }
+        .dialog-time { color: #555; font-size: 10px; white-space: nowrap; }
     </style>
 </head>
 <body>
@@ -99,6 +108,9 @@
             </span>
         </div>
     </div>
+
+    <!-- Relations and tagged entries (goal entries) -->
+    <div id="goal-relations"></div>
 
     <!-- All metadata at bottom -->
     <div class="meta">
@@ -258,6 +270,102 @@
         document.getElementById('saveBtn').addEventListener('click', doSave);
         document.getElementById('cancelBtn').addEventListener('click', cancelEdit);
         document.getElementById('deleteBtn').addEventListener('click', doDelete);
+
+        // Render goal relations and tagged entries
+        (function() {
+            var relations = JSON.parse('{{ relations_json|escapejs }}');
+            var tagged = JSON.parse('{{ tagged_entries_json|escapejs }}');
+            if (relations.length === 0 && tagged.length === 0) return;
+
+            var container = document.getElementById('goal-relations');
+            function esc(s) { var d = document.createElement('span'); d.textContent = s; return d.innerHTML; }
+            function entryUrl(id, data) {
+                if (data && data.entry_id) return '/tjai/entry/' + data.entry_id + '/';
+                return '/tjai/entry/?uuid=' + id;
+            }
+            function timeAgo(ts) {
+                if (!ts) return '';
+                var d = new Date(ts);
+                var sec = Math.floor((Date.now() - d.getTime()) / 1000);
+                if (sec < 60) return sec + 's ago';
+                if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
+                if (sec < 86400) return Math.floor(sec / 3600) + 'h ago';
+                return Math.floor(sec / 86400) + 'd ago';
+            }
+
+            // Group relations by kind
+            var groups = {goal: [], todo: [], memory: [], other: []};
+            for (var i = 0; i < relations.length; i++) {
+                var r = relations[i];
+                var other = r.other_entry || {};
+                var k = other.kind || 'other';
+                if (groups[k]) groups[k].push(r);
+                else groups.other.push(r);
+            }
+
+            var html = '';
+            var sectionOrder = [
+                ['goal', 'Goals'], ['todo', 'Todos'], ['other', 'Related'], ['memory', 'Memories']
+            ];
+            for (var s = 0; s < sectionOrder.length; s++) {
+                var key = sectionOrder[s][0], label = sectionOrder[s][1];
+                var items = groups[key];
+                if (!items || items.length === 0) continue;
+                html += '<div class="rel-section"><h3>' + label + ' (' + items.length + ')</h3>';
+                for (var j = 0; j < items.length; j++) {
+                    var rel = items[j];
+                    var other = rel.other_entry || {};
+                    var od = other.data || {};
+                    var firstLine = (other.content || '').split('\n')[0];
+                    var md = new Date(other.modified);
+                    var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+                    var ts = days[md.getDay()] + ' ' + (md.getMonth()+1) + '/' + md.getDate() + ' ' + String(md.getHours()).padStart(2,'0') + ':' + String(md.getMinutes()).padStart(2,'0');
+                    html += '<div class="rel-row">';
+                    html += '<span class="dialog-time">' + ts + '</span>';
+                    html += '<span class="rel-type">' + esc(rel.relation_type) + '</span>';
+                    html += '<a class="rel-link" href="' + entryUrl(other.id, od) + '">' + esc(firstLine) + '</a>';
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+
+            // Tagged dialog entries
+            if (tagged.length > 0) {
+                html += '<div class="rel-section"><h3>Dialog (' + tagged.length + ')</h3>';
+                for (var t = 0; t < tagged.length; t++) {
+                    var e = tagged[t];
+                    var ed = e.data || {};
+                    var fl = (e.content || '').split('\n')[0];
+                    var speaker = ed.role === 'assistant' ? 'AI' : 'Human';
+                    var isHuman = ed.role !== 'assistant';
+                    var color = isHuman ? '#a0a0a0' : '#64b5f6';
+                    var md = new Date(e.modified);
+                    var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+                    var ts = days[md.getDay()] + ' ' + (md.getMonth()+1) + '/' + md.getDate() + ' ' + String(md.getHours()).padStart(2,'0') + ':' + String(md.getMinutes()).padStart(2,'0');
+                    html += '<div class="rel-row">';
+                    html += '<span class="dialog-time">' + ts + '</span>';
+                    var fromTime = new Date(md.getTime() - 3600000);
+                    var toTime = new Date(md.getTime() + 3600000);
+                    function isoWithOffset(d) {
+                        var off = -d.getTimezoneOffset();
+                        var sign = off >= 0 ? '+' : '-';
+                        off = Math.abs(off);
+                        var hh = String(Math.floor(off/60)).padStart(2,'0');
+                        var mm = String(off%60).padStart(2,'0');
+                        return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')
+                            + 'T' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0')
+                            + sign + hh + ':' + mm;
+                    }
+                    var dialogUrl = '/tjai/dashboard/?context=claude-code&from_time=' + encodeURIComponent(isoWithOffset(fromTime)) + '&to_time=' + encodeURIComponent(isoWithOffset(toTime)) + '#e-' + e.id;
+                    html += '<span class="dialog-speaker" style="color:' + color + '">' + speaker + '</span>';
+                    html += '<a href="' + dialogUrl + '" style="color:' + color + '">' + esc(fl) + '</a>';
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+
+            container.innerHTML = html;
+        })();
     </script>
     </div>
 </body>

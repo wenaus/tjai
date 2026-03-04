@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>tjai Goals</title>
+    <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 13px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .goals-header {
+            padding: 8px 24px;
+            background: #222;
+            border-bottom: 1px solid #333;
+            flex-shrink: 0;
+            font-size: 12px;
+        }
+        .goals-header .stats { color: #8a8a8a; font-size: 11px; float: right; }
+        .filter-bar {
+            padding: 4px 24px 6px;
+            background: #222;
+            border-bottom: 1px solid #333;
+            flex-shrink: 0;
+            font-size: 12px;
+        }
+        .filter-bar a { text-decoration: none; }
+        .filter-bar a:hover { text-decoration: underline; }
+        .context-link { color: #ce93d8; }
+        .context-link.active { background: #ce93d8; color: #1a1a1a !important; padding: 1px 4px; border-radius: 3px; }
+        .tag-link { color: #9ccc65; }
+        .tag-link.active { background: #9ccc65; color: #1a1a1a !important; padding: 1px 4px; border-radius: 3px; }
+        .status-link { color: #daa520; }
+        .status-link.active { background: #daa520; color: #1a1a1a !important; padding: 1px 4px; border-radius: 3px; }
+        .filter-clear {
+            background: #444;
+            color: #e0e0e0;
+            border: none;
+            padding: 2px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+        }
+        .filter-clear:hover { background: #666; }
+        .content-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 24px 40px;
+        }
+        .goal-item {
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            border-left: 3px solid #64b5f6;
+            background: #222;
+            border-radius: 0 3px 3px 0;
+            cursor: pointer;
+        }
+        .goal-item:hover { background: #282828; }
+        .goal-item.done { border-left-color: #4caf50; }
+        .goal-item.blocked { border-left-color: #ef5350; }
+        .goal-item.archive { border-left-color: #555; }
+        .goal-item.selected { background: #2a2a3a; }
+        .item-header {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            margin-bottom: 2px;
+        }
+        .item-title {
+            color: #e0e0e0;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        .item-title a { color: #e0e0e0; text-decoration: none; }
+        .item-title a:hover { text-decoration: underline; color: #64b5f6; }
+        .item-status {
+            font-size: 11px;
+            padding: 1px 6px;
+            border-radius: 3px;
+        }
+        .status-done { background: #1a3c1a; color: #4caf50; }
+        .status-blocked { background: rgba(239, 83, 80, 0.15); color: #ef5350; }
+        .status-archive { background: #333; color: #888; }
+        .item-body {
+            color: #999;
+            font-size: 12px;
+            line-height: 1.4;
+            margin-top: 2px;
+        }
+        .item-meta {
+            color: #8a8a8a;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+        .item-meta a { text-decoration: none; }
+        .item-meta a:hover { text-decoration: underline; }
+        .rel-badge {
+            display: inline-block;
+            font-size: 10px;
+            padding: 1px 5px;
+            border-radius: 3px;
+            background: #2a2a3a;
+            color: #8a8a8a;
+        }
+        /* Detail panel */
+        .detail-panel {
+            border-top: 1px solid #333;
+            background: #1e1e1e;
+            flex-shrink: 0;
+            max-height: 50vh;
+            overflow-y: auto;
+            padding: 16px 24px;
+            display: none;
+        }
+        .detail-panel.open { display: block; }
+        .detail-title {
+            color: #d8a070;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        .detail-content {
+            color: #ccc;
+            font-size: 12px;
+            line-height: 1.6;
+            margin-bottom: 12px;
+            white-space: pre-wrap;
+        }
+        .detail-relations { margin-top: 8px; }
+        .detail-relations h4 {
+            color: #8a8a8a;
+            font-size: 11px;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+        .rel-item {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            padding: 4px 0;
+            font-size: 12px;
+        }
+        .rel-type { color: #888; font-size: 11px; min-width: 100px; }
+        .rel-entry { color: #bbb; }
+        .rel-entry a { color: #64b5f6; text-decoration: none; }
+        .rel-entry a:hover { text-decoration: underline; }
+        .rel-kind {
+            font-size: 10px;
+            padding: 1px 4px;
+            border-radius: 2px;
+            background: #2a2a3a;
+            color: #777;
+        }
+        .btn-unrelate {
+            background: none;
+            border: none;
+            color: #555;
+            cursor: pointer;
+            font-size: 11px;
+            padding: 0 4px;
+        }
+        .btn-unrelate:hover { color: #ef5350; }
+        /* Create form */
+        .create-bar {
+            display: flex;
+            gap: 8px;
+            padding: 8px 24px;
+            background: #222;
+            border-top: 1px solid #333;
+            flex-shrink: 0;
+        }
+        .create-bar input {
+            background: #333;
+            color: #e0e0e0;
+            border: 1px solid #444;
+            padding: 4px 8px;
+            font-family: inherit;
+            font-size: 12px;
+            border-radius: 3px;
+        }
+        .btn-submit {
+            background: #333;
+            color: #64b5f6;
+            border: 1px solid #64b5f6;
+            padding: 2px 10px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 11px;
+            white-space: nowrap;
+        }
+        .btn-submit:hover { background: #1a3a5c; }
+        .loading { color: #8a8a8a; padding: 20px; }
+        .error { color: #ef5350; padding: 20px; }
+        .empty { color: #8a8a8a; padding: 40px; text-align: center; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1a1a1a; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+        * { scrollbar-width: thin; scrollbar-color: #444 #1a1a1a; }
+    </style>
+</head>
+<body>
+    {% with current_page="goals" %}{% include "tjai_app/_menu.html" %}{% endwith %}
+    <div class="goals-header">
+        <span style="color:#d8a070;font-weight:bold">Goals</span>
+        <span class="stats" id="stats"></span>
+    </div>
+    <div class="filter-bar" id="filter-bar"></div>
+    <div class="content-area" id="content">
+        <div class="loading">Loading goals...</div>
+    </div>
+    <div class="detail-panel" id="detail-panel"></div>
+    <div class="create-bar">
+        <input type="text" id="new-title" placeholder="Goal title..." style="flex:0 0 200px" onkeydown="if(event.key==='Enter')document.getElementById('new-desc').focus()">
+        <input type="text" id="new-desc" placeholder="Description (optional)..." style="flex:1" onkeydown="if(event.key==='Enter')createGoal()">
+        <button class="btn-submit" onclick="createGoal()">Create</button>
+    </div>
+
+    <script>
+        function esc(s) {
+            if (!s) return '';
+            const el = document.createElement('span');
+            el.textContent = s;
+            return el.innerHTML;
+        }
+
+        function timeAgo(ts) {
+            if (!ts) return '';
+            const d = new Date(typeof ts === 'string' && !ts.endsWith('Z') ? ts + 'Z' : ts);
+            const sec = Math.floor((Date.now() - d.getTime()) / 1000);
+            if (sec < 0) return 'just now';
+            if (sec < 60) return sec + 's ago';
+            if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
+            if (sec < 86400) return Math.floor(sec / 3600) + 'h ago';
+            return Math.floor(sec / 86400) + 'd ago';
+        }
+
+        function entryUrl(id, data) {
+            if (data && data.entry_id) return '/tjai/entry/' + data.entry_id + '/';
+            return '/tjai/entry/?uuid=' + id;
+        }
+
+        function getCsrf() {
+            const c = document.cookie.match(/csrftoken=([^;]+)/);
+            return c ? c[1] : '';
+        }
+
+        let goalsData = [];
+        let allContexts = [];
+        let allTags = [];
+        let selectedGoalId = null;
+        let activeContext = null;
+        let activeTag = null;
+        let activeStatus = null;
+
+        async function fetchData() {
+            try {
+                let url = '/tjai/api/goals/data?include_done=1';
+                const resp = await fetch(url);
+                const data = await resp.json();
+                if (data.error) {
+                    document.getElementById('content').innerHTML =
+                        `<div class="error">${esc(data.error)}</div>`;
+                    return;
+                }
+                goalsData = data.goals || [];
+                allContexts = data.contexts || [];
+                // Collect tags from goals
+                const tagSet = new Set();
+                for (const g of goalsData) {
+                    for (const t of (g.tags || [])) tagSet.add(t);
+                }
+                allTags = [...tagSet].sort();
+                renderFilters();
+                render();
+            } catch (e) {
+                document.getElementById('content').innerHTML =
+                    '<div class="error">Error loading goals</div>';
+            }
+        }
+
+        function renderFilters() {
+            let lines = [];
+            // Contexts present in goals
+            const goalContexts = new Set(goalsData.map(g => g.context).filter(Boolean));
+            if (goalContexts.size > 0) {
+                const chips = [...goalContexts].sort().map(c => {
+                    const cls = activeContext === c ? ' active' : '';
+                    return `<a href="#" class="context-link${cls}" data-context="${c}">${c}</a>`;
+                }).join(' ');
+                lines.push('Contexts: ' + chips);
+            }
+            // Tags
+            if (allTags.length > 0) {
+                const chips = allTags.map(t => {
+                    const cls = activeTag === t ? ' active' : '';
+                    return `<a href="#" class="tag-link${cls}" data-tag="${t}">${t}</a>`;
+                }).join(', ');
+                lines.push('Tags: ' + chips);
+            }
+            // Status filters
+            const statuses = ['done', 'blocked', 'archive'];
+            const statusChips = statuses.map(s => {
+                const cls = activeStatus === s ? ' active' : '';
+                return `<a href="#" class="status-link${cls}" data-status="${s}">${s}</a>`;
+            }).join(' ');
+            lines.push('Status: ' + statusChips);
+
+            let html = lines.map(l => `<div>${l}</div>`).join('');
+            if (activeContext || activeTag || activeStatus) {
+                html += ` <button class="filter-clear" onclick="clearFilters()">clear</button>`;
+            }
+
+            document.getElementById('filter-bar').innerHTML = html;
+        }
+
+        function filteredGoals() {
+            return goalsData.filter(g => {
+                if (activeContext && g.context !== activeContext) return false;
+                if (activeTag && !(g.tags || []).includes(activeTag)) return false;
+                if (activeStatus && (g.status || 'active') !== activeStatus) return false;
+                if (!activeStatus && (g.status === 'done' || g.status === 'archive')) return false;
+                return true;
+            });
+        }
+
+        function render() {
+            const goals = filteredGoals();
+            const total = goalsData.filter(g => g.status !== 'done' && g.status !== 'archive').length;
+            const totalRels = goalsData.reduce((s, g) => s + (g.relation_count || 0), 0);
+            document.getElementById('stats').textContent =
+                `${total} active, ${totalRels} relations`;
+
+            if (goals.length === 0) {
+                document.getElementById('content').innerHTML =
+                    '<div class="empty">No goals match filters.</div>';
+                return;
+            }
+
+            let html = '';
+            for (const g of goals) {
+                const status = g.status || 'active';
+                const data = g.data || {};
+                const title = g.content.split('\n')[0];
+                const bodyLines = g.content.split('\n').slice(1).filter(l => l.trim());
+                const body = bodyLines.slice(0, 2).join('\n');
+                const selCls = g.id === selectedGoalId ? ' selected' : '';
+
+                html += `<div class="goal-item ${status}${selCls}" onclick="selectGoal('${g.id}')">`;
+                html += '<div class="item-header">';
+                html += `<span class="item-title"><a href="${entryUrl(g.id, data)}" onclick="event.stopPropagation()">${esc(title)}</a></span>`;
+                // Only badge non-active statuses
+                if (status !== 'active') {
+                    html += `<span class="item-status status-${status}">${status}</span>`;
+                }
+                if (g.priority) {
+                    html += `<span style="color:#666;font-size:11px">priority ${g.priority}</span>`;
+                }
+                if (g.relation_count > 0) {
+                    html += `<span class="rel-badge">${g.relation_count} rel</span>`;
+                }
+                html += '</div>';
+                if (body) {
+                    html += `<div class="item-body">${esc(body)}</div>`;
+                }
+                let meta = timeAgo(g.modified);
+                if (g.context) {
+                    meta += ` <span style="color:#ce93d8">=${esc(g.context)}</span>`;
+                }
+                if (g.tags && g.tags.length) {
+                    meta += ' ' + g.tags.map(t => `<span style="color:#9ccc65">${esc(t)}</span>`).join(' ');
+                }
+                html += `<div class="item-meta">${meta}</div>`;
+                html += '</div>';
+            }
+
+            document.getElementById('content').innerHTML = html;
+        }
+
+        async function selectGoal(goalId) {
+            selectedGoalId = goalId;
+            render();
+            const panel = document.getElementById('detail-panel');
+            panel.className = 'detail-panel open';
+            panel.innerHTML = '<div class="loading">Loading...</div>';
+
+            try {
+                const resp = await fetch('/tjai/api/goals/detail?id=' + encodeURIComponent(goalId));
+                const data = await resp.json();
+                if (data.error) {
+                    panel.innerHTML = `<div class="error">${esc(data.error)}</div>`;
+                    return;
+                }
+                renderDetail(data);
+            } catch (e) {
+                panel.innerHTML = '<div class="error">Error loading goal detail</div>';
+            }
+        }
+
+        function renderRelSection(title, items) {
+            if (items.length === 0) return '';
+            let html = `<h4>${esc(title)} (${items.length})</h4>`;
+            for (const r of items) {
+                const other = r.other_entry || {};
+                const otherData = other.data || {};
+                const otherFirstLine = (other.content || '').split('\n')[0];
+                html += '<div class="rel-item">';
+                html += `<span class="rel-type">${esc(r.relation_type)}</span>`;
+                html += `<span class="rel-entry"><a href="${entryUrl(other.id, otherData)}">${esc(otherFirstLine)}</a></span>`;
+                html += `<button class="btn-unrelate" title="Remove relation" onclick="unrelate('${r.id}')">x</button>`;
+                html += '</div>';
+            }
+            return html;
+        }
+
+        function renderDetail(goal) {
+            const panel = document.getElementById('detail-panel');
+            const data = goal.data || {};
+            const title = goal.content.split('\n')[0];
+            const status = goal.status || 'active';
+
+            let html = `<div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">`;
+            html += `<span class="detail-title"><a href="${entryUrl(goal.id, data)}" style="color:#d8a070">${esc(title)}</a></span>`;
+            if (status !== 'active') {
+                html += `<span class="item-status status-${status}">${status}</span>`;
+            }
+            if (goal.context) html += `<span style="color:#ce93d8">=${esc(goal.context)}</span>`;
+            html += `<button class="btn-submit" style="margin-left:auto;font-size:10px" onclick="closeDetail()">Close</button>`;
+            html += `</div>`;
+            const descLines = goal.content.split('\n').slice(1).join('\n').trim();
+            if (descLines) {
+                html += `<div class="detail-content">${esc(descLines)}</div>`;
+            }
+
+            // Group relations by kind
+            const rels = goal.relations || [];
+            const goalRels = rels.filter(r => (r.other_entry || {}).kind === 'goal');
+            const todoRels = rels.filter(r => (r.other_entry || {}).kind === 'todo');
+            const otherRels = rels.filter(r => {
+                const k = (r.other_entry || {}).kind;
+                return k !== 'goal' && k !== 'todo' && k !== 'memory';
+            });
+            const memoryRels = rels.filter(r => (r.other_entry || {}).kind === 'memory');
+
+            if (rels.length > 0 || (goal.tagged_entries || []).length > 0) {
+                html += '<div class="detail-relations">';
+                html += renderRelSection('Goals', goalRels);
+                html += renderRelSection('Todos', todoRels);
+                html += renderRelSection('Other', otherRels);
+                html += renderRelSection('Memories', memoryRels);
+                html += '</div>';
+            }
+
+            // Tagged dialog entries (via data.rel_goal)
+            const tagged = goal.tagged_entries || [];
+            if (tagged.length > 0) {
+                html += '<div class="detail-relations" style="margin-top:12px">';
+                html += `<h4>Dialog (${tagged.length})</h4>`;
+                for (const e of tagged) {
+                    const eData = e.data || {};
+                    const firstLine = (e.content || '').split('\n')[0];
+                    const speaker = eData.role === 'assistant' ? 'AI' : 'Human';
+                    html += '<div class="rel-item">';
+                    html += `<span class="rel-type" style="color:#64b5f6;min-width:50px">${speaker}</span>`;
+                    html += `<span class="rel-entry"><a href="${entryUrl(e.id, eData)}">${esc(firstLine)}</a></span>`;
+                    html += `<span style="color:#555;font-size:10px;white-space:nowrap">${timeAgo(e.modified)}</span>`;
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+
+            if (rels.length === 0 && tagged.length === 0) {
+                html += '<div style="color:#666;font-size:11px;margin-top:8px">No relations or associated entries</div>';
+            }
+
+            panel.innerHTML = html;
+        }
+
+        function closeDetail() {
+            selectedGoalId = null;
+            document.getElementById('detail-panel').className = 'detail-panel';
+            render();
+        }
+
+        function clearFilters() {
+            activeContext = null;
+            activeTag = null;
+            activeStatus = null;
+            renderFilters();
+            render();
+        }
+
+        async function createGoal() {
+            const titleInput = document.getElementById('new-title');
+            const descInput = document.getElementById('new-desc');
+            const title = titleInput.value.trim();
+            if (!title) { titleInput.focus(); return; }
+
+            try {
+                const resp = await fetch('/tjai/api/goals/create', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                    body: JSON.stringify({title: title, content: descInput.value.trim()}),
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+                titleInput.value = '';
+                descInput.value = '';
+                fetchData();
+            } catch (e) {
+                alert('Error creating goal');
+            }
+        }
+
+        async function unrelate(relationId) {
+            try {
+                const resp = await fetch('/tjai/api/goals/unrelate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                    body: JSON.stringify({relation_id: relationId}),
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+                if (selectedGoalId) selectGoal(selectedGoalId);
+                fetchData();
+            } catch (e) {
+                alert('Error removing relation');
+            }
+        }
+
+        // Event delegation for filter clicks
+        document.getElementById('filter-bar').addEventListener('click', function(e) {
+            const link = e.target.closest('a');
+            if (!link) return;
+            e.preventDefault();
+            if (link.classList.contains('context-link')) {
+                const ctx = link.dataset.context;
+                activeContext = activeContext === ctx ? null : ctx;
+            } else if (link.classList.contains('tag-link')) {
+                const tag = link.dataset.tag;
+                activeTag = activeTag === tag ? null : tag;
+            } else if (link.classList.contains('status-link')) {
+                const st = link.dataset.status;
+                activeStatus = activeStatus === st ? null : st;
+            }
+            renderFilters();
+            render();
+        });
+
+        fetchData();
+    </script>
+</body>
+</html>

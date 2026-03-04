@@ -511,7 +511,7 @@
                     line += ` <span style="color:#9ccc65">${tagStr}</span>`;
                 }
 
-                html += `<div class="entry" style="margin-left:0" data-context="${entry.context || ''}" data-machine="${entry.hostname || ''}" data-kind="${entry.kind || ''}" data-tags="${(entry.all_tags || entry.tags || []).join(',')}">${line}</div>`;
+                html += `<div class="entry" id="e-${entry.id}" style="margin-left:0" data-context="${entry.context || ''}" data-machine="${entry.hostname || ''}" data-kind="${entry.kind || ''}" data-tags="${(entry.all_tags || entry.tags || []).join(',')}">${line}</div>`;
             }
             return html;
         }
@@ -528,6 +528,8 @@
         let activeContext = null;
         let activeStatus = null;
         let activeDate = null;
+        let activeFromTime = null;
+        let activeToTime = null;
         let cachedDailyCounts = null;
         let excludedContexts = new Set();
         let isFilterActive = false;
@@ -541,6 +543,8 @@
             if (activeStatus) params.set('status', activeStatus);
             if (excludedContexts.size > 0) params.set('exclude', [...excludedContexts].sort().join(','));
             if (activeDate) params.set('date', activeDate);
+            if (activeFromTime) params.set('from_time', activeFromTime);
+            if (activeToTime) params.set('to_time', activeToTime);
             const searchVal = document.getElementById('entry-search').value.trim();
             if (searchVal && isSearchActive) params.set('search', searchVal);
             const qs = params.toString();
@@ -559,7 +563,9 @@
             const excl = params.get('exclude');
             if (excl) excl.split(',').forEach(c => excludedContexts.add(c));
             activeDate = params.get('date') || null;
-            isFilterActive = !!(activeTags.size > 0 || activeKind || activeContext || activeMachine || activeStatus || activeDate || excludedContexts.size > 0);
+            activeFromTime = params.get('from_time') || null;
+            activeToTime = params.get('to_time') || null;
+            isFilterActive = !!(activeTags.size > 0 || activeKind || activeContext || activeMachine || activeStatus || activeDate || activeFromTime || activeToTime || excludedContexts.size > 0);
             const searchParam = params.get('search');
             if (searchParam) {
                 document.getElementById('entry-search').value = searchParam;
@@ -582,6 +588,8 @@
             if (activeStatus) params.push(`status=${encodeURIComponent(activeStatus)}`);
             if (excludedContexts.size > 0) params.push(`exclude_context=${encodeURIComponent([...excludedContexts].join(','))}`);
             if (activeDate) params.push(`date=${encodeURIComponent(activeDate)}`);
+            if (activeFromTime) params.push(`from_time=${encodeURIComponent(activeFromTime)}`);
+            if (activeToTime) params.push(`to_time=${encodeURIComponent(activeToTime)}`);
             return params;
         }
 
@@ -708,7 +716,8 @@
             // Entry types
             const types = [
                 ['ai', 'ai', 'AI guidance'], ['b', 'bookmark', 'bookmark'], ['do', 'todo', 'todo'],
-                ['j', 'journal', 'journal'], ['m', 'memory', 'memory'], ['p', 'profile', 'profile']
+                ['g', 'goal', 'goal'], ['j', 'journal', 'journal'], ['m', 'memory', 'memory'],
+                ['p', 'profile', 'profile']
             ];
             const typeLinks = types.map(([abbr, kind, label]) => {
                 const activeClass = activeKind === kind ? ' active' : '';
@@ -793,6 +802,16 @@
                 document.getElementById('entries-list').innerHTML = renderEntries(entries, dashboardTimezone);
                 // Highlight tags that co-occur with selected tags
                 highlightAvailableTags(entries);
+                scrollToHash();
+            }
+        }
+
+        function scrollToHash() {
+            if (!location.hash) return;
+            var el = document.getElementById(location.hash.slice(1));
+            if (el) {
+                el.scrollIntoView({block: 'center'});
+                el.style.color = '#d8a070';
             }
         }
 

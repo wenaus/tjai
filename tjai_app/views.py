@@ -765,6 +765,8 @@ def dashboard_status(request):
     filter_machine = request.GET.get('machine')
     filter_status = request.GET.get('status')
     filter_date = request.GET.get('date')  # YYYY-MM-DD, filter entries to this day
+    filter_from_time = request.GET.get('from_time')  # ISO datetime e.g. 2026-03-04T03:30
+    filter_to_time = request.GET.get('to_time')  # ISO datetime e.g. 2026-03-04T05:30
     exclude_contexts = [c for c in request.GET.get('exclude_context', '').split(',') if c]
 
     # Exclude claude-code (dialog) from default dashboard view
@@ -825,6 +827,26 @@ def dashboard_status(request):
             timestamp_modified__gte=day_start.timestamp(),
             timestamp_modified__lt=day_end.timestamp(),
         )
+
+    if filter_from_time:
+        try:
+            ft = datetime.fromisoformat(filter_from_time)
+            if ft.tzinfo is None:
+                # Naive string — assume Eastern for backward compat
+                from zoneinfo import ZoneInfo
+                ft = ft.replace(tzinfo=ZoneInfo('America/New_York'))
+            base_qs = base_qs.filter(timestamp_modified__gte=ft.timestamp())
+        except ValueError:
+            pass
+    if filter_to_time:
+        try:
+            tt = datetime.fromisoformat(filter_to_time)
+            if tt.tzinfo is None:
+                from zoneinfo import ZoneInfo
+                tt = tt.replace(tzinfo=ZoneInfo('America/New_York'))
+            base_qs = base_qs.filter(timestamp_modified__lt=tt.timestamp())
+        except ValueError:
+            pass
 
     base_qs = base_qs.order_by('-timestamp_modified')
 
@@ -1270,6 +1292,22 @@ def entry_detail(request, entry_id=None):
         for k, v in data.items():
             if 'entry_id' in k and isinstance(v, str) and v:
                 linked_entry_ids[k] = f'/tjai/entry/{v}/'
+
+    # Relations and tagged entries for goal entries
+    relations_json = '[]'
+    tagged_entries_json = '[]'
+    if entry.kind == 'goal':
+        from . import services
+        relations = services._get_relations_for_entry(str(entry.id))
+        relations_json = json.dumps(relations)
+        goal_entry_id = (data or {}).get('entry_id')
+        if goal_entry_id:
+            tagged = Entry.objects.filter(
+                data__rel_goal=goal_entry_id,
+                deleted_at__isnull=True,
+            ).select_related('context').prefetch_related('tags').order_by('timestamp_modified')
+            tagged_entries_json = json.dumps([services._format_entry(e) for e in tagged])
+
     return render(request, 'tjai_app/entry_detail.html', {
         'entry': entry,
         'content_html': content_html,
@@ -1281,6 +1319,8 @@ def entry_detail(request, entry_id=None):
         'content_format': fmt,
         'explicit_format': bool(data.get('format')) if data else False,
         'linked_entry_ids_json': json.dumps(linked_entry_ids),
+        'relations_json': relations_json,
+        'tagged_entries_json': tagged_entries_json,
     })
 
 
@@ -3582,3 +3622,124 @@ def api_agent_queue_data(request):
             pass
 
     return JsonResponse({'timeline': timeline, 'daemon': daemon})
+
+
+# --- Goals ---
+
+@login_required
+def goals_page(request):
+    """Render the goals page."""
+    return render(request, 'tjai_app/goals.html')
+
+
+@login_required
+def api_goals_data(request):
+    """Return goals list with optional filtering."""
+    from . import services
+    goals = services.get_goals(include_done=True)
+    if isinstance(goals, dict) and 'error' in goals:
+        return JsonResponse(goals, status=400)
+
+    # Also return available contexts for filter dropdown
+    contexts = list(Context.objects.order_by('name').values_list('name', flat=True))
+    return JsonResponse({'goals': goals, 'contexts': contexts})
+
+
+@login_required
+def api_goals_detail(request):
+    """Return a single goal with its relations. Supports UUID and entry_id."""
+    from . import services
+    goal_id = request.GET.get('id', '')
+    if not goal_id:
+        return JsonResponse({'error': 'id parameter is required'}, status=400)
+
+    # If shorter than UUID (36 chars), try entry_id first
+    entry = None
+    if len(goal_id) < 36:
+        entry = Entry.objects.filter(
+            data__entry_id=goal_id, deleted_at__isnull=True
+        ).first()
+    if not entry:
+        entry = Entry.objects.filter(
+            id=goal_id, deleted_at__isnull=True
+        ).first()
+    if not entry:
+        return JsonResponse({'error': f"Entry '{goal_id}' not found"}, status=404)
+
+    result = services.get_goal(str(entry.id))
+    if isinstance(result, dict) and 'error' in result:
+        return JsonResponse(result, status=400)
+    return JsonResponse(result)
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_goals_create(request):
+    """Create a new goal entry."""
+    from . import services
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    title = body.get('title', '').strip()
+    if not title:
+        return JsonResponse({'error': 'title is required'}, status=400)
+    description = body.get('content', '').strip()
+    content = title + '\n' + description if description else title
+
+    result = services.create_goal(
+        content=content,
+        context=body.get('context'),
+        priority=body.get('priority'),
+        status=body.get('status'),
+        data=body.get('data'),
+        create_context=body.get('create_context', False),
+    )
+    if isinstance(result, dict) and 'error' in result:
+        return JsonResponse(result, status=400)
+    return JsonResponse(result)
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_goals_relate(request):
+    """Create a relation between two entries."""
+    from . import services
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    result = services.create_relation(
+        entry1_id=body.get('entry1_id', ''),
+        entry2_id=body.get('entry2_id', ''),
+        relation_type=body.get('relation_type', ''),
+        data=body.get('data'),
+    )
+    if isinstance(result, dict) and 'error' in result:
+        return JsonResponse(result, status=400)
+    return JsonResponse(result)
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_goals_unrelate(request):
+    """Delete a relation."""
+    from . import services
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    relation_id = body.get('relation_id', '')
+    if not relation_id:
+        return JsonResponse({'error': 'relation_id is required'}, status=400)
+
+    result = services.delete_relation(relation_id)
+    if isinstance(result, dict) and 'error' in result:
+        return JsonResponse(result, status=400)
+    return JsonResponse(result)
