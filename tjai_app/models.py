@@ -10,6 +10,7 @@ class Context(models.Model):
     description = models.TextField(blank=True, null=True)
     timestamp_created = models.FloatField()
     timestamp_modified = models.FloatField()
+    data = models.JSONField(default=dict, blank=True)
 
     class Meta:
         db_table = 'contexts'
@@ -153,6 +154,7 @@ class RssItem(models.Model):
     published = models.DateTimeField(null=True)
     fetched = models.DateTimeField()
     read = models.BooleanField(default=False, db_index=True)
+    data = models.JSONField(default=dict, blank=True)
 
     class Meta:
         db_table = 'rss_items'

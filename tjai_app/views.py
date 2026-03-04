@@ -2820,11 +2820,58 @@ def system_health(request):
 
 @login_required
 def api_system_status(request):
-    """Return just the health status string — lightweight poll for menu color."""
-    status = SysConfig.objects.filter(
+    """Return health status + agent status — lightweight poll for menu colors."""
+    health_row = SysConfig.objects.filter(
         key='system_health_status'
-    ).values_list('value', flat=True).first()
-    return JsonResponse({'status': status or ''})
+    ).values_list('value', 'timestamp_modified').first()
+    status = health_row[0] if health_row else ''
+    health_age = time.time() - health_row[1] if health_row else float('inf')
+    # Health collection runs every 30 min; if >1h stale, agent is down
+    HEALTH_STALE = 3600
+    if health_age > HEALTH_STALE:
+        status = 'red'
+
+    # Agent health: check heartbeat staleness and overdue actions
+    agents_status = 'green'
+    sc_vals = dict(SysConfig.objects.filter(
+        key__in=['action_agent_heartbeat', 'action_agent_started']
+    ).values_list('key', 'value'))
+    hb = sc_vals.get('action_agent_heartbeat', '')
+    started = sc_vals.get('action_agent_started', '')
+    now = time.time()
+    # Heartbeat stale > 5 min means agent is stuck or down
+    HEARTBEAT_STALE = 300
+    if hb:
+        try:
+            if now - float(hb) > HEARTBEAT_STALE:
+                agents_status = 'red'
+        except (ValueError, TypeError):
+            pass
+    elif started:
+        # No heartbeat yet but agent started — check if started too long ago
+        try:
+            if now - float(started) > HEARTBEAT_STALE:
+                agents_status = 'red'
+        except (ValueError, TypeError):
+            pass
+
+    # Check for overdue periodic actions (only if heartbeat is ok)
+    if agents_status == 'green':
+        from .action_runner import get_next_scheduled_time
+        overdue_actions = Entry.objects.filter(
+            kind='action', deleted_at__isnull=True,
+        ).exclude(status='done').exclude(status='blocked')
+        OVERDUE_THRESHOLD = 600  # 10 min grace before flagging
+        for action in overdue_actions:
+            data = action.data or {}
+            if data.get('trigger') != 'periodic':
+                continue
+            next_due = get_next_scheduled_time(action)
+            if next_due + OVERDUE_THRESHOLD < now:
+                agents_status = 'red'
+                break
+
+    return JsonResponse({'status': status or '', 'agents': agents_status})
 
 
 def api_system_data(request):
@@ -2982,6 +3029,7 @@ def api_rss_data(request):
             'precis': item.precis,
             'published': item.published.isoformat() if item.published else None,
             'fetched': item.fetched.isoformat(),
+            'author': (item.data or {}).get('author', ''),
             'readme': item.url in readme_urls,
         })
 
@@ -3001,11 +3049,22 @@ def api_rss_data(request):
     total_unread = RssItem.objects.filter(read=False).count()
     oldest = RssItem.objects.filter(read=False, published__isnull=False).order_by('published').values_list('published', flat=True).first()
     from django.utils import timezone as djtz
+
+    # Include feed fetch errors if any
+    fetch_errors = []
+    err_row = SysConfig.objects.filter(key='rss_fetch_errors').first()
+    if err_row:
+        try:
+            fetch_errors = json.loads(err_row.value)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     return JsonResponse({
         'categories': result,
         'total_unread': total_unread,
         'oldest_date': oldest.isoformat() if oldest else None,
         'server_time': djtz.now().isoformat(),
+        'fetch_errors': fetch_errors,
     })
 
 

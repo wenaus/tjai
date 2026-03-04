@@ -171,7 +171,13 @@ def _run_one_script(script_cmd, target_date=None):
     cmd = [sys.executable, str(script_path)] + script_args
     logger.info("Running: %s", ' '.join(cmd))
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    SCRIPT_TIMEOUT = 300  # 5 minutes — no mechanical script should take longer
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True,
+                                timeout=SCRIPT_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        logger.error("%s timed out after %ds — killed", script_name, SCRIPT_TIMEOUT)
+        return False
     if result.stdout:
         for line in result.stdout.rstrip().split('\n'):
             logger.info("  %s", line)
@@ -447,6 +453,17 @@ def execute_action(action, target_date=None):
 
     action_id = data.get('entry_id')
     _log_context.action_id = action_id
+
+    # Set running status for all actions (not just AI dispatches)
+    if action_id:
+        now = time.time()
+        SysConfig.objects.update_or_create(
+            key=f'agent_{action_id}_status',
+            defaults={'value': 'running', 'timestamp_modified': now})
+        SysConfig.objects.update_or_create(
+            key=f'agent_{action_id}_launched',
+            defaults={'value': str(now), 'timestamp_modified': now})
+
     try:
         # Journal entry must exist before mechanical scripts (they may append to it)
         entry_id = create_journal_entry(action, target_date=target_date)
@@ -472,6 +489,17 @@ def execute_action(action, target_date=None):
         return True
     finally:
         _log_context.action_id = None
+        # Clear running status for mechanical-only actions (no AI dispatch).
+        # Actions with ai_prompt are cleared by agent_complete.py when the
+        # detached tj agent finishes.
+        if action_id and not (data or {}).get('ai_prompt'):
+            now = time.time()
+            SysConfig.objects.update_or_create(
+                key=f'agent_{action_id}_status',
+                defaults={'value': 'idle', 'timestamp_modified': now})
+            SysConfig.objects.update_or_create(
+                key=f'agent_{action_id}_completed',
+                defaults={'value': str(now), 'timestamp_modified': now})
 
 
 def _write_agent_error(action_id, error_msg):

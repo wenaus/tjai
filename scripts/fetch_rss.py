@@ -16,6 +16,7 @@ import traceback
 from datetime import datetime, timedelta, timezone
 
 import feedparser
+import requests
 
 import bootstrap  # noqa: F401 - Django setup
 
@@ -74,10 +75,20 @@ def parse_published(entry):
     return None
 
 
+FEED_TIMEOUT = 30  # seconds per feed request
+
 def fetch_feed(feed_url, category):
     """Fetch one feed and insert new items. Returns (new_count, error_msg)."""
     try:
-        feed = feedparser.parse(feed_url)
+        resp = requests.get(feed_url, timeout=FEED_TIMEOUT,
+                            headers={'User-Agent': 'tjai-rss/1.0'})
+        if resp.status_code >= 400:
+            return 0, f"HTTP {resp.status_code}"
+        feed = feedparser.parse(resp.content)
+    except requests.Timeout:
+        return 0, f"timeout after {FEED_TIMEOUT}s"
+    except requests.RequestException as e:
+        return 0, f"request error: {e}"
     except Exception as e:
         return 0, f"feedparser error: {e}"
 
@@ -107,7 +118,11 @@ def fetch_feed(feed_url, category):
         # Truncate long summaries
         if len(summary) > 500:
             summary = summary[:497] + '...'
+        author = getattr(fe, 'author', '') or ''
         published = parse_published(fe)
+        data = {}
+        if author:
+            data['author'] = author
 
         # Skip items older than cutoff
         if published and published < cutoff:
@@ -121,6 +136,7 @@ def fetch_feed(feed_url, category):
             title=title,
             url=link,
             precis=summary,
+            data=data,
             published=published,
             fetched=now,
             read=False,
@@ -170,8 +186,18 @@ def main():
                 print(f"  EXCEPTION {url}:\n{tb}", file=sys.stderr)
 
     print(f"Done: {total_new} new items, {len(errors)} errors")
+
+    # Persist errors to sysconfig for RSS page visibility
+    from tjai_app.models import SysConfig
+    import json, time as _time
+    now = _time.time()
     if errors:
-        sys.exit(1)
+        SysConfig.objects.update_or_create(
+            key='rss_fetch_errors',
+            defaults={'value': json.dumps(errors), 'timestamp_modified': now},
+        )
+    else:
+        SysConfig.objects.filter(key='rss_fetch_errors').delete()
 
 
 if __name__ == '__main__':

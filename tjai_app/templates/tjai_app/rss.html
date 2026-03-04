@@ -171,7 +171,7 @@
             text-decoration: underline;
         }
         .rss-meta {
-            color: #666;
+            color: #999;
             font-size: 13px;
         }
         .rss-precis {
@@ -276,6 +276,7 @@
 
     <script>
         let allData = [];
+        let fetchErrors = [];
         let pageBuiltAt = null;
 
         async function loadRss() {
@@ -289,6 +290,7 @@
                 }
                 allData = data.categories || [];
                 pageBuiltAt = data.server_time;
+                fetchErrors = data.fetch_errors || [];
                 renderRss();
                 let statsText = `${data.total_unread} unread`;
                 if (data.oldest_date) {
@@ -303,13 +305,19 @@
         }
 
         function renderRss() {
-            if (allData.length === 0) {
+            if (allData.length === 0 && fetchErrors.length === 0) {
                 document.getElementById('rss-content').innerHTML =
                     '<div class="empty">No unread RSS items. Add sources and click Fetch Now.</div>';
                 return;
             }
 
             let html = '';
+            if (fetchErrors.length > 0) {
+                html += '<div style="background:#2a1a1a;border:1px solid #ef5350;padding:8px 12px;margin:8px;border-radius:4px;font-size:12px">';
+                html += `<span style="color:#ef5350;font-weight:bold">Feed errors (${fetchErrors.length})</span>`;
+                for (const err of fetchErrors) html += `<div style="color:#999;margin-top:4px">${esc(err)}</div>`;
+                html += '</div>';
+            }
             for (const cat of allData) {
                 html += `<div class="category-block">`;
                 html += `<div class="category-header">${esc(cat.category)}</div>`;
@@ -326,9 +334,14 @@
                     for (const item of src.items) {
                         html += `<div class="rss-item" data-guid="${esc(item.guid)}">`;
                         html += `<div class="rss-title"><a href="${esc(item.url)}" target="_blank" rel="noopener" onclick="markItemRead(this)">${esc(item.title)}</a> <span class="rss-actions"><button class="${item.readme ? 'active-readme' : ''}" data-url="${esc(item.url)}" data-title="${esc(item.title)}" onclick="toggleReadme(this)">ReadMe</button><button onclick="markAboveRead(this)" title="Mark all items above as read">▲ Clear</button></span></div>`;
-                        if (item.published) {
-                            const d = new Date(item.published);
-                            html += `<div class="rss-meta">${d.toLocaleDateString('en-US', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</div>`;
+                        if (item.published || item.author) {
+                            let meta = '';
+                            if (item.published) {
+                                const d = new Date(item.published);
+                                meta = d.toLocaleDateString('en-US', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'});
+                            }
+                            if (item.author) meta += (meta ? ' · ' : '') + esc(item.author);
+                            html += `<div class="rss-meta">${meta}</div>`;
                         }
                         if (item.precis) {
                             // Strip HTML tags from precis
