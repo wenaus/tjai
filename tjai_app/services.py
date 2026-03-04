@@ -526,7 +526,7 @@ def get_todos(context=None, status=None, include_done=False):
     elif not include_done:
         qs = qs.exclude(status='done')
 
-    qs = qs.order_by(models.F('priority').asc(nulls_last=True), '-timestamp_modified')
+    qs = qs.order_by('-timestamp_modified')
     return [_format_entry(entry) for entry in qs]
 
 

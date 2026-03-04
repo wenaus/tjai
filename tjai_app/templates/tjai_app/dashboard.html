@@ -497,7 +497,10 @@
                 if (entry.name) line += `<span style="color:#c0d8f0;font-weight:bold">@${entry.name}</span>  `;
 
                 const hasUrl = /https?:\/\//.test(entry.content) || /\[.*\]\(.*\)/.test(entry.content);
-                if (hasUrl) {
+                if (expandDialog) {
+                    line += `</a>`;
+                    line += `<div style="white-space:pre-wrap;margin-top:4px">${hasUrl ? linkifyContent(escapeHtml(entry.content)) : escapeHtml(entry.content)}</div>`;
+                } else if (hasUrl) {
                     // Close link before content so inner links aren't nested
                     line += `</a>`;
                     line += linkifyContent(escapeHtml(entry.content));
@@ -505,7 +508,7 @@
                     line += escapeHtml(entry.content);
                     line += `</a>`;
                 }
-                if (entry.line_count) line += ` <span style="color:#daa520">[${entry.line_count} lines]</span>`;
+                if (entry.line_count && !expandDialog) line += ` <span style="color:#daa520">[${entry.line_count} lines]</span>`;
                 if (entry.tags && entry.tags.length) {
                     const tagStr = entry.tags.map(t => ':' + t).join(' ');
                     line += ` <span style="color:#9ccc65">${tagStr}</span>`;
@@ -530,6 +533,7 @@
         let activeDate = null;
         let activeFromTime = null;
         let activeToTime = null;
+        let expandDialog = false;
         let cachedDailyCounts = null;
         let excludedContexts = new Set();
         let isFilterActive = false;
@@ -545,6 +549,7 @@
             if (activeDate) params.set('date', activeDate);
             if (activeFromTime) params.set('from_time', activeFromTime);
             if (activeToTime) params.set('to_time', activeToTime);
+            if (expandDialog) params.set('expand_dialog', '1');
             const searchVal = document.getElementById('entry-search').value.trim();
             if (searchVal && isSearchActive) params.set('search', searchVal);
             const qs = params.toString();
@@ -565,6 +570,7 @@
             activeDate = params.get('date') || null;
             activeFromTime = params.get('from_time') || null;
             activeToTime = params.get('to_time') || null;
+            expandDialog = params.get('expand_dialog') === '1';
             isFilterActive = !!(activeTags.size > 0 || activeKind || activeContext || activeMachine || activeStatus || activeDate || activeFromTime || activeToTime || excludedContexts.size > 0);
             const searchParam = params.get('search');
             if (searchParam) {
@@ -590,11 +596,76 @@
             if (activeDate) params.push(`date=${encodeURIComponent(activeDate)}`);
             if (activeFromTime) params.push(`from_time=${encodeURIComponent(activeFromTime)}`);
             if (activeToTime) params.push(`to_time=${encodeURIComponent(activeToTime)}`);
+            if (expandDialog) params.push('expand_dialog=1');
             return params;
         }
 
+        function shiftIsoTime(isoStr, deltaMs) {
+            var d = new Date(isoStr);
+            d = new Date(d.getTime() + deltaMs);
+            var off = -d.getTimezoneOffset();
+            var sign = off >= 0 ? '+' : '-';
+            off = Math.abs(off);
+            var hh = String(Math.floor(off/60)).padStart(2,'0');
+            var mm = String(off%60).padStart(2,'0');
+            return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')
+                + 'T' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0')
+                + sign + hh + ':' + mm;
+        }
+
+        function formatIsoForDisplay(isoStr) {
+            var d = new Date(isoStr);
+            var opts = { timeZone: dashboardTimezone, weekday: 'short', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false };
+            var parts = new Intl.DateTimeFormat('en-US', opts).formatToParts(d);
+            var p = {};
+            parts.forEach(function(x) { p[x.type] = x.value; });
+            return p.weekday + ' ' + p.month + '/' + p.day + '/' + p.hour + ':' + p.minute;
+        }
+
+        function updateTimeRangeDisplay() {
+            var el = document.getElementById('time-range-display');
+            if (!el) return;
+            if (activeFromTime || activeToTime) {
+                var str = 'Time: ';
+                if (activeFromTime) str += 'from ' + formatIsoForDisplay(activeFromTime);
+                if (activeFromTime && activeToTime) str += ' ';
+                if (activeToTime) str += 'to ' + formatIsoForDisplay(activeToTime);
+                el.textContent = str;
+                el.style.display = '';
+            } else {
+                el.style.display = 'none';
+            }
+        }
+
+        function flashTimeNotice(msg) {
+            var box = document.getElementById('time-flash');
+            if (!box) {
+                box = document.createElement('div');
+                box.id = 'time-flash';
+                box.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#2a2a3a;color:#d8a070;padding:12px 20px;border:1px solid #d8a070;border-radius:4px;font-size:14px;z-index:999;transition:opacity 0.5s';
+                document.body.appendChild(box);
+            }
+            box.textContent = msg;
+            box.style.opacity = '1';
+            box.style.display = 'block';
+            clearTimeout(box._timer);
+            box._timer = setTimeout(function() {
+                box.style.opacity = '0';
+                setTimeout(function() { box.style.display = 'none'; }, 500);
+            }, 3000);
+        }
+
         async function loadMoreEntries() {
-            if (loadingMore || !hasMoreEntries || isSearchActive) return;
+            if (loadingMore || isSearchActive) return;
+            // If no more entries and from_time is set, extend backward by 1 hour
+            if (!hasMoreEntries && activeFromTime) {
+                activeFromTime = shiftIsoTime(activeFromTime, -3600000);
+                syncStateToUrl();
+                updateTimeRangeDisplay();
+                flashTimeNotice('Extended range earlier to ' + formatIsoForDisplay(activeFromTime));
+                hasMoreEntries = true;  // allow fetch to proceed
+            }
+            if (!hasMoreEntries) return;
             loadingMore = true;
             const indicator = document.getElementById('load-more-indicator');
             if (indicator) indicator.style.display = 'block';
@@ -616,10 +687,34 @@
             }
         }
 
+        var _newerCooldown = false;
+        async function loadNewerEntries() {
+            if (loadingMore || !activeToTime || isSearchActive || _newerCooldown) return;
+            var nowMs = Date.now();
+            var toMs = new Date(activeToTime).getTime();
+            // Don't extend past now, and don't bother if already within 1 min of now
+            if (nowMs - toMs < 60000) return;
+            var newTo = Math.min(toMs + 3600000, nowMs);
+            var newToStr = shiftIsoTime(activeToTime, newTo - toMs);
+            if (newToStr === activeToTime) return;
+            _newerCooldown = true;
+            loadingMore = true;
+            activeToTime = newToStr;
+            syncStateToUrl();
+            updateTimeRangeDisplay();
+            flashTimeNotice('Extended range later to ' + formatIsoForDisplay(activeToTime));
+            await refresh();
+            loadingMore = false;
+            setTimeout(function() { _newerCooldown = false; }, 2000);
+        }
+
         // Infinite scroll on entries container
         document.getElementById('recent-entries').addEventListener('scroll', function() {
             if (this.scrollHeight - this.scrollTop - this.clientHeight < 200) {
                 loadMoreEntries();
+            }
+            if (this.scrollTop < 50 && activeToTime) {
+                loadNewerEntries();
             }
         });
 
@@ -686,6 +781,19 @@
             }
             html += '</div>';
 
+            // Time range display
+            {
+                let timeStr = '';
+                const showTime = activeFromTime || activeToTime;
+                if (showTime) {
+                    timeStr = 'Time: ';
+                    if (activeFromTime) timeStr += `from ${formatIsoForDisplay(activeFromTime)}`;
+                    if (activeFromTime && activeToTime) timeStr += ' ';
+                    if (activeToTime) timeStr += `to ${formatIsoForDisplay(activeToTime)}`;
+                }
+                html += `<div id="time-range-display" class="status-line" style="color:#d8a070;${showTime ? '' : 'display:none'}">${timeStr}</div>`;
+            }
+
             // Contexts — clickable in-dash filters (poetry/recipe link to custom pages)
             if (data.contexts && data.contexts.length > 0) {
                 const customPages = ['poetry', 'recipe'];
@@ -724,6 +832,10 @@
                 return `<a href="#" class="kind-link${activeClass}" data-kind="${kind}" style="color:#daa520;text-decoration:none">[${abbr}]=${label}</a>`;
             }).join(' ');
             html += `<div class="status-line">Types: ${typeLinks}</div>`;
+
+            // Expand dialog toggle
+            const expandClass = expandDialog ? ' active' : '';
+            html += `<div class="status-line"><a href="#" id="expand-toggle" class="kind-link${expandClass}" style="color:#d8a070;text-decoration:none">[expand dialog]</a></div>`;
 
             // Open todos
             if (data.open_todos && data.open_todos.length > 0) {
@@ -933,6 +1045,16 @@
 
             const tagLink = e.target.closest('.tag-link');
             if (tagLink) { e.preventDefault(); toggleFilter('tag', tagLink.dataset.tag, 'tag-link'); return; }
+
+            const expandToggle = e.target.closest('#expand-toggle');
+            if (expandToggle) {
+                e.preventDefault();
+                expandDialog = !expandDialog;
+                expandToggle.classList.toggle('active', expandDialog);
+                syncStateToUrl();
+                refresh();
+                return;
+            }
 
             const kindLink = e.target.closest('.kind-link');
             if (kindLink) { e.preventDefault(); toggleFilter('kind', kindLink.dataset.kind, 'kind-link'); return; }

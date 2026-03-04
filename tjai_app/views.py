@@ -767,6 +767,7 @@ def dashboard_status(request):
     filter_date = request.GET.get('date')  # YYYY-MM-DD, filter entries to this day
     filter_from_time = request.GET.get('from_time')  # ISO datetime e.g. 2026-03-04T03:30
     filter_to_time = request.GET.get('to_time')  # ISO datetime e.g. 2026-03-04T05:30
+    expand_dialog = request.GET.get('expand_dialog') == '1'
     exclude_contexts = [c for c in request.GET.get('exclude_context', '').split(',') if c]
 
     # Exclude claude-code (dialog) from default dashboard view
@@ -868,7 +869,7 @@ def dashboard_status(request):
         data = e.data if isinstance(e.data, dict) else None
         recent_entries.append({
             'id': e.id,
-            'content': lines[0],
+            'content': e.content if expand_dialog else lines[0],
             'kind': e.kind,
             'context': e.context_id,
             'timestamp': e.timestamp_modified,

@@ -335,15 +335,13 @@
                 for (var t = 0; t < tagged.length; t++) {
                     var e = tagged[t];
                     var ed = e.data || {};
-                    var fl = (e.content || '').split('\n')[0];
+                    var content = e.content || '';
                     var speaker = ed.role === 'assistant' ? 'AI' : 'Human';
                     var isHuman = ed.role !== 'assistant';
                     var color = isHuman ? '#a0a0a0' : '#64b5f6';
                     var md = new Date(e.modified);
                     var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
                     var ts = days[md.getDay()] + ' ' + (md.getMonth()+1) + '/' + md.getDate() + ' ' + String(md.getHours()).padStart(2,'0') + ':' + String(md.getMinutes()).padStart(2,'0');
-                    html += '<div class="rel-row">';
-                    html += '<span class="dialog-time">' + ts + '</span>';
                     var fromTime = new Date(md.getTime() - 3600000);
                     var toTime = new Date(md.getTime() + 3600000);
                     function isoWithOffset(d) {
@@ -356,9 +354,12 @@
                             + 'T' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0')
                             + sign + hh + ':' + mm;
                     }
-                    var dialogUrl = '/tjai/dashboard/?context=claude-code&from_time=' + encodeURIComponent(isoWithOffset(fromTime)) + '&to_time=' + encodeURIComponent(isoWithOffset(toTime)) + '#e-' + e.id;
-                    html += '<span class="dialog-speaker" style="color:' + color + '">' + speaker + '</span>';
-                    html += '<a href="' + dialogUrl + '" style="color:' + color + '">' + esc(fl) + '</a>';
+                    var dialogUrl = '/tjai/dashboard/?context=claude-code&expand_dialog=1&from_time=' + encodeURIComponent(isoWithOffset(fromTime)) + '&to_time=' + encodeURIComponent(isoWithOffset(toTime)) + '#e-' + e.id;
+                    html += '<div style="margin-bottom:12px; padding:8px; border-left:3px solid ' + color + '">';
+                    html += '<div style="margin-bottom:4px"><span class="dialog-time">' + ts + '</span> ';
+                    html += '<span class="dialog-speaker" style="color:' + color + '">' + speaker + '</span> ';
+                    html += '<a href="' + dialogUrl + '" style="color:#888;font-size:10px">context</a></div>';
+                    html += '<div style="color:' + color + ';white-space:pre-wrap;font-size:12px">' + esc(content) + '</div>';
                     html += '</div>';
                 }
                 html += '</div>';
