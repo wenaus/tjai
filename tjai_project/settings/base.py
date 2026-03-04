@@ -184,9 +184,20 @@ Tools:
   content or timestamp.
 - run_action(entry_id): Execute an action entry immediately.
 - delete_entry(entry_id): Soft delete an entry. Requires user approval.
+- create_goal(content, context, tags, priority, status, create_context, data):
+  Create a goal entry. Goals are the organizing nodes of the knowledge graph.
+- get_goal(entry_id): Get a goal entry with all its relations.
+- create_relation(entry1_id, entry2_id, relation_type, data): Create a relation
+  between any two entries. One relation per pair; use data field for metadata.
+- edit_relation(relation_id, relation_type, data): Edit a relation's type/data.
+- delete_relation(relation_id): Delete a relation.
+- get_relations(entry_id): Get all relations for an entry.
+- get_web(entry_id, depth, kinds): Traverse the relation graph from an entry.
+  BFS up to depth hops, optional kind filtering on results.
 
 Entry types: memory (notes), todo (tasks), journal (calendar events), profile
-(user facts), ai (AI instructions), bookmark (URLs), list (lists), action.
+(user facts), ai (AI instructions), bookmark (URLs), list (lists), action,
+goal (organizing nodes of the knowledge graph).
 Valid statuses: active, done, blocked, archive. Priority: positive integers (1=highest).
 
 Error handling: All tools return {"error": "message"} on validation failures.

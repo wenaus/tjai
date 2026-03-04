@@ -16,12 +16,12 @@ from django.utils import timezone
 
 from django.db.models import Q
 
-from .models import Entry, Context, Tag, SysConfig
+from .models import Entry, Context, Tag, SysConfig, Relation
 from .tagger import tag_bookmark
 from tj.commands.journal import parse_time
 from tj.date_utils import parse_date_filter
 
-VALID_KINDS = ('memory', 'todo', 'journal', 'profile', 'ai', 'bookmark', 'list', 'action')
+VALID_KINDS = ('memory', 'todo', 'journal', 'profile', 'ai', 'bookmark', 'list', 'action', 'goal')
 VALID_STATUSES = ('active', 'done', 'blocked', 'archive')
 
 
@@ -139,6 +139,41 @@ def _apply_date_filter(qs, start_date, end_date):
         if end_ts:
             qs = qs.filter(timestamp_modified__lte=end_ts)
     return qs, None
+
+
+def _format_relation(relation):
+    """Format a Relation object for API response."""
+    result = {
+        "id": relation.id,
+        "entry1_id": relation.entry1_id,
+        "entry2_id": relation.entry2_id,
+        "relation_type": relation.relation_type,
+        "created": datetime.fromtimestamp(relation.timestamp_created).isoformat(),
+        "modified": datetime.fromtimestamp(relation.timestamp_modified).isoformat(),
+    }
+    if relation.data:
+        result["data"] = relation.data
+    return result
+
+
+def _get_relations_for_entry(entry_id):
+    """Get all relations touching an entry, with the other entry formatted."""
+    rels = Relation.objects.filter(
+        Q(entry1_id=entry_id) | Q(entry2_id=entry_id)
+    )
+
+    results = []
+    for rel in rels:
+        other_id = rel.entry2_id if rel.entry1_id == entry_id else rel.entry1_id
+        other = Entry.objects.filter(
+            id=other_id, deleted_at__isnull=True
+        ).select_related('context').prefetch_related('tags').first()
+        if not other:
+            continue
+        result = _format_relation(rel)
+        result["other_entry"] = _format_entry(other)
+        results.append(result)
+    return results
 
 
 def _query_annual_events(start_dt, end_dt, today_mmdd):
@@ -568,7 +603,11 @@ def get_entry(entry_id):
     ).prefetch_related('tags').first()
     if not entry:
         return {"error": f"Entry '{entry_id}' not found"}
-    return _format_entry(entry)
+    result = _format_entry(entry)
+    relations = _get_relations_for_entry(entry_id)
+    if relations:
+        result["relations"] = relations
+    return result
 
 
 def get_named_entries(name=None, context=None):
@@ -781,3 +820,188 @@ def run_action(entry_id):
     """Execute a specific action entry immediately. Delegates to action_runner."""
     from .action_runner import run_action as _run_action
     return _run_action(entry_id)
+
+
+# --- Goal and Relation functions ---
+
+def create_goal(content, context=None, name=None, tags=None,
+                priority=None, status=None, create_context=False,
+                source_tags=None, data=None):
+    """Create a goal entry. Convenience wrapper around create_entry with kind='goal'."""
+    return create_entry(
+        content=content, kind='goal', context=context, name=name, tags=tags,
+        priority=priority, status=status, create_context=create_context,
+        source_tags=source_tags, data=data,
+    )
+
+
+def get_goal(entry_id):
+    """Get a goal entry with all its relations."""
+    if not entry_id:
+        return {"error": "entry_id is required"}
+    entry = Entry.objects.select_related('context').filter(
+        id=entry_id, deleted_at__isnull=True,
+    ).prefetch_related('tags').first()
+    if not entry:
+        return {"error": f"Entry '{entry_id}' not found"}
+    if entry.kind != 'goal':
+        return {"error": f"Entry is kind='{entry.kind}', not goal"}
+    result = _format_entry(entry)
+    result["relations"] = _get_relations_for_entry(entry_id)
+    return result
+
+
+def create_relation(entry1_id, entry2_id, relation_type, data=None):
+    """Create a relation between two entries."""
+    if not entry1_id or not entry2_id:
+        return {"error": "both entry1_id and entry2_id are required"}
+    if not relation_type:
+        return {"error": "relation_type is required"}
+    if entry1_id == entry2_id:
+        return {"error": "Cannot create a relation between an entry and itself"}
+
+    # Normalize ordering: smaller UUID first for unique constraint
+    if entry1_id > entry2_id:
+        entry1_id, entry2_id = entry2_id, entry1_id
+
+    # Verify both entries exist and are not deleted
+    e1 = Entry.objects.filter(id=entry1_id, deleted_at__isnull=True).first()
+    if not e1:
+        return {"error": f"Entry '{entry1_id}' not found"}
+    e2 = Entry.objects.filter(id=entry2_id, deleted_at__isnull=True).first()
+    if not e2:
+        return {"error": f"Entry '{entry2_id}' not found"}
+
+    # One relation per pair
+    existing = Relation.objects.filter(entry1_id=entry1_id, entry2_id=entry2_id).first()
+    if existing:
+        return {"error": f"Relation already exists between these entries (id: {existing.id})"}
+
+    now = time.time()
+    rel = Relation.objects.create(
+        id=str(uuid.uuid4()),
+        entry1_id=entry1_id,
+        entry2_id=entry2_id,
+        relation_type=relation_type,
+        data=data,
+        timestamp_created=now,
+        timestamp_modified=now,
+    )
+    return _format_relation(rel)
+
+
+def edit_relation(relation_id, relation_type=None, data=None):
+    """Edit a relation's type and/or data."""
+    if not relation_id:
+        return {"error": "relation_id is required"}
+    if relation_type is None and data is None:
+        return {"error": "Nothing to edit — provide relation_type and/or data"}
+
+    rel = Relation.objects.filter(id=relation_id).first()
+    if not rel:
+        return {"error": f"Relation '{relation_id}' not found"}
+
+    if relation_type is not None:
+        rel.relation_type = relation_type
+
+    if data is not None:
+        if rel.data is None:
+            rel.data = {}
+        for k, v in data.items():
+            if v is None:
+                rel.data.pop(k, None)
+            else:
+                rel.data[k] = v
+        if not rel.data:
+            rel.data = None
+
+    rel.timestamp_modified = time.time()
+    rel.save()
+    return _format_relation(rel)
+
+
+def delete_relation(relation_id):
+    """Delete a relation (hard delete — relations are structural edges, not content)."""
+    if not relation_id:
+        return {"error": "relation_id is required"}
+
+    rel = Relation.objects.filter(id=relation_id).first()
+    if not rel:
+        return {"error": f"Relation '{relation_id}' not found"}
+
+    result = _format_relation(rel)
+    rel.delete()
+    return {"deleted": True, "relation": result}
+
+
+def get_relations(entry_id):
+    """Get all relations for an entry."""
+    if not entry_id:
+        return {"error": "entry_id is required"}
+    entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
+    if not entry:
+        return {"error": f"Entry '{entry_id}' not found"}
+    return _get_relations_for_entry(entry_id)
+
+
+def get_web(entry_id, depth=2, kinds=None):
+    """Traverse the relation graph from an entry, returning the connected subgraph.
+
+    BFS traversal up to `depth` hops. Explores all edges regardless of entry kind,
+    then optionally filters the returned results by kinds.
+    """
+    if not entry_id:
+        return {"error": "entry_id is required"}
+    if not isinstance(depth, int) or depth < 1 or depth > 10:
+        return {"error": "depth must be an integer between 1 and 10"}
+    if kinds is not None:
+        for k in kinds:
+            if k not in VALID_KINDS:
+                return {"error": f"Invalid kind '{k}'. Must be one of: {', '.join(VALID_KINDS)}"}
+
+    visited_entries = {}   # id -> formatted entry
+    visited_relations = {}  # id -> formatted relation
+    queue = [(entry_id, 0)]
+
+    while queue:
+        current_id, current_depth = queue.pop(0)
+        if current_id in visited_entries:
+            continue
+
+        entry = Entry.objects.filter(
+            id=current_id, deleted_at__isnull=True
+        ).select_related('context').prefetch_related('tags').first()
+        if not entry:
+            continue
+
+        visited_entries[current_id] = _format_entry(entry)
+
+        if current_depth < depth:
+            rels = Relation.objects.filter(
+                Q(entry1_id=current_id) | Q(entry2_id=current_id)
+            )
+            for rel in rels:
+                if rel.id not in visited_relations:
+                    visited_relations[rel.id] = _format_relation(rel)
+                other_id = rel.entry2_id if rel.entry1_id == current_id else rel.entry1_id
+                if other_id not in visited_entries:
+                    queue.append((other_id, current_depth + 1))
+
+    # Apply kind filtering to results
+    if kinds:
+        filtered_entries = {
+            eid: e for eid, e in visited_entries.items() if e['kind'] in kinds
+        }
+        filtered_relations = {
+            rid: r for rid, r in visited_relations.items()
+            if r['entry1_id'] in filtered_entries and r['entry2_id'] in filtered_entries
+        }
+        return {
+            "entries": list(filtered_entries.values()),
+            "relations": list(filtered_relations.values()),
+        }
+
+    return {
+        "entries": list(visited_entries.values()),
+        "relations": list(visited_relations.values()),
+    }

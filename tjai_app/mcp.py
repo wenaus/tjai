@@ -22,8 +22,15 @@ Available tools:
     copy_calendar_entry - Copy a journal entry to a new date (preserves all fields)
     change_entry_kind - Change an entry's type without modifying content or timestamp
     delete_entry      - Soft delete an entry (requires user approval)
+    create_goal       - Create a goal entry (convenience wrapper for create_entry)
+    get_goal          - Get a goal entry with all its relations
+    create_relation   - Create a relation between any two entries
+    edit_relation     - Edit a relation's type and/or data
+    delete_relation   - Delete a relation
+    get_relations     - Get all relations for an entry
+    get_web           - Traverse the relation graph from an entry
 
-Entry types: memory, todo, journal, profile, bookmark, ai, list, action
+Entry types: memory, todo, journal, profile, bookmark, ai, list, action, goal
 
 Contexts group entries by project or topic. Most tools accept a context parameter
 to filter results. Use get_ai_guidance(context) before starting work on any
@@ -545,4 +552,187 @@ async def delete_entry(entry_id: str, content: str) -> dict:
     """
     return await sync_to_async(services.delete_entry)(
         entry_id=entry_id, content=content,
+    )
+
+
+@mcp.tool()
+async def create_goal(
+    content: str,
+    context: str = None,
+    tags: str = None,
+    priority: int = None,
+    status: str = None,
+    create_context: bool = False,
+    data: dict = None,
+) -> dict:
+    """
+    Create a goal entry in the user's tjai knowledge base.
+
+    Goals are the organizing nodes of the knowledge graph. Everything — todos,
+    memories, dialogs, commits, bookmarks — can relate to goals. Goals relate
+    to other goals, forming a graph (not a hierarchy).
+
+    Args:
+        content: The goal description (required).
+        context: Context/project name to associate with.
+        tags: Comma-separated tags.
+        priority: Priority level (1=highest).
+        status: One of: active, done, blocked, archive.
+        create_context: If True, creates context if it doesn't exist.
+        data: JSON metadata object.
+
+    Returns:
+        The created goal entry with id, content, kind='goal', and optional fields.
+        Returns {"error": "..."} if validation fails.
+    """
+    return await sync_to_async(services.create_goal)(
+        content=content, context=context, tags=tags,
+        priority=priority, status=status, create_context=create_context,
+        source_tags=['fromai'], data=data,
+    )
+
+
+@mcp.tool()
+async def get_goal(entry_id: str) -> dict:
+    """
+    Get a goal entry with all its relations.
+
+    Returns the goal plus every relation touching it, with the other entry
+    in each relation fully formatted.
+
+    Args:
+        entry_id: The UUID of the goal entry (required).
+
+    Returns:
+        Goal entry with all standard fields plus a "relations" list.
+        Each relation contains: id, entry1_id, entry2_id, relation_type,
+        created, modified, data, and "other_entry" (the related entry).
+        Returns {"error": "..."} if not found or not a goal.
+    """
+    return await sync_to_async(services.get_goal)(entry_id=entry_id)
+
+
+@mcp.tool()
+async def create_relation(
+    entry1_id: str,
+    entry2_id: str,
+    relation_type: str,
+    data: dict = None,
+) -> dict:
+    """
+    Create a relation between any two entries.
+
+    Relations are the edges of the knowledge graph. They connect goals to goals,
+    goals to todos, goals to memories/dialogs, or any entry to any other entry.
+    One relation per pair — use the data field for metadata characterizing
+    the relationship.
+
+    Args:
+        entry1_id: UUID of first entry.
+        entry2_id: UUID of second entry.
+        relation_type: Freeform string describing the relation (e.g., "related",
+                       "realizes", "spawned_by", "informs", "enables").
+        data: Optional JSON metadata for the relation (e.g., {"note": "..."}).
+
+    Returns:
+        The created relation with id, entry1_id, entry2_id, relation_type,
+        created, modified, data.
+        Returns {"error": "..."} if entries not found or relation already exists.
+    """
+    return await sync_to_async(services.create_relation)(
+        entry1_id=entry1_id, entry2_id=entry2_id,
+        relation_type=relation_type, data=data,
+    )
+
+
+@mcp.tool()
+async def edit_relation(
+    relation_id: str,
+    relation_type: str = None,
+    data: dict = None,
+) -> dict:
+    """
+    Edit a relation's type and/or data.
+
+    Args:
+        relation_id: UUID of the relation to edit (required).
+        relation_type: New relation type string (optional).
+        data: JSON metadata to merge into the relation's data field.
+              Keys with null values are removed. Merges with existing data.
+
+    Returns:
+        The updated relation with all fields.
+        Returns {"error": "..."} if not found or nothing to edit.
+    """
+    return await sync_to_async(services.edit_relation)(
+        relation_id=relation_id, relation_type=relation_type, data=data,
+    )
+
+
+@mcp.tool()
+async def delete_relation(relation_id: str) -> dict:
+    """
+    Delete a relation between entries.
+
+    This is a hard delete — the relation is removed. The entries themselves
+    are not affected.
+
+    Args:
+        relation_id: UUID of the relation to delete (required).
+
+    Returns:
+        Confirmation with the deleted relation's details.
+        Returns {"error": "..."} if not found.
+    """
+    return await sync_to_async(services.delete_relation)(
+        relation_id=relation_id,
+    )
+
+
+@mcp.tool()
+async def get_relations(entry_id: str) -> list:
+    """
+    Get all relations for an entry.
+
+    Returns every relation touching this entry, with the other entry in each
+    relation fully formatted. Relations to soft-deleted entries are excluded.
+
+    Args:
+        entry_id: UUID of the entry (required).
+
+    Returns:
+        List of relations, each containing: id, entry1_id, entry2_id,
+        relation_type, created, modified, data, and "other_entry".
+        Returns {"error": "..."} if entry not found.
+    """
+    return await sync_to_async(services.get_relations)(entry_id=entry_id)
+
+
+@mcp.tool()
+async def get_web(
+    entry_id: str,
+    depth: int = 2,
+    kinds: list[str] = None,
+) -> dict:
+    """
+    Traverse the relation graph from an entry, returning the connected subgraph.
+
+    BFS traversal up to `depth` hops from the starting entry. Explores all
+    edges regardless of entry kind, then optionally filters the returned
+    results by kinds.
+
+    Args:
+        entry_id: UUID of the starting entry (required).
+        depth: Maximum traversal depth (1-10, default 2).
+        kinds: Optional list of entry kinds to include in results
+               (e.g., ["goal", "todo"]). Traversal still explores all kinds;
+               this filters only the output. Default: all kinds.
+
+    Returns:
+        Dict with "entries" (list of formatted entries) and "relations"
+        (list of formatted relations between included entries).
+        Returns {"error": "..."} if entry not found or invalid parameters.
+    """
+    return await sync_to_async(services.get_web)(
+        entry_id=entry_id, depth=depth, kinds=kinds,
     )

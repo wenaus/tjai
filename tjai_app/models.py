@@ -83,6 +83,40 @@ class SubNote(models.Model):
         db_table = 'sub_notes'
 
 
+class Relation(models.Model):
+    """Relations between entries — the edges of the goal/knowledge graph."""
+    id = models.CharField(max_length=36, primary_key=True)  # UUID
+    entry1 = models.ForeignKey(
+        Entry, on_delete=models.CASCADE,
+        related_name='relations_as_entry1', db_column='entry1_id'
+    )
+    entry2 = models.ForeignKey(
+        Entry, on_delete=models.CASCADE,
+        related_name='relations_as_entry2', db_column='entry2_id'
+    )
+    relation_type = models.CharField(max_length=255)
+    data = models.JSONField(null=True, blank=True)
+    timestamp_created = models.FloatField()
+    timestamp_modified = models.FloatField()
+
+    class Meta:
+        db_table = 'relations'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['entry1', 'entry2'],
+                name='unique_relation_pair'
+            ),
+            models.CheckConstraint(
+                check=~models.Q(entry1=models.F('entry2')),
+                name='no_self_relation'
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['entry1'], name='idx_relations_entry1'),
+            models.Index(fields=['entry2'], name='idx_relations_entry2'),
+        ]
+
+
 class SyncMetadata(models.Model):
     """Sync state tracking."""
     key = models.CharField(max_length=255, primary_key=True)
