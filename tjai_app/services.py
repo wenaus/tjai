@@ -886,7 +886,7 @@ def get_goal(entry_id):
     result = _format_entry(entry)
     result["relations"] = _get_relations_for_entry(entry_id)
 
-    # Also return entries tagged with data.rel_goal = this goal's entry_id
+    # Also return entries with data.rel_goal matching this goal's entry_id
     goal_entry_id = (entry.data or {}).get('entry_id')
     if goal_entry_id:
         tagged = Entry.objects.filter(

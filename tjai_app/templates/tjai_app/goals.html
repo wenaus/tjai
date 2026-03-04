@@ -234,15 +234,15 @@
             return el.innerHTML;
         }
 
-        function timeAgo(ts) {
+        function fmtDate(ts) {
             if (!ts) return '';
-            const d = new Date(typeof ts === 'string' && !ts.endsWith('Z') ? ts + 'Z' : ts);
-            const sec = Math.floor((Date.now() - d.getTime()) / 1000);
-            if (sec < 0) return 'just now';
-            if (sec < 60) return sec + 's ago';
-            if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
-            if (sec < 86400) return Math.floor(sec / 3600) + 'h ago';
-            return Math.floor(sec / 86400) + 'd ago';
+            try {
+                const d = new Date(ts);
+                return d.toLocaleDateString('en-US', {
+                    month: 'short', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                });
+            } catch { return ''; }
         }
 
         function entryUrl(id, data) {
@@ -373,7 +373,7 @@
                 if (body) {
                     html += `<div class="item-body">${esc(body)}</div>`;
                 }
-                let meta = timeAgo(g.modified);
+                let meta = fmtDate(g.modified);
                 if (g.context) {
                     meta += ` <span style="color:#ce93d8">=${esc(g.context)}</span>`;
                 }
@@ -461,7 +461,7 @@
                 html += '</div>';
             }
 
-            // Tagged dialog entries (via data.rel_goal)
+            // Dialog entries associated via data.rel_goal
             const tagged = goal.tagged_entries || [];
             if (tagged.length > 0) {
                 html += '<div class="detail-relations" style="margin-top:12px">';
@@ -473,7 +473,7 @@
                     html += '<div class="rel-item">';
                     html += `<span class="rel-type" style="color:#64b5f6;min-width:50px">${speaker}</span>`;
                     html += `<span class="rel-entry"><a href="${entryUrl(e.id, eData)}">${esc(firstLine)}</a></span>`;
-                    html += `<span style="color:#555;font-size:10px;white-space:nowrap">${timeAgo(e.modified)}</span>`;
+                    html += `<span style="color:#555;font-size:10px;white-space:nowrap">${fmtDate(e.modified)}</span>`;
                     html += '</div>';
                 }
                 html += '</div>';
