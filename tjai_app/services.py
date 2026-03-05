@@ -8,7 +8,6 @@ import re
 import time
 import uuid
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 
 from django.db import models
 from django.db.models import Count
@@ -18,8 +17,7 @@ from django.db.models import Q
 
 from .models import Entry, Context, Tag, SysConfig, Relation
 from .tagger import tag_bookmark
-
-_DEFAULT_TZ = ZoneInfo('America/New_York')
+from .tjai_utils import fmt_datetime, get_app_tz
 from tj.commands.journal import parse_time
 from tj.date_utils import parse_date_filter
 
@@ -90,14 +88,14 @@ def _extract_time_from_content(content):
 
 
 def get_timezone():
-    """Get configured timezone with fallback to America/New_York."""
-    tz_config = SysConfig.objects.filter(key='timezone').first()
-    tz_name = tz_config.value if tz_config else 'America/New_York'
-    return ZoneInfo(tz_name)
+    """Get configured timezone. Delegates to tjai_utils.get_app_tz() (cached)."""
+    return get_app_tz()
 
 
-def _format_entry(entry, tz=_DEFAULT_TZ):
+def _format_entry(entry, tz=None):
     """Format an Entry object for API response."""
+    if tz is None:
+        tz = get_app_tz()
     result = {
         "id": entry.id,
         "content": entry.content,
@@ -105,6 +103,8 @@ def _format_entry(entry, tz=_DEFAULT_TZ):
         "context": entry.context.name if entry.context else None,
         "created": datetime.fromtimestamp(entry.timestamp_created, tz=tz).isoformat(),
         "modified": datetime.fromtimestamp(entry.timestamp_modified, tz=tz).isoformat(),
+        "created_display": fmt_datetime(entry.timestamp_created, tz),
+        "modified_display": fmt_datetime(entry.timestamp_modified, tz),
     }
     if entry.name:
         result["name"] = entry.name
@@ -150,8 +150,8 @@ def _format_relation(relation):
         "entry1_id": relation.entry1_id,
         "entry2_id": relation.entry2_id,
         "relation_type": relation.relation_type,
-        "created": datetime.fromtimestamp(relation.timestamp_created).isoformat(),
-        "modified": datetime.fromtimestamp(relation.timestamp_modified).isoformat(),
+        "created": datetime.fromtimestamp(relation.timestamp_created, tz=get_app_tz()).isoformat(),
+        "modified": datetime.fromtimestamp(relation.timestamp_modified, tz=get_app_tz()).isoformat(),
     }
     if relation.data:
         result["data"] = relation.data
@@ -403,7 +403,7 @@ def create_entry(content, kind="memory", context=None, name=None, tags=None,
     # Compute mmdd for annual events
     entry_mmdd = None
     if tags and 'annual' in tags and entry_data and 'event_date' in entry_data:
-        event_dt = datetime.fromtimestamp(entry_data['event_date'])
+        event_dt = datetime.fromtimestamp(entry_data['event_date'], tz=get_app_tz())
         entry_mmdd = event_dt.month * 100 + event_dt.day
 
     entry = Entry.objects.create(

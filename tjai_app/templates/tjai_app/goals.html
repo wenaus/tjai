@@ -234,16 +234,7 @@
             return el.innerHTML;
         }
 
-        function fmtDate(ts) {
-            if (!ts) return '';
-            try {
-                const d = new Date(ts);
-                return d.toLocaleDateString('en-US', {
-                    month: 'short', day: 'numeric',
-                    hour: '2-digit', minute: '2-digit'
-                });
-            } catch { return ''; }
-        }
+        // fmtDate removed — server provides modified_display
 
         function entryUrl(id, data) {
             if (data && data.entry_id) return '/tjai/entry/' + data.entry_id + '/';
@@ -373,7 +364,7 @@
                 if (body) {
                     html += `<div class="item-body">${esc(body)}</div>`;
                 }
-                let meta = fmtDate(g.modified);
+                let meta = (g.modified_display || '');
                 if (g.context) {
                     meta += ` <span style="color:#ce93d8">=${esc(g.context)}</span>`;
                 }
@@ -473,7 +464,7 @@
                     html += '<div class="rel-item">';
                     html += `<span class="rel-type" style="color:#64b5f6;min-width:50px">${speaker}</span>`;
                     html += `<span class="rel-entry"><a href="${entryUrl(e.id, eData)}">${esc(firstLine)}</a></span>`;
-                    html += `<span style="color:#555;font-size:10px;white-space:nowrap">${fmtDate(e.modified)}</span>`;
+                    html += `<span style="color:#555;font-size:10px;white-space:nowrap">${(e.modified_display || '')}</span>`;
                     html += '</div>';
                 }
                 html += '</div>';

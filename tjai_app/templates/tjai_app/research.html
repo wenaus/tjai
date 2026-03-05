@@ -159,25 +159,7 @@
             return el.innerHTML;
         }
 
-        function timeAgo(ts) {
-            if (!ts) return '';
-            const sec = Math.floor(Date.now() / 1000 - ts);
-            if (sec < 60) return sec + 's ago';
-            if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
-            if (sec < 86400) return Math.floor(sec / 3600) + 'h ' + Math.floor((sec % 3600) / 60) + 'm ago';
-            return Math.floor(sec / 86400) + 'd ago';
-        }
-
-        function fmtDate(ts) {
-            if (!ts) return '';
-            try {
-                const d = new Date(ts * 1000);
-                return d.toLocaleDateString('en-US', {
-                    month: 'short', day: 'numeric', year: 'numeric',
-                    hour: '2-digit', minute: '2-digit'
-                });
-            } catch { return ''; }
-        }
+        // timeAgo, fmtDate removed — server provides _ago and _display fields
 
         function entryUrl(uuid) {
             return '/tjai/entry/?uuid=' + uuid;
@@ -220,7 +202,7 @@
             const banner = document.getElementById('agent-banner');
             const errorDiv = document.getElementById('error-section');
             if (agent.status === 'running') {
-                const dur = agent.launched ? ' for ' + timeAgo(parseFloat(agent.launched)).replace(' ago', '') : '';
+                const dur = agent.launched_dur ? ' for ' + agent.launched_dur : '';
                 const logLink = agent.current_entry ? ` <a href="/tjai/agent-log?ref=${agent.current_entry}" style="color:#ffd54f">log</a>` : '';
                 // Look up what entry the agent is working on
                 const currentItem = items.find(i => i.id === agent.current_entry);
@@ -231,11 +213,11 @@
                 let dotClass = 'dot-idle';
                 let activityInfo = '';
                 if (agent.last_activity) {
-                    const actAge = Date.now() / 1000 - parseFloat(agent.last_activity);
+                    const actAge = agent.last_activity_age;
                     if (actAge < 30) { dotClass = 'dot-active'; }
                     else if (actAge < 300) { dotClass = 'dot-idle'; }
                     else { dotClass = 'dot-stale'; }
-                    activityInfo = ` · activity ${timeAgo(parseFloat(agent.last_activity))}`;
+                    activityInfo = ` · activity ${agent.last_activity_ago}`;
                 } else if (agent.health === 'active') { dotClass = 'dot-active'; }
                 else if (agent.health === 'stale') { dotClass = 'dot-stale'; }
                 const procInfo = agent.process_alive === '0' ? ' · <span style="color:#ef5350">no process</span>' : '';
@@ -253,13 +235,13 @@
                 banner.className = 'agent-banner agent-idle';
                 let text = '<span class="activity-dot dot-off"></span>Agent: idle';
                 if (agent.completed) {
-                    text += ' — last completed ' + timeAgo(parseFloat(agent.completed));
+                    text += ' — last completed ' + agent.completed_ago;
                 }
                 banner.innerHTML = text;
             }
             // Error section
             if (agent.last_error && agent.last_error.trim()) {
-                const errTime = agent.last_error_time ? timeAgo(parseFloat(agent.last_error_time)) : '';
+                const errTime = agent.last_error_time_ago || '';
                 errorDiv.innerHTML = `Error${errTime ? ' (' + errTime + ')' : ''}: ${esc(agent.last_error)}`;
             } else {
                 errorDiv.innerHTML = '';
@@ -309,16 +291,16 @@
                 html += '</div>';
                 const topic = item.content.split('\n')[0];
                 html += `<div class="item-content">${esc(topic)}</div>`;
-                let meta = `Created ${fmtDate(item.created)}`;
-                if (isRunning && data.agent && data.agent.launched) {
-                    meta += ` · Running for ${timeAgo(parseFloat(data.agent.launched)).replace(' ago', '')}`;
+                let meta = `Created ${item.created_display}`;
+                if (isRunning && data.agent && data.agent.launched_dur) {
+                    meta += ` · Running for ${data.agent.launched_dur}`;
                 } else if (item.status === 'done' && item.started_at) {
                     const dur = item.modified - item.started_at;
                     const durMin = Math.floor(dur / 60);
                     meta += ` · Ran ${durMin < 60 ? durMin + 'm' : Math.floor(durMin/60) + 'h ' + (durMin%60) + 'm'}`;
-                    meta += ` · Completed ${timeAgo(item.modified)}`;
+                    meta += ` · Completed ${item.modified_ago}`;
                 } else if (item.status === 'done') {
-                    meta += ` · Completed ${timeAgo(item.modified)}`;
+                    meta += ` · Completed ${item.modified_ago}`;
                 }
                 html += `<div class="item-meta">${meta}</div>`;
                 html += '</div>';

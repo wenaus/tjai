@@ -28,6 +28,7 @@ def _fix_md_list_spacing(text):
         result.append(line)
     return '\n'.join(result)
 
+from .tjai_utils import fmt_datetime, fmt_date, fmt_time, fmt_duration, fmt_ago, get_app_tz
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
@@ -542,21 +543,13 @@ def dashboard(request):
 @login_required
 def dashboard_calendar(request):
     """Return calendar data as JSON for dashboard."""
-    import zoneinfo
-
     now = time.time()
 
-    # Get timezone from SysConfig
-    tz_config = SysConfig.objects.filter(key='timezone').first()
-    timezone_name = tz_config.value if tz_config else 'America/New_York'
-    try:
-        tz = zoneinfo.ZoneInfo(timezone_name)
-    except Exception as e:
-        logger.error("Invalid timezone %r in sysconfig: %s", timezone_name, e)
-        tz = None
+    tz = get_app_tz()
+    timezone_name = str(tz)
 
     # Go back 7 days, then to Monday of that week (to show full previous week)
-    seven_days_ago = datetime.now() - timedelta(days=7)
+    seven_days_ago = datetime.now(tz) - timedelta(days=7)
     days_since_monday = seven_days_ago.weekday()
     monday_of_prev_week = seven_days_ago - timedelta(days=days_since_monday)
     start_ts = monday_of_prev_week.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
@@ -572,10 +565,7 @@ def dashboard_calendar(request):
     ).order_by('data__event_date')
 
     # Calculate today's date key in configured timezone
-    if tz:
-        now_dt = datetime.now(tz)
-    else:
-        now_dt = datetime.now()
+    now_dt = datetime.now(tz)
     today_date_str = now_dt.strftime('%Y%m%d')
 
     result = []
@@ -584,10 +574,7 @@ def dashboard_calendar(request):
         if isinstance(data, dict) and 'event_date' in data:
             event_ts = data['event_date']
             # Convert to timezone-aware datetime for formatting
-            if tz:
-                event_dt = datetime.fromtimestamp(event_ts, tz=tz)
-            else:
-                event_dt = datetime.fromtimestamp(event_ts)
+            event_dt = datetime.fromtimestamp(event_ts, tz=tz)
 
             # Pre-format all date/time strings server-side
             date_key = event_dt.strftime('%Y%m%d')
@@ -619,7 +606,7 @@ def dashboard_calendar(request):
     # Inject annual events
     from .services import _query_annual_events
     start_dt = monday_of_prev_week.replace(hour=0, minute=0, second=0, microsecond=0)
-    end_dt = datetime.fromtimestamp(end_ts, tz=tz) if tz else datetime.fromtimestamp(end_ts)
+    end_dt = datetime.fromtimestamp(end_ts, tz=tz)
     today_mmdd = now_dt.month * 100 + now_dt.day
     seen_ids = {r['id'] for r in result}
     for entry in _query_annual_events(start_dt, end_dt, today_mmdd):
@@ -628,10 +615,7 @@ def dashboard_calendar(request):
         annual_month = entry.mmdd // 100
         annual_day = entry.mmdd % 100
         try:
-            if tz:
-                projected_dt = now_dt.replace(month=annual_month, day=annual_day, hour=0, minute=0, second=0, microsecond=0)
-            else:
-                projected_dt = datetime.now().replace(month=annual_month, day=annual_day, hour=0, minute=0, second=0, microsecond=0)
+            projected_dt = now_dt.replace(month=annual_month, day=annual_day, hour=0, minute=0, second=0, microsecond=0)
         except ValueError:
             continue
         date_key = projected_dt.strftime('%Y%m%d')
@@ -660,6 +644,7 @@ def dashboard_calendar(request):
         'server_time': now,
         'timezone': timezone_name,
         'today_date': today_date_str,
+        'today_date_display': fmt_date(now_dt),
     })
 
 
@@ -667,10 +652,10 @@ def dashboard_calendar(request):
 def dashboard_status(request):
     """Return status data as JSON for dashboard."""
     now = time.time()
-    now_dt = datetime.now()
+    now_dt = datetime.now(tz=get_app_tz())
 
     # Format timestamp
-    timestamp = now_dt.strftime('%a %m/%d/%H:%M')
+    timestamp = fmt_datetime(now_dt)
 
     # Get current context from most recent entry or default
     context = None
@@ -716,8 +701,7 @@ def dashboard_status(request):
         }
 
     # Today's work sessions
-    from zoneinfo import ZoneInfo
-    tz = ZoneInfo('America/New_York')
+    tz = get_app_tz()
     today_dt = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
     today_start = today_dt.timestamp()
 
@@ -803,12 +787,11 @@ def dashboard_status(request):
     # Daily counts for dialog mode — DB query covering last 14 days
     daily_counts = None
     if filter_context and offset == 0:
-        from zoneinfo import ZoneInfo
-        tz = ZoneInfo('America/New_York')
-        now_eastern = datetime.now(tz=tz)
+        tz = get_app_tz()
+        now_local = datetime.now(tz=tz)
         day_counts = {}
         for days_ago in range(14):
-            day = (now_eastern - timedelta(days=days_ago)).date()
+            day = (now_local - timedelta(days=days_ago)).date()
             day_start = datetime.combine(day, datetime.min.time()).replace(tzinfo=tz)
             day_end = day_start + timedelta(days=1)
             count = base_qs.filter(
@@ -820,8 +803,7 @@ def dashboard_status(request):
         daily_counts = [{'date': k, 'count': v} for k, v in sorted(day_counts.items(), reverse=True)]
 
     if filter_date:
-        from zoneinfo import ZoneInfo
-        tz = ZoneInfo('America/New_York')
+        tz = get_app_tz()
         day_start = datetime.strptime(filter_date, '%Y-%m-%d').replace(tzinfo=tz)
         day_end = day_start + timedelta(days=1)
         base_qs = base_qs.filter(
@@ -834,8 +816,7 @@ def dashboard_status(request):
             ft = datetime.fromisoformat(filter_from_time)
             if ft.tzinfo is None:
                 # Naive string — assume Eastern for backward compat
-                from zoneinfo import ZoneInfo
-                ft = ft.replace(tzinfo=ZoneInfo('America/New_York'))
+                ft = ft.replace(tzinfo=get_app_tz())
             base_qs = base_qs.filter(timestamp_modified__gte=ft.timestamp())
         except ValueError:
             pass
@@ -843,8 +824,7 @@ def dashboard_status(request):
         try:
             tt = datetime.fromisoformat(filter_to_time)
             if tt.tzinfo is None:
-                from zoneinfo import ZoneInfo
-                tt = tt.replace(tzinfo=ZoneInfo('America/New_York'))
+                tt = tt.replace(tzinfo=get_app_tz())
             base_qs = base_qs.filter(timestamp_modified__lt=tt.timestamp())
         except ValueError:
             pass
@@ -860,6 +840,7 @@ def dashboard_status(request):
         tags_by_entry.setdefault(t.entry_id, []).append(t.tag_name)
 
     recent_entries = []
+    app_tz = get_app_tz()
     for e in recent:
         lines = e.content.split('\n')
         line_count = len([l for l in lines if l.strip()])
@@ -867,17 +848,31 @@ def dashboard_status(request):
         entry_tags = tags_by_entry.get(e.id, [])
         missing_tags = [t for t in entry_tags if f':{t}' not in e.content]
         data = e.data if isinstance(e.data, dict) else None
+        event_date_epoch = data.get('event_date') if data else None
+        # Format event_date with all-day detection
+        event_date_display = None
+        if event_date_epoch and e.kind == 'journal':
+            ev_dt = datetime.fromtimestamp(event_date_epoch, tz=app_tz)
+            is_allday = (ev_dt.hour == 0 and ev_dt.minute == 0)
+            if ev_dt.year != datetime.now(tz=app_tz).year:
+                event_date_display = ev_dt.strftime('%m/%d/%Y')
+            elif is_allday:
+                event_date_display = ev_dt.strftime('%a %m/%d')
+            else:
+                event_date_display = ev_dt.strftime('%a %m/%d/%H:%M')
         recent_entries.append({
             'id': e.id,
             'content': e.content if expand_dialog else lines[0],
             'kind': e.kind,
             'context': e.context_id,
             'timestamp': e.timestamp_modified,
+            'date_display': fmt_datetime(e.timestamp_modified),
             'line_count': line_count if line_count > 1 else None,
             'name': e.name,
             'entry_id': data.get('entry_id') if data else None,
             'nickname': data.get('nickname') if data else None,
-            'event_date': data.get('event_date') if data else None,
+            'event_date': event_date_epoch,
+            'event_date_display': event_date_display,
             'hostname': data.get('hostname') if data else None,
             'tags': missing_tags,
             'all_tags': entry_tags,
@@ -894,9 +889,7 @@ def dashboard_status(request):
             'total_count': total_count,
         })
 
-    # Get timezone from SysConfig, default to America/New_York
-    tz_config = SysConfig.objects.filter(key='timezone').first()
-    timezone_name = tz_config.value if tz_config else 'America/New_York'
+    timezone_name = str(get_app_tz())
 
     # Contexts (alpha sorted)
     from django.db.models import Count
@@ -999,8 +992,7 @@ def dashboard_search(request):
 
     filter_date = request.GET.get('date')
     if filter_date:
-        from zoneinfo import ZoneInfo
-        tz = ZoneInfo('America/New_York')
+        tz = get_app_tz()
         day_start = datetime.strptime(filter_date, '%Y-%m-%d').replace(tzinfo=tz)
         day_end = day_start + timedelta(days=1)
         qs = qs.filter(
@@ -1029,6 +1021,7 @@ def dashboard_search(request):
             'kind': e.kind,
             'context': e.context_id,
             'timestamp': e.timestamp_modified,
+            'date_display': fmt_datetime(e.timestamp_modified),
             'line_count': line_count if line_count > 1 else None,
             'name': e.name,
             'entry_id': data.get('entry_id') if data else None,
@@ -1075,8 +1068,6 @@ def daily_synopsis(request):
 @login_required
 def daily_synopsis_data(request):
     """Return list of daily synopsis dates as JSON."""
-    import zoneinfo
-
     daily_tag_ids = Tag.objects.filter(tag_name='daily').values_list('entry_id', flat=True)
     entries = Entry.objects.filter(
         kind='journal',
@@ -1084,14 +1075,8 @@ def daily_synopsis_data(request):
         id__in=daily_tag_ids,
     ).order_by('-data__event_date')
 
-    tz_config = SysConfig.objects.filter(key='timezone').first()
-    timezone_name = tz_config.value if tz_config else 'America/New_York'
-    try:
-        tz = zoneinfo.ZoneInfo(timezone_name)
-        today_dt = datetime.now(tz)
-    except Exception as e:
-        logger.error("Invalid timezone %r in sysconfig: %s", timezone_name, e)
-        today_dt = datetime.now()
+    tz = get_app_tz()
+    today_dt = datetime.now(tz)
     today_key = today_dt.strftime('%Y%m%d')
 
     result = []
@@ -1202,8 +1187,7 @@ def agent_log_data(request):
         )
     qs = qs[:limit]
 
-    from zoneinfo import ZoneInfo
-    tz = ZoneInfo('America/New_York')
+    tz = get_app_tz()
     entries = [{
         'timestamp': log.timestamp.astimezone(tz).strftime('%Y-%m-%d %H:%M:%S'),
         'level': log.levelname,
@@ -1289,10 +1273,17 @@ def entry_detail(request, entry_id=None):
     ).values_list('value', flat=True).first() or ''
     # Convention: any data key containing 'entry_id' holds an entry reference
     linked_entry_ids = {}
+    # Pre-format data fields that look like timestamps
+    data_ts_display = {}
+    TIMESTAMP_KEYS = {'event_date', 'last_run', 'started_at', 'completed_at', 'created_at'}
     if data:
         for k, v in data.items():
             if 'entry_id' in k and isinstance(v, str) and v:
                 linked_entry_ids[k] = f'/tjai/entry/{v}/'
+            # Detect timestamps: known keys or epoch-range numbers
+            if isinstance(v, (int, float)):
+                if k in TIMESTAMP_KEYS or (v > 1e9 and v < 2e10):
+                    data_ts_display[k] = fmt_datetime(v)
 
     # Relations and tagged entries for goal entries
     relations_json = '[]'
@@ -1320,6 +1311,7 @@ def entry_detail(request, entry_id=None):
         'content_format': fmt,
         'explicit_format': bool(data.get('format')) if data else False,
         'linked_entry_ids_json': json.dumps(linked_entry_ids),
+        'data_ts_display_json': json.dumps(data_ts_display),
         'relations_json': relations_json,
         'tagged_entries_json': tagged_entries_json,
     })
@@ -1415,13 +1407,11 @@ def _entries_for_list(entries):
         e.hostname = data.get('hostname') if data else None
         e.detail_slug = (data.get('nickname') if data else None) or e.name or str(e.id)
         # Convert float timestamp to datetime for template formatting
-        e.modified_dt = datetime.fromtimestamp(e.timestamp_modified)
+        e.modified_dt = datetime.fromtimestamp(e.timestamp_modified, tz=get_app_tz())
         if e.context_id == 'quote':
             e.date_display = str(e.modified_dt.year)
-        elif e.modified_dt.year != datetime.now().year:
-            e.date_display = e.modified_dt.strftime('%m/%d/%Y')
         else:
-            e.date_display = e.modified_dt.strftime('%a %m/%d %H:%M')
+            e.date_display = fmt_datetime(e.timestamp_modified)
         result.append(e)
     return result
 
@@ -2079,6 +2069,7 @@ def api_context_entries(request, context_name):
             'kind': e.kind,
             'context': e.context_id,
             'timestamp': e.timestamp_modified,
+            'date_display': fmt_datetime(e.timestamp_modified),
             'line_count': line_count if line_count > 1 else None,
             'name': e.name,
             'nickname': data.get('nickname') if data else None,
@@ -2148,7 +2139,9 @@ def api_research_data(request):
             'status': e.status or 'pending',
             'priority': e.priority,
             'created': e.timestamp_created,
+            'created_display': fmt_datetime(e.timestamp_created),
             'modified': e.timestamp_modified,
+            'modified_ago': fmt_ago(e.timestamp_modified),
             'started_at': data.get('started_at'),
         })
 
@@ -2169,17 +2162,55 @@ def api_research_data(request):
         'research agent',
     )
 
+    def _epoch_ago(val):
+        """Convert sysconfig epoch string to 'Xm ago' display."""
+        if not val:
+            return ''
+        try:
+            return fmt_ago(float(val))
+        except (ValueError, TypeError):
+            return ''
+
+    def _epoch_dur(val):
+        """Convert sysconfig epoch string to duration-from-now (no 'ago')."""
+        if not val:
+            return ''
+        try:
+            return fmt_duration(int(time.time() - float(val)))
+        except (ValueError, TypeError):
+            return ''
+
+    def _epoch_age_sec(val):
+        """Seconds since epoch string, for threshold checks."""
+        if not val:
+            return None
+        try:
+            return int(time.time() - float(val))
+        except (ValueError, TypeError):
+            return None
+
+    launched_epoch = launched_val or agent_keys.get('agent_research-agent_launched')
+    completed_epoch = agent_keys.get('agent_research-agent_completed')
+    last_activity_epoch = agent_keys.get('agent_research-agent_last_activity')
+    last_error_time_epoch = agent_keys.get('agent_research-agent_last_error_time')
+
     agent_status = {
         'status': status_val,
-        'launched': launched_val or agent_keys.get('agent_research-agent_launched'),
-        'completed': agent_keys.get('agent_research-agent_completed'),
+        'launched': launched_epoch,
+        'launched_ago': _epoch_ago(launched_epoch),
+        'launched_dur': _epoch_dur(launched_epoch),
+        'completed': completed_epoch,
+        'completed_ago': _epoch_ago(completed_epoch),
         'tracking': agent_keys.get('agent_research-agent_tracking'),
         'current_entry': agent_keys.get('agent_research-agent_entry'),
-        'last_activity': agent_keys.get('agent_research-agent_last_activity'),
+        'last_activity': last_activity_epoch,
+        'last_activity_ago': _epoch_ago(last_activity_epoch),
+        'last_activity_age': _epoch_age_sec(last_activity_epoch),
         'process_alive': agent_keys.get('agent_research-agent_process_alive'),
         'health': agent_keys.get('agent_research-agent_health'),
         'last_error': agent_keys.get('agent_research-agent_last_error'),
-        'last_error_time': agent_keys.get('agent_research-agent_last_error_time'),
+        'last_error_time': last_error_time_epoch,
+        'last_error_time_ago': _epoch_ago(last_error_time_epoch),
     }
 
     return JsonResponse({
@@ -2545,6 +2576,7 @@ def api_research_studies(request):
             'kind': e.kind,
             'created': e.timestamp_created,
             'modified': e.timestamp_modified,
+            'modified_display': fmt_datetime(e.timestamp_modified),
             'context': e.context.name if e.context else None,
         })
 
@@ -2607,8 +2639,10 @@ def api_picks_data(request):
             duration = round(max(timestamps) - min(timestamps))
         sorted_runs.append({
             'run': run_key,
+            'run_display': fmt_datetime(run_key) if run_key != 'unknown' else 'Unknown run',
             'picks': runs[run_key],
             'duration_seconds': duration,
+            'duration_display': fmt_duration(duration) if duration else None,
             'source_count': len(meta.get('sources', set())),
         })
 
@@ -2641,11 +2675,15 @@ def api_picks_data(request):
     picks_keys = {}
     for sc in SysConfig.objects.filter(key__startswith='agent_picks-agent'):
         picks_keys[sc.key] = sc.value
-    agent_info['last_activity'] = picks_keys.get('agent_picks-agent_last_activity')
+    last_activity_val = picks_keys.get('agent_picks-agent_last_activity')
+    last_error_time_val = picks_keys.get('agent_picks-agent_last_error_time')
+    agent_info['last_activity'] = last_activity_val
+    agent_info['last_activity_ago'] = fmt_ago(float(last_activity_val)) if last_activity_val else ''
     agent_info['process_alive'] = picks_keys.get('agent_picks-agent_process_alive')
     agent_info['health'] = picks_keys.get('agent_picks-agent_health')
     agent_info['last_error'] = picks_keys.get('agent_picks-agent_last_error')
-    agent_info['last_error_time'] = picks_keys.get('agent_picks-agent_last_error_time')
+    agent_info['last_error_time'] = last_error_time_val
+    agent_info['last_error_time_ago'] = fmt_ago(float(last_error_time_val)) if last_error_time_val else ''
 
     # Override latest run duration with agent launched→last_activity
     if sorted_runs and agent_info.get('last_activity') and agent_info.get('launched'):
@@ -2826,6 +2864,7 @@ def api_readme_data(request):
             'context': e.context_id,
             'kind': e.kind,
             'modified': e.timestamp_modified,
+            'modified_display': fmt_datetime(e.timestamp_modified),
             'tags': other_tags,
         })
 
@@ -2996,16 +3035,30 @@ def api_system_data(request):
         .order_by('key')
         .values_list('key', 'value', 'timestamp_modified')
     )
+    def _sysconfig_row(k, v, m):
+        is_secret = any(s in k.lower() for s in _secret_keywords)
+        display_val = '***' if is_secret else (v[:200] if v else '')
+        row = {'key': k, 'value': display_val, 'modified': m, 'modified_ago': fmt_ago(m)}
+        # Detect epoch-valued sysconfig entries and add _ago display
+        if not is_secret and v:
+            import re as _re
+            if _re.match(r'^\d{10}(\.\d+)?$', v):
+                try:
+                    ts = float(v)
+                    if 1700000000 < ts < 2000000000:
+                        row['value_ago'] = fmt_ago(ts)
+                except (ValueError, TypeError):
+                    pass
+        return row
     data['sysconfig'] = [
-        {
-            'key': k,
-            'value': '***' if any(s in k.lower() for s in _secret_keywords)
-                     else (v[:200] if v else ''),
-            'modified': m,
-        }
+        _sysconfig_row(k, v, m)
         for k, v, m in sysconfig_rows
         if k != 'system_health_data'
     ]
+
+    # Pre-format collection timestamp
+    if data.get('timestamp'):
+        data['timestamp_ago'] = fmt_ago(data['timestamp'])
 
     return JsonResponse(data)
 
@@ -3069,6 +3122,7 @@ def api_rss_data(request):
             'url': item.url,
             'precis': item.precis,
             'published': item.published.isoformat() if item.published else None,
+            'published_display': fmt_datetime(item.published) if item.published else None,
             'fetched': item.fetched.isoformat(),
             'author': (item.data or {}).get('author', ''),
             'readme': item.url in readme_urls,
@@ -3104,6 +3158,7 @@ def api_rss_data(request):
         'categories': result,
         'total_unread': total_unread,
         'oldest_date': oldest.isoformat() if oldest else None,
+        'oldest_date_display': fmt_datetime(oldest) if oldest else None,
         'server_time': djtz.now().isoformat(),
         'fetch_errors': fetch_errors,
     })
@@ -3602,6 +3657,14 @@ def api_agent_queue_data(request):
 
     for item in timeline:
         item.pop('_event_time', None)
+        # Add server-formatted display strings for absolute date cases
+        if item.get('due_at'):
+            item['due_display'] = fmt_datetime(item['due_at'])
+        if item.get('completed_at'):
+            item['completed_display'] = fmt_datetime(item['completed_at'])
+            item['completed_ago'] = fmt_ago(item['completed_at'])
+        if item.get('duration_sec') is not None:
+            item['duration_display'] = fmt_duration(item['duration_sec'])
 
     # ── Daemon status ──
     daemon = {

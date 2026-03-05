@@ -281,12 +281,12 @@
 
                 html += `<div class="run-block" data-run="${esc(runId)}">`;
                 html += '<div class="run-header">';
-                html += `<span class="run-time">${formatRunTime(runId)}</span>`;
+                html += `<span class="run-time">${(run.run_display || runId)}</span>`;
                 let statsText = `${picks.length} picks, ${keptCount} kept`;
                 if (run.source_count) {
                     statsText += totalSources ? `, ${run.source_count} of ${totalSources} sources` : `, ${run.source_count} sources`;
                 }
-                if (run.duration_seconds != null) statsText += ` · ${formatDuration(run.duration_seconds)}`;
+                if (run.duration_display) statsText += ` · ${run.duration_display}`;
                 html += `<span class="run-stats">${statsText}</span>`;
                 if (!allDone) {
                     html += `<button onclick="archiveRun('${esc(runId)}')">Archive All</button>`;
@@ -346,28 +346,8 @@
             }
         }
 
-        function formatRunTime(runStr) {
-            if (!runStr || runStr === 'unknown') return 'Unknown run';
-            try {
-                const d = new Date(runStr);
-                return d.toLocaleDateString('en-US', {
-                    weekday: 'short', month: 'short', day: 'numeric',
-                    hour: '2-digit', minute: '2-digit'
-                });
-            } catch {
-                return runStr;
-            }
-        }
-
-        function formatDuration(seconds) {
-            if (seconds < 60) return seconds + 's';
-            const m = Math.floor(seconds / 60);
-            const s = seconds % 60;
-            if (m < 60) return s > 0 ? `${m}m ${s}s` : `${m}m`;
-            const h = Math.floor(m / 60);
-            const rm = m % 60;
-            return rm > 0 ? `${h}h ${rm}m` : `${h}h`;
-        }
+        // formatRunTime removed — server provides run_display
+        // formatDuration removed — server provides duration_display
 
         function esc(s) {
             if (!s) return '';
@@ -506,7 +486,7 @@
                     if (run.source_count) {
                         st += totalSources ? `, ${run.source_count} of ${totalSources} sources` : `, ${run.source_count} sources`;
                     }
-                    if (run.duration_seconds != null) st += ` · ${formatDuration(run.duration_seconds)}`;
+                    if (run.duration_display) st += ` · ${run.duration_display}`;
                     statsEl.textContent = st;
                 }
                 // Update all Archive All buttons (header + bottom)
@@ -532,13 +512,7 @@
 
         let picksAgentRunning = false;
 
-        function timeAgo(ts) {
-            if (!ts) return '';
-            const sec = Math.floor(Date.now() / 1000 - ts);
-            if (sec < 60) return sec + 's ago';
-            if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
-            return Math.floor(sec / 3600) + 'h ' + Math.floor((sec % 3600) / 60) + 'm ago';
-        }
+        // timeAgo removed — server provides _ago fields
 
         function updateAgentInfo(agent) {
             const el = document.getElementById('next-run');
@@ -567,7 +541,7 @@
                     runText += 'Running...';
                 }
                 if (agent.last_activity) {
-                    runText += ` · activity ${timeAgo(parseFloat(agent.last_activity))}`;
+                    runText += ` · activity ${agent.last_activity_ago}`;
                 }
                 el.innerHTML = runText;
                 btn.disabled = true;
@@ -594,7 +568,7 @@
             }
             // Error section
             if (agent.last_error && agent.last_error.trim()) {
-                const errTime = agent.last_error_time ? timeAgo(parseFloat(agent.last_error_time)) : '';
+                const errTime = agent.last_error_time_ago || '';
                 errorDiv.innerHTML = `Error${errTime ? ' (' + errTime + ')' : ''}: ${esc(agent.last_error)}`;
             } else {
                 errorDiv.innerHTML = '';

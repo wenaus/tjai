@@ -119,7 +119,7 @@
         return h + 'h ' + (m ? m + 'm' : '');
     }
 
-    function fmtRelTime(sec) {
+    function fmtRelTime(sec, absDisplay) {
         sec = Math.round(sec);
         const abs = Math.abs(sec);
         if (abs < 60) return 'now';
@@ -133,13 +133,8 @@
             const s = h + 'h' + (m ? ' ' + m + 'm' : '');
             return sec > 0 ? 'in ' + s : s + ' ago';
         }
-        // >24h: show date
-        const d = new Date((Date.now() / 1000 + sec) * 1000);
-        const mon = d.toLocaleString('en-US', {month:'short'});
-        const day = d.getDate();
-        const hh = String(d.getHours()).padStart(2,'0');
-        const mm = String(d.getMinutes()).padStart(2,'0');
-        return mon + ' ' + day + ' ' + hh + ':' + mm;
+        // >24h: use server-provided absolute date
+        return absDisplay || '';
     }
 
     function fmtUptime(sec) {
@@ -239,7 +234,7 @@
             if (item.due_in_sec < 0) {
                 time = '<span class="overdue">overdue ' + fmtDuration(-item.due_in_sec) + '</span>';
             } else {
-                time = fmtRelTime(item.due_in_sec);
+                time = fmtRelTime(item.due_in_sec, item.due_display);
             }
             action = '<span class="dot dot-gray"></span>' + actionLink(item);
             let triggerInfo;
@@ -272,7 +267,7 @@
         }
         else if (item.type === 'completed') {
             const ago = Math.round(now - item.completed_at);
-            time = fmtRelTime(-ago);
+            time = fmtRelTime(-ago, item.completed_display);
             const ok = item.status === 'completed';
             const dot = ok ? 'dot-green' : 'dot-red';
             const sym = ok ? '<span class="status-ok">&#10003;</span>' : '<span class="status-fail">&#10007;</span>';

@@ -293,9 +293,8 @@
                 fetchErrors = data.fetch_errors || [];
                 renderRss();
                 let statsText = `${data.total_unread} unread`;
-                if (data.oldest_date) {
-                    const d = new Date(data.oldest_date);
-                    statsText += ` · oldest ${d.toLocaleDateString('en-US', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}`;
+                if (data.oldest_date_display) {
+                    statsText += ` · oldest ${data.oldest_date_display}`;
                 }
                 document.getElementById('global-stats').textContent = statsText;
             } catch (e) {
@@ -336,9 +335,8 @@
                         html += `<div class="rss-title"><a href="${esc(item.url)}" target="_blank" rel="noopener" onclick="markItemRead(this)">${esc(item.title)}</a> <span class="rss-actions"><button class="${item.readme ? 'active-readme' : ''}" data-url="${esc(item.url)}" data-title="${esc(item.title)}" onclick="toggleReadme(this)">ReadMe</button><button onclick="markAboveRead(this)" title="Mark all items above as read">▲ Clear</button></span></div>`;
                         if (item.published || item.author) {
                             let meta = '';
-                            if (item.published) {
-                                const d = new Date(item.published);
-                                meta = d.toLocaleDateString('en-US', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'});
+                            if (item.published_display) {
+                                meta = item.published_display;
                             }
                             if (item.author) meta += (meta ? ' · ' : '') + esc(item.author);
                             html += `<div class="rss-meta">${meta}</div>`;

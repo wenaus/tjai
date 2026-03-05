@@ -183,11 +183,20 @@
             return n;
         }
 
-        function timeAgo(ts) {
-            const sec = Math.floor(Date.now() / 1000 - ts);
-            if (sec < 60) return sec + 's ago';
-            if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
-            return Math.floor(sec / 3600) + 'h ' + Math.floor((sec % 3600) / 60) + 'm ago';
+        // fmtDuration for live-ticking banner timer
+        function fmtDuration(sec) {
+            if (sec == null || isNaN(sec)) return '';
+            sec = Math.abs(Math.floor(sec));
+            if (sec < 60) return sec + 's';
+            if (sec < 3600) return Math.floor(sec / 60) + 'm';
+            if (sec < 86400) {
+                var h = Math.floor(sec / 3600);
+                var m = Math.floor((sec % 3600) / 60);
+                return m > 0 ? h + 'h ' + m + 'm' : h + 'h';
+            }
+            var d = Math.floor(sec / 86400);
+            var hr = Math.floor((sec % 86400) / 3600);
+            return hr > 0 ? d + 'd ' + hr + 'h' : d + 'd';
         }
 
         function metricClass(val, yellowThresh, redThresh, invert) {
@@ -208,7 +217,7 @@
             banner.className = 'banner banner-' + (status === 'green' || status === 'yellow' || status === 'red' ? status : 'gray');
             dot.className = 'status-dot dot-' + (status === 'green' || status === 'yellow' || status === 'red' ? status : 'gray');
             document.getElementById('banner-status').textContent = 'SYSTEM HEALTH: ' + status.toUpperCase();
-            document.getElementById('banner-time').textContent = data.timestamp ? 'Collected ' + timeAgo(data.timestamp) : '';
+            document.getElementById('banner-time').textContent = data.timestamp_ago ? 'Collected ' + data.timestamp_ago : '';
         }
 
         function renderIssues(issues) {
@@ -445,16 +454,9 @@
                 html += '<div class="section"><div class="section-title">SysConfig</div>';
                 html += '<table style="max-width:800px"><tr><th>Key</th><th>Value</th><th style="text-align:right">Modified</th></tr>';
                 for (const sc of data.sysconfig) {
-                    let val = sc.value || '';
-                    // Format epoch timestamps as human-readable
-                    if (/^\d{10}(\.\d+)?$/.test(val)) {
-                        const ts = parseFloat(val);
-                        if (ts > 1700000000 && ts < 2000000000) {
-                            val = timeAgo(ts);
-                        }
-                    }
+                    let val = sc.value_ago || sc.value || '';
                     if (val.length > 80) val = val.substring(0, 80) + '…';
-                    const mod = sc.modified ? timeAgo(sc.modified) : '-';
+                    const mod = sc.modified_ago || '-';
                     html += `<tr><td style="color:#b0bec5;white-space:nowrap">${sc.key}</td><td style="word-break:break-all;max-width:400px">${val}</td><td class="num" style="white-space:nowrap">${mod}</td></tr>`;
                 }
                 html += '</table></div>';
@@ -555,7 +557,7 @@
             // Also update the "collected X ago" text
             const bannerTime = document.getElementById('banner-time');
             if (bannerTime.dataset.ts) {
-                bannerTime.textContent = 'Collected ' + timeAgo(parseFloat(bannerTime.dataset.ts));
+                bannerTime.textContent = 'Collected ' + fmtDuration(Math.floor(Date.now() / 1000 - parseFloat(bannerTime.dataset.ts))) + ' ago';
             }
         }
 

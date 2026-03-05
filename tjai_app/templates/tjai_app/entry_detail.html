@@ -129,20 +129,14 @@
             (function() {
                 var raw = JSON.parse(document.getElementById('entry-data-json').textContent);
                 var el = document.getElementById('entry-data');
-                var TIMESTAMP_KEYS = ['event_date', 'last_run', 'timestamp', 'created', 'modified', 'start', 'end'];
-                function isTimestamp(key, val) {
-                    if (typeof val !== 'number') return false;
-                    if (TIMESTAMP_KEYS.indexOf(key) >= 0) return true;
-                    return val > 1e9 && val < 2e10;
-                }
+                var DATA_TS_DISPLAY = JSON.parse('{{ data_ts_display_json|escapejs }}');
                 function escHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
                 var GITHUB_URL = '{{ github_url|escapejs }}';
                 var SCRIPT_PATH = 'blob/master/tjai/scripts/';
                 var ENTRY_REF_LINKS = JSON.parse('{{ linked_entry_ids_json|escapejs }}');
                 function fmtVal(key, val) {
-                    if (isTimestamp(key, val)) {
-                        var d = new Date(val * 1000);
-                        return '<span>' + d.toLocaleDateString('en-US', {weekday:'short', year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) + '</span>';
+                    if (DATA_TS_DISPLAY[key]) {
+                        return '<span>' + DATA_TS_DISPLAY[key] + '</span>';
                     }
                     if (typeof val === 'object' && val !== null) return '<span>' + escHtml(JSON.stringify(val)) + '</span>';
                     var s = String(val);
@@ -283,15 +277,7 @@
                 if (data && data.entry_id) return '/tjai/entry/' + data.entry_id + '/';
                 return '/tjai/entry/?uuid=' + id;
             }
-            function timeAgo(ts) {
-                if (!ts) return '';
-                var d = new Date(ts);
-                var sec = Math.floor((Date.now() - d.getTime()) / 1000);
-                if (sec < 60) return sec + 's ago';
-                if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
-                if (sec < 86400) return Math.floor(sec / 3600) + 'h ago';
-                return Math.floor(sec / 86400) + 'd ago';
-            }
+            // timeAgo removed — server provides modified_display
 
             // Group relations by kind
             var groups = {goal: [], todo: [], memory: [], other: []};
@@ -317,11 +303,8 @@
                     var other = rel.other_entry || {};
                     var od = other.data || {};
                     var firstLine = (other.content || '').split('\n')[0];
-                    var md = new Date(other.modified);
-                    var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-                    var ts = days[md.getDay()] + ' ' + (md.getMonth()+1) + '/' + md.getDate() + ' ' + String(md.getHours()).padStart(2,'0') + ':' + String(md.getMinutes()).padStart(2,'0');
                     html += '<div class="rel-row">';
-                    html += '<span class="dialog-time">' + ts + '</span>';
+                    html += '<span class="dialog-time">' + (other.modified_display || '') + '</span>';
                     html += '<span class="rel-type">' + esc(rel.relation_type) + '</span>';
                     html += '<a class="rel-link" href="' + entryUrl(other.id, od) + '">' + esc(firstLine) + '</a>';
                     html += '</div>';
@@ -339,22 +322,16 @@
                     var speaker = ed.role === 'assistant' ? 'AI' : 'Human';
                     var isHuman = ed.role !== 'assistant';
                     var color = isHuman ? '#a0a0a0' : '#64b5f6';
-                    var md = new Date(e.modified);
-                    var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-                    var ts = days[md.getDay()] + ' ' + (md.getMonth()+1) + '/' + md.getDate() + ' ' + String(md.getHours()).padStart(2,'0') + ':' + String(md.getMinutes()).padStart(2,'0');
-                    var fromTime = new Date(md.getTime() - 3600000);
-                    var toTime = new Date(md.getTime() + 3600000);
-                    function isoWithOffset(d) {
-                        var off = -d.getTimezoneOffset();
-                        var sign = off >= 0 ? '+' : '-';
-                        off = Math.abs(off);
-                        var hh = String(Math.floor(off/60)).padStart(2,'0');
-                        var mm = String(off%60).padStart(2,'0');
-                        return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')
-                            + 'T' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0')
-                            + sign + hh + ':' + mm;
+                    var ts = e.modified_display || '';
+                    // Build dashboard dialog context link using server-provided ISO modified timestamp
+                    var modifiedIso = e.modified || '';
+                    var dialogUrl = '';
+                    if (modifiedIso) {
+                        var modMs = new Date(modifiedIso).getTime();
+                        var fromIso = new Date(modMs - 3600000).toISOString();
+                        var toIso = new Date(modMs + 3600000).toISOString();
+                        dialogUrl = '/tjai/dashboard/?context=claude-code&expand_dialog=1&from_time=' + encodeURIComponent(fromIso) + '&to_time=' + encodeURIComponent(toIso) + '#e-' + e.id;
                     }
-                    var dialogUrl = '/tjai/dashboard/?context=claude-code&expand_dialog=1&from_time=' + encodeURIComponent(isoWithOffset(fromTime)) + '&to_time=' + encodeURIComponent(isoWithOffset(toTime)) + '#e-' + e.id;
                     html += '<div style="margin-bottom:12px; padding:8px; border-left:3px solid ' + color + '">';
                     html += '<div style="margin-bottom:4px"><span class="dialog-time">' + ts + '</span> ';
                     html += '<span class="dialog-speaker" style="color:' + color + '">' + speaker + '</span> ';

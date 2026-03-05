@@ -80,7 +80,7 @@
             for (const item of items) {
                 html += `<div class="readme-item" id="rm-${item.id}">`;
                 html += `<div class="readme-title"><a href="${esc(item.url)}" target="_blank" rel="noopener" onclick="dismiss('${item.id}', this)">${esc(item.title)}</a><button class="readme-remove" onclick="dismiss('${item.id}')">remove</button></div>`;
-                let detail = formatDate(item.modified);
+                let detail = item.modified_display || '';
                 if (item.url) detail += ' \u00b7 ' + esc(item.url);
                 if (item.tags && item.tags.length) detail += ' \u00b7 ' + item.tags.map(t => ':' + esc(t)).join(' ');
                 html += `<div class="readme-detail">${detail}</div>`;
@@ -90,13 +90,7 @@
             document.getElementById('readme-content').innerHTML = html;
         }
 
-        function formatDate(ts) {
-            if (!ts) return '';
-            const d = new Date(ts * 1000);
-            return d.toLocaleDateString('en-US', {
-                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-            });
-        }
+        // formatDate removed — server provides modified_display
 
         function esc(s) {
             if (!s) return '';

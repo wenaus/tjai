@@ -777,14 +777,7 @@
         return content;
     }
 
-    function formatTimestamp(ts) {
-        const d = new Date(ts * 1000);
-        const mon = d.getMonth() + 1;
-        const day = d.getDate();
-        const h = d.getHours();
-        const m = String(d.getMinutes()).padStart(2, '0');
-        return `${mon}/${day} ${h}:${m}`;
-    }
+    // formatTimestamp removed — server provides date_display
 
     async function toggleExpand(el, entryId) {
         const existing = el.querySelector('.entry-expanded');
@@ -836,14 +829,10 @@
 
         // Inject today placeholder if missing
         if (todayKey && !entries.some(e => e.date_key === todayKey)) {
-            const y = todayKey.slice(0,4), m = parseInt(todayKey.slice(4,6))-1, d = parseInt(todayKey.slice(6,8));
-            const dt = new Date(y, m, d);
-            const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
             entries.push({
                 id: '__placeholder__', content: '', event_date: now,
                 date_key: todayKey,
-                date_display: `${days[dt.getDay()]} ${months[dt.getMonth()]} ${String(d).padStart(2,'0')}`,
+                date_display: data.today_date_display || todayKey,
                 time_display: null, week_num: 0, week_start_key: '0',
                 context: null, data: {_placeholder: true}
             });
@@ -1052,12 +1041,10 @@
             const topic = item.content.split('\n')[0];
             html += `<div class="research-topic">${escapeHtml(topic)}</div>`;
             let meta = '';
-            if (item.status === 'done' && item.modified) {
-                const d = new Date(item.modified * 1000);
-                meta = 'Completed ' + d.toLocaleDateString('en-US', {month: 'short', day: 'numeric'});
-            } else if (item.created) {
-                const d = new Date(item.created * 1000);
-                meta = 'Created ' + d.toLocaleDateString('en-US', {month: 'short', day: 'numeric'});
+            if (item.status === 'done' && item.modified_ago) {
+                meta = 'Completed ' + item.modified_ago;
+            } else if (item.created_display) {
+                meta = 'Created ' + item.created_display;
             }
             if (meta) html += `<div class="research-meta">${meta}</div>`;
             html += `</div>`;
@@ -1103,7 +1090,7 @@
 
             html += `<div class="entry-item" onclick="openEntryDetail('${e.id}')">`;
             html += `<div class="entry-first-line">${name}${content}</div>`;
-            html += `<div class="entry-meta">${kind}${ctx}${lines}${tags ? tags + ' ' : ''}${formatTimestamp(e.timestamp)}</div>`;
+            html += `<div class="entry-meta">${kind}${ctx}${lines}${tags ? tags + ' ' : ''}${(e.date_display || '')}</div>`;
             html += `</div>`;
         }
         return html;
@@ -1314,7 +1301,7 @@
 
             html += `<div class="run-block" data-run="${escapeHtml(runId)}">`;
             html += '<div class="run-header">';
-            html += `<span class="run-time">${formatRunTime(runId)}</span>`;
+            html += `<span class="run-time">${escapeHtml(run.run_display || runId)}</span>`;
             html += `<span class="run-stats">${picks.length} picks, ${keptCount} kept</span>`;
             if (!allDone) {
                 html += `<button onclick="archiveRun('${escapeHtml(runId)}')">Archive All</button>`;
@@ -1346,17 +1333,6 @@
             html += '</div>';
         }
         panel.innerHTML = html;
-    }
-
-    function formatRunTime(runStr) {
-        if (!runStr || runStr === 'unknown') return 'Unknown run';
-        try {
-            const d = new Date(runStr);
-            return d.toLocaleDateString('en-US', {
-                weekday: 'short', month: 'short', day: 'numeric',
-                hour: '2-digit', minute: '2-digit'
-            });
-        } catch { return runStr; }
     }
 
     function findPick(id) {
@@ -1535,11 +1511,7 @@
         for (const item of readmeItems) {
             html += `<div class="readme-item" id="rm-${item.id}">`;
             html += `<div class="readme-title"><a href="${escapeHtml(item.url)}" target="_blank" rel="noopener">${escapeHtml(item.title)}</a><button onclick="dismissReadme('${item.id}')">remove</button></div>`;
-            let detail = '';
-            if (item.modified) {
-                const d = new Date(item.modified * 1000);
-                detail = d.toLocaleDateString('en-US', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'});
-            }
+            let detail = item.modified_display || '';
             if (item.tags && item.tags.length) detail += (detail ? ' \u00b7 ' : '') + item.tags.map(t => ':' + escapeHtml(t)).join(' ');
             if (detail) html += `<div class="readme-detail">${detail}</div>`;
             if (item.precis) html += `<div class="readme-precis">${escapeHtml(item.precis)}</div>`;
@@ -1638,18 +1610,17 @@
             }
             rssData = data.categories || [];
             rssPageBuiltAt = data.server_time;
-            renderRss(data.total_unread, data.oldest_date);
+            renderRss(data.total_unread, data.oldest_date_display);
         } catch (e) {
             panel.innerHTML = '<div class="error-msg">Error loading RSS</div>';
         }
     }
 
-    function renderRss(totalUnread, oldestDate) {
+    function renderRss(totalUnread, oldestDateDisplay) {
         const panel = document.getElementById('panel-rss');
         let statsText = `${totalUnread || 0} unread`;
-        if (oldestDate) {
-            const d = new Date(oldestDate);
-            statsText += ` \u00b7 oldest ${d.toLocaleDateString('en-US', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}`;
+        if (oldestDateDisplay) {
+            statsText += ` \u00b7 oldest ${oldestDateDisplay}`;
         }
 
         if (rssData.length === 0) {
@@ -1667,9 +1638,8 @@
                     html += `<div class="rss-item" data-guid="${escapeHtml(item.guid)}">`;
                     html += `<div class="rss-title"><a href="${escapeHtml(item.url)}" target="_blank" rel="noopener" onclick="markRssItemRead(this)">${escapeHtml(item.title)}</a>`;
                     html += `<button class="${item.readme ? 'active-readme' : ''}" data-url="${escapeHtml(item.url)}" data-title="${escapeHtml(item.title)}" onclick="toggleRssReadme(this)">ReadMe</button></div>`;
-                    if (item.published) {
-                        const d = new Date(item.published);
-                        html += `<div class="rss-meta">${d.toLocaleDateString('en-US', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</div>`;
+                    if (item.published_display) {
+                        html += `<div class="rss-meta">${escapeHtml(item.published_display)}</div>`;
                     }
                     if (item.precis) {
                         const tmp = document.createElement('div');

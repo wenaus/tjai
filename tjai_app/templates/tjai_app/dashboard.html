@@ -211,16 +211,7 @@
     </div>
 
     <script>
-        function formatTime(timestamp) {
-            const d = new Date(timestamp * 1000);
-            let h = d.getHours();
-            const m = d.getMinutes().toString().padStart(2, '0');
-            const ampm = h >= 12 ? 'pm' : 'am';
-            h = h % 12 || 12;
-            return `${h}:${m}${ampm}`;
-        }
-
-        // formatDate removed - server provides pre-formatted date_display
+        // formatTime, formatDate removed — server provides pre-formatted date_display
 
         function formatDuration(minutes) {
             const h = Math.floor(minutes / 60);
@@ -453,15 +444,7 @@
         function renderEntries(entries, tz) {
             let html = '';
             for (const entry of entries) {
-                const ts = new Date(entry.timestamp * 1000);
-                const opts = { timeZone: tz, weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false };
-                const parts = new Intl.DateTimeFormat('en-US', opts).formatToParts(ts);
-                const p = {};
-                parts.forEach(x => p[x.type] = x.value);
-                const currentYear = new Date().getFullYear().toString();
-                const tsStr = p.year === currentYear
-                    ? `${p.weekday} ${p.month}/${p.day}/${p.hour}:${p.minute}`
-                    : `${p.month}/${p.day}/${p.year}`;
+                const tsStr = entry.date_display || '';
 
                 const kindMap = {memory: 'm', todo: 'do', profile: 'p', bookmark: 'b', ai: 'ai', journal: 'j', log: 'log'};
                 const kindAbbr = kindMap[entry.kind] || entry.kind;
@@ -475,22 +458,8 @@
                 line += `<span style="color:#8a8a8a">${tsStr}</span> `;
                 line += `<span style="color:#daa520">[${kindAbbr}]</span> `;
 
-                if (entry.kind === 'journal' && entry.event_date) {
-                    const evd = new Date(entry.event_date * 1000);
-                    const evOpts = { timeZone: tz, weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false };
-                    const evParts = new Intl.DateTimeFormat('en-US', evOpts).formatToParts(evd);
-                    const ev = {};
-                    evParts.forEach(x => ev[x.type] = x.value);
-                    const isAllDay = (ev.hour === '00' && ev.minute === '00');
-                    let evStr;
-                    if (ev.year !== currentYear) {
-                        evStr = `${ev.month}/${ev.day}/${ev.year}`;
-                    } else if (isAllDay) {
-                        evStr = `${ev.weekday} ${ev.month}/${ev.day}`;
-                    } else {
-                        evStr = `${ev.weekday} ${ev.month}/${ev.day}/${ev.hour}:${ev.minute}`;
-                    }
-                    line += `<span style="color:#d8a070">${evStr}</span> `;
+                if (entry.event_date_display) {
+                    line += `<span style="color:#d8a070">${entry.event_date_display}</span> `;
                 }
 
                 if (entry.context) line += `<span style="color:#ce93d8">=${entry.context}</span> `;
