@@ -139,8 +139,8 @@ def _heal_stale_agent(status_key, launched_key, agent_name):
 
 
 def api_health(request):
-    """Health check endpoint."""
-    return JsonResponse({"status": "ok"})
+    """Health check endpoint. Also exposes app timezone for external clients."""
+    return JsonResponse({"status": "ok", "timezone": str(get_app_tz())})
 
 
 def oauth_protected_resource(request):

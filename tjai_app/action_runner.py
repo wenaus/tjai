@@ -484,6 +484,25 @@ def execute_action(action, target_date=None):
             update_last_run(action)
             return False
 
+        # For research-agent: also dispatch Gemini/ChatGPT in parallel with Claude
+        if action_id == 'research-agent':
+            target_uuid = data.get('next_target_entry_id')
+            if target_uuid:
+                target_entry = Entry.objects.filter(
+                    id=target_uuid, deleted_at__isnull=True,
+                ).first()
+                if target_entry:
+                    target_data = target_entry.data if isinstance(target_entry.data, dict) else {}
+                    base_entry_id = target_data.get('entry_id')
+                    topic_text = target_entry.content.split('\n')[0].strip()
+                    if base_entry_id and topic_text:
+                        dispatch_multimodel(
+                            topic_text=topic_text,
+                            base_entry_id=base_entry_id,
+                            base_uuid=target_uuid,
+                            context_obj=target_entry.context,
+                        )
+
         update_last_run(action)
         logger.info("Done.")
         return True
