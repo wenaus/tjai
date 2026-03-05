@@ -237,7 +237,7 @@ def _create_and_dispatch_synthesis(base_entry_id, base_entry, synth_entry_id):
             'model': 'synthesis',
         },
     )
-    Tag.objects.create(tag_name='research', entry=synth)
+    Tag.objects.create(tag_name='research_topic', entry=synth)
 
     # Load synthesis prompt template
     sp_entry = Entry.objects.filter(

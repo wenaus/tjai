@@ -71,7 +71,10 @@ def _link_subagent_reports(entry, source_entry_id, ref_extra):
     links = "\n\n## Subagent Reports\n\n"
     for i, r in enumerate(reports, 1):
         size = f"{len(r.content) // 1024}K" if len(r.content) > 1024 else f"{len(r.content)} chars"
-        links += f"{i}. [Report — {size}](/tjai/entry/?uuid={r.id})\n"
+        r_data = r.data if isinstance(r.data, dict) else {}
+        r_eid = r_data.get('entry_id')
+        r_url = f"/tjai/entry/?entry_id={r_eid}" if r_eid else f"/tjai/entry/?uuid={r.id}"
+        links += f"{i}. [Report — {size}]({r_url})\n"
 
     # Replace existing section or append
     if '## Subagent Reports' in content:
@@ -297,7 +300,7 @@ def _research_queue_drain(now):
 
     # Find next pending research item (sorted by priority then FIFO)
     research_ids = Tag.objects.filter(
-        tag_name='research'
+        tag_name='research_topic'
     ).values_list('entry_id', flat=True)
     next_item = Entry.objects.filter(
         id__in=research_ids,

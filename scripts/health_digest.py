@@ -308,13 +308,13 @@ def collect_research(since_ts):
     metrics['research_completed_24h'] = Entry.objects.filter(
         timestamp_modified__gte=since_ts,
         deleted_at__isnull=True,
-        tags__tag_name='research',
+        tags__tag_name='research_topic',
         status='done',
     ).distinct().count()
 
     metrics['research_queue_depth'] = Entry.objects.filter(
         deleted_at__isnull=True,
-        tags__tag_name='research',
+        tags__tag_name='research_topic',
     ).exclude(
         status='done'
     ).exclude(

@@ -119,7 +119,8 @@
 
         // fmtDate removed — server provides modified_display
 
-        function entryUrl(uuid) {
+        function entryUrl(uuid, entryId) {
+            if (entryId) return '/tjai/entry/?entry_id=' + encodeURIComponent(entryId);
             return '/tjai/entry/?uuid=' + uuid;
         }
 
@@ -175,7 +176,7 @@
 
                 html += `<div class="study-item">`;
                 html += '<div class="study-header">';
-                html += `<span class="study-eid"><a href="${entryUrl(item.id)}">${esc(displayName)}</a></span>`;
+                html += `<span class="study-eid"><a href="${entryUrl(item.id, item.entry_id)}">${esc(displayName)}</a></span>`;
                 html += `<span class="study-kind">${esc(item.kind)}</span>`;
                 if (item.context) {
                     html += `<span class="study-context">${esc(item.context)}</span>`;

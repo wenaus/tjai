@@ -2121,7 +2121,7 @@ def research_page(request):
 def api_research_data(request):
     """Return research queue entries and agent status as JSON."""
     research_ids = Tag.objects.filter(
-        tag_name='research'
+        tag_name='research_topic'
     ).values_list('entry_id', flat=True)
     entries = Entry.objects.filter(
         id__in=research_ids,
@@ -2270,7 +2270,7 @@ def api_research_run(request):
     else:
         # Submit All: find the first pending item and use SPECIFIC TARGET
         research_ids = Tag.objects.filter(
-            tag_name='research'
+            tag_name='research_topic'
         ).values_list('entry_id', flat=True)
         first_item = Entry.objects.filter(
             id__in=research_ids,
@@ -2309,7 +2309,13 @@ def api_research_run(request):
             key='research_stop_requested',
             defaults={'value': '', 'timestamp_modified': now})
 
-    # Clear last_run so get_due_actions sees it as overdue
+    # Force-run: set scheduled_time to now so scheduler sees it as due
+    # (just setting last_run=0 fails when scheduled_time is in the future today)
+    original_scheduled = data.get('scheduled_time')
+    if original_scheduled:
+        data['scheduled_time_config'] = original_scheduled
+        tz = get_app_tz()
+        data['scheduled_time'] = datetime.now(tz).strftime('%H%M')
     data['last_run'] = 0
     research_action.data = data
     research_action.timestamp_modified = now
@@ -2432,7 +2438,7 @@ def api_research_rerun(request):
             'version': next_ver,
         },
     )
-    Tag.objects.create(tag_name='research', entry=new_entry)
+    Tag.objects.create(tag_name='research_topic', entry=new_entry)
 
     _log_research(logging.INFO,
                   f"Rerun created: {new_entry_id} from {entry_id}",
@@ -2450,6 +2456,12 @@ def api_research_rerun(request):
         ).values_list('value', flat=True).first()
         if status != 'running':
             rdata = research_action.data or {}
+            # Force-run: set scheduled_time to now so scheduler sees it as due
+            original_scheduled = rdata.get('scheduled_time')
+            if original_scheduled:
+                rdata['scheduled_time_config'] = original_scheduled
+                tz = get_app_tz()
+                rdata['scheduled_time'] = datetime.now(tz).strftime('%H%M')
             rdata['last_run'] = 0
             rdata['next_target'] = (
                 f"SPECIFIC TARGET:\nEntry UUID: {new_entry.id}\n"

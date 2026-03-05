@@ -161,7 +161,8 @@
 
         // timeAgo, fmtDate removed — server provides _ago and _display fields
 
-        function entryUrl(uuid) {
+        function entryUrl(uuid, entryId) {
+            if (entryId) return '/tjai/entry/?entry_id=' + encodeURIComponent(entryId);
             return '/tjai/entry/?uuid=' + uuid;
         }
 
@@ -191,7 +192,7 @@
             // Sysprompt link
             const spEl = document.getElementById('sysprompt-link');
             if (data.sysprompt_id) {
-                spEl.innerHTML = `<a href="${entryUrl(data.sysprompt_id)}">System Prompt</a>`;
+                spEl.innerHTML = `<a href="${entryUrl(data.sysprompt_id, 'research-system-prompt-v2')}">System Prompt</a>`;
             } else {
                 spEl.innerHTML = '<span style="color:#666">No system prompt</span>';
             }
@@ -270,7 +271,7 @@
 
                 html += `<div class="research-item ${cls}">`;
                 html += '<div class="item-header">';
-                html += `<span class="item-eid"><a href="${entryUrl(item.id)}">${esc(item.entry_id || item.id.substring(0, 8))}</a></span>`;
+                html += `<span class="item-eid"><a href="${entryUrl(item.id, item.entry_id)}">${esc(item.entry_id || item.id.substring(0, 8))}</a></span>`;
                 html += `<span class="item-status ${statusCls}">${label}</span>`;
                 if (item.priority) {
                     html += `<span style="color:#666;font-size:11px">P${item.priority}</span>`;

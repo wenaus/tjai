@@ -171,7 +171,7 @@ System prompt (`research-system-prompt` entry) enforces:
 Entry(kind='memory', status='pending',  # pending → done
     content='Topic... → replaced with full report',
     data={'entry_id': 'research-mcp', 'started_at': 1771962258.67})
-# Tags: 'research'
+# Tags: 'research_topic'
 ```
 
 **Study/subagent entry:**

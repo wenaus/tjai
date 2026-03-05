@@ -21,7 +21,7 @@ Built on an offline-first, distributed architecture: the `tj` client works local
 - **Telegram bot** — voice/text AI assistant with calendar reminders and Mini App
 - **Claude integration** — MCP server for Claude Code and Claude.ai, cross-session dialog memory
 - **Add-ons** — Gmail calendar invite capture, Chrome bookmark extension
-- **Multi-device sync** — daemon-based SQLite ↔ PostgreSQL sync across machines
+- **Multi-device sync** — PostgreSQL (server, source of truth) with local SQLite caches synced via persistent daemon
 
 ## Documentation
 

@@ -1145,7 +1145,7 @@
         ov.innerHTML = html;
         _detailEntry = data;
         // Auto-prettify research items with larger fonts
-        if ((data.tags || []).includes('research')) {
+        if ((data.tags || []).includes('research_topic')) {
             togglePretty();
             const dc = document.getElementById('detail-content');
             if (dc) dc.classList.add('research');

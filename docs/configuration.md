@@ -40,7 +40,9 @@ tj l                                            # List entries
 
 ## Database
 
-Location is configurable. Default: `~/Dropbox/Current/tjai_{location}.db` where `{location}` is your machine name. Each machine has its own file; sync happens via REST API, not Dropbox.
+The primary database is **PostgreSQL** on the server (source of truth). Each client machine has a **local SQLite cache** that syncs automatically via the tjai-agent daemon.
+
+Local SQLite location is configurable. Default: `~/Dropbox/Current/tjai_{location}.db` where `{location}` is your machine name. Each machine has its own file; sync happens via REST API, not Dropbox.
 
 ```bash
 tj config show  # Check current database location

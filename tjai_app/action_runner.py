@@ -400,7 +400,7 @@ def dispatch_multimodel(topic_text, base_entry_id, base_uuid, context_obj):
                 'started_at': now,
             },
         )
-        Tag.objects.create(tag_name='research', entry=entry)
+        Tag.objects.create(tag_name='research_topic', entry=entry)
 
         # Launch research_multimodel.py in a detached subprocess.
         # Use DEVNULL — script logs via DbLogHandler, no need for pipe I/O.
