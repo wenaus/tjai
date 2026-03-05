@@ -1820,15 +1820,17 @@ def api_dialog(request):
 
     if request.method == "GET":
         turns = int(request.GET.get("turns", 20))
+        hostname = request.GET.get("hostname", "").strip()
         entry_ids = Tag.objects.filter(
             tag_name='ccdialog'
         ).values_list('entry_id', flat=True)
-        entries = list(
-            Entry.objects.filter(
-                id__in=entry_ids,
-                deleted_at__isnull=True,
-            ).order_by('-timestamp_created')[:turns]
+        qs = Entry.objects.filter(
+            id__in=entry_ids,
+            deleted_at__isnull=True,
         )
+        if hostname:
+            qs = qs.filter(data__hostname=hostname)
+        entries = list(qs.order_by('-timestamp_created')[:turns])
         entries.reverse()
         result = []
         for e in entries:
