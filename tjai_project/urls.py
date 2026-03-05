@@ -52,6 +52,7 @@ urlpatterns = [
     path("api/goals/create", views.api_goals_create, name="api_goals_create"),
     path("api/goals/relate", views.api_goals_relate, name="api_goals_relate"),
     path("api/goals/unrelate", views.api_goals_unrelate, name="api_goals_unrelate"),
+    path("api/goals/create-note", views.api_goal_create_note, name="api_goal_create_note"),
     path("picks/", views.picks, name="picks"),
     path("api/picks/data", views.api_picks_data, name="api_picks_data"),
     path("api/picks/update", views.api_picks_update, name="api_picks_update"),

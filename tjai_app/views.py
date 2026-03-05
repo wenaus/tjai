@@ -10,7 +10,6 @@ logger = logging.getLogger(__name__)
 
 _LIST_RE = re.compile(r'[-*+] |\d+\. ')
 
-
 def _fix_md_list_spacing(text):
     """Insert blank line before list items that follow a non-list, non-blank line.
 
@@ -1288,9 +1287,11 @@ def entry_detail(request, entry_id=None):
     # Relations and tagged entries for goal entries
     relations_json = '[]'
     tagged_entries_json = '[]'
+    goal_note_url = None
+    goal_note_exists = False
     if entry.kind == 'goal':
         from . import services
-        relations = services._get_relations_for_entry(str(entry.id))
+        relations = services._get_relations_for_entry(str(entry.id), max_content_length=0)
         relations_json = json.dumps(relations)
         goal_entry_id = (data or {}).get('entry_id')
         if goal_entry_id:
@@ -1299,6 +1300,16 @@ def entry_detail(request, entry_id=None):
                 deleted_at__isnull=True,
             ).select_related('context').prefetch_related('tags').order_by('timestamp_modified')
             tagged_entries_json = json.dumps([services._format_entry(e) for e in tagged])
+            # Check for goal note entry
+            note_entry_id = f'{goal_entry_id}-note'
+            note_entry = Entry.objects.filter(
+                data__entry_id=note_entry_id, deleted_at__isnull=True
+            ).first()
+            if note_entry:
+                goal_note_url = f'/tjai/entry/{note_entry_id}/'
+                goal_note_exists = True
+            else:
+                goal_note_url = goal_entry_id  # pass the goal's entry_id for creation
 
     return render(request, 'tjai_app/entry_detail.html', {
         'entry': entry,
@@ -1314,6 +1325,8 @@ def entry_detail(request, entry_id=None):
         'data_ts_display_json': json.dumps(data_ts_display),
         'relations_json': relations_json,
         'tagged_entries_json': tagged_entries_json,
+        'goal_note_url': goal_note_url,
+        'goal_note_exists': goal_note_exists,
     })
 
 
@@ -1368,6 +1381,15 @@ def api_entry_save(request, entry_id):
         else:
             entry.data.pop('format', None)
         fmt_changed = True
+    # entry_id (human-readable identifier in data.entry_id)
+    if 'entry_id' in data:
+        eid_val = (data['entry_id'] or '').strip()
+        if not isinstance(entry.data, dict):
+            entry.data = {}
+        if eid_val:
+            entry.data['entry_id'] = eid_val
+        else:
+            entry.data.pop('entry_id', None)
     # Preserve mod time if only tags/context changed (content and other fields unchanged)
     metadata_only = (content == old_content and
                      'name' not in data and not fmt_changed)
@@ -3712,7 +3734,7 @@ def goals_page(request):
 def api_goals_data(request):
     """Return goals list with optional filtering."""
     from . import services
-    goals = services.get_goals(include_done=True)
+    goals = services.get_goals(include_done=True, max_content_length=0)
     if isinstance(goals, dict) and 'error' in goals:
         return JsonResponse(goals, status=400)
 
@@ -3742,10 +3764,55 @@ def api_goals_detail(request):
     if not entry:
         return JsonResponse({'error': f"Entry '{goal_id}' not found"}, status=404)
 
-    result = services.get_goal(str(entry.id))
+    result = services.get_goal(str(entry.id), max_content_length=0)
     if isinstance(result, dict) and 'error' in result:
         return JsonResponse(result, status=400)
     return JsonResponse(result)
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_goal_create_note(request):
+    """Create a note entry for a goal."""
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    goal_entry_id = body.get('goal_entry_id', '').strip()
+    if not goal_entry_id:
+        return JsonResponse({'error': 'goal_entry_id is required'}, status=400)
+
+    note_entry_id = f'{goal_entry_id}-note'
+
+    # Check note doesn't already exist
+    if Entry.objects.filter(data__entry_id=note_entry_id, deleted_at__isnull=True).exists():
+        return JsonResponse({'error': 'Note already exists', 'url': f'/tjai/entry/{note_entry_id}/'})
+
+    # Verify the goal exists
+    goal = Entry.objects.filter(
+        data__entry_id=goal_entry_id, deleted_at__isnull=True, kind='goal'
+    ).first()
+    if not goal:
+        return JsonResponse({'error': f"Goal '{goal_entry_id}' not found"}, status=404)
+
+    # Create the note entry — seed with goal title
+    goal_title = goal.content.split('\n')[0].strip()
+    now = time.time()
+    note = Entry.objects.create(
+        id=str(uuid.uuid4()),
+        content=f'{goal_title} notes',
+        kind='memory',
+        context=goal.context,
+        timestamp_created=now,
+        timestamp_modified=now,
+        data={
+            'entry_id': note_entry_id,
+            'rel_goal': goal_entry_id,
+        },
+    )
+
+    return JsonResponse({'ok': True, 'url': f'/tjai/entry/{note_entry_id}/'})
 
 
 @login_required

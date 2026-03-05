@@ -207,6 +207,7 @@ async def get_todos(
     context: str = None,
     status: str = None,
     include_done: bool = False,
+    max_content_length: int = 200,
 ) -> list:
     """
     Get todo/task entries.
@@ -231,6 +232,7 @@ async def get_todos(
     """
     return await sync_to_async(services.get_todos)(
         context=context, status=status, include_done=include_done,
+        max_content_length=max_content_length,
     )
 
 
@@ -240,6 +242,7 @@ async def get_memories(
     limit: int = 50,
     start_date: str = None,
     end_date: str = None,
+    max_content_length: int = 200,
 ) -> list:
     """
     Get memory entries - general notes and information.
@@ -269,6 +272,7 @@ async def get_memories(
     """
     return await sync_to_async(services.get_memories)(
         context=context, limit=limit, start_date=start_date, end_date=end_date,
+        max_content_length=max_content_length,
     )
 
 
@@ -278,6 +282,7 @@ async def get_bookmarks(
     limit: int = 50,
     start_date: str = None,
     end_date: str = None,
+    max_content_length: int = 200,
 ) -> list:
     """
     Get saved bookmark entries (URLs).
@@ -298,6 +303,7 @@ async def get_bookmarks(
     """
     return await sync_to_async(services.get_bookmarks)(
         context=context, limit=limit, start_date=start_date, end_date=end_date,
+        max_content_length=max_content_length,
     )
 
 
@@ -309,6 +315,7 @@ async def search_entries(
     limit: int = 50,
     start_date: str = None,
     end_date: str = None,
+    max_content_length: int = 200,
 ) -> list:
     """
     Full-text search across entries.
@@ -326,16 +333,20 @@ async def search_entries(
         start_date: Start of date range (YYYYMMDD, ISO format, or natural language
                     like '7d', 'yesterday', 'monday'). Default: no filtering.
         end_date: End of date range. Default: no filtering.
+        max_content_length: Truncate content to this many characters (appends …).
+                           Default: 200. Set 0 for full content. Use get_entry() for
+                           full content of specific entries.
 
     Returns:
         List of matching entries ordered by modification date (newest first),
-        each containing: id, content, kind, context, created, modified, and
+        each containing: id, content (preview), kind, context, created, modified, and
         optional name, priority, status, tags.
         Returns {"error": "..."} if parameters are invalid.
     """
     return await sync_to_async(services.search_entries)(
         query=query, kind=kind, context=context, limit=limit,
         start_date=start_date, end_date=end_date,
+        max_content_length=max_content_length,
     )
 
 
@@ -343,6 +354,7 @@ async def search_entries(
 async def get_named_entries(
     name: str = None,
     context: str = None,
+    max_content_length: int = 200,
 ) -> list | dict:
     """
     Get entries that have an @name assigned.
@@ -362,7 +374,7 @@ async def get_named_entries(
         Returns {"error": "..."} if named entry not found.
     """
     return await sync_to_async(services.get_named_entries)(
-        name=name, context=context,
+        name=name, context=context, max_content_length=max_content_length,
     )
 
 
@@ -593,15 +605,17 @@ async def create_goal(
 
 
 @mcp.tool()
-async def get_goal(entry_id: str) -> dict:
+async def get_goal(entry_id: str, max_content_length: int = 200) -> dict:
     """
     Get a goal entry with all its relations.
 
     Returns the goal plus every relation touching it, with the other entry
-    in each relation fully formatted.
+    content truncated to max_content_length.
 
     Args:
         entry_id: The UUID of the goal entry (required).
+        max_content_length: Truncate related entry content to this many characters.
+                           Default: 200. Set 0 for full content.
 
     Returns:
         Goal entry with all standard fields plus a "relations" list.
@@ -609,7 +623,7 @@ async def get_goal(entry_id: str) -> dict:
         created, modified, data, and "other_entry" (the related entry).
         Returns {"error": "..."} if not found or not a goal.
     """
-    return await sync_to_async(services.get_goal)(entry_id=entry_id)
+    return await sync_to_async(services.get_goal)(entry_id=entry_id, max_content_length=max_content_length)
 
 
 @mcp.tool()
@@ -690,22 +704,24 @@ async def delete_relation(relation_id: str) -> dict:
 
 
 @mcp.tool()
-async def get_relations(entry_id: str) -> list:
+async def get_relations(entry_id: str, max_content_length: int = 200) -> list:
     """
     Get all relations for an entry.
 
-    Returns every relation touching this entry, with the other entry in each
-    relation fully formatted. Relations to soft-deleted entries are excluded.
+    Returns every relation touching this entry, with the other entry content
+    truncated to max_content_length. Relations to soft-deleted entries are excluded.
 
     Args:
         entry_id: UUID of the entry (required).
+        max_content_length: Truncate related entry content to this many characters.
+                           Default: 200. Set 0 for full content.
 
     Returns:
         List of relations, each containing: id, entry1_id, entry2_id,
         relation_type, created, modified, data, and "other_entry".
         Returns {"error": "..."} if entry not found.
     """
-    return await sync_to_async(services.get_relations)(entry_id=entry_id)
+    return await sync_to_async(services.get_relations)(entry_id=entry_id, max_content_length=max_content_length)
 
 
 @mcp.tool()
@@ -713,6 +729,7 @@ async def get_web(
     entry_id: str,
     depth: int = 2,
     kinds: list[str] = None,
+    max_content_length: int = 200,
 ) -> dict:
     """
     Traverse the relation graph from an entry, returning the connected subgraph.
@@ -735,4 +752,5 @@ async def get_web(
     """
     return await sync_to_async(services.get_web)(
         entry_id=entry_id, depth=depth, kinds=kinds,
+        max_content_length=max_content_length,
     )

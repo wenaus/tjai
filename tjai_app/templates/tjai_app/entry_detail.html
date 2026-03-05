@@ -65,7 +65,7 @@
         .rel-row .rel-link:hover { text-decoration: underline; }
         .rel-row .rel-kind { font-size: 10px; padding: 1px 4px; border-radius: 2px; background: #2a2a3a; color: #777; }
         .dialog-speaker { font-size: 11px; min-width: 50px; }
-        .dialog-time { color: #555; font-size: 10px; white-space: nowrap; }
+        .dialog-time { color: #888; font-size: 10px; white-space: nowrap; }
     </style>
 </head>
 <body>
@@ -77,6 +77,16 @@
         <span id="first-line"></span>
         <button class="toolbar-btn" id="editBtn" style="margin-left: 8px;">edit</button>
     </div>
+
+    {% if goal_note_url %}
+    <div id="goalNoteDiv" style="margin-bottom: 10px;">
+        {% if goal_note_exists %}
+        <a href="{{ goal_note_url }}" target="_blank" style="font-size: 12px;">notes</a>
+        {% else %}
+        <button class="toolbar-btn" id="createNoteBtn" style="font-size: 11px;">Create note</button>
+        {% endif %}
+    </div>
+    {% endif %}
 
     <!-- Content (view mode) -->
     <div id="viewMode">
@@ -92,6 +102,8 @@
             <input id="contextField" type="text" value="{{ entry.context_id|default:'' }}" placeholder="(none)" style="width:160px">
             <label style="margin-left:16px">:tags</label>
             <input id="tagsField" type="text" value="{% for t in tags %}{{ t }}{% if not forloop.last %}, {% endif %}{% endfor %}" placeholder="(none)" style="width:240px">
+            <label style="margin-left:16px">entry_id</label>
+            <input id="entryIdField" type="text" value="{{ entry.data.entry_id|default:'' }}" placeholder="(none)" style="width:200px">
             <label style="margin-left:16px">format</label>
             <select id="formatField" style="background:#111;color:#c0d8f0;border:1px solid #555;padding:3px 6px;font-family:inherit;font-size:13px;border-radius:3px;">
                 <option value="">auto</option>
@@ -99,7 +111,7 @@
                 <option value="txt"{% if explicit_format and content_format == 'txt' %} selected{% endif %}>txt</option>
             </select>
         </div>
-        <textarea id="editor">{{ entry.content }}</textarea>
+        <textarea id="editor" style="background:#1a1a1a;color:#e0e0e0;border:none;display:none;">{{ entry.content }}</textarea>
         <div class="edit-toolbar" style="display:flex; align-items:center;">
             <span style="margin-left:auto">
                 <button class="toolbar-btn save-btn" id="saveBtn">save</button>
@@ -176,6 +188,7 @@
         var originalName = "{{ entry.name|default:''|escapejs }}";
         var originalContext = "{{ entry.context_id|default:''|escapejs }}";
         var originalTags = "{% for t in tags %}{{ t }}{% if not forloop.last %}, {% endif %}{% endfor %}";
+        var originalEntryId = "{{ entry.data.entry_id|default:''|escapejs }}";
         var csrfToken = "{{ csrf_token }}";
         var saveUrl = "{% url 'api_entry_save' entry.id %}";
         var deleteUrl = "{% url 'api_delete_entry' entry.id %}";
@@ -194,19 +207,26 @@
             document.getElementById('viewMode').style.display = 'none';
             document.getElementById('editMode').style.display = 'block';
             document.getElementById('editBtn').style.display = 'none';
+            var gn = document.getElementById('goalNoteDiv');
+            if (gn) gn.style.display = 'none';
             document.getElementById('nameField').value = originalName;
             document.getElementById('contextField').value = originalContext;
             document.getElementById('tagsField').value = originalTags;
+            document.getElementById('entryIdField').value = originalEntryId;
             if (!cm) {
                 cm = CodeMirror.fromTextArea(document.getElementById('editor'), {
                     mode: 'markdown',
                     theme: 'material-darker',
                     lineWrapping: true,
                     lineNumbers: true,
+                    indentUnit: 4,
+                    tabSize: 4,
+                    indentWithTabs: false,
                     extraKeys: {
                         'Ctrl-S': function() { doSave(); },
                         'Cmd-S': function() { doSave(); },
                         'Esc': function() { cancelEdit(); },
+                        'Tab': function(cm) { cm.replaceSelection('    '); },
                     }
                 });
             }
@@ -219,6 +239,8 @@
             document.getElementById('viewMode').style.display = 'block';
             document.getElementById('editMode').style.display = 'none';
             document.getElementById('editBtn').style.display = '';
+            var gn = document.getElementById('goalNoteDiv');
+            if (gn) gn.style.display = '';
         }
 
         function doSave() {
@@ -227,10 +249,11 @@
             var context = document.getElementById('contextField').value.trim().replace(/^=/, '');
             var fmt = document.getElementById('formatField').value || null;
             var tags = document.getElementById('tagsField').value.trim();
+            var entryIdVal = document.getElementById('entryIdField').value.trim();
             fetch(saveUrl, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-                body: JSON.stringify({content: content, name: name, context: context, format: fmt, tags: tags})
+                body: JSON.stringify({content: content, name: name, context: context, format: fmt, tags: tags, entry_id: entryIdVal})
             }).then(function(r) { return r.json(); }).then(function(data) {
                 if (data.ok) {
                     var st = document.getElementById('saveStatus');
@@ -265,6 +288,25 @@
         document.getElementById('cancelBtn').addEventListener('click', cancelEdit);
         document.getElementById('deleteBtn').addEventListener('click', doDelete);
 
+        // Goal note creation
+        var createNoteBtn = document.getElementById('createNoteBtn');
+        if (createNoteBtn) {
+            createNoteBtn.addEventListener('click', function() {
+                fetch("{% url 'api_goal_create_note' %}", {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+                    body: JSON.stringify({goal_entry_id: '{{ goal_note_url|escapejs }}'})
+                }).then(function(r) { return r.json(); }).then(function(data) {
+                    if (data.url) {
+                        window.open(data.url, '_blank');
+                        location.reload();
+                    } else {
+                        alert('Failed: ' + (data.error || 'unknown'));
+                    }
+                }).catch(function(err) { alert('Failed: ' + err); });
+            });
+        }
+
         // Render goal relations and tagged entries
         (function() {
             var relations = JSON.parse('{{ relations_json|escapejs }}');
@@ -288,6 +330,14 @@
                 if (groups[k]) groups[k].push(r);
                 else groups.other.push(r);
             }
+            // Sort non-dialog groups by modified date, newest first
+            ['goal', 'todo', 'memory', 'other'].forEach(function(k) {
+                if (groups[k]) groups[k].sort(function(a, b) {
+                    var am = (a.other_entry || {}).modified || '';
+                    var bm = (b.other_entry || {}).modified || '';
+                    return bm.localeCompare(am);
+                });
+            });
 
             var html = '';
             var sectionOrder = [

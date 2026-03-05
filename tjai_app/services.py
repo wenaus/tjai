@@ -92,13 +92,16 @@ def get_timezone():
     return get_app_tz()
 
 
-def _format_entry(entry, tz=None):
+def _format_entry(entry, tz=None, max_content_length=None):
     """Format an Entry object for API response."""
     if tz is None:
         tz = get_app_tz()
+    content = entry.content
+    if max_content_length and len(content) > max_content_length:
+        content = content[:max_content_length] + '…'
     result = {
         "id": entry.id,
-        "content": entry.content,
+        "content": content,
         "kind": entry.kind,
         "context": entry.context.name if entry.context else None,
         "created": datetime.fromtimestamp(entry.timestamp_created, tz=tz).isoformat(),
@@ -158,7 +161,7 @@ def _format_relation(relation):
     return result
 
 
-def _get_relations_for_entry(entry_id):
+def _get_relations_for_entry(entry_id, max_content_length=None):
     """Get all relations touching an entry, with the other entry formatted."""
     rels = Relation.objects.filter(
         Q(entry1_id=entry_id) | Q(entry2_id=entry_id)
@@ -173,7 +176,7 @@ def _get_relations_for_entry(entry_id):
         if not other:
             continue
         result = _format_relation(rel)
-        result["other_entry"] = _format_entry(other)
+        result["other_entry"] = _format_entry(other, max_content_length=max_content_length)
         results.append(result)
     return results
 
@@ -510,7 +513,7 @@ def copy_calendar_entry(entry_id, event_date, event_time=None):
     return _format_entry(entry)
 
 
-def get_todos(context=None, status=None, include_done=False):
+def get_todos(context=None, status=None, include_done=False, max_content_length=200):
     if status is not None and status not in VALID_STATUSES:
         return {"error": f"Invalid status '{status}'. Must be one of: {', '.join(VALID_STATUSES)}"}
 
@@ -527,10 +530,10 @@ def get_todos(context=None, status=None, include_done=False):
         qs = qs.exclude(status='done')
 
     qs = qs.order_by('-timestamp_modified')
-    return [_format_entry(entry) for entry in qs]
+    return [_format_entry(entry, max_content_length=max_content_length) for entry in qs]
 
 
-def get_goals(context=None, status=None, include_done=False):
+def get_goals(context=None, status=None, include_done=False, max_content_length=200):
     """Get all goal entries with relation counts."""
     if status is not None and status not in VALID_STATUSES:
         return {"error": f"Invalid status '{status}'. Must be one of: {', '.join(VALID_STATUSES)}"}
@@ -551,7 +554,7 @@ def get_goals(context=None, status=None, include_done=False):
 
     goals = []
     for entry in qs:
-        g = _format_entry(entry)
+        g = _format_entry(entry, max_content_length=max_content_length)
         # Count relations for this entry (cheap aggregate, not N+1)
         rel_count = Relation.objects.filter(
             Q(entry1_id=entry.id) | Q(entry2_id=entry.id)
@@ -561,7 +564,7 @@ def get_goals(context=None, status=None, include_done=False):
     return goals
 
 
-def get_memories(context=None, limit=50, start_date=None, end_date=None):
+def get_memories(context=None, limit=50, start_date=None, end_date=None, max_content_length=200):
     if not isinstance(limit, int) or limit < 1:
         return {"error": f"limit must be a positive integer, got {limit}"}
 
@@ -578,10 +581,10 @@ def get_memories(context=None, limit=50, start_date=None, end_date=None):
         return err
 
     qs = qs.order_by('-timestamp_modified')[:limit]
-    return [_format_entry(entry) for entry in qs]
+    return [_format_entry(entry, max_content_length=max_content_length) for entry in qs]
 
 
-def get_bookmarks(context=None, limit=50, start_date=None, end_date=None):
+def get_bookmarks(context=None, limit=50, start_date=None, end_date=None, max_content_length=200):
     if not isinstance(limit, int) or limit < 1:
         return {"error": f"limit must be a positive integer, got {limit}"}
 
@@ -598,10 +601,10 @@ def get_bookmarks(context=None, limit=50, start_date=None, end_date=None):
         return err
 
     qs = qs.order_by('-timestamp_modified')[:limit]
-    return [_format_entry(entry) for entry in qs]
+    return [_format_entry(entry, max_content_length=max_content_length) for entry in qs]
 
 
-def search_entries(query, kind=None, context=None, limit=50, start_date=None, end_date=None):
+def search_entries(query, kind=None, context=None, limit=50, start_date=None, end_date=None, max_content_length=200):
     if not query:
         return {"error": "query is required"}
     if kind is not None and kind not in VALID_KINDS:
@@ -624,7 +627,7 @@ def search_entries(query, kind=None, context=None, limit=50, start_date=None, en
         return err
 
     qs = qs.order_by('-timestamp_modified')[:limit]
-    return [_format_entry(entry) for entry in qs]
+    return [_format_entry(entry, max_content_length=max_content_length) for entry in qs]
 
 
 def get_entry(entry_id):
@@ -643,7 +646,7 @@ def get_entry(entry_id):
     return result
 
 
-def get_named_entries(name=None, context=None):
+def get_named_entries(name=None, context=None, max_content_length=200):
     """Get entries that have a @name. If name given, return that specific entry."""
     qs = Entry.objects.filter(
         deleted_at__isnull=True,
@@ -658,10 +661,10 @@ def get_named_entries(name=None, context=None):
         if not entry:
             ctx_msg = f" in context '{context}'" if context else ""
             return {"error": f"No entry named '{name}'{ctx_msg}"}
-        return _format_entry(entry)
+        return _format_entry(entry, max_content_length=max_content_length)
 
     qs = qs.order_by('name')
-    return [_format_entry(entry) for entry in qs]
+    return [_format_entry(entry, max_content_length=max_content_length) for entry in qs]
 
 
 def get_entry_by_entry_id(entry_id):
@@ -868,7 +871,7 @@ def create_goal(content, context=None, name=None, tags=None,
     )
 
 
-def get_goal(entry_id):
+def get_goal(entry_id, max_content_length=200):
     """Get a goal entry with all its relations and tagged entries.
 
     Returns relations (from the relations table) and tagged_entries
@@ -884,7 +887,7 @@ def get_goal(entry_id):
     if entry.kind != 'goal':
         return {"error": f"Entry is kind='{entry.kind}', not goal"}
     result = _format_entry(entry)
-    result["relations"] = _get_relations_for_entry(entry_id)
+    result["relations"] = _get_relations_for_entry(entry_id, max_content_length=max_content_length)
 
     # Also return entries with data.rel_goal matching this goal's entry_id
     goal_entry_id = (entry.data or {}).get('entry_id')
@@ -893,7 +896,7 @@ def get_goal(entry_id):
             data__rel_goal=goal_entry_id,
             deleted_at__isnull=True,
         ).select_related('context').prefetch_related('tags').order_by('timestamp_modified')
-        result["tagged_entries"] = [_format_entry(e) for e in tagged]
+        result["tagged_entries"] = [_format_entry(e, max_content_length=max_content_length) for e in tagged]
     else:
         result["tagged_entries"] = []
 
@@ -983,17 +986,17 @@ def delete_relation(relation_id):
     return {"deleted": True, "relation": result}
 
 
-def get_relations(entry_id):
+def get_relations(entry_id, max_content_length=200):
     """Get all relations for an entry."""
     if not entry_id:
         return {"error": "entry_id is required"}
     entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
     if not entry:
         return {"error": f"Entry '{entry_id}' not found"}
-    return _get_relations_for_entry(entry_id)
+    return _get_relations_for_entry(entry_id, max_content_length=max_content_length)
 
 
-def get_web(entry_id, depth=2, kinds=None):
+def get_web(entry_id, depth=2, kinds=None, max_content_length=200):
     """Traverse the relation graph from an entry, returning the connected subgraph.
 
     BFS traversal up to `depth` hops. Explores all edges regardless of entry kind,
@@ -1023,7 +1026,7 @@ def get_web(entry_id, depth=2, kinds=None):
         if not entry:
             continue
 
-        visited_entries[current_id] = _format_entry(entry)
+        visited_entries[current_id] = _format_entry(entry, max_content_length=max_content_length)
 
         if current_depth < depth:
             rels = Relation.objects.filter(

@@ -38,4 +38,4 @@ popd >/dev/null
 # reload apache
 sudo systemctl reload apache2
 
-echo "Deployment complete."
+echo "Deployment complete. Apache reloaded."
