@@ -61,8 +61,16 @@ def get_next_scheduled_time(action):
 
     For actions without scheduled_time:
         Falls back to last_run + interval_hours * 3600.
+
+    If retry_after is set (agent failed, pending retry), returns that instead.
     """
     data = action.data or {}
+
+    # Failed agent retry takes priority over normal schedule
+    retry_after = data.get('retry_after')
+    if retry_after:
+        return retry_after
+
     scheduled_time = data.get('scheduled_time')
 
     if scheduled_time:
@@ -421,6 +429,10 @@ def update_last_run(action):
     """
     data = action.data or {}
     data['last_run'] = time.time()
+
+    # Clear retry state — this run was dispatched (success/failure handled by agent_complete)
+    data.pop('retry_after', None)
+    data.pop('retry_count', None)
 
     # Restore scheduled_time after a force-run
     if 'scheduled_time_config' in data:

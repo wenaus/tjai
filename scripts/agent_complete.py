@@ -34,6 +34,8 @@ if not logger.handlers:
 HARD_KILL_HOURS = 4
 SUBAGENT_POLL_SECONDS = 300
 SUBAGENT_STABLE_SECONDS = 600
+MAX_RETRIES = 3
+RETRY_BACKOFF_MINUTES = [15, 60, 240]  # 15min, 1h, 4h
 
 
 def _count_subagent_entries(source_entry_id):
@@ -154,6 +156,65 @@ def _wait_for_subagents(action_id, current_entry, ref_extra):
     return final_count
 
 
+def _schedule_retry(action_id, ref_extra):
+    """Schedule a retry with exponential backoff on agent failure.
+
+    Sets retry_after and retry_count on the action entry's data so the
+    scheduler picks it up after a delay. Returns True if retry was scheduled,
+    False if max retries exceeded.
+    """
+    action = Entry.objects.filter(
+        kind='action', deleted_at__isnull=True,
+        data__entry_id=action_id,
+    ).first()
+    if not action:
+        logger.error("%s: action entry not found, cannot schedule retry",
+                     action_id, extra=ref_extra)
+        return False
+
+    data = action.data or {}
+    retry_count = data.get('retry_count', 0)
+
+    if retry_count >= MAX_RETRIES:
+        logger.error("%s: max retries (%d) exceeded, giving up until next scheduled run",
+                     action_id, MAX_RETRIES, extra=ref_extra)
+        data.pop('retry_after', None)
+        data.pop('retry_count', None)
+        action.data = data
+        action.save(update_fields=['data'])
+        return False
+
+    backoff_minutes = RETRY_BACKOFF_MINUTES[min(retry_count, len(RETRY_BACKOFF_MINUTES) - 1)]
+    retry_at = time.time() + backoff_minutes * 60
+    data['retry_after'] = retry_at
+    data['retry_count'] = retry_count + 1
+    action.data = data
+    action.save(update_fields=['data'])
+    logger.info("%s: scheduled retry %d/%d in %d minutes",
+                action_id, retry_count + 1, MAX_RETRIES, backoff_minutes,
+                extra=ref_extra)
+    return True
+
+
+def _clear_retry(action_id):
+    """Clear retry state on successful completion."""
+    action = Entry.objects.filter(
+        kind='action', deleted_at__isnull=True,
+        data__entry_id=action_id,
+    ).first()
+    if not action:
+        return
+    data = action.data or {}
+    changed = False
+    for key in ('retry_after', 'retry_count'):
+        if key in data:
+            del data[key]
+            changed = True
+    if changed:
+        action.data = data
+        action.save(update_fields=['data'])
+
+
 def main():
     if len(sys.argv) < 2:
         logger.error("Usage: agent_complete.py <action_entry_id> [exit_code]")
@@ -231,7 +292,7 @@ def main():
                 defaults={'value': str(float(tracking_ts)),
                           'timestamp_modified': now})
 
-    # Structured error reporting
+    # Structured error reporting and retry scheduling
     if exit_code not in (0, 124):
         error_msg = f"Agent exited {exit_code}"
         if stderr_content:
@@ -242,11 +303,15 @@ def main():
         SysConfig.objects.update_or_create(
             key=f'agent_{action_id}_last_error_time',
             defaults={'value': str(now), 'timestamp_modified': now})
+        # Schedule retry with backoff
+        _schedule_retry(action_id, ref_extra)
     else:
         SysConfig.objects.filter(key=f'agent_{action_id}_last_error').update(
             value='', timestamp_modified=now)
         SysConfig.objects.filter(key=f'agent_{action_id}_last_error_time').update(
             value='', timestamp_modified=now)
+        # Clear retry state on success
+        _clear_retry(action_id)
 
     # Write structured run result to the current entry's data field
     if current_entry:
