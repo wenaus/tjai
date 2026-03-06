@@ -7,7 +7,7 @@ TARGET_DIR=/var/www/tjai
 VENV=$TARGET_DIR/.venv
 
 # rsync code (preserve .env in target)
-rsync -av --delete \
+rsync -av \
   --exclude '.venv' --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' --exclude '.env' --exclude 'data/' \
   "$REPO_ROOT/" "$TARGET_DIR/"
 
