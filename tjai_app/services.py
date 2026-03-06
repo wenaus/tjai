@@ -400,6 +400,12 @@ def create_entry(content, kind="memory", context=None, name=None, tags=None,
         tz = get_timezone()
         dt = datetime.strptime(event_date, '%Y%m%d').replace(hour=hour, minute=minute, tzinfo=tz)
         entry_data['event_date'] = dt.timestamp()
+
+    # Store actual line count for dashboard display (content may be shown truncated)
+    line_count = len([l for l in actual_content.split('\n') if l.strip()])
+    if line_count > 1:
+        entry_data['content_lines'] = line_count
+
     if not entry_data:
         entry_data = None
 
@@ -778,6 +784,16 @@ def edit_entry(entry_id, content, context=None, clear_context=False,
         entry.name = name
     elif clear_name:
         entry.name = None
+
+    # Update content_lines when content changes
+    if actual_content != old_content:
+        line_count = len([l for l in actual_content.split('\n') if l.strip()])
+        if entry.data is None:
+            entry.data = {}
+        if line_count > 1:
+            entry.data['content_lines'] = line_count
+        else:
+            entry.data.pop('content_lines', None)
 
     # Auto-preserve mod time if only tags and/or context changed
     metadata_only = (actual_content == old_content and

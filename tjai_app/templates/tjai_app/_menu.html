@@ -29,7 +29,7 @@
             const agEl = document.getElementById('menu-agents');
             if (agEl && d.agents) {
                 const isCurrent = agEl.tagName === 'SPAN';
-                agEl.style.color = d.agents === 'red' ? colors.red : (isCurrent ? '#e0e0e0' : defaultColor);
+                agEl.style.color = d.agents === 'red' ? colors.red : (isCurrent ? '#e0e0e0' : '');
             }
         } catch(e) {}
     }
