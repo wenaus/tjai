@@ -235,6 +235,9 @@ def _create_and_dispatch_synthesis(base_entry_id, base_entry, synth_entry_id):
             'base_entry_id': base_entry_id,
             'base_uuid': str(base_entry.id),
             'model': 'synthesis',
+            'source_claude_entry_id': base_entry_id,
+            'source_gemini_entry_id': f'{base_entry_id}-gemini',
+            'source_chatgpt_entry_id': f'{base_entry_id}-chatgpt',
         },
     )
     Tag.objects.create(tag_name='research_topic', entry=synth)

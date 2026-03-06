@@ -344,6 +344,10 @@ def main():
             logger.error("%s: failed to write run result: %s",
                          action_id, e, extra=ref_extra)
 
+    # Post-process synthesis entries: convert plain source report references to md links
+    if current_entry and exit_code in (0, 124):
+        _linkify_synthesis_sources(current_entry)
+
     # Queue drain for research-agent: auto-chain to next pending item
     if action_id == 'research-agent' and exit_code in (0, 124):
         _research_queue_drain(now)
@@ -417,6 +421,43 @@ def _research_queue_drain(now):
             base_uuid=str(next_item.id),
             context_obj=next_item.context,
         )
+
+
+def _linkify_synthesis_sources(current_entry_uuid):
+    """Convert plain-text source report entry_ids to markdown links in synthesis entries."""
+    entry = Entry.objects.filter(
+        id=current_entry_uuid, deleted_at__isnull=True,
+    ).first()
+    if not entry:
+        return
+    data = entry.data if isinstance(entry.data, dict) else {}
+    if data.get('model') != 'synthesis':
+        return
+
+    content = entry.content
+    changed = False
+    for key in ('source_claude_entry_id', 'source_gemini_entry_id', 'source_chatgpt_entry_id'):
+        eid = data.get(key)
+        if not eid:
+            continue
+        md_link = f'[{eid}](/tjai/entry/?entry_id={eid})'
+        # Replace bare entry_id references that aren't already inside a markdown link
+        # Match the entry_id when NOT preceded by ( or [ (already linked)
+        if eid in content and md_link not in content:
+            # Only replace occurrences that are plain text, not already in a link
+            import re
+            # Negative lookbehind for ( or [ to avoid re-linking
+            pattern = re.compile(r'(?<!\()(?<!\[)' + re.escape(eid) + r'(?!\])')
+            new_content = pattern.sub(md_link, content)
+            if new_content != content:
+                content = new_content
+                changed = True
+
+    if changed:
+        entry.content = content
+        entry.save(update_fields=['content'])
+        logger.info("Linkified source reports in synthesis entry %s",
+                     current_entry_uuid)
 
 
 def _check_and_trigger_synthesis(current_entry_uuid):
