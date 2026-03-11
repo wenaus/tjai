@@ -298,7 +298,7 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
     '(' + MONTH_PAT_ + ')' +                              // (1) month
     '\\s+(\\d{1,2})(?:st|nd|rd|th)?' +                       // (2) day + optional ordinal
     '(?:,?\\s*(\\d{4}))?' +                                // (3) optional year
-    ',?\\s+(?:at\\s+)?' +                                  // separator
+    ',?\\s+(?:(?:at|from)\\s+)?' +                           // separator
     '(\\d{1,2})(?::(\\d{2}))?\\s*' +                       // (4) hour (5) min
     '(a\\.?m\\.?|p\\.?m\\.?|AM|PM)' +                     // (6) am/pm
     '(?:\\s*\\(?(E[SD]T|C[SD]T|M[SD]T|P[SD]T|ET|CT|MT|PT|UTC|GMT|CES?T)\\)?)?',  // (7) tz
@@ -314,7 +314,7 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
       '(\\d{1,2})(?:st|nd|rd|th)?\\s+' +                      // (1) day + optional ordinal
       '(' + MONTH_PAT_ + ')' +                                 // (2) month
       '(?:,?\\s*(\\d{4}))?' +                                  // (3) optional year
-      '(?:[,\\s\\-]+|\\s+(?:at\\s+))' +                        // separator (comma, dash, or "at")
+      '(?:[,\\s\\-]+|\\s+(?:(?:at|from)\\s+))' +                // separator (comma, dash, or "at")
       '(\\d{1,2})(?::(\\d{2}))?\\s*' +                         // (4) hour (5) min
       '(a\\.?m\\.?|p\\.?m\\.?|AM|PM)' +                       // (6) am/pm
       '(?:\\s*\\(?(E[SD]T|C[SD]T|M[SD]T|P[SD]T|ET|CT|MT|PT|UTC|GMT|CES?T)\\)?)?',  // (7) tz
@@ -337,7 +337,7 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
       '(\\d{1,2})(?:st|nd|rd|th)?\\s+' +                      // (1) day
       '(' + MONTH_PAT_ + ')' +                                 // (2) month
       '(?:,?\\s*(\\d{4}))?' +                                  // (3) optional year
-      '(?:[,\\s\\-]+|\\s+(?:at\\s+))' +                        // separator
+      '(?:[,\\s\\-]+|\\s+(?:(?:at|from)\\s+))' +                // separator
       '(\\d{1,2}):(\\d{2})' +                                  // (4) hour (5) min — colon required
       '(?:\\s*\\(?(E[SD]T|C[SD]T|M[SD]T|P[SD]T|ET|CT|MT|PT|UTC|GMT|CES?T)\\)?)?',  // (6) tz
       'i'
@@ -358,7 +358,7 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
       '(' + MONTH_PAT_ + ')' +                                 // (1) month
       '\\s+(\\d{1,2})(?:st|nd|rd|th)?' +                       // (2) day
       '(?:,?\\s*(\\d{4}))?' +                                  // (3) optional year
-      ',?\\s+(?:at\\s+)?' +                                    // separator
+      ',?\\s+(?:(?:at|from)\\s+)?' +                             // separator
       '(\\d{1,2}):(\\d{2})' +                                  // (4) hour (5) min — colon required
       '(?:\\s*\\(?(E[SD]T|C[SD]T|M[SD]T|P[SD]T|ET|CT|MT|PT|UTC|GMT|CES?T)\\)?)?',  // (6) tz
       'i'
@@ -377,7 +377,7 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
       '(\\d{1,2})[./\\-](\\d{1,2})' +                           // (1) MM (2) DD
       '(?:[./\\-](\\d{2,4}))?' +                                // (3) optional year
       '\\)?' +                                                   // optional closing paren
-      '(?:[,\\s]+|\\s+)(?:at\\s+)?' +                            // separator
+      '(?:[,\\s]+|\\s+)(?:(?:at|from)\\s+)?' +                    // separator
       '(\\d{1,2})(?::(\\d{2}))?\\s*' +                           // (4) hour (5) min
       '(a\\.?m\\.?|p\\.?m\\.?|AM|PM)' +                         // (6) am/pm
       '(?:\\s*\\(?(E[SD]T|C[SD]T|M[SD]T|P[SD]T|ET|CT|MT|PT|UTC|GMT|CES?T)\\)?)?',  // (7) tz
@@ -395,7 +395,7 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
       '(\\d{1,2})[./\\-](\\d{1,2})' +                           // (1) MM (2) DD
       '(?:[./\\-](\\d{2,4}))?' +                                // (3) optional year
       '\\)?' +                                                   // optional closing paren
-      '(?:[,\\s]+|\\s+)(?:at\\s+)?' +                            // separator
+      '(?:[,\\s]+|\\s+)(?:(?:at|from)\\s+)?' +                    // separator
       '(\\d{1,2}):(\\d{2})' +                                   // (4) hour (5) min — colon required
       '(?:\\s*\\(?(E[SD]T|C[SD]T|M[SD]T|P[SD]T|ET|CT|MT|PT|UTC|GMT|CES?T)\\)?)?',  // (6) tz
       'i'
@@ -405,6 +405,10 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
   }
 
   if (!match) return null;
+
+  // Check for IANA timezone path near the matched time (e.g., "Europe/Zurich", "America/New_York")
+  var ianaMatch = text.match(/\b(Africa|America|Antarctica|Asia|Atlantic|Australia|Europe|Indian|Pacific)\/[A-Za-z_]+(?:\/[A-Za-z_]+)?\b/);
+  var ianaTz = ianaMatch ? ianaMatch[0] : null;
 
   // Numeric date: month and day are already numeric, no MONTHS_ lookup needed
   if (isNumeric) {
@@ -427,6 +431,8 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
     var numTzName = defaultTz;
     if (numTzGroup && TZ_ABBREV_[numTzGroup.toUpperCase()]) {
       numTzName = TZ_ABBREV_[numTzGroup.toUpperCase()];
+    } else if (ianaTz) {
+      numTzName = ianaTz;
     }
 
     var numTimestamp = dateInTimezone_(numYear, numMonth, numDay, numHour, numMinute, numTzName);
@@ -453,11 +459,13 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
     if (ampm === 'am' && hour === 12) hour = 0;
   }
 
-  // Resolve timezone: explicit in text > sender-based default
+  // Resolve timezone: explicit in text > IANA path > sender-based default
   var tzGroup = is24h ? match[6] : match[7];
   var tzName = defaultTz;
   if (tzGroup && TZ_ABBREV_[tzGroup.toUpperCase()]) {
     tzName = TZ_ABBREV_[tzGroup.toUpperCase()];
+  } else if (ianaTz) {
+    tzName = ianaTz;
   }
 
   var timestamp = dateInTimezone_(year, month, day, hour, minute, tzName);
