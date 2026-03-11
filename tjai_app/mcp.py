@@ -31,13 +31,18 @@ Available tools:
     get_web           - Traverse the relation graph from an entry
 
 Entry types: memory, todo, journal, profile, bookmark, ai, list, action, goal
+Valid statuses: active, done, blocked, archive. Priority: positive integers (1=highest).
+
+IMPORTANT — entry_id: Every non-trivial entry MUST have a human-readable entry_id
+set via data={"entry_id": "kebab-case-slug"}. This is how entries are referenced,
+linked, and looked up (get_entry_by_entry_id). Without it, the entry is UUID-only.
 
 Contexts group entries by project or topic. Most tools accept a context parameter
 to filter results. Use get_ai_guidance(context) before starting work on any
 project to get project-specific instructions.
 
 Error handling: Tools return {"error": "message"} on validation failures.
-Check for "error" key in response before processing results.
+Always check for "error" key in response before processing results.
 """
 
 from asgiref.sync import sync_to_async
@@ -182,12 +187,25 @@ async def create_entry(
         status: Status value. One of: active, done, blocked, archive.
         create_context: If True, creates context if it doesn't exist. Default: False
                         (fails if context doesn't exist, preventing typos).
-        data: JSON metadata object. For journal entries, event_date/event_time are
-              stored here automatically. For action entries, holds trigger config
+        data: JSON metadata object. IMPORTANT: Always include an "entry_id" key
+              with a human-readable slug (e.g., {"entry_id": "research-css-design"}).
+              This is the primary way entries are referenced and linked — without it,
+              the entry is only findable by UUID. Use lowercase-kebab-case.
+              For journal entries, event_date/event_time are stored here automatically.
+              For action entries, holds trigger config
               (trigger, interval_hours, mechanical_script, ai_prompt, last_run).
 
+    ENTRY_ID IS REQUIRED: Every non-trivial entry MUST have data.entry_id set.
+    It is the human-readable identifier used in URLs, cross-references (rel_goal),
+    and the get_entry_by_entry_id() lookup. Omitting it forces UUID-only access.
+
     Example for calendar event "Meeting at 9am on Jan 28, 2026":
-        create_entry(content="Meeting", kind="journal", event_date="20260128", event_time="0900")
+        create_entry(content="Meeting", kind="journal", event_date="20260128",
+                     event_time="0900", data={"entry_id": "meeting-hsf-20260128"})
+
+    Example for a research topic:
+        create_entry(content="Why LLMs fail at CSS", kind="memory",
+                     tags="research_topic", data={"entry_id": "research-css-llm-failure"})
 
     Returns:
         The created entry with id, content, kind, context, created, modified,
@@ -591,7 +609,9 @@ async def create_goal(
         priority: Priority level (1=highest).
         status: One of: active, done, blocked, archive.
         create_context: If True, creates context if it doesn't exist.
-        data: JSON metadata object.
+        data: JSON metadata object. MUST include "entry_id" with a human-readable
+              slug (e.g., {"entry_id": "goal-system-vision"}). Goals are referenced
+              by entry_id in relations and dialog associations (rel_goal).
 
     Returns:
         The created goal entry with id, content, kind='goal', and optional fields.
