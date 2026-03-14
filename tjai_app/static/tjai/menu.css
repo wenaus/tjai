@@ -7,6 +7,9 @@
     border-bottom: 1px solid #333;
     font-size: 12px;
     flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    z-index: 100;
 }
 #top-menu .menu-title {
     color: #d8a070;

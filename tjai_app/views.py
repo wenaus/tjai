@@ -1286,15 +1286,14 @@ def entry_detail(request, entry_id=None):
                 if k in TIMESTAMP_KEYS or (v > 1e9 and v < 2e10):
                     data_ts_display[k] = fmt_datetime(v)
 
-    # Relations and tagged entries for goal entries
-    relations_json = '[]'
+    # Relations for all entries; tagged entries for goals
+    from . import services
+    relations = services._get_relations_for_entry(str(entry.id), max_content_length=0)
+    relations_json = json.dumps(relations)
     tagged_entries_json = '[]'
     goal_note_url = None
     goal_note_exists = False
     if entry.kind == 'goal':
-        from . import services
-        relations = services._get_relations_for_entry(str(entry.id), max_content_length=0)
-        relations_json = json.dumps(relations)
         goal_entry_id = (data or {}).get('entry_id')
         if goal_entry_id:
             tagged = Entry.objects.filter(
@@ -1334,6 +1333,14 @@ def entry_detail(request, entry_id=None):
 
 @login_required
 @require_http_methods(["POST"])
+@login_required
+@require_http_methods(["POST"])
+def api_entry_tag_delete(request, entry_id, tag_name):
+    """Delete a single tag from an entry."""
+    deleted, _ = Tag.objects.filter(entry_id=entry_id, tag_name=tag_name).delete()
+    return JsonResponse({'ok': deleted > 0})
+
+
 def api_entry_save(request, entry_id):
     """Save entry content from the inline editor."""
     entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
@@ -3509,6 +3516,7 @@ def api_agent_queue_data(request):
 
     # ── Per-action: build upcoming/running + latest completion ──
     action_uuid_map = {}  # action_id -> entry UUID for linking
+    action_data_map = {}  # action_id -> action.data dict
     for action in actions:
         data = action.data or {}
         action_id = data.get('entry_id', '')
@@ -3517,6 +3525,7 @@ def api_agent_queue_data(request):
 
         action_uuid = action.id
         action_uuid_map[action_id] = action_uuid
+        action_data_map[action_id] = data
         prefix = f'agent_{action_id}_'
         from .action_runner import get_next_scheduled_time
         next_due = get_next_scheduled_time(action)
@@ -3602,6 +3611,7 @@ def api_agent_queue_data(request):
                     'entry_id': entry_uuid,
                     'tracking': tracking,
                     'error': last_error if last_error else None,
+                    'result_url': data.get('result_url', ''),
                     '_event_time': completed_f,
                 }
 
@@ -3658,6 +3668,7 @@ def api_agent_queue_data(request):
             'status': status,
             'entry_id': entry_uuid,
             'tracking': tracking,
+            'result_url': action_data_map.get(aid, {}).get('result_url', ''),
             '_event_time': completed_at,
         }
         model = ed.get('model')

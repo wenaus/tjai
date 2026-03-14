@@ -76,6 +76,7 @@ urlpatterns = [
     path("api/system/data", views.api_system_data, name="api_system_data"),
     path("api/system/refresh", views.api_system_refresh, name="api_system_refresh"),
     path("api/entry/<uuid:entry_id>/save", views.api_entry_save, name="api_entry_save"),
+    path("api/entry/<uuid:entry_id>/tag/<str:tag_name>/delete", views.api_entry_tag_delete, name="api_entry_tag_delete"),
     path("entry/", views.entry_detail, name="entry_detail_query"),
     path("entry/<path:entry_id>/", views.entry_detail, name="entry_detail"),
     path("context/<str:context_name>/", views.context_entries, name="context_entries"),

@@ -96,7 +96,7 @@ def handle_ai_agent(args) -> None:
 
     # Create tjai entry for tracking
     entry_id = _create_tracking_entry(prompt, context)
-    print(f"Tracking: {entry_id[:8]}  [{prompt[:60]}]")
+    print(f"Tracking: [[tracking:{entry_id}]]  [{prompt[:60]}]")
     print(f"TRACKING_ID={entry_id}")
 
     # Build system prompt (custom prompt overrides default agent behavior)

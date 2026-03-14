@@ -278,6 +278,7 @@
             if (item.message) parts.push('<span class="topic">' + escHtml(item.message) + '</span>');
             const links = [];
             if (item.entry_id) links.push('<a href="' + entryUrl(item.entry_id) + '">result</a>');
+            else if (item.result_url) links.push('<a href="' + item.result_url + '">result</a>');
             if (item.tracking) links.push('<a href="' + logUrl(item.tracking) + '">log</a>');
             if (links.length) parts.push(links.join(' '));
             detail = parts.join(' &nbsp; ');

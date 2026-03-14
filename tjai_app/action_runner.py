@@ -354,6 +354,7 @@ def dispatch_ai(action, entry_id=None, target_date=None):
                     logger.info("  %s", line)
                     if action_id and line.startswith('TRACKING_ID='):
                         tracking_id = line.split('=', 1)[1].strip()
+                        logger.info("[[tracking:%s]]", tracking_id)
                         SysConfig.objects.update_or_create(
                             key=f'agent_{action_id}_tracking',
                             defaults={'value': tracking_id,

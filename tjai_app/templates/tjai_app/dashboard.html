@@ -479,8 +479,9 @@
                 }
                 if (entry.line_count && !expandDialog) line += ` <span style="color:#daa520">[${entry.line_count} lines]</span>`;
                 if (entry.tags && entry.tags.length) {
-                    const tagStr = entry.tags.map(t => ':' + t).join(' ');
-                    line += ` <span style="color:#9ccc65">${tagStr}</span>`;
+                    for (const t of entry.tags) {
+                        line += ` <span style="color:#9ccc65">:${t}</span><span class="tag-del" data-eid="${entry.id}" data-tag="${t}" style="color:#ef5350;cursor:pointer;margin-left:1px">-</span>`;
+                    }
                 }
 
                 html += `<div class="entry" id="e-${entry.id}" style="margin-left:0" data-context="${entry.context || ''}" data-machine="${entry.hostname || ''}" data-kind="${entry.kind || ''}" data-tags="${(entry.all_tags || entry.tags || []).join(',')}">${line}</div>`;
@@ -678,6 +679,22 @@
         }
 
         // Infinite scroll on entries container
+        document.getElementById('recent-entries').addEventListener('click', function(e) {
+            const tagDel = e.target.closest('.tag-del');
+            if (tagDel) {
+                e.preventDefault();
+                e.stopPropagation();
+                const eid = tagDel.dataset.eid, tag = tagDel.dataset.tag;
+                fetch(`/tjai/api/entry/${eid}/tag/${tag}/delete`, {
+                    method: 'POST',
+                    headers: {'X-CSRFToken': '{{ csrf_token }}'},
+                }).then(() => {
+                    const prev = tagDel.previousElementSibling;
+                    if (prev) prev.remove();
+                    tagDel.remove();
+                });
+            }
+        });
         document.getElementById('recent-entries').addEventListener('scroll', function() {
             if (this.scrollHeight - this.scrollTop - this.clientHeight < 200) {
                 loadMoreEntries();

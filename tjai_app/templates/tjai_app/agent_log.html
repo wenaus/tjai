@@ -123,7 +123,7 @@
                     `<span class="log-ts">${e.timestamp}</span> ` +
                     `<span class="log-level">${e.level.padEnd(7)}</span> ` +
                     `<span class="log-src">${e.source}</span> ` +
-                    `<span class="log-msg">${escapeHtml(e.message)}</span>` +
+                    `<span class="log-msg">${linkifyMsg(escapeHtml(e.message))}</span>` +
                     `</div>`;
             }
             document.getElementById('log-container').innerHTML = html;
@@ -132,6 +132,17 @@
 
         function escapeHtml(str) {
             return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+        const _linkRoutes = {
+            tracking: id => `/tjai/agent-log?ref=${id}&name=${id.substring(0,8)}`,
+            entry: id => `/tjai/entry/${id}/`,
+        };
+        function linkifyMsg(str) {
+            return str.replace(/\[\[(\w+):([^\]]+)\]\]/g, (m, type, id) => {
+                const route = _linkRoutes[type];
+                if (!route) return m;
+                return `<a href="${route(id)}" style="color:#64b5f6">${id.substring(0,8)}</a>`;
+            });
         }
 
         let lastRefresh = 0;
