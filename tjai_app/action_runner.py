@@ -160,7 +160,12 @@ def resolve_prompt_template(prompt_template, extra_vars=None, target_date=None):
     if extra_vars:
         template_vars.update(extra_vars)
 
-    return prompt_template.format(**template_vars)
+    # Simple string replacement — prompts contain JSON examples with braces
+    # that would crash str.format(). Only replace known {key} placeholders.
+    result = prompt_template
+    for key, value in template_vars.items():
+        result = result.replace('{' + key + '}', str(value))
+    return result
 
 
 def _run_one_script(script_cmd, target_date=None):
