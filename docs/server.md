@@ -112,6 +112,64 @@ Automated daily backup to Dropbox (`~/Dropbox/tjai-backups/server/YYYY-MM-DD/`).
 | Data files | `data/` | `/var/www/tjai/data/` |
 | Apache config | `etaverse.conf` | `/etc/apache2/sites-enabled/etaverse.conf` |
 
-Runs overnight as a tjai action (`trigger=overnight`, `interval_hours=24`). Health page monitors freshness and completeness.
+Runs overnight as a tjai action (`trigger=overnight`, `interval_hours=24`). Health page monitors freshness and completeness. Backup runs around 09:00 UTC — changes after that are not covered until the next day.
 
 **File:** `scripts/backup.py`
+
+### Restoration
+
+**Full database restore** (nuclear option — replaces everything):
+
+```bash
+gunzip -c ~/Dropbox/tjai-backups/server/YYYY-MM-DD/tjai-db.sql.gz > /tmp/restore.sql
+# Drop and recreate:
+sudo -u postgres dropdb tjai
+sudo -u postgres createdb tjai
+sudo -u postgres psql tjai < /tmp/restore.sql
+```
+
+**Selective restore** (recover specific rows from a table):
+
+1. Extract the dump:
+   ```bash
+   gunzip -c ~/Dropbox/tjai-backups/server/YYYY-MM-DD/tjai-db.sql.gz > /tmp/restore.sql
+   ```
+
+2. Find the COPY block for the table:
+   ```bash
+   grep -n 'COPY public.tablename' /tmp/restore.sql
+   ```
+
+3. Extract specific rows. The COPY format is tab-separated. Example — extract `system_health` rows from `applog` (source is column 2):
+   ```bash
+   # Extract COPY header
+   awk '/^COPY public.applog/,/^\\\\.$/' /tmp/restore.sql | head -1 > /tmp/partial.sql
+   # Extract matching rows
+   awk -F'\t' '/^COPY public.applog/,/^\\\\.$/{if($2=="system_health") print}' /tmp/restore.sql >> /tmp/partial.sql
+   # Add terminator
+   echo '\\.' >> /tmp/partial.sql
+   ```
+
+4. Re-insert using Python (handles ID conflicts):
+   ```python
+   import psycopg, os
+   conn = psycopg.connect(os.environ['DJANGO_DATABASE_URL'])
+   cur = conn.cursor()
+   with open('/tmp/partial.sql') as f:
+       for line in f.readlines()[1:-1]:  # skip COPY header and terminator
+           parts = line.strip().split('\t')
+           cur.execute('INSERT INTO applog (...) VALUES (%s,...) ON CONFLICT (id) DO NOTHING', parts)
+   conn.commit()
+   ```
+
+   Use `ON CONFLICT (id) DO NOTHING` to skip rows that already exist. Always validate with `conn.rollback()` before committing.
+
+**Restoring other items:**
+
+- **Secrets:** Copy `env-www.env` → `/var/www/tjai/.env`, `env-home.env` → `~/.env`
+- **Data files:** Copy `data/` → `/var/www/tjai/data/`
+- **Apache config:** Copy `etaverse.conf` → `/etc/apache2/sites-enabled/`, then `sudo systemctl reload apache2`
+
+### Applog cleanup
+
+The action agent automatically prunes `action_agent` log entries older than 7 days (runs hourly in the main loop). `system_health`, `health_digest`, and other sources are preserved indefinitely.

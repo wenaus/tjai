@@ -373,10 +373,24 @@ def main():
         defaults={'value': str(now), 'timestamp_modified': now},
     )
     logger.info("Action agent started (PID %d)", pid)
+    last_applog_cleanup = 0
     while not shutdown_requested:
         try:
             _check_health_refresh()
             _check_daily_rerun()
+
+            # Prune old operational log entries (once per hour)
+            now_ts = time.time()
+            if now_ts - last_applog_cleanup > 3600:
+                try:
+                    from django.db import connection
+                    with connection.cursor() as cur:
+                        cur.execute("DELETE FROM applog WHERE source IN ('action_agent', 'system_health') AND timestamp < now() - interval '7 days'")
+                        if cur.rowcount > 0:
+                            logger.info("Pruned %d old applog entries", cur.rowcount)
+                    last_applog_cleanup = now_ts
+                except Exception as e:
+                    logger.warning("Applog cleanup failed: %s", e)
 
             due = get_due_actions(trigger_filter=args.trigger)
             for action in due:

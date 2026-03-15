@@ -1948,7 +1948,13 @@ def api_kozy_chat(request):
     if request.method == "GET":
         limit = min(int(request.GET.get("limit", 50)), 200)
         before = request.GET.get("before")
+        sender = request.GET.get("sender", "").strip()
+        search = request.GET.get("q", "").strip()
         qs = KozyChat.objects.all()
+        if sender:
+            qs = qs.filter(sender=sender)
+        if search:
+            qs = qs.filter(content__icontains=search)
         if before:
             qs = qs.filter(id__lt=int(before))
         messages = list(qs.order_by('-id')[:limit])
