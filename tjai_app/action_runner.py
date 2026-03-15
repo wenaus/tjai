@@ -325,7 +325,26 @@ def dispatch_ai(action, entry_id=None, target_date=None):
     timeout_val = data.get('timeout', 7200)  # default 2 hours
     env['TJAI_AGENT_TIMEOUT'] = str(timeout_val)
 
-    # Clear ephemeral keys from action data
+    # Link action to the research entry it dispatched
+    target_entry_uuid = data.get('next_target_entry_id')
+    if target_entry_uuid:
+        from tjai_app.models import Relation
+        import uuid as _uuid
+        try:
+            Relation.objects.get_or_create(
+                entry1_id=action.id,
+                entry2_id=target_entry_uuid,
+                defaults={
+                    'id': str(_uuid.uuid4()),
+                    'relation_type': 'dispatched',
+                    'timestamp_created': time.time(),
+                    'timestamp_modified': time.time(),
+                },
+            )
+        except Exception as e:
+            logger.warning("Failed to create dispatch relation: %s", e)
+
+    # Clear ephemeral dispatch keys — relation preserves the link
     ephemeral_changed = False
     for key in ('next_target', 'next_target_entry_id'):
         if key in data:
@@ -495,6 +514,9 @@ def execute_action(action, target_date=None):
             _write_agent_error(action_id, "Mechanical step failed")
             return False
 
+        # Capture before dispatch_ai clears ephemeral keys
+        multimodel_target_uuid = data.get('next_target_entry_id') if action_id == 'research-agent' else None
+
         if not dispatch_ai(action, entry_id=entry_id if isinstance(entry_id, str) else None,
                            target_date=target_date):
             logger.error("AI dispatch failed")
@@ -504,7 +526,7 @@ def execute_action(action, target_date=None):
 
         # For research-agent: also dispatch Gemini/ChatGPT in parallel with Claude
         if action_id == 'research-agent':
-            target_uuid = data.get('next_target_entry_id')
+            target_uuid = multimodel_target_uuid
             if target_uuid:
                 target_entry = Entry.objects.filter(
                     id=target_uuid, deleted_at__isnull=True,

@@ -519,6 +519,28 @@ def login_view(request):
     })
 
 
+def auto_login(request):
+    """Auto-login for KozyKorner family users. Verifies API key, logs in as 'family', redirects."""
+    key = request.GET.get('key', '')
+    next_url = request.GET.get('next', '/tjai/dashboard/')
+
+    try:
+        api_key = SysConfig.objects.get(key='gmail_addon_api_key').value
+    except SysConfig.DoesNotExist:
+        return JsonResponse({"error": "Not configured"}, status=503)
+
+    if key != api_key:
+        return redirect('login')
+
+    from django.contrib.auth.models import User
+    user = User.objects.filter(username='family').first()
+    if not user:
+        return JsonResponse({"error": "Family account not found"}, status=500)
+
+    login(request, user)
+    return redirect(next_url)
+
+
 def public_home(request):
     """Render the public landing page."""
     return render(request, 'tjai_app/public_home.html')

@@ -23,6 +23,7 @@ urlpatterns = [
     # Public landing
     path("", views.public_home, name="public_home"),
     # Login/Logout
+    path("auto-login", views.auto_login, name="auto_login"),
     path("login/", views.login_view, name="login"),
     path("logout/", views.logout_view, name="logout"),
     # Dashboard (protected by login)
