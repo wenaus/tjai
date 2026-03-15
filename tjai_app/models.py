@@ -83,6 +83,18 @@ class SubNote(models.Model):
         db_table = 'sub_notes'
 
 
+class KozyChat(models.Model):
+    """KozyKorner chat messages — persistent family chat alongside video."""
+    id = models.AutoField(primary_key=True)
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    sender = models.CharField(max_length=50)  # Torre, Mom, Jarvis, etc.
+    content = models.TextField()
+
+    class Meta:
+        db_table = 'kozy_chat'
+        ordering = ['timestamp']
+
+
 class Relation(models.Model):
     """Relations between entries — the edges of the goal/knowledge graph."""
     id = models.CharField(max_length=36, primary_key=True)  # UUID

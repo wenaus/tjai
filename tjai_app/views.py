@@ -40,7 +40,7 @@ from django.db.models import Count
 from django.db.models.functions import Lower
 from django.http import Http404
 from django.conf import settings as django_settings
-from .models import AppLog, Context, Entry, RssItem, Tag, TagStats, SubNote, Machine, SysConfig
+from .models import AppLog, Context, Entry, KozyChat, RssItem, Tag, TagStats, SubNote, Machine, SysConfig
 
 
 AGENT_GRACE_SECONDS = 300  # 5 min — never touch an agent younger than this
@@ -1920,6 +1920,74 @@ def api_dialog(request):
         Tag.objects.create(tag_name=tag, entry=entry)
 
     return JsonResponse({"status": "ok", "entry_id": entry.id})
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST", "DELETE"])
+def api_kozy_chat(request):
+    """KozyKorner persistent chat.
+
+    GET: Return recent messages. Query params: limit (default 50), before (id for pagination).
+    POST: Send a message. Body: {sender, content}
+
+    Requires Bearer token matching SysConfig 'gmail_addon_api_key'.
+    """
+    auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+    if not auth_header.startswith('Bearer '):
+        return JsonResponse({"error": "Authorization required"}, status=401)
+    token = auth_header[7:]
+
+    try:
+        api_key = SysConfig.objects.get(key='gmail_addon_api_key').value
+    except SysConfig.DoesNotExist:
+        return JsonResponse({"error": "API key not configured"}, status=503)
+
+    if token != api_key:
+        return JsonResponse({"error": "Invalid API key"}, status=403)
+
+    if request.method == "GET":
+        limit = min(int(request.GET.get("limit", 50)), 200)
+        before = request.GET.get("before")
+        qs = KozyChat.objects.all()
+        if before:
+            qs = qs.filter(id__lt=int(before))
+        messages = list(qs.order_by('-id')[:limit])
+        messages.reverse()
+        return JsonResponse({"messages": [
+            {
+                "id": m.id,
+                "ts": m.timestamp.isoformat(),
+                "sender": m.sender,
+                "content": m.content,
+            } for m in messages
+        ]})
+
+    # DELETE
+    if request.method == "DELETE":
+        msg_id = request.GET.get("id")
+        if not msg_id:
+            return JsonResponse({"error": "id required"}, status=400)
+        deleted, _ = KozyChat.objects.filter(id=msg_id).delete()
+        return JsonResponse({"ok": deleted > 0})
+
+    # POST
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    sender = (data.get("sender") or "").strip()
+    content = (data.get("content") or "").strip()
+    if not sender or not content:
+        return JsonResponse({"error": "sender and content required"}, status=400)
+
+    msg = KozyChat.objects.create(sender=sender, content=content)
+    return JsonResponse({
+        "id": msg.id,
+        "ts": msg.timestamp.isoformat(),
+        "sender": msg.sender,
+        "content": msg.content,
+    })
 
 
 @csrf_exempt

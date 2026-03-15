@@ -18,6 +18,7 @@ urlpatterns = [
     path("api/add-bookmark", views.api_add_bookmark, name="api_add_bookmark"),
     path("api/add-entry", views.api_add_entry, name="api_add_entry"),
     path("api/dialog", views.api_dialog, name="api_dialog"),
+    path("api/kozy-chat", views.api_kozy_chat, name="api_kozy_chat"),
     path("api/bulk-import", views.api_bulk_import, name="api_bulk_import"),
     # Public landing
     path("", views.public_home, name="public_home"),
