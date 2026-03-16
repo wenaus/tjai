@@ -424,7 +424,15 @@ def _research_queue_drain(now):
 
 
 def _linkify_synthesis_sources(current_entry_uuid):
-    """Convert plain-text source report entry_ids to markdown links in synthesis entries."""
+    """Fix source report references in synthesis entries.
+
+    Handles common AI mistakes:
+    - Backtick-wrapped markdown links: `[text](url)` → [text](url)
+    - Suffixes outside URL: [eid](url)-gemini → [eid-gemini](url-gemini)
+    - Bare entry_ids not linked at all
+    """
+    import re
+
     entry = Entry.objects.filter(
         id=current_entry_uuid, deleted_at__isnull=True,
     ).first()
@@ -436,16 +444,37 @@ def _linkify_synthesis_sources(current_entry_uuid):
 
     content = entry.content
     changed = False
+
+    # Fix 1: Strip backticks around markdown links — `[text](url)` → [text](url)
+    backtick_link = re.compile(r'`(\[[^\]]+\]\([^\)]+\))`')
+    new_content = backtick_link.sub(r'\1', content)
+    if new_content != content:
+        content = new_content
+        changed = True
+
+    # Fix 2: For each source entry_id, ensure proper markdown links exist
     for key in ('source_claude_entry_id', 'source_gemini_entry_id', 'source_chatgpt_entry_id'):
         eid = data.get(key)
         if not eid:
             continue
         md_link = f'[{eid}](/tjai/entry/?entry_id={eid})'
-        # Replace bare entry_id references that aren't already inside a markdown link
-        # Match the entry_id when NOT preceded by ( or [ (already linked)
+
+        # Fix suffix outside URL paren: [base-eid](url)-suffix → [full-eid](full-url)
+        # e.g. [research-foo](/tjai/entry/?entry_id=research-foo)-gemini
+        base_eid = data.get('base_entry_id', '')
+        if base_eid and eid != base_eid and eid.startswith(base_eid):
+            suffix = eid[len(base_eid):]  # e.g. "-gemini"
+            bad_pattern = re.compile(
+                re.escape(f'[{base_eid}](/tjai/entry/?entry_id={base_eid})') +
+                re.escape(suffix)
+            )
+            new_content = bad_pattern.sub(md_link, content)
+            if new_content != content:
+                content = new_content
+                changed = True
+
+        # Fix bare entry_ids not already in a markdown link
         if eid in content and md_link not in content:
-            # Only replace occurrences that are plain text, not already in a link
-            import re
             # Negative lookbehind for ( or [ to avoid re-linking
             pattern = re.compile(r'(?<!\()(?<!\[)' + re.escape(eid) + r'(?!\])')
             new_content = pattern.sub(md_link, content)

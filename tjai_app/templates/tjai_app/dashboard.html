@@ -228,6 +228,9 @@
         }
 
         function linkifyContent(content) {
+            // [title](/path) — internal relative links
+            content = content.replace(/\[([^\]]+)\]\((\/[^\)]+)\)/g,
+                '<a href="$2">$1</a>');
             // Convert markdown links [title](url) to clickable HTML
             content = content.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,
                 '<a href="$2" target="_blank">$1</a>');

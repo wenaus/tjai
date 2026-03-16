@@ -199,6 +199,9 @@
             // [title](entry:uuid) — internal entry links
             content = content.replace(/\[([^\]]+)\]\(entry:([^\)]+)\)/g,
                 '<a href="/tjai/entry/$2/">$1</a>');
+            // [title](/path) — internal relative links
+            content = content.replace(/\[([^\]]+)\]\((\/[^\)]+)\)/g,
+                '<a href="$2">$1</a>');
             // [title](url) — external markdown links
             content = content.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,
                 '<a href="$2" target="_blank">$1</a>');
