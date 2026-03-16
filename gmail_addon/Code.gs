@@ -175,6 +175,22 @@ function getApiKey_() {
 // ============================================================
 
 /**
+ * Strip email signature from plain text body.
+ * Signatures start with "-- \n" (RFC 3676) or "\n--\n" (common variant).
+ * Also catches "---------- Forwarded message" boundaries.
+ * Returns body text up to (not including) the signature.
+ */
+function stripSignature_(text) {
+  if (!text) return text;
+  // RFC 3676 sig separator: "-- " on its own line (with trailing space)
+  // Common variant: "--" on its own line (no trailing space)
+  // Handle both \n and \r\n line endings
+  var match = text.match(/\r?\n-- ?\r?\n/);
+  if (match) return text.substring(0, match.index);
+  return text;
+}
+
+/**
  * Extract the best Zoom URL from text (location or description).
  * Recognizes zoom.us, *.zoom.us, zoomgov.com, *.zoomgov.com.
  * Preserves full query string including ?pwd= password parameter.
@@ -672,15 +688,17 @@ function onGmailMessage(e) {
       var msgYear = tryMsg.getDate().getFullYear();
       var senderTz = senderTimezone_(tryMsg.getFrom());
 
-      var title = extractMeetingTitle_(subject, body);
+      var bodyNoSig = stripSignature_(body);
+
+      var title = extractMeetingTitle_(subject, bodyNoSig);
       if (!title) { diag.push('msg[' + t + ']: no title'); continue; }
 
-      var dt = extractDateTime_(subject, body, msgYear, senderTz);
+      var dt = extractDateTime_(subject, bodyNoSig, msgYear, senderTz);
       if (!dt) { diag.push('msg[' + t + ']: no datetime'); continue; }
 
       diag.push('msg[' + t + ']: ' + title + ' @ ' + dt.displayDate);
-      var zoomUrl = extractZoomUrl_(body) || extractZoomUrl_(subject);
-      var indicoUrl = extractIndicoUrl_(body) || extractIndicoUrl_(subject);
+      var zoomUrl = extractZoomUrl_(bodyNoSig) || extractZoomUrl_(subject);
+      var indicoUrl = extractIndicoUrl_(bodyNoSig) || extractIndicoUrl_(subject);
 
       var ev = {
         summary: title,
@@ -699,7 +717,7 @@ function onGmailMessage(e) {
     for (var a = 0; a < tryMsgs.length; a++) {
       var aMsg = tryMsgs[a];
       var aSubject = aMsg.getSubject();
-      var aBody = aMsg.getPlainBody();
+      var aBody = stripSignature_(aMsg.getPlainBody());
       var aMsgYear = aMsg.getDate().getFullYear();
 
       var aIndicoUrl = extractIndicoUrl_(aBody) || extractIndicoUrl_(aSubject);
