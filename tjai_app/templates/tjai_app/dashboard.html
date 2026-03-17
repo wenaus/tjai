@@ -121,10 +121,10 @@
             color: #9ccc65;
         }
         .link {
-            color: #64b5f6;
+            color: #90caf9;
         }
         a {
-            color: #64b5f6;
+            color: #90caf9;
             text-decoration: none;
         }
         a:hover {
@@ -150,7 +150,7 @@
             font-size: 12px;
         }
         .filter-clear:hover { background: #666; }
-        .machine-link.active { background: #64b5f6; color: #1a1a1a !important; padding: 1px 4px; border-radius: 3px; }
+        .machine-link.active { background: #90caf9; color: #1a1a1a !important; padding: 1px 4px; border-radius: 3px; }
         .tag-link.active { background: #9ccc65; color: #1a1a1a !important; padding: 1px 4px; border-radius: 3px; }
         .kind-link.active { background: #daa520; color: #1a1a1a !important; padding: 1px 4px; border-radius: 3px; }
         .context-link.active { background: #ce93d8; color: #1a1a1a !important; padding: 1px 4px; border-radius: 3px; }
@@ -190,7 +190,7 @@
                 <div id="calendar-content">Loading...</div>
             </div>
             <div id="named-section">
-                <div class="panel-header">Named Entries</div>
+                <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">Named Entries <button id="create-entry-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:12px">Create Entry</button></div>
                 <div id="named-content">Loading...</div>
             </div>
         </div>
@@ -274,6 +274,16 @@
                 document.getElementById('named-content').innerHTML = 'Error loading named entries';
             }
         }
+
+        document.getElementById('create-entry-btn').addEventListener('click', async () => {
+            try {
+                const resp = await fetch('/tjai/api/entry/create', { method: 'POST' });
+                const data = await resp.json();
+                if (data.id) window.location.href = '/tjai/entry/?uuid=' + data.id;
+            } catch (e) {
+                alert('Failed to create entry: ' + e.message);
+            }
+        });
 
         function renderNamed(data) {
             let html = '';
@@ -839,7 +849,7 @@
             if (data.machines && data.machines.length > 0) {
                 const machineStrs = data.machines.slice().sort().map(m => {
                     const activeClass = activeMachine === m ? ' active' : '';
-                    let mLink = `<a href="#" class="machine-link${activeClass}" data-machine="${m}" style="color:#64b5f6;text-decoration:none">${m}</a>`;
+                    let mLink = `<a href="#" class="machine-link${activeClass}" data-machine="${m}" style="color:#90caf9;text-decoration:none">${m}</a>`;
                     if (data.oldest_sync && data.oldest_sync.machine === m) {
                         const age = data.oldest_sync.age_min;
                         const ageStr = age < 60 ? `${age}m` : `${Math.floor(age/60)}h${age%60}m`;
@@ -860,7 +870,7 @@
                     const day = parseInt(parts[2]);
                     const label = `${mon} ${day}`;
                     const isActive = activeDate === d.date;
-                    const style = isActive ? 'color:#1a1a1a;background:#64b5f6;padding:1px 4px;border-radius:3px' : 'color:#64b5f6';
+                    const style = isActive ? 'color:#1a1a1a;background:#90caf9;padding:1px 4px;border-radius:3px' : 'color:#90caf9';
                     return `<a href="#" class="date-link" data-date="${d.date}" style="${style};text-decoration:none">${label}</a>&nbsp;<span style="color:#8a8a8a">${d.count}</span>`;
                 }).join('&nbsp; ');
                 html += `<div class="status-line">Dialog: ${dayChips}</div>`;

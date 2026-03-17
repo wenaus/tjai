@@ -50,16 +50,70 @@ def compute_tags(content: str) -> list[str]:
     return tags
 
 
+def extract_inline_metadata(content: str) -> tuple[str, list[str], str | None]:
+    """Extract :tags and =context from content text, return cleaned content.
+
+    Same convention as the CLI parser in tj/commands/create.py.
+    Tags must start with alpha character. Context is first =word found
+    (outside of markdown links).
+
+    Returns (cleaned_content, tag_names, context_or_none).
+    """
+    tags = []
+    context = None
+
+    # Extract =context (first occurrence not inside a markdown link)
+    # Match =word that isn't preceded by ( which would be part of ](url)
+    ctx_match = re.search(r'(?<!\()(?<!\])\s=([a-zA-Z][a-zA-Z0-9_-]*)\b', content)
+    if ctx_match:
+        context = ctx_match.group(1)
+        content = content[:ctx_match.start()] + content[ctx_match.end():]
+
+    # Extract :tags — words starting with : where tag starts with alpha
+    for match in re.finditer(r'(?<!\S):([a-zA-Z][a-zA-Z0-9_-]*)\b', content):
+        tags.append(match.group(1))
+
+    # Strip :tags from content
+    content = re.sub(r'(?<!\S):[a-zA-Z][a-zA-Z0-9_-]*\b', '', content)
+    content = re.sub(r'  +', ' ', content).strip()
+
+    return content, tags, context
+
+
 def tag_bookmark(entry) -> list[str]:
-    """Apply rule-based tags to a Django ORM bookmark entry.
+    """Apply rule-based tags and extract inline :tags/=context from content.
 
     Returns list of tag names added.
     """
-    from .models import Tag
+    from .models import Tag, Context
 
     added = []
+
+    # Rule-based tags from URL/title patterns
     for tag_name in compute_tags(entry.content):
         _, created = Tag.objects.get_or_create(tag_name=tag_name, entry=entry)
         if created:
             added.append(tag_name)
+
+    # Extract inline :tags and =context from content
+    cleaned, inline_tags, context_name = extract_inline_metadata(entry.content)
+
+    for tag_name in inline_tags:
+        _, created = Tag.objects.get_or_create(tag_name=tag_name, entry=entry)
+        if created:
+            added.append(tag_name)
+
+    # Apply context if found and valid
+    if context_name:
+        ctx = Context.objects.filter(name=context_name).first()
+        if ctx:
+            entry.context = ctx
+
+    # Update content if it changed (tags/context stripped)
+    if cleaned != entry.content:
+        entry.content = cleaned
+        entry.save(update_fields=['content', 'context_id'])
+    elif context_name:
+        entry.save(update_fields=['context_id'])
+
     return added

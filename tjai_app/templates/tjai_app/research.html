@@ -28,7 +28,7 @@
             flex-shrink: 0;
             font-size: 12px;
         }
-        .research-header a { color: #64b5f6; text-decoration: none; }
+        .research-header a { color: #90caf9; text-decoration: none; }
         .research-header a:hover { text-decoration: underline; }
         .research-header .stats { color: #8a8a8a; font-size: 11px; margin-left: auto; }
         .agent-banner {
@@ -53,7 +53,7 @@
             border-radius: 0 3px 3px 0;
         }
         .research-item.done { border-left-color: #4caf50; }
-        .research-item.pending { border-left-color: #64b5f6; }
+        .research-item.pending { border-left-color: #90caf9; }
         .item-header {
             display: flex;
             align-items: baseline;
@@ -72,7 +72,7 @@
             padding: 1px 6px;
             border-radius: 3px;
         }
-        .status-pending { background: #1a3a5c; color: #64b5f6; }
+        .status-pending { background: #1a3a5c; color: #90caf9; }
         .status-running { background: rgba(255, 213, 79, 0.15); color: #ffd54f; }
         .status-done { background: #1a3c1a; color: #4caf50; }
         .research-item.running { border-left-color: #ffd54f; }
@@ -88,8 +88,8 @@
         }
         .btn-submit {
             background: #333;
-            color: #64b5f6;
-            border: 1px solid #64b5f6;
+            color: #90caf9;
+            border: 1px solid #90caf9;
             padding: 2px 10px;
             border-radius: 12px;
             cursor: pointer;
@@ -279,8 +279,8 @@
                 }
                 if (item.status === 'done' || isRunning) {
                     const itemName = encodeURIComponent(item.entry_id || item.id.substring(0,8));
-                    html += `<a href="/tjai/agent-log?ref=${item.id}&name=${itemName}" style="color:#64b5f6;font-size:11px">log</a>`;
-                    html += `<a href="/tjai/research/studies/?uuid=${item.id}&name=${itemName}" style="color:#64b5f6;font-size:11px">studies</a>`;
+                    html += `<a href="/tjai/agent-log?ref=${item.id}&name=${itemName}" style="color:#90caf9;font-size:11px">log</a>`;
+                    html += `<a href="/tjai/research/studies/?uuid=${item.id}&name=${itemName}" style="color:#90caf9;font-size:11px">studies</a>`;
                 }
                 if (isRunning) {
                     html += `<button class="btn-submit" style="color:#ef5350;border-color:#ef5350" onclick="abortAgent(this)">Abort</button>`;
@@ -401,8 +401,8 @@
                 btn.disabled = false;
             } else if (hasPending) {
                 btn.textContent = 'Submit All';
-                btn.style.color = '#64b5f6';
-                btn.style.borderColor = '#64b5f6';
+                btn.style.color = '#90caf9';
+                btn.style.borderColor = '#90caf9';
                 btn.disabled = false;
             } else {
                 btn.textContent = 'Submit All';

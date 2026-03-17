@@ -50,7 +50,7 @@
         .log-ts { color: #8a8a8a; }
         .log-src { color: #ce93d8; }
         .log-msg { color: #e0e0e0; }
-        .log-INFO .log-level { color: #64b5f6; }
+        .log-INFO .log-level { color: #90caf9; }
         .log-WARNING .log-level { color: #ffd54f; }
         .log-ERROR .log-level { color: #ef5350; font-weight: bold; }
         .log-CRITICAL .log-level { color: #ef5350; font-weight: bold; background: rgba(239,83,80,0.2); padding: 0 4px; border-radius: 2px; }
@@ -142,7 +142,7 @@
             return str.replace(/\[\[(\w+):([^\]]+)\]\]/g, (m, type, id) => {
                 const route = _linkRoutes[type];
                 if (!route) return m;
-                return `<a href="${route(id)}" style="color:#64b5f6">${id.substring(0,8)}</a>`;
+                return `<a href="${route(id)}" style="color:#90caf9">${id.substring(0,8)}</a>`;
             });
         }
 

@@ -26,7 +26,7 @@
         .content {
             line-height: 1.5;
         }
-        a { color: #64b5f6; text-decoration: none; }
+        a { color: #90caf9; text-decoration: none; }
         a:hover { text-decoration: underline; }
         .meta { color: #888; margin-top: 16px; padding-top: 12px; border-top: 1px solid #333; font-size: 12px; }
         .toolbar-btn {
@@ -53,7 +53,7 @@
             padding: 3px 6px; font-family: inherit; font-size: 13px;
             width: 300px; border-radius: 3px;
         }
-        .field-row input:focus { outline: 1px solid #64b5f6; border-color: #64b5f6; }
+        .field-row input:focus { outline: 1px solid #90caf9; border-color: #90caf9; }
         .delete-link { color: #cc4444; cursor: pointer; font-size: 12px; }
         .delete-link:hover { text-decoration: underline; }
         .CodeMirror-selected { background: #264f78 !important; }
@@ -62,7 +62,7 @@
         .rel-section h3 { color: #e0e0e0; margin-bottom: 6px; font-weight: normal; }
         .rel-row { display: flex; align-items: baseline; gap: 8px; padding: 3px 0; }
         .rel-row .rel-type { color: #e0e0e0; min-width: 80px; }
-        .rel-row .rel-link { color: #64b5f6; }
+        .rel-row .rel-link { color: #90caf9; }
         .rel-row .rel-link:hover { text-decoration: underline; }
         .rel-row .rel-kind { padding: 1px 4px; border-radius: 2px; background: #2a2a3a; color: #e0e0e0; }
         .dialog-speaker { font-size: 11px; min-width: 50px; }
@@ -84,7 +84,7 @@
         {% if goal_note_exists %}
         <a href="{{ goal_note_url }}" target="_blank" style="font-size: 12px;">notes</a>
         {% else %}
-        <button class="toolbar-btn" id="createNoteBtn" style="font-size: 11px;">Create note</button>
+        <button class="toolbar-btn" id="createNoteBtn" style="font-size: 11px;">Create companion note</button>
         {% endif %}
     </div>
     {% endif %}
@@ -155,10 +155,10 @@
                     var s = String(val);
                     if (key === 'mechanical_script' && GITHUB_URL) {
                         var url = GITHUB_URL + '/' + SCRIPT_PATH + encodeURIComponent(val);
-                        return '<a href="' + url + '" style="color:#64b5f6">' + escHtml(val) + '</a>';
+                        return '<a href="' + url + '" style="color:#90caf9">' + escHtml(val) + '</a>';
                     }
                     if (ENTRY_REF_LINKS[key]) {
-                        return '<a href="' + ENTRY_REF_LINKS[key] + '" style="color:#64b5f6">' + escHtml(s) + '</a>';
+                        return '<a href="' + ENTRY_REF_LINKS[key] + '" style="color:#90caf9">' + escHtml(s) + '</a>';
                     }
                     var lineCount = (s.match(/\n/g) || []).length + 1;
                     if (lineCount >= 3) {
@@ -386,7 +386,7 @@
                     var content = e.content || '';
                     var speaker = ed.role === 'assistant' ? 'AI' : 'Human';
                     var isHuman = ed.role !== 'assistant';
-                    var color = isHuman ? '#a0a0a0' : '#64b5f6';
+                    var color = isHuman ? '#a0a0a0' : '#90caf9';
                     var ts = e.modified_display || '';
                     // Build dashboard dialog context link using server-provided ISO modified timestamp
                     var modifiedIso = e.modified || '';

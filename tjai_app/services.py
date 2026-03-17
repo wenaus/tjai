@@ -556,7 +556,7 @@ def get_goals(context=None, status=None, include_done=False, max_content_length=
     elif not include_done:
         qs = qs.exclude(status='done')
 
-    qs = qs.order_by(models.F('priority').asc(nulls_last=True), '-timestamp_modified')
+    qs = qs.order_by('-timestamp_modified')
 
     goals = []
     for entry in qs:

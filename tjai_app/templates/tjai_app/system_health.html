@@ -140,7 +140,7 @@
         .chart-bar {
             height: 100%;
             border-radius: 2px;
-            background: #64b5f6;
+            background: #90caf9;
             min-width: 1px;
         }
         .chart-val { color: #b0bec5; width: 45px; }
@@ -247,10 +247,10 @@
             // System section
             html += '<div class="section"><div class="section-title">System</div><div class="metric-grid">';
             html += metric('Uptime', s.uptime_days + ' days');
-            html += metric('Load', `${s.load_1m} / ${s.load_5m} / ${s.load_15m}  (${s.cpu_count} CPU)`, metricClass(s.load_1m, s.cpu_count, s.cpu_count * 2, false));
-            html += metric('Memory', `${s.mem_available_mb} / ${s.mem_total_mb} MB available (${s.mem_available_pct}%)`, metricClass(s.mem_available_pct, 20, 10, true));
-            html += metric('Swap', `${s.swap_used_mb} / ${s.swap_total_mb} MB (${s.swap_used_pct}%)`, metricClass(s.swap_used_pct, 20, 50, false));
-            html += metric('Disk', `${s.disk_used_gb} / ${s.disk_total_gb} GB (${s.disk_used_pct}%)`, metricClass(s.disk_used_pct, 80, 90, false));
+            html += metric('Load', `${s.load_1m}/${s.load_5m}/${s.load_15m} (${s.cpu_count} CPU)`, metricClass(s.load_1m, s.cpu_count, s.cpu_count * 2, false));
+            html += metric('Mem', `${(s.mem_available_mb/1024).toFixed(1)}/${(s.mem_total_mb/1024).toFixed(1)} GB avail (${Math.round(s.mem_available_pct)}%)`, metricClass(s.mem_available_pct, 20, 10, true));
+            html += metric('Swap', `${s.swap_used_mb}/${s.swap_total_mb} MB (${s.swap_used_pct}%)`, metricClass(s.swap_used_pct, 20, 50, false));
+            html += metric('Disk', `${Math.round(parseFloat(s.disk_used_gb))}/${Math.round(parseFloat(s.disk_total_gb))} GB (${Math.round(s.disk_used_pct)}%)`, metricClass(s.disk_used_pct, 80, 90, false));
             html += '</div></div>';
 
             // PostgreSQL section
@@ -299,8 +299,12 @@
                     if (m < 1) return Math.round(m * 60) + 's';
                     m = Math.round(m);
                     if (m < 60) return m + 'm';
-                    const h = Math.floor(m / 60), r = m % 60;
-                    return r ? h + 'h ' + r + 'm' : h + 'h';
+                    if (m < 1440) {
+                        const h = Math.floor(m / 60), r = m % 60;
+                        return r ? h + 'h ' + r + 'm' : h + 'h';
+                    }
+                    const d = Math.floor(m / 1440), rh = Math.floor((m % 1440) / 60);
+                    return rh ? d + 'd ' + rh + 'h' : d + 'd';
                 }
 
                 // Agents
@@ -327,7 +331,7 @@
                             detail = `last run ${fmtMin(ag.completed_min)} ago`;
                         }
                         const restartFlag = ag.restart_pending ? ' <span style="color:#ffd54f">[restart pending]</span>' : '';
-                        html += `<div class="process-row" style="max-width:600px"><span class="process-name"><span style="color:${dotColor}">&#9679;</span> ${ag.name}</span><span class="${statusCls}">${ag.status}${restartFlag} <span style="color:#666;font-weight:normal">${detail}</span></span></div>`;
+                        html += `<div class="process-row" style="max-width:600px;justify-content:start;gap:8px"><span class="process-name" style="min-width:140px"><span style="color:${dotColor}">&#9679;</span> ${ag.name}</span><span class="${statusCls}" style="display:inline-block;min-width:75px">${ag.status}${restartFlag}</span><span style="color:#666;font-weight:normal">${detail}</span></div>`;
                         if (ag.last_error) {
                             const errAge = ag.last_error_min !== undefined ? ` (${fmtMin(ag.last_error_min)} ago)` : '';
                             html += `<div class="process-row" style="max-width:600px;background:rgba(239,83,80,0.08)"><span style="color:#ef5350;font-size:11px">Error${errAge}: ${ag.last_error}</span></div>`;
@@ -341,19 +345,19 @@
                     for (const a of tj.actions) {
                         const lr = a.last_run_min !== null ? fmtMin(a.last_run_min) + ' ago' : 'never';
                         const entryUrl = a.entry_id ? `/tjai/entry/?entry_id=${a.entry_id}` : `/tjai/entry/?uuid=${a.id}`;
-                        const link = a.id ? `<a href="${entryUrl}" style="color:#64b5f6">${a.content}</a>` : a.content;
+                        const link = a.id ? `<a href="${entryUrl}" style="color:#90caf9">${a.content}</a>` : a.content;
                         let agentCol = '';
                         if (a.agent_status === 'running') {
                             const dur = a.agent_launched_min != null ? fmtMin(a.agent_launched_min) : '';
-                            const logLink = a.agent_tracking ? `<a href="/tjai/entry/?uuid=${a.agent_tracking}" style="color:#64b5f6">log</a>` : '';
+                            const logLink = a.agent_tracking ? `<a href="/tjai/entry/?uuid=${a.agent_tracking}" style="color:#90caf9">log</a>` : '';
                             agentCol = `<span style="color:#ffd54f">running ${dur}</span> ${logLink}`;
                         } else if (a.agent_status === 'completed') {
                             const ago = a.agent_completed_min != null ? fmtMin(a.agent_completed_min) + ' ago' : '';
                             const dur = a.agent_duration_min != null ? 'duration ' + fmtMin(a.agent_duration_min) : '';
-                            const logLink = a.agent_tracking ? `<a href="/tjai/entry/?uuid=${a.agent_tracking}" style="color:#64b5f6">log</a>` : '';
+                            const logLink = a.agent_tracking ? `<a href="/tjai/entry/?uuid=${a.agent_tracking}" style="color:#90caf9">log</a>` : '';
                             agentCol = `<span style="color:#9ccc65">done ${ago} ${dur}</span> ${logLink}`;
                         } else if (a.agent_status === 'failed') {
-                            const logLink = a.agent_tracking ? `<a href="/tjai/entry/?uuid=${a.agent_tracking}" style="color:#64b5f6">log</a>` : '';
+                            const logLink = a.agent_tracking ? `<a href="/tjai/entry/?uuid=${a.agent_tracking}" style="color:#90caf9">log</a>` : '';
                             agentCol = `<span style="color:#ef5350">failed</span> ${logLink}`;
                         } else if (a.agent_status) {
                             agentCol = a.agent_status;
@@ -375,7 +379,7 @@
                 if (tj.machines && tj.machines.length > 0) {
                     html += '<div style="margin-top:12px;margin-bottom:4px;color:#8a8a8a;font-size:12px">Sync Machines</div>';
                     for (const m of tj.machines) {
-                        const syncStr = m.last_sync_min !== null ? m.last_sync_min + 'm ago' : 'never';
+                        const syncStr = m.last_sync_min !== null ? fmtMin(m.last_sync_min) + ' ago' : 'never';
                         const syncCls = m.last_sync_min > 60 ? 'metric-warn' : 'metric-value';
                         html += `<div class="process-row"><span class="process-name">${m.name}</span><span class="${syncCls}">synced ${syncStr}</span></div>`;
                     }
@@ -393,7 +397,7 @@
             html += `<div class="process-row" style="max-width:500px"><span class="process-name"><span style="color:${dbDotColor}">&#9679;</span> Status</span><span class="${dbStatusCls}">${db.status}${dbNote}</span></div>`;
             if (db.newest_backup_min !== undefined) {
                 const bkCls = db.newest_backup_min > 1440 ? 'metric-warn' : 'metric-value';
-                html += `<div class="process-row" style="max-width:500px"><span class="process-name">Backups</span><span class="${bkCls}">${db.backup_count} files, newest ${Math.round(db.newest_backup_min)}m ago</span></div>`;
+                html += `<div class="process-row" style="max-width:500px"><span class="process-name">Backups</span><span class="${bkCls}">${db.backup_count} files, newest ${fmtMin(db.newest_backup_min)} ago</span></div>`;
             }
             html += '</div>';
 
@@ -443,6 +447,20 @@
                     for (const p of cw.mem_used_percent_hourly) {
                         const barWidth = Math.max(1, Math.min(100, p.avg));
                         html += `<div class="chart-row"><span class="chart-label">${p.hour}</span><div class="chart-bar-bg"><div class="chart-bar" style="width:${barWidth}%;background:#ce93d8"></div></div><span class="chart-val">${p.avg}%</span></div>`;
+                    }
+                }
+                if (cw.swap_used_percent_hourly) {
+                    html += '<div style="margin-top:12px;margin-bottom:4px;color:#b0bec5">Swap Used %</div>';
+                    for (const p of cw.swap_used_percent_hourly) {
+                        const barWidth = Math.max(1, Math.min(100, p.avg));
+                        html += `<div class="chart-row"><span class="chart-label">${p.hour}</span><div class="chart-bar-bg"><div class="chart-bar" style="width:${barWidth}%;background:#ffb74d"></div></div><span class="chart-val">${p.avg}%</span></div>`;
+                    }
+                }
+                if (cw.disk_used_percent_hourly) {
+                    html += '<div style="margin-top:12px;margin-bottom:4px;color:#b0bec5">Disk Used %</div>';
+                    for (const p of cw.disk_used_percent_hourly) {
+                        const barWidth = Math.max(1, Math.min(100, p.avg));
+                        html += `<div class="chart-row"><span class="chart-label">${p.hour}</span><div class="chart-bar-bg"><div class="chart-bar" style="width:${barWidth}%;background:#4db6ac"></div></div><span class="chart-val">${p.avg}%</span></div>`;
                     }
                 }
                 html += '</div>';

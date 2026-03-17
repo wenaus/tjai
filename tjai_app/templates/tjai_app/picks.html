@@ -32,7 +32,7 @@
             flex-shrink: 0;
         }
         .picks-header a {
-            color: #64b5f6;
+            color: #90caf9;
             text-decoration: none;
             font-size: 12px;
         }
@@ -110,7 +110,7 @@
             margin-bottom: 3px;
         }
         .pick-title a {
-            color: #64b5f6;
+            color: #90caf9;
             text-decoration: none;
         }
         .pick-title a:hover {
@@ -225,7 +225,7 @@
     <div class="picks-header">
         <a href="/tjai/entry/?entry_id=picks-sources">Sources</a>
         <span id="next-run" style="color:#8a8a8a;font-size:11px"></span>
-        <button class="btn-run" id="btn-run" onclick="runNow()" style="background:#333;color:#64b5f6;border:1px solid #64b5f6;padding:2px 10px;border-radius:12px;cursor:pointer;font-family:inherit;font-size:11px;white-space:nowrap">Run now</button>
+        <button class="btn-run" id="btn-run" onclick="runNow()" style="background:#333;color:#90caf9;border:1px solid #90caf9;padding:2px 10px;border-radius:12px;cursor:pointer;font-family:inherit;font-size:11px;white-space:nowrap">Run now</button>
         <button class="btn-run" id="btn-abort" onclick="abortAgent()" style="display:none;background:#333;color:#ef5350;border:1px solid #ef5350;padding:2px 10px;border-radius:12px;cursor:pointer;font-family:inherit;font-size:11px;white-space:nowrap">Abort</button>
         <span class="stats" id="global-stats"></span>
     </div>
@@ -563,8 +563,8 @@
                     }
                 }
                 btn.disabled = false;
-                btn.style.color = '#64b5f6';
-                btn.style.borderColor = '#64b5f6';
+                btn.style.color = '#90caf9';
+                btn.style.borderColor = '#90caf9';
             }
             // Error section
             if (agent.last_error && agent.last_error.trim()) {
@@ -598,7 +598,7 @@
                 if (data.warning) {
                     btn.textContent = data.warning;
                     btn.style.color = '#ff9800';
-                    setTimeout(() => { btn.textContent = 'Run now'; btn.disabled = false; btn.style.color = '#64b5f6'; }, 5000);
+                    setTimeout(() => { btn.textContent = 'Run now'; btn.disabled = false; btn.style.color = '#90caf9'; }, 5000);
                     return;
                 }
                 btn.textContent = 'Queued';

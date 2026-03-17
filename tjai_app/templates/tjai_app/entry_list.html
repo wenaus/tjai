@@ -83,13 +83,13 @@
             cursor: pointer;
             padding: 2px 6px;
             border-radius: 3px;
-            color: #64b5f6;
+            color: #90caf9;
             white-space: nowrap;
             display: inline-block;
         }
         .machine-chip:hover { background: #333; }
-        .machine-chip.active { background: #64b5f6; color: #1a1a1a; }
-        .machine-chip.available { outline: 1px solid #64b5f6; }
+        .machine-chip.active { background: #90caf9; color: #1a1a1a; }
+        .machine-chip.available { outline: 1px solid #90caf9; }
         .machine-chip .count { color: #8a8a8a; font-size: 11px; }
         .machine-chip.active .count { color: #555; }
         .clear-btn:hover { background: #666; }
@@ -106,7 +106,7 @@
         a { color: inherit; text-decoration: none; }
         a:hover { text-decoration: underline; }
         .back { margin-bottom: 12px; }
-        .back a { color: #64b5f6; }
+        .back a { color: #90caf9; }
         #countDisplay { color: #8a8a8a; }
         .search-btn {
             background: #333; color: #e0e0e0; border: 1px solid #555;
@@ -334,9 +334,9 @@
             var hasUrl = /https?:\/\//.test(content);
             if (hasUrl) {
                 content = content.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,
-                    '<a href="$2" target="_blank" style="color:#64b5f6">$1</a>');
+                    '<a href="$2" target="_blank" style="color:#90caf9">$1</a>');
                 content = content.replace(/(^|[^"'])(https?:\/\/[^\s<]+)/g,
-                    '$1<a href="$2" target="_blank" style="color:#64b5f6">$2</a>');
+                    '$1<a href="$2" target="_blank" style="color:#90caf9">$2</a>');
                 var wrapper = el.closest('a.content-link');
                 if (wrapper) {
                     var span = document.createElement('span');

@@ -1766,6 +1766,26 @@ def api_add_journal(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@login_required
+@csrf_exempt
+def api_entry_create(request):
+    """Create a new blank entry and return its UUID for redirect to edit page."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    import uuid
+    import time
+    now = time.time()
+    entry = Entry.objects.create(
+        id=str(uuid.uuid4()),
+        content='',
+        kind='memory',
+        timestamp_created=now,
+        timestamp_modified=now,
+        is_dirty=1,
+    )
+    return JsonResponse({'id': str(entry.id)})
+
+
 def api_add_entry(request):
     """Create a generic entry from an external source (Gmail addon).
 

@@ -186,7 +186,7 @@ OPERATIONAL RULES:
 
 {custom_prompt}"""
 
-    return f"""You are a tjai agent — a focused, single-task AI worker.
+    return f"""You are a tjai research and task agent working for Torre Wenaus, a physicist and software developer at BNL. You have access to his personal knowledge base via MCP tools. Call get_profile() to understand the user. You are truthful, thorough, and addicted to researching facts rather than assuming.
 
 {guidance}
 

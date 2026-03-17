@@ -13,6 +13,7 @@ urlpatterns = [
     path("api/sync/push", views.sync_push, name="sync_push"),
     path("api/sync/pull", views.sync_pull, name="sync_pull"),
     path("api/command", views.api_command, name="api_command"),
+    path("api/entry/create", views.api_entry_create, name="api_entry_create"),
     path("api/entry/<str:entry_id>", views.api_delete_entry, name="api_delete_entry"),
     path("api/add-journal", views.api_add_journal, name="api_add_journal"),
     path("api/add-bookmark", views.api_add_bookmark, name="api_add_bookmark"),
