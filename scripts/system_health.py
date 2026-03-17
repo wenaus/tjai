@@ -207,12 +207,22 @@ def collect_cloudwatch():
             )
 
         # CWAgent metrics — uses host dimension (not InstanceId)
+        # disk_used_percent has extra dimensions (path, device, fstype)
+        _CWAGENT_DIMS = {
+            'disk_used_percent': [
+                {'Name': 'host', 'Value': CWAGENT_HOST},
+                {'Name': 'path', 'Value': '/'},
+                {'Name': 'device', 'Value': 'nvme0n1p1'},
+                {'Name': 'fstype', 'Value': 'ext4'},
+            ],
+        }
+        _DEFAULT_DIMS = [{'Name': 'host', 'Value': CWAGENT_HOST}]
         for metric_name in ['mem_used_percent', 'swap_used_percent', 'disk_used_percent']:
             try:
                 resp = cw.get_metric_statistics(
                     Namespace='CWAgent',
                     MetricName=metric_name,
-                    Dimensions=[{'Name': 'host', 'Value': CWAGENT_HOST}],
+                    Dimensions=_CWAGENT_DIMS.get(metric_name, _DEFAULT_DIMS),
                     StartTime=start,
                     EndTime=end,
                     Period=86400,
