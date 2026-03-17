@@ -312,6 +312,9 @@ def dispatch_ai(action, entry_id=None, target_date=None):
     model = data.get('model')
     if model:
         env['TJAI_AGENT_MODEL'] = model
+    effort = data.get('effort')
+    if effort:
+        env['TJAI_AGENT_EFFORT'] = effort
     system_prompt_entry_id_id = data.get('system_prompt_entry_id')
     if system_prompt_entry_id_id:
         sp_entry = Entry.objects.filter(
@@ -513,6 +516,33 @@ def execute_action(action, target_date=None):
             logger.error("Mechanical step failed, aborting")
             _write_agent_error(action_id, "Mechanical step failed")
             return False
+
+        # For research-agent: ensure target is set before dispatch.
+        # Queue drain sets it when chaining; for scheduled runs, look it up now.
+        if action_id == 'research-agent' and not data.get('next_target_entry_id'):
+            research_ids = Tag.objects.filter(
+                tag_name='research_topic'
+            ).values_list('entry_id', flat=True)
+            next_primary = Entry.objects.filter(
+                id__in=research_ids,
+                kind='memory',
+                deleted_at__isnull=True,
+            ).exclude(
+                status='done'
+            ).exclude(
+                data__source='multimodel'
+            ).order_by('priority', 'timestamp_created').first()
+            if next_primary:
+                np_data = next_primary.data if isinstance(next_primary.data, dict) else {}
+                np_eid = np_data.get('entry_id', str(next_primary.id)[:8])
+                data['next_target'] = (
+                    f"SPECIFIC TARGET:\nEntry UUID: {next_primary.id}\n"
+                    f"Topic: {next_primary.content}"
+                )
+                data['next_target_entry_id'] = str(next_primary.id)
+                action.data = data
+                action.save(update_fields=['data'])
+                logger.info("Research scheduled run — set target: %s", np_eid)
 
         # Capture before dispatch_ai clears ephemeral keys
         multimodel_target_uuid = data.get('next_target_entry_id') if action_id == 'research-agent' else None

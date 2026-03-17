@@ -208,8 +208,14 @@ def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: 
     """Launch claude -p in background. Logs stderr to file for diagnostics."""
     import shlex
 
-    model = os.environ.get('TJAI_AGENT_MODEL', 'sonnet')
+    model = os.environ.get('TJAI_AGENT_MODEL', 'opus')
+    effort = os.environ.get('TJAI_AGENT_EFFORT', 'high')
     timeout_secs = int(os.environ.get('TJAI_AGENT_TIMEOUT', '0'))
+
+    if not os.environ.get('TJAI_AGENT_MODEL'):
+        print(f"WARNING: TJAI_AGENT_MODEL not set, defaulting to {model}", file=sys.stderr)
+    if not os.environ.get('TJAI_AGENT_EFFORT'):
+        print(f"WARNING: TJAI_AGENT_EFFORT not set, defaulting to {effort}", file=sys.stderr)
 
     cmd = [
         claude_path,
@@ -217,11 +223,24 @@ def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: 
         '--system-prompt', system_prompt,
         '--output-format', 'text',
         '--model', model,
+        '--effort', effort,
     ]
 
     env = os.environ.copy()
     env.pop('CLAUDECODE', None)
     env.pop('ANTHROPIC_API_KEY', None)  # Force subscription auth, not API
+
+    # Record model/effort in tracking entry metadata
+    try:
+        repository = RepositoryFactory.get_repository()
+        entry = repository.get_entry(entry_id)
+        if entry:
+            existing = entry.data if isinstance(entry.data, dict) else {}
+            existing['model'] = model
+            existing['effort'] = effort
+            repository.update_entry(entry_id, data=existing, is_dirty=True)
+    except Exception as e:
+        print(f"Error writing agent metadata to entry: {e}", file=sys.stderr)
 
     _append_to_entry(entry_id, "LAUNCHED")
 

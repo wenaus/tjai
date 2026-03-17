@@ -230,17 +230,51 @@ def _check_agent_health():
             SysConfig.objects.update_or_create(
                 key=key, defaults={'value': value, 'timestamp_modified': now})
 
-        # Watchdog only observes and reports — NEVER resets status or kills.
-        # Status management is agent_complete.py's job. The UI reads health
-        # keys to show the user what's happening.
+        # Status management is normally agent_complete.py's job. But if the
+        # process was hard-killed (reboot, OOM, etc.), agent_complete never
+        # runs and status stays 'running' forever. Auto-recover after
+        # consecutive stale+no-process checks (grace period for agent_complete).
+        stale_key = f'agent_{action_id}_stale_count'
         if health == 'stale' and not process_alive:
-            logger.warning("%s stale (no activity %.0fm, no process)",
-                           action_id,
-                           activity_age / 60 if activity_age else 0)
+            # Increment consecutive stale counter
+            sc_obj = SysConfig.objects.filter(key=stale_key).first()
+            stale_count = int(sc_obj.value) + 1 if sc_obj else 1
+            SysConfig.objects.update_or_create(
+                key=stale_key,
+                defaults={'value': str(stale_count), 'timestamp_modified': now})
+
+            if stale_count >= 4:  # ~2 min grace (4 × 30s loop)
+                duration = int(launch_age) if launch_age else 0
+                error_msg = (f"Agent process died after {duration}s "
+                             f"without completing")
+                logger.warning("%s: %s — auto-clearing stale state",
+                               action_id, error_msg)
+                for key, value in {
+                    f'agent_{action_id}_status': 'failed',
+                    f'agent_{action_id}_last_error': error_msg,
+                    f'agent_{action_id}_last_error_time': str(now),
+                    f'agent_{action_id}_completed': str(now),
+                }.items():
+                    SysConfig.objects.update_or_create(
+                        key=key,
+                        defaults={'value': value, 'timestamp_modified': now})
+                # Reset counter
+                SysConfig.objects.filter(key=stale_key).delete()
+            else:
+                logger.warning("%s stale (no activity %.0fm, no process) "
+                               "[%d/4 before auto-clear]",
+                               action_id,
+                               activity_age / 60 if activity_age else 0,
+                               stale_count)
         elif health == 'stale' and process_alive:
+            # Process alive — reset stale counter, just warn
+            SysConfig.objects.filter(key=stale_key).delete()
             logger.warning("%s stale but process alive (activity %.0fm ago)",
                            action_id,
                            activity_age / 60 if activity_age else 0)
+        else:
+            # Healthy — reset stale counter if any
+            SysConfig.objects.filter(key=stale_key).delete()
 
 
 def _scan_agent_processes():

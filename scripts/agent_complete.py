@@ -313,33 +313,36 @@ def main():
         # Clear retry state on success
         _clear_retry(action_id)
 
-    # Write structured run result to the current entry's data field
+    # Fetch current entry once for run result + post-processing
+    entry = None
     if current_entry:
+        entry = Entry.objects.filter(
+            id=current_entry, deleted_at__isnull=True
+        ).first()
+
+    # Write structured run result to the current entry's data field
+    if entry:
         try:
-            entry = Entry.objects.filter(
-                id=current_entry, deleted_at__isnull=True
-            ).first()
-            if entry:
-                data = entry.data if isinstance(entry.data, dict) else {}
-                launched = SysConfig.objects.filter(
-                    key=f'agent_{action_id}_launched'
-                ).values_list('value', flat=True).first()
-                duration = round(now - float(launched)) if launched else None
-                data['run_status'] = status
-                data['run_completed_at'] = now
-                data['run_duration_seconds'] = duration
-                data['run_exit_code'] = exit_code
-                if subagent_count:
-                    data['subagent_count'] = subagent_count
-                if exit_code not in (0, 124) and stderr_content:
-                    data['run_error'] = stderr_content[-200:]
-                elif 'run_error' in data:
-                    del data['run_error']
-                entry.data = data
-                entry.save(update_fields=['data'])
-                logger.info("%s: wrote run result to entry %s (duration=%ss, subagents=%d)",
-                            action_id, current_entry,
-                            duration, subagent_count, extra=ref_extra)
+            data = entry.data if isinstance(entry.data, dict) else {}
+            launched = SysConfig.objects.filter(
+                key=f'agent_{action_id}_launched'
+            ).values_list('value', flat=True).first()
+            duration = round(now - float(launched)) if launched else None
+            data['run_status'] = status
+            data['run_completed_at'] = now
+            data['run_duration_seconds'] = duration
+            data['run_exit_code'] = exit_code
+            if subagent_count:
+                data['subagent_count'] = subagent_count
+            if exit_code not in (0, 124) and stderr_content:
+                data['run_error'] = stderr_content[-200:]
+            elif 'run_error' in data:
+                del data['run_error']
+            entry.data = data
+            entry.save(update_fields=['data'])
+            logger.info("%s: wrote run result to entry %s (duration=%ss, subagents=%d)",
+                        action_id, current_entry,
+                        duration, subagent_count, extra=ref_extra)
         except Exception as e:
             logger.error("%s: failed to write run result: %s",
                          action_id, e, extra=ref_extra)
@@ -347,6 +350,22 @@ def main():
     # Post-process synthesis entries: convert plain source report references to md links
     if current_entry and exit_code in (0, 124):
         _linkify_synthesis_sources(current_entry)
+
+    # Post-process daily-history: extract digested history to file for KozyKorner
+    if action_id == 'daily-history' and exit_code in (0, 124):
+        try:
+            # entry may be None (daily-history doesn't set next_target_entry_id).
+            # Derive date from today and look up the daily entry directly.
+            from tjai_app.services import get_timezone
+            from datetime import datetime
+            date_str = datetime.now(get_timezone()).date().isoformat()
+            from extract_history import process_date
+            if process_date(date_str):
+                logger.info("daily-history: extracted history HTML for %s", date_str)
+            else:
+                logger.warning("daily-history: no history section found for %s", date_str)
+        except Exception as e:
+            logger.error("daily-history: extract_history failed: %s", e)
 
     # Queue drain for research-agent: auto-chain to next pending item
     if action_id == 'research-agent' and exit_code in (0, 124):
@@ -367,7 +386,8 @@ def _research_queue_drain(now):
         stop_req.save(update_fields=['value', 'timestamp_modified'])
         return
 
-    # Find next pending research item (sorted by priority then FIFO)
+    # Find next pending PRIMARY research item (sorted by priority then FIFO)
+    # Derivatives (gemini, chatgpt, synthesis) all have data.source='multimodel'
     research_ids = Tag.objects.filter(
         tag_name='research_topic'
     ).values_list('entry_id', flat=True)
@@ -375,7 +395,11 @@ def _research_queue_drain(now):
         id__in=research_ids,
         kind='memory',
         deleted_at__isnull=True,
-    ).exclude(status='done').order_by('priority', 'timestamp_created').first()
+    ).exclude(
+        status='done'
+    ).exclude(
+        data__source='multimodel'
+    ).order_by('priority', 'timestamp_created').first()
 
     if not next_item:
         logger.info("research-agent: queue empty, not chaining")

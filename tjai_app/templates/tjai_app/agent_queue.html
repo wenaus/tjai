@@ -263,6 +263,7 @@
             const links = [];
             if (item.current_entry) links.push('<a href="' + entryUrl(item.current_entry) + '">entry</a>');
             if (item.tracking) links.push('<a href="' + logUrl(item.tracking) + '">log</a>');
+            if (item.progress_log) links.push('<a href="' + entryUrl(item.progress_log) + '">progress</a>');
             if (links.length) parts.push(links.join(' '));
             detail = parts.join(' &nbsp; ');
         }
@@ -281,6 +282,7 @@
             if (item.entry_id) links.push('<a href="' + entryUrl(item.entry_id) + '">result</a>');
             else if (item.result_url) links.push('<a href="' + item.result_url + '">result</a>');
             if (item.tracking) links.push('<a href="' + logUrl(item.tracking) + '">log</a>');
+            if (item.progress_log) links.push('<a href="' + entryUrl(item.progress_log) + '">progress</a>');
             if (links.length) parts.push(links.join(' '));
             detail = parts.join(' &nbsp; ');
         }

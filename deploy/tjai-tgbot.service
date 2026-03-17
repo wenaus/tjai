@@ -1,0 +1,17 @@
+[Unit]
+Description=tjai Telegram bot
+After=network.target postgresql.service apache2.service
+
+[Service]
+Type=simple
+User=admin
+WorkingDirectory=/var/www/tjai
+ExecStart=/var/www/tjai/.venv/bin/python -m tg_bot
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+Environment="HOME=/home/admin"
+
+[Install]
+WantedBy=multi-user.target

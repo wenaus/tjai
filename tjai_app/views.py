@@ -3708,6 +3708,7 @@ def api_agent_queue_data(request):
                     'tracking': tracking,
                     'error': last_error if last_error else None,
                     'result_url': data.get('result_url', ''),
+                    'progress_log': data.get('progress_log', ''),
                     '_event_time': completed_f,
                 }
 
@@ -3755,6 +3756,8 @@ def api_agent_queue_data(request):
                 latest_completions[aid]['completed_at'] - completed_at) < 60:
             tracking = latest_completions[aid].get('tracking', '')
 
+        progress_log = action_data_map.get(aid, {}).get('progress_log', '')
+
         item = {
             'type': 'completed',
             'action_id': aid,
@@ -3765,6 +3768,7 @@ def api_agent_queue_data(request):
             'entry_id': entry_uuid,
             'tracking': tracking,
             'result_url': action_data_map.get(aid, {}).get('result_url', ''),
+            'progress_log': progress_log,
             '_event_time': completed_at,
         }
         model = ed.get('model')
