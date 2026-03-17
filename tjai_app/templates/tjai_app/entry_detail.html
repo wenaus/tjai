@@ -45,9 +45,11 @@
         .status { color: #9ccc65; font-size: 12px; margin-left: 8px; }
         #editMode { display: none; }
         .edit-toolbar { margin-top: 8px; }
-        .CodeMirror { height: auto; min-height: 300px; font-size: 13px; background: #1a1a1a; }
-        .CodeMirror-scroll { background: #1a1a1a; }
-        .CodeMirror-gutters { background: #1a1a1a; border-right: 1px solid #333; }
+        .CodeMirror, .CodeMirror-scroll, .CodeMirror-gutters,
+        .CodeMirror-sizer, .CodeMirror-gutter-filler,
+        .CodeMirror-hscrollbar, .CodeMirror-vscrollbar,
+        .CodeMirror-scrollbar-filler { background: #1a1a1a !important; }
+        .CodeMirror-gutters { border-right: 1px solid #333; }
         .field-row { margin-bottom: 8px; }
         .field-row label { color: #8a8a8a; margin-right: 6px; }
         .field-row input {
