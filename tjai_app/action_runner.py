@@ -555,6 +555,7 @@ def execute_action(action, target_date=None):
             return False
 
         # For research-agent: also dispatch Gemini/ChatGPT in parallel with Claude
+        # Only for primary research entries — not derivatives (synthesis, gemini, chatgpt)
         if action_id == 'research-agent':
             target_uuid = multimodel_target_uuid
             if target_uuid:
@@ -565,7 +566,7 @@ def execute_action(action, target_date=None):
                     target_data = target_entry.data if isinstance(target_entry.data, dict) else {}
                     base_entry_id = target_data.get('entry_id')
                     topic_text = target_entry.content.split('\n')[0].strip()
-                    if base_entry_id and topic_text:
+                    if base_entry_id and topic_text and target_data.get('source') != 'multimodel':
                         dispatch_multimodel(
                             topic_text=topic_text,
                             base_entry_id=base_entry_id,
