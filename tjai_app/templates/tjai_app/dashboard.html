@@ -186,11 +186,11 @@
         {% if not is_archive and not is_dialog %}
         <div class="panel panel-left" id="calendar-panel">
             <div id="calendar-section">
-                <div class="panel-header">Calendar <span id="calendar-time" style="color:#fff;font-weight:normal"></span></div>
+                <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">Calendar <span id="calendar-time" style="color:#fff;font-weight:normal"></span> <button id="diary-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px">Diary</button></div>
                 <div id="calendar-content">Loading...</div>
             </div>
             <div id="named-section">
-                <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">Named Entries <button id="create-entry-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:12px">Create Entry</button></div>
+                <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">Named Entries <button id="create-entry-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px">Create Entry</button></div>
                 <div id="named-content">Loading...</div>
             </div>
         </div>
@@ -274,6 +274,16 @@
                 document.getElementById('named-content').innerHTML = 'Error loading named entries';
             }
         }
+
+        document.getElementById('diary-btn').addEventListener('click', async () => {
+            try {
+                const resp = await fetch('/tjai/api/diary/today', { method: 'POST' });
+                const data = await resp.json();
+                if (data.entry_id) window.location.href = '/tjai/entry/?entry_id=' + encodeURIComponent(data.entry_id);
+            } catch (e) {
+                alert('Failed: ' + e.message);
+            }
+        });
 
         document.getElementById('create-entry-btn').addEventListener('click', async () => {
             try {
@@ -394,6 +404,10 @@
                 else if (clockType === 'start') contentClass = 'clock-start';
                 else if (clockType === 'stop') contentClass = 'clock-stop';
 
+                // Entry ID for links
+                const calEid = entry.data && entry.data.entry_id;
+                const isDailyEntry = calEid?.startsWith('daily-');
+
                 // Use server-provided time_display (Eastern), add local time if different
                 let timeStr = '';
                 if (entry.time_display) {
@@ -407,12 +421,12 @@
                         }
                     }
                     timeStr = `<span class="entry-time">${entry.time_display}</span>${localSuffix} `;
+                } else if (!isAnnual && !clockType && !entry.data?._placeholder && entry.context !== 'diary') {
+                    timeStr = `<span class="entry-time" style="color:#8a8a8a">All day</span> `;
                 }
 
                 // Countdown for next upcoming event (only if it's today)
                 let countdownStr = '';
-                const calEid = entry.data && entry.data.entry_id;
-                const isDailyEntry = calEid?.startsWith('daily-');
                 if (entry.event_date === nextUpcomingTs && isToday && !isDailyEntry) {
                     const diffSec = entry.event_date - now;
                     const hours = Math.floor(diffSec / 3600);

@@ -1768,6 +1768,39 @@ def api_add_journal(request):
 @require_http_methods(["POST"])
 @login_required
 @csrf_exempt
+def api_diary_today(request):
+    """Find or create today's diary entry. Returns entry_id for redirect."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    from .tjai_utils import get_app_tz
+    from datetime import datetime
+    tz = get_app_tz()
+    today = datetime.now(tz).date()
+    entry_id = f'diary-{today.isoformat()}'
+    existing = Entry.objects.filter(
+        data__entry_id=entry_id, deleted_at__isnull=True,
+    ).first()
+    if existing:
+        return JsonResponse({'entry_id': entry_id, 'id': str(existing.id)})
+    # Create new diary entry
+    now = time.time()
+    title = today.strftime('Diary: %a %b %-d, %Y')
+    event_date = today.strftime('%Y%m%d')
+    from . import services
+    result = services.create_entry(
+        content=title,
+        kind='journal',
+        context='diary',
+        event_date=event_date,
+        data={'entry_id': entry_id},
+    )
+    if isinstance(result, dict) and 'error' in result:
+        return JsonResponse(result, status=400)
+    return JsonResponse({'entry_id': entry_id, 'id': result.get('id', '')})
+
+
+@login_required
+@csrf_exempt
 def api_entry_create(request):
     """Create a new blank entry and return its UUID for redirect to edit page."""
     if request.method != 'POST':

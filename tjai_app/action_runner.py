@@ -251,6 +251,7 @@ def create_journal_entry(action, target_date=None):
     result = services.create_entry(
         content=content,
         kind='journal',
+        context='diary',
         event_date=event_date,
         tags=tags,
         data={'entry_id': entry_id},
