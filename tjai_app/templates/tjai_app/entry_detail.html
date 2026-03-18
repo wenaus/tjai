@@ -77,6 +77,10 @@
     {% with current_page="entry" %}{% include "tjai_app/_menu.html" %}{% endwith %}
     <div class="page-content">
 
+    {% if entry.name %}
+    <div style="margin-bottom: 8px;"><span style="color:#c0d8f0;font-size:1.4em;font-weight:bold">@{{ entry.name }}</span></div>
+    {% endif %}
+
     <!-- Title + edit -->
     <div style="margin-bottom: 12px;">
         <span id="first-line"></span>
@@ -232,14 +236,15 @@
                     theme: 'material-darker',
                     lineWrapping: true,
                     lineNumbers: true,
-                    indentUnit: 4,
-                    tabSize: 4,
+                    indentUnit: 2,
+                    tabSize: 2,
                     indentWithTabs: false,
                     extraKeys: {
+                        'Tab': function(cm) { cm.replaceSelection('  ', 'end'); },
+                        'Shift-Tab': function(cm) { cm.indentSelection('subtract'); },
                         'Ctrl-S': function() { doSave(); },
                         'Cmd-S': function() { doSave(); },
-                        'Esc': function() { cancelEdit(); },
-                        'Tab': function(cm) { cm.replaceSelection('    '); },
+                        'Esc': function(cm) { if (confirm('Discard changes?')) cancelEdit(); },
                     }
                 });
             }
@@ -370,6 +375,9 @@
                     var other = rel.other_entry || {};
                     var od = other.data || {};
                     var firstLine = (other.content || '').split('\n')[0];
+                    // Extract title from markdown link [title](url)
+                    var mdMatch = firstLine.match(/^\[([^\]]+)\]\(.*\)$/);
+                    if (mdMatch) firstLine = mdMatch[1];
                     html += '<div class="rel-row">';
                     html += '<span class="dialog-time">' + (other.modified_display || '') + '</span>';
                     html += '<span class="rel-type">' + esc(rel.relation_type) + '</span>';

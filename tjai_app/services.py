@@ -663,7 +663,7 @@ def get_named_entries(name=None, context=None, max_content_length=200):
         qs = qs.filter(context__name=context)
 
     if name:
-        entry = qs.filter(name=name).first()
+        entry = qs.filter(name__iexact=name).first()
         if not entry:
             ctx_msg = f" in context '{context}'" if context else ""
             return {"error": f"No entry named '{name}'{ctx_msg}"}
