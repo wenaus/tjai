@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/tjai/static/tjai/favicon.svg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Item Versions</title>
+    <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 13px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+        .page-content { padding: 16px; }
+        a { color: #90caf9; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th { color: #8a8a8a; text-align: left; padding: 4px 8px; }
+        td { padding: 4px 8px; border-top: 1px solid #2a2a2a; }
+        .v { color: #daa520; white-space: nowrap; }
+        .dt { color: #aaa; white-space: nowrap; }
+        .by { color: #ce93d8; white-space: nowrap; }
+        .lc { color: #888; white-space: nowrap; }
+        .entry { color: #c0d8f0; white-space: nowrap; }
+        .preview { color: #bbb; max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    </style>
+</head>
+<body>
+    {% with current_page="archive" %}{% include "tjai_app/_menu.html" %}{% endwith %}
+    <div class="page-content">
+        <h3 style="color:#e0e0e0; margin-bottom: 12px; font-size: 14px;">Item Versions</h3>
+        <table id="versions-table"></table>
+    </div>
+    <script>
+        var items = JSON.parse('{{ items_json|escapejs }}');
+        function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+        var html = '<tr><th>V</th><th>Date</th><th>Entry</th><th>Preview</th><th>By</th><th>Lines</th><th></th></tr>';
+        for (var i = 0; i < items.length; i++) {
+            var it = items[i];
+            html += '<tr>';
+            html += '<td class="v">v' + it.version_num + '</td>';
+            html += '<td class="dt">' + esc(it.datetime) + '</td>';
+            html += '<td class="entry"><a href="' + esc(it.entry_url) + '">' + esc(it.entry_label) + '</a></td>';
+            html += '<td class="preview">' + esc(it.preview) + '</td>';
+            html += '<td class="by">' + esc(it.changed_by) + '</td>';
+            html += '<td class="lc">' + it.line_count + '</td>';
+            html += '<td><a href="' + esc(it.edit_url) + '" style="font-size:11px">edit</a></td>';
+            html += '</tr>';
+        }
+        document.getElementById('versions-table').innerHTML = html;
+    </script>
+</body>
+</html>

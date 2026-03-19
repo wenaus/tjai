@@ -209,6 +209,42 @@ class RssItem(models.Model):
         ]
 
 
+class EntryVersion(models.Model):
+    """Revision history for entries — snapshots previous state before each save."""
+    entry = models.ForeignKey(
+        Entry, on_delete=models.CASCADE,
+        related_name='versions', db_column='entry_id'
+    )
+    version_num = models.IntegerField(default=0)  # immutable: v1, v2, v3...
+    content = models.TextField()
+    data = models.JSONField(null=True, blank=True)
+    changed_by = models.CharField(max_length=100, default='unknown')
+    timestamp = models.FloatField()  # when the snapshot was taken
+
+    class Meta:
+        db_table = 'entry_versions'
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['entry', '-timestamp'], name='idx_entryver_entry_ts'),
+        ]
+
+
+def snapshot_entry(entry, changed_by='unknown'):
+    """Snapshot an entry's current state into the version history.
+    Call before any operation that modifies or deletes content."""
+    import time as _time
+    from django.db.models import Max
+    max_num = EntryVersion.objects.filter(entry_id=entry.pk).aggregate(Max('version_num'))['version_num__max'] or 0
+    EntryVersion.objects.create(
+        entry_id=entry.pk,
+        version_num=max_num + 1,
+        content=entry.content,
+        data=entry.data,
+        changed_by=changed_by,
+        timestamp=_time.time(),
+    )
+
+
 class SysConfig(models.Model):
     """System-wide configuration parameters (server-authoritative)."""
     key = models.CharField(max_length=255, primary_key=True)

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/tjai/static/tjai/favicon.svg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diary</title>
+    <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 13px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+        .page-content { padding: 16px; max-width: 900px; }
+        .toolbar { margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+        .toolbar-btn {
+            background: #333; color: #e0e0e0; border: 1px solid #555;
+            padding: 4px 12px; border-radius: 3px; cursor: pointer;
+            font-family: inherit; font-size: 12px;
+        }
+        .toolbar-btn:hover { background: #444; }
+        .diary-item { margin-bottom: 20px; border: 1px solid #333; border-radius: 4px; }
+        .diary-header {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 12px; background: #222; cursor: pointer;
+            border-radius: 4px 4px 0 0; user-select: none;
+        }
+        .diary-header.collapsed { border-radius: 4px; }
+        .diary-header .toggle { color: #888; font-size: 11px; min-width: 14px; }
+        .diary-header a {
+            color: #90caf9; text-decoration: none; font-size: 14px; font-weight: bold;
+        }
+        .diary-header a:hover { text-decoration: underline; }
+        .diary-header .label-underway {
+            color: #ffd54f; font-size: 14px; font-weight: bold;
+        }
+        .diary-body {
+            padding: 10px 16px; line-height: 1.6;
+        }
+        .diary-body.hidden { display: none; }
+        .diary-body a { color: #90caf9; text-decoration: none; }
+        .diary-body a:hover { text-decoration: underline; }
+        .diary-body h1, .diary-body h2, .diary-body h3 { color: #e0e0e0; margin: 10px 0 6px; }
+        .diary-body h2 { font-size: 15px; }
+        .diary-body h3 { font-size: 14px; }
+        .diary-body ul, .diary-body ol { margin-left: 20px; margin-bottom: 8px; }
+        .diary-body li { margin-bottom: 3px; }
+        .diary-body p { margin-bottom: 8px; }
+        .diary-body code { background: #2a2a2a; padding: 1px 4px; border-radius: 2px; }
+        .diary-body pre { background: #2a2a2a; padding: 8px; border-radius: 4px; overflow-x: auto; margin-bottom: 8px; }
+        .diary-body strong { color: #fff; }
+        .loading { color: #888; padding: 20px; }
+    </style>
+</head>
+<body>
+    {% with current_page="diary" %}{% include "tjai_app/_menu.html" %}{% endwith %}
+    <div class="page-content">
+        <div class="toolbar">
+            <button class="toolbar-btn" id="openAllBtn">Open All</button>
+            <button class="toolbar-btn" id="closeAllBtn">Close All</button>
+        </div>
+        <div id="diary-content"><div class="loading">Loading...</div></div>
+    </div>
+    <script>
+        const STORAGE_KEY = 'tjai-diary-collapse';
+
+        function getCollapseState() {
+            try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch(e) { return {}; }
+        }
+        function saveCollapseState(state) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        }
+
+        function toggleItem(key) {
+            const body = document.querySelector(`[data-key="${key}"] .diary-body`);
+            const header = document.querySelector(`[data-key="${key}"] .diary-header`);
+            const toggle = header.querySelector('.toggle');
+            const state = getCollapseState();
+            if (body.classList.contains('hidden')) {
+                body.classList.remove('hidden');
+                header.classList.remove('collapsed');
+                toggle.textContent = '\u25BC';
+                delete state[key];
+            } else {
+                body.classList.add('hidden');
+                header.classList.add('collapsed');
+                toggle.textContent = '\u25B6';
+                state[key] = 1;
+            }
+            saveCollapseState(state);
+        }
+
+        function setAll(collapsed) {
+            const state = collapsed ? {} : {};
+            document.querySelectorAll('.diary-item').forEach(item => {
+                const key = item.dataset.key;
+                const body = item.querySelector('.diary-body');
+                const header = item.querySelector('.diary-header');
+                const toggle = header.querySelector('.toggle');
+                if (collapsed) {
+                    body.classList.add('hidden');
+                    header.classList.add('collapsed');
+                    toggle.textContent = '\u25B6';
+                    state[key] = 1;
+                } else {
+                    body.classList.remove('hidden');
+                    header.classList.remove('collapsed');
+                    toggle.textContent = '\u25BC';
+                }
+            });
+            saveCollapseState(state);
+        }
+
+        document.getElementById('openAllBtn').addEventListener('click', () => setAll(false));
+        document.getElementById('closeAllBtn').addEventListener('click', () => setAll(true));
+
+        function escHtml(s) {
+            const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
+        }
+
+        async function loadDiary() {
+            try {
+                const resp = await fetch('/tjai/api/diary/entries');
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const data = await resp.json();
+                const state = getCollapseState();
+                let html = '';
+
+                // @Underway
+                if (data.underway) {
+                    const u = data.underway;
+                    const key = 'underway';
+                    const collapsed = !!state[key];
+                    const url = u.entry_id
+                        ? `/tjai/entry/?entry_id=${encodeURIComponent(u.entry_id)}&edit=1`
+                        : `/tjai/entry/?uuid=${u.id}&edit=1`;
+                    html += `<div class="diary-item" data-key="${key}">`;
+                    html += `<div class="diary-header${collapsed ? ' collapsed' : ''}" onclick="toggleItem('${key}')">`;
+                    html += `<span class="toggle">${collapsed ? '\u25B6' : '\u25BC'}</span>`;
+                    html += `<span class="label-underway">@Underway</span>`;
+                    html += `<a href="${url}" onclick="event.stopPropagation()">edit</a>`;
+                    html += `</div>`;
+                    html += `<div class="diary-body${collapsed ? ' hidden' : ''}">${u.content_html || '<em>empty</em>'}</div>`;
+                    html += `</div>`;
+                }
+
+                // Diary entries
+                for (const e of data.diary_entries) {
+                    const key = e.entry_id || e.id;
+                    const collapsed = !!state[key];
+                    const url = e.entry_id
+                        ? `/tjai/entry/?entry_id=${encodeURIComponent(e.entry_id)}&edit=1`
+                        : `/tjai/entry/?uuid=${e.id}&edit=1`;
+                    html += `<div class="diary-item" data-key="${escHtml(key)}">`;
+                    html += `<div class="diary-header${collapsed ? ' collapsed' : ''}" onclick="toggleItem('${escHtml(key)}')">`;
+                    html += `<span class="toggle">${collapsed ? '\u25B6' : '\u25BC'}</span>`;
+                    html += `<a href="${url}" onclick="event.stopPropagation()">${escHtml(e.first_line)}</a>`;
+                    html += `</div>`;
+                    html += `<div class="diary-body${collapsed ? ' hidden' : ''}">${e.content_html || '<em>empty</em>'}</div>`;
+                    html += `</div>`;
+                }
+
+                if (!html) html = '<div class="loading">No diary entries yet.</div>';
+                document.getElementById('diary-content').innerHTML = html;
+            } catch (e) {
+                document.getElementById('diary-content').innerHTML =
+                    '<div class="loading">Error loading diary: ' + escHtml(e.message) + '</div>';
+            }
+        }
+
+        loadDiary();
+    </script>
+</body>
+</html>

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <link rel="icon" type="image/svg+xml" href="/tjai/static/tjai/favicon.svg">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>tjai - Entry</title>
+    <title>{% if entry.name %}@{{ entry.name }}{% elif entry.data.entry_id %}{{ entry.data.entry_id }}{% else %}tjai - Entry{% endif %}</title>
     <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/theme/material-darker.min.css">
@@ -86,6 +86,7 @@
         <span id="first-line"></span>
         <button class="toolbar-btn" id="editBtn" style="margin-left: 8px;">edit</button>
     </div>
+    <div id="version-label" style="color:#8a8a8a; font-size: 12px; margin-bottom: 8px; display:none;"></div>
 
     {% if goal_note_url %}
     <div id="goalNoteDiv" style="margin-bottom: 10px;">
@@ -113,6 +114,19 @@
             <input id="tagsField" type="text" value="{% for t in tags %}{{ t }}{% if not forloop.last %}, {% endif %}{% endfor %}" placeholder="(none)" style="width:240px">
             <label style="margin-left:16px">entry_id</label>
             <input id="entryIdField" type="text" value="{{ entry.data.entry_id|default:'' }}" placeholder="(none)" style="width:200px">
+        </div>
+        <div class="field-row">
+            <label>kind</label>
+            <select id="kindField" style="background:#111;color:#c0d8f0;border:1px solid #555;padding:3px 6px;font-family:inherit;font-size:13px;border-radius:3px;">
+                <option value="memory"{% if entry.kind == 'memory' %} selected{% endif %}>memory</option>
+                <option value="todo"{% if entry.kind == 'todo' %} selected{% endif %}>todo</option>
+                <option value="journal"{% if entry.kind == 'journal' %} selected{% endif %}>journal</option>
+                <option value="bookmark"{% if entry.kind == 'bookmark' %} selected{% endif %}>bookmark</option>
+                <option value="profile"{% if entry.kind == 'profile' %} selected{% endif %}>profile</option>
+                <option value="ai"{% if entry.kind == 'ai' %} selected{% endif %}>ai</option>
+            </select>
+            <label style="margin-left:16px">priority</label>
+            <input id="priorityField" type="number" min="1" value="{{ entry.priority|default:'' }}" placeholder="(none)" style="width:60px">
             <label style="margin-left:16px">format</label>
             <select id="formatField" style="background:#111;color:#c0d8f0;border:1px solid #555;padding:3px 6px;font-family:inherit;font-size:13px;border-radius:3px;">
                 <option value="">auto</option>
@@ -121,12 +135,11 @@
             </select>
         </div>
         <textarea id="editor" style="background:#1a1a1a;color:#e0e0e0;border:none;display:none;">{{ entry.content }}</textarea>
+        <div id="restoreWarning" style="display:none; background:#4a1a1a; border:1px solid #cc4444; color:#ff6666; padding:8px 12px; margin-bottom:8px; border-radius:4px; font-size:13px;"></div>
         <div class="edit-toolbar" style="display:flex; align-items:center;">
-            <span style="margin-left:auto">
-                <button class="toolbar-btn save-btn" id="saveBtn">save</button>
-                <button class="toolbar-btn" id="cancelBtn">cancel</button>
-                <span class="status" id="saveStatus" style="display:none">saved</span>
-            </span>
+            <button class="toolbar-btn save-btn" id="saveBtn">save</button>
+            <button class="toolbar-btn" id="cancelBtn">cancel</button>
+            <span class="status" id="saveStatus" style="display:none">saved</span>
         </div>
     </div>
 
@@ -190,14 +203,62 @@
         </div>
     </div>
 
+    <!-- Version History -->
+    <div id="version-history" style="margin-top: 16px;"></div>
+    <script>
+    (function() {
+        var versions = JSON.parse('{{ versions_json|escapejs }}');
+        if (!versions.length) return;
+        var el = document.getElementById('version-history');
+        var html = '<div style="border-top: 1px solid #333; padding-top: 12px;">';
+        html += '<div style="color:#8a8a8a; margin-bottom: 8px; font-size: 12px;">Version History (' + versions.length + ')';
+        if (versions.length > 1) html += ' <button onclick="purgeVersions()" style="background:#333;color:#e0e0e0;border:1px solid #555;padding:2px 8px;border-radius:3px;cursor:pointer;font-family:inherit;font-size:11px;margin-left:8px">Purge</button>';
+        html += '</div>';
+        html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+        html += '<tr style="color:#8a8a8a;text-align:left;"><th style="padding:3px 8px">V</th><th style="padding:3px 8px">Date</th><th style="padding:3px 8px">By</th><th style="padding:3px 8px">Lines</th><th style="padding:3px 8px">Preview</th><th style="padding:3px 8px"></th></tr>';
+        for (var i = 0; i < versions.length; i++) {
+            var v = versions[i];
+            var d = document.createElement('div');
+            d.textContent = v.content_preview;
+            var preview = d.innerHTML;
+            var baseUrl = window.location.pathname + '?uuid={{ entry.id }}';
+            var editUrl = baseUrl + '&version=' + v.id + '&edit=1';
+            html += '<tr style="border-top:1px solid #2a2a2a;">';
+            html += '<td style="padding:4px 8px;color:#daa520;white-space:nowrap">v' + v.version_num + '</td>';
+            html += '<td style="padding:4px 8px;color:#aaa;white-space:nowrap">' + v.datetime + '</td>';
+            html += '<td style="padding:4px 8px;color:#ce93d8;white-space:nowrap">' + v.changed_by + '</td>';
+            html += '<td style="padding:4px 8px;color:#888;white-space:nowrap">' + v.line_count + '</td>';
+            html += '<td style="padding:4px 8px;color:#bbb;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + preview + '</td>';
+            html += '<td style="padding:4px 8px"><a href="' + editUrl + '" style="color:#90caf9;font-size:11px">edit</a></td>';
+            html += '</tr>';
+        }
+        html += '</table></div>';
+        el.innerHTML = html;
+    })();
+    async function purgeVersions() {
+        try {
+            var resp = await fetch('/tjai/api/entry/{{ entry.id }}/purge-versions', {
+                method: 'POST',
+                headers: {'X-CSRFToken': '{{ csrf_token }}'},
+            });
+            var data = await resp.json();
+            if (data.ok) location.reload();
+        } catch(e) { alert('Purge failed: ' + e.message); }
+    }
+    </script>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/mode/markdown/markdown.min.js"></script>
     <script>
         var originalContent = "{{ entry.content|escapejs }}";
+        var restoreContent = {% if restore_version_content is not None %}"{{ restore_version_content|escapejs }}"{% else %}null{% endif %};
+        var restoreVersionInfo = JSON.parse('{{ restore_version_info_json|escapejs }}');
         var originalName = "{{ entry.name|default:''|escapejs }}";
         var originalContext = "{{ entry.context_id|default:''|escapejs }}";
         var originalTags = "{% for t in tags %}{{ t }}{% if not forloop.last %}, {% endif %}{% endfor %}";
         var originalEntryId = "{{ entry.data.entry_id|default:''|escapejs }}";
+        var originalKind = "{{ entry.kind|escapejs }}";
+        var originalPriority = "{{ entry.priority|default:''|escapejs }}";
         var csrfToken = "{{ csrf_token }}";
         var saveUrl = "{% url 'api_entry_save' entry.id %}";
         var deleteUrl = "{% url 'api_delete_entry' entry.id %}";
@@ -216,11 +277,18 @@
             // bare URLs
             content = content.replace(/(^|[^"'])(https?:\/\/[^\s<]+)/g,
                 '$1<a href="$2" target="_blank">$2</a>');
+            // [[wiki-links]]: [[@name]] or [[entry_id]]
+            content = content.replace(/\[\[([^\]]+)\]\]/g, function(m, ref) {
+                if (ref.startsWith('@')) return '<a href="/tjai/entry/?name=' + encodeURIComponent(ref.slice(1)) + '">' + ref + '</a>';
+                return '<a href="/tjai/entry/?entry_id=' + encodeURIComponent(ref) + '">' + ref + '</a>';
+            });
             return content;
         }
         document.getElementById('first-line').innerHTML = linkifyContent("{{ first_line|escapejs }}");
 
+        var baseTitle = document.title;
         function startEdit() {
+            document.title = baseTitle + ' - Edit';
             document.getElementById('viewMode').style.display = 'none';
             document.getElementById('editMode').style.display = 'block';
             document.getElementById('editBtn').style.display = 'none';
@@ -248,15 +316,34 @@
                     }
                 });
             }
-            cm.setValue(originalContent);
+            var isRestore = !!restoreContent;
+            cm.setValue(restoreContent || originalContent);
+            restoreContent = null;
+            var label = document.getElementById('version-label');
+            var warn = document.getElementById('restoreWarning');
+            if (isRestore && restoreVersionInfo) {
+                label.textContent = 'Editing v' + restoreVersionInfo.num;
+                label.style.display = 'block';
+                warn.innerHTML = 'Editing v' + restoreVersionInfo.num +
+                    ' (' + restoreVersionInfo.datetime + ', by ' + restoreVersionInfo.changed_by +
+                    '). Saving will replace current with this content.';
+                warn.style.display = 'block';
+            } else {
+                label.textContent = 'Editing current';
+                label.style.display = 'block';
+                warn.style.display = 'none';
+            }
             cm.refresh();
             cm.focus();
         }
 
         function cancelEdit() {
+            document.title = baseTitle;
             document.getElementById('viewMode').style.display = 'block';
             document.getElementById('editMode').style.display = 'none';
             document.getElementById('editBtn').style.display = '';
+            document.getElementById('restoreWarning').style.display = 'none';
+            document.getElementById('version-label').style.display = 'none';
             var gn = document.getElementById('goalNoteDiv');
             if (gn) gn.style.display = '';
         }
@@ -268,10 +355,13 @@
             var fmt = document.getElementById('formatField').value || null;
             var tags = document.getElementById('tagsField').value.trim();
             var entryIdVal = document.getElementById('entryIdField').value.trim();
+            var kind = document.getElementById('kindField').value;
+            var priorityVal = document.getElementById('priorityField').value.trim();
+            var priority = priorityVal ? parseInt(priorityVal) : null;
             fetch(saveUrl, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-                body: JSON.stringify({content: content, name: name, context: context, format: fmt, tags: tags, entry_id: entryIdVal})
+                body: JSON.stringify({content: content, name: name, context: context, format: fmt, tags: tags, entry_id: entryIdVal, kind: kind, priority: priority})
             }).then(function(r) { return r.json(); }).then(function(data) {
                 if (data.ok) {
                     var st = document.getElementById('saveStatus');
@@ -305,6 +395,63 @@
         document.getElementById('saveBtn').addEventListener('click', doSave);
         document.getElementById('cancelBtn').addEventListener('click', cancelEdit);
         document.getElementById('deleteBtn').addEventListener('click', doDelete);
+        if (new URLSearchParams(window.location.search).get('edit') === '1') startEdit();
+
+        // Autosave system
+        var _autosaveInterval = null;
+        var _lastSavedContent = originalContent;
+        var _autosaveKey = 'tjai-autosave-{{ entry.id }}';
+
+        function _startAutosave() {
+            // Check for locally saved content newer than server
+            try {
+                var local = JSON.parse(localStorage.getItem(_autosaveKey));
+                if (local && local.content !== _lastSavedContent && local.ts > {{ entry.timestamp_modified }}) {
+                    if (confirm('Found locally saved edits from ' + new Date(local.ts * 1000).toLocaleString() + '. Restore?')) {
+                        cm.setValue(local.content);
+                    }
+                }
+            } catch(e) {}
+            _autosaveInterval = setInterval(_doAutosave, 30000);
+        }
+
+        function _stopAutosave() {
+            if (_autosaveInterval) { clearInterval(_autosaveInterval); _autosaveInterval = null; }
+            try { localStorage.removeItem(_autosaveKey); } catch(e) {}
+        }
+
+        function _doAutosave() {
+            if (!cm) return;
+            var content = cm.getValue();
+            if (content === _lastSavedContent) return;
+            // Always save to localStorage first
+            var now = Date.now() / 1000;
+            try { localStorage.setItem(_autosaveKey, JSON.stringify({content: content, ts: now})); } catch(e) {}
+            // Try server save silently
+            fetch(saveUrl, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+                body: JSON.stringify({content: content, autosave: true})
+            }).then(function(r) { return r.json(); }).then(function(data) {
+                if (data.ok) {
+                    _lastSavedContent = content;
+                    try { localStorage.removeItem(_autosaveKey); } catch(e) {}
+                }
+            }).catch(function() { /* silent — localStorage has the backup */ });
+        }
+
+        // Hook autosave into edit lifecycle
+        var _origStartEdit = startEdit;
+        startEdit = function() { _origStartEdit(); _startAutosave(); };
+        var _origCancelEdit = cancelEdit;
+        cancelEdit = function() { _stopAutosave(); _origCancelEdit(); };
+        // On manual save success, update baseline and clear local
+        var _origDoSave = doSave;
+        doSave = function() {
+            _stopAutosave();
+            if (cm) _lastSavedContent = cm.getValue();
+            _origDoSave();
+        };
 
         // Goal note creation
         var createNoteBtn = document.getElementById('createNoteBtn');

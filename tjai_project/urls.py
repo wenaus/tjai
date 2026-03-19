@@ -31,6 +31,9 @@ urlpatterns = [
     path("logout/", views.logout_view, name="logout"),
     # Dashboard (protected by login)
     path("dashboard/", views.dashboard, name="dashboard"),
+    path("diary/", views.diary_page, name="diary_page"),
+    path("versions/", views.versions_page, name="versions_page"),
+    path("api/diary/entries", views.api_diary_entries, name="api_diary_entries"),
     path("api/dashboard/calendar", views.dashboard_calendar, name="dashboard_calendar"),
     path("api/dashboard/status", views.dashboard_status, name="dashboard_status"),
     path("api/dashboard/search", views.dashboard_search, name="dashboard_search"),
@@ -81,6 +84,7 @@ urlpatterns = [
     path("api/system/data", views.api_system_data, name="api_system_data"),
     path("api/system/refresh", views.api_system_refresh, name="api_system_refresh"),
     path("api/entry/<uuid:entry_id>/save", views.api_entry_save, name="api_entry_save"),
+    path("api/entry/<uuid:entry_id>/purge-versions", views.api_entry_purge_versions, name="api_entry_purge_versions"),
     path("api/entry/<uuid:entry_id>/tag/<str:tag_name>/delete", views.api_entry_tag_delete, name="api_entry_tag_delete"),
     path("entry/", views.entry_detail, name="entry_detail_query"),
     path("entry/<path:entry_id>/", views.entry_detail, name="entry_detail"),

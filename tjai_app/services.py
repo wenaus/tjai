@@ -690,6 +690,8 @@ def edit_entry(entry_id, content, context=None, clear_context=False,
                tags=None, event_date=None, event_time=None, clear_event_date=False,
                priority=None, clear_priority=False, status=None, clear_status=False,
                name=None, clear_name=False, keep_time=False, data=None):
+    from .signals import set_changed_by
+    set_changed_by('api')
     if not entry_id:
         return {"error": "entry_id is required"}
     if not content:
@@ -858,6 +860,9 @@ def delete_entry(entry_id, content):
 
     if _strip_punct(entry.content) != _strip_punct(content):
         return {"error": "Content does not match entry. Use get_entry to fetch current content."}
+
+    from .models import snapshot_entry
+    snapshot_entry(entry, changed_by='api_delete')
 
     now = time.time()
     entry.deleted_at = now

@@ -479,6 +479,9 @@ def api_delete_entry(request, entry_id):
     if not entry:
         return JsonResponse({"error": f"Entry '{entry_id}' not found or already deleted"}, status=404)
 
+    from .models import snapshot_entry
+    snapshot_entry(entry, changed_by='delete')
+
     now = time.time()
     entry.deleted_at = now
     entry.timestamp_modified = now
@@ -559,6 +562,85 @@ def dashboard(request):
         'is_archive': request.GET.get('status') == 'archive',
         'is_dialog': request.GET.get('context') == 'claude-code',
     })
+
+
+@login_required
+def versions_page(request):
+    """Flat reverse-chron list of all entry versions."""
+    from .models import EntryVersion
+    versions = EntryVersion.objects.select_related('entry').order_by('-timestamp')[:200]
+    items = []
+    for v in versions:
+        entry = v.entry
+        data = entry.data if isinstance(entry.data, dict) else {}
+        entry_id = data.get('entry_id', '')
+        entry_name = entry.name or ''
+        entry_label = f'@{entry_name}' if entry_name else entry_id or str(entry.id)[:8]
+        items.append({
+            'version_num': v.version_num,
+            'datetime': fmt_datetime(v.timestamp),
+            'changed_by': v.changed_by,
+            'line_count': v.content.count('\n') + 1 if v.content else 0,
+            'preview': v.content[:120].replace('\n', ' ') if v.content else '',
+            'entry_label': entry_label,
+            'entry_url': f'/tjai/entry/?entry_id={entry_id}' if entry_id else f'/tjai/entry/?uuid={entry.id}',
+            'edit_url': f'/tjai/entry/?uuid={entry.id}&version={v.id}&edit=1',
+        })
+    return render(request, 'tjai_app/versions.html', {'items_json': json.dumps(items)})
+
+
+@login_required
+def diary_page(request):
+    """Render the Diary overview page."""
+    return render(request, 'tjai_app/diary.html')
+
+
+@login_required
+def api_diary_entries(request):
+    """Return @Underway entry and diary journal entries as JSON."""
+    import markdown as md_lib
+    from .models import Entry, Tag
+
+    def render_entry(entry):
+        body_lines = entry.content.split('\n')
+        first_line = body_lines[0] if body_lines else ''
+        body_text = '\n'.join(body_lines[1:]).strip() if len(body_lines) > 1 else ''
+        data = entry.data if isinstance(entry.data, dict) else {}
+        fmt = data.get('format') or 'md'
+        md_exts = ['nl2br', 'tables', 'fenced_code'] if fmt == 'txt' else ['tables', 'fenced_code']
+        content_html = md_lib.markdown(_fix_md_list_spacing(body_text), extensions=md_exts, tab_length=2) if body_text else ''
+        content_html = re.sub(r'(?<!["\'>])(https?://[^\s<]+)', r'<a href="\1">\1</a>', content_html)
+        def _wl(m):
+            ref = m.group(1)
+            if ref.startswith('@'):
+                return f'<a href="/tjai/entry/?name={ref[1:]}">{ref}</a>'
+            return f'<a href="/tjai/entry/?entry_id={ref}">{ref}</a>'
+        content_html = re.sub(r'\[\[([^\]]+)\]\]', _wl, content_html)
+        entry_id = data.get('entry_id', '')
+        return {
+            'id': str(entry.id),
+            'entry_id': entry_id,
+            'first_line': first_line,
+            'content_html': content_html,
+            'kind': entry.kind,
+            'modified': entry.timestamp_modified,
+        }
+
+    result = {'underway': None, 'diary_entries': []}
+
+    # @Underway
+    underway = Entry.objects.filter(name='Underway', deleted_at__isnull=True).first()
+    if underway:
+        result['underway'] = render_entry(underway)
+
+    # Diary entries only (entry_id starts with 'diary-'), not daily synopsis
+    diary_qs = Entry.objects.filter(
+        context_id='diary', kind='journal', deleted_at__isnull=True,
+        data__entry_id__startswith='diary-',
+    ).order_by('-timestamp_modified')[:60]
+    result['diary_entries'] = [render_entry(e) for e in diary_qs]
+
+    return JsonResponse(result)
 
 
 @login_required
@@ -1285,6 +1367,14 @@ def entry_detail(request, entry_id=None):
         r'<a href="\1">\1</a>',
         content_html
     )
+    # [[wiki-links]]: [[@name]] → entry by name, [[entry_id]] → entry by entry_id
+    def _wiki_link(m):
+        ref = m.group(1)
+        if ref.startswith('@'):
+            name = ref[1:]
+            return f'<a href="/tjai/entry/?name={name}">{ref}</a>'
+        return f'<a href="/tjai/entry/?entry_id={ref}">{ref}</a>'
+    content_html = re.sub(r'\[\[([^\]]+)\]\]', _wiki_link, content_html)
     first_line = lines[0] if lines else ''
     if entry.context_id == 'poetry':
         content_lines = entry.content.split('\n')
@@ -1340,6 +1430,34 @@ def entry_detail(request, entry_id=None):
             else:
                 goal_note_url = goal_entry_id  # pass the goal's entry_id for creation
 
+    # Version history
+    from .models import EntryVersion
+    # Version numbers are immutable, stored in DB
+    all_versions = list(EntryVersion.objects.filter(entry_id=entry.id).order_by('-version_num').values(
+        'id', 'version_num', 'content', 'data', 'changed_by', 'timestamp'
+    ))
+    for v in all_versions:
+        v['datetime'] = fmt_datetime(v['timestamp'])
+        v['line_count'] = v['content'].count('\n') + 1 if v['content'] else 0
+        v['content_preview'] = v['content'][:120].replace('\n', ' ') if v['content'] else ''
+        del v['content']
+        del v['data']
+    versions = all_versions
+
+    # If ?version=N, load that version's content into editor
+    restore_version_content = None
+    restore_version_info = None
+    version_id = request.GET.get('version')
+    if version_id:
+        ver_obj = EntryVersion.objects.filter(id=version_id, entry_id=entry.id).first()
+        if ver_obj:
+            restore_version_content = ver_obj.content
+            restore_version_info = {
+                'num': ver_obj.version_num,
+                'datetime': fmt_datetime(ver_obj.timestamp),
+                'changed_by': ver_obj.changed_by,
+            }
+
     return render(request, 'tjai_app/entry_detail.html', {
         'entry': entry,
         'content_html': content_html,
@@ -1356,7 +1474,24 @@ def entry_detail(request, entry_id=None):
         'tagged_entries_json': tagged_entries_json,
         'goal_note_url': goal_note_url,
         'goal_note_exists': goal_note_exists,
+        'versions_json': json.dumps(versions),
+        'restore_version_content': restore_version_content,
+        'restore_version_info_json': json.dumps(restore_version_info),
     })
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_entry_purge_versions(request, entry_id):
+    """Delete all but the most recent version for an entry."""
+    from .models import EntryVersion
+    versions = EntryVersion.objects.filter(entry_id=entry_id).order_by('-timestamp')
+    keep = versions.first()
+    if keep:
+        deleted, _ = EntryVersion.objects.filter(entry_id=entry_id).exclude(id=keep.id).delete()
+    else:
+        deleted = 0
+    return JsonResponse({'ok': True, 'deleted': deleted})
 
 
 @login_required
@@ -1371,6 +1506,9 @@ def api_entry_tag_delete(request, entry_id, tag_name):
 
 def api_entry_save(request, entry_id):
     """Save entry content from the inline editor."""
+    from .signals import set_changed_by
+    body_peek = json.loads(request.body) if request.body else {}
+    set_changed_by('autosave' if body_peek.get('autosave') else 'web_ui')
     entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
     if not entry:
         return JsonResponse({'error': 'Entry not found'}, status=404)
@@ -1407,6 +1545,13 @@ def api_entry_save(request, entry_id):
         Tag.objects.create(tag_name=tag_name, entry_id=entry.id)
     for tag_name in existing_tags - desired_tags:
         Tag.objects.filter(entry_id=entry.id, tag_name=tag_name).delete()
+    # Kind
+    valid_kinds = ('memory', 'todo', 'journal', 'bookmark', 'profile', 'ai')
+    if 'kind' in data and data['kind'] in valid_kinds:
+        entry.kind = data['kind']
+    # Priority
+    if 'priority' in data:
+        entry.priority = data['priority'] if data['priority'] else None
     # Content format: md/txt/None (auto)
     fmt_changed = False
     if 'format' in data:

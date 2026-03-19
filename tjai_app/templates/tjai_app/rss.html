@@ -451,7 +451,10 @@
                 if (data.ok) {
                     above.forEach(el => el.remove());
                     document.querySelectorAll('.source-block').forEach(sb => {
-                        if (sb.querySelectorAll('.rss-item').length === 0) sb.remove();
+                        const remaining = sb.querySelectorAll('.rss-item').length;
+                        if (remaining === 0) { sb.remove(); return; }
+                        const countEl = sb.querySelector('.source-count');
+                        if (countEl) countEl.textContent = remaining;
                     });
                     document.querySelectorAll('.category-block').forEach(cb => {
                         if (cb.querySelectorAll('.source-block').length === 0) cb.remove();

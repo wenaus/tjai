@@ -196,7 +196,7 @@
         </div>
         {% endif %}
         <div class="panel panel-right" id="status-panel">
-            <div class="panel-header" style="display:flex; align-items:center;">{% if is_archive %}Archive{% elif is_dialog %}Dialog{% else %}Status{% endif %}<span class="refresh-indicator"><span id="refresh-indicator"></span> <a href="{% url 'logout' %}" style="color:#999;margin-left:12px">Logout</a></span></div>
+            <div class="panel-header" style="display:flex; align-items:center;">{% if is_archive %}Archive <a href="{% url 'versions_page' %}" style="color:#90caf9;font-size:12px;font-weight:normal;margin-left:12px">Item Versions</a>{% elif is_dialog %}Dialog{% else %}Status{% endif %}<span class="refresh-indicator"><span id="refresh-indicator"></span> <a href="{% url 'logout' %}" style="color:#999;margin-left:12px">Logout</a></span></div>
             <div id="status-fixed">Loading status...</div>
             <div id="entries-header" style="display:flex; align-items:center; gap:12px; margin-top:16px; margin-bottom:8px; border-top:1px solid #333; padding-top:12px; flex-shrink:0;">
                 <span id="entries-label" style="color: #d8a070;">Entries <span style="color:#8a8a8a">with modified time</span></span>
@@ -281,7 +281,7 @@
             try {
                 const resp = await fetch('/tjai/api/diary/today', { method: 'POST' });
                 const data = await resp.json();
-                if (data.entry_id) window.location.href = '/tjai/entry/?entry_id=' + encodeURIComponent(data.entry_id);
+                if (data.entry_id) window.location.href = '/tjai/entry/?entry_id=' + encodeURIComponent(data.entry_id) + '&edit=1';
             } catch (e) {
                 alert('Failed: ' + e.message);
             }
