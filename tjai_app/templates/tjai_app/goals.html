@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <link rel="icon" type="image/svg+xml" href="/tjai/static/tjai/favicon.svg">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>tjai Goals</title>
+    <title>Goals</title>
     <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -176,7 +176,7 @@
             gap: 8px;
             padding: 8px 24px;
             background: #222;
-            border-top: 1px solid #333;
+            border-bottom: 1px solid #333;
             flex-shrink: 0;
         }
         .create-bar input {
@@ -216,16 +216,16 @@
         <span style="color:#d8a070;font-weight:bold">Goals</span>
         <span class="stats" id="stats"></span>
     </div>
-    <div class="filter-bar" id="filter-bar"></div>
-    <div class="content-area" id="content">
-        <div class="loading">Loading goals...</div>
-    </div>
-    <div class="detail-panel" id="detail-panel"></div>
     <div class="create-bar">
         <input type="text" id="new-title" placeholder="Goal title..." style="flex:0 0 200px" onkeydown="if(event.key==='Enter')document.getElementById('new-desc').focus()">
         <input type="text" id="new-desc" placeholder="Description (optional)..." style="flex:1" onkeydown="if(event.key==='Enter')createGoal()">
         <button class="btn-submit" onclick="createGoal()">Create</button>
     </div>
+    <div class="filter-bar" id="filter-bar"></div>
+    <div class="content-area" id="content">
+        <div class="loading">Loading goals...</div>
+    </div>
+    <div class="detail-panel" id="detail-panel"></div>
 
     <script>
         function esc(s) {
