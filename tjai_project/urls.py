@@ -18,6 +18,7 @@ urlpatterns = [
     path("api/entry/<str:entry_id>", views.api_delete_entry, name="api_delete_entry"),
     path("api/add-journal", views.api_add_journal, name="api_add_journal"),
     path("api/add-bookmark", views.api_add_bookmark, name="api_add_bookmark"),
+    path("api/log", views.api_log, name="api_log"),
     path("api/add-entry", views.api_add_entry, name="api_add_entry"),
     path("api/dialog", views.api_dialog, name="api_dialog"),
     path("api/kozy-chat", views.api_kozy_chat, name="api_kozy_chat"),

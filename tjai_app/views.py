@@ -673,6 +673,7 @@ def dashboard_calendar(request):
 def dashboard_status(request):
     """Return status data as JSON for dashboard."""
     now = time.time()
+
     now_dt = datetime.now(tz=get_app_tz())
 
     # Format timestamp
@@ -805,23 +806,28 @@ def dashboard_status(request):
     if filter_machine:
         base_qs = base_qs.filter(data__hostname=filter_machine)
 
-    # Daily counts for dialog mode — DB query covering last 14 days
+    # Daily counts for dialog mode — single raw SQL query for speed
     daily_counts = None
     if filter_context and offset == 0:
-        tz = get_app_tz()
-        now_local = datetime.now(tz=tz)
-        day_counts = {}
-        for days_ago in range(14):
-            day = (now_local - timedelta(days=days_ago)).date()
-            day_start = datetime.combine(day, datetime.min.time()).replace(tzinfo=tz)
-            day_end = day_start + timedelta(days=1)
-            count = base_qs.filter(
-                timestamp_modified__gte=day_start.timestamp(),
-                timestamp_modified__lt=day_end.timestamp(),
-            ).count()
-            if count > 0:
-                day_counts[day.isoformat()] = count
-        daily_counts = [{'date': k, 'count': v} for k, v in sorted(day_counts.items(), reverse=True)]
+        try:
+            tz = get_app_tz()
+            now_local = datetime.now(tz=tz)
+            cutoff_ts = (now_local - timedelta(days=14)).timestamp()
+            tz_name = str(tz)
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT (to_timestamp(timestamp_modified) AT TIME ZONE %s)::date AS day,
+                           count(*) AS cnt
+                    FROM entries
+                    WHERE context = %s AND deleted_at IS NULL
+                          AND (status IS NULL OR status != 'archive')
+                          AND timestamp_modified >= %s
+                    GROUP BY day ORDER BY day DESC
+                """, [tz_name, filter_context, cutoff_ts])
+                daily_counts = [{'date': row[0].isoformat(), 'count': row[1]} for row in cursor.fetchall()]
+        except Exception:
+            logger.exception("daily_counts query failed for context=%s", filter_context)
 
     if filter_date:
         tz = get_app_tz()
@@ -852,7 +858,7 @@ def dashboard_status(request):
 
     base_qs = base_qs.order_by('-timestamp_modified')
 
-    recent = base_qs[offset:offset + DASHBOARD_PAGE]
+    recent = list(base_qs[offset:offset + DASHBOARD_PAGE])
 
     # Batch fetch tags for all entries
     entry_ids = [e.id for e in recent]
@@ -901,7 +907,7 @@ def dashboard_status(request):
         })
 
     has_more = len(recent_entries) == DASHBOARD_PAGE
-    total_count = base_qs.count() if has_more else offset + len(recent_entries)
+    total_count = offset + len(recent_entries) + (1 if has_more else 0)  # approximate, avoid full count
 
     # If loading more entries (offset > 0), return just entries
     if offset > 0:
@@ -1819,8 +1825,53 @@ def api_entry_create(request):
     return JsonResponse({'id': str(entry.id)})
 
 
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_log(request):
+    """Write to AppLog from external sources. Requires Bearer token.
+
+    Request body: {source, message, level, extra_data}
+    level: debug/info/warning/error (default: debug)
+    """
+    auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+    if not auth_header.startswith('Bearer '):
+        return JsonResponse({"error": "Authorization required"}, status=401)
+    token = auth_header[7:]
+    try:
+        api_key = SysConfig.objects.get(key='gmail_addon_api_key').value
+    except SysConfig.DoesNotExist:
+        return JsonResponse({"error": "API key not configured"}, status=503)
+    if token != api_key:
+        return JsonResponse({"error": "Invalid API key"}, status=403)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    message = data.get("message", "").strip()
+    if not message:
+        return JsonResponse({"error": "message is required"}, status=400)
+
+    level_map = {'debug': logging.DEBUG, 'info': logging.INFO, 'warning': logging.WARNING, 'error': logging.ERROR}
+    level_str = data.get("level", "debug").lower()
+    level = level_map.get(level_str, logging.DEBUG)
+
+    from django.utils import timezone as tz
+    AppLog.objects.create(
+        source=data.get("source", "external"),
+        timestamp=tz.now(),
+        level=level,
+        levelname=logging.getLevelName(level),
+        message=message,
+        extra_data=data.get("extra_data"),
+    )
+    return JsonResponse({"status": "ok"})
+
+
+@csrf_exempt
 def api_add_entry(request):
-    """Create a generic entry from an external source (Gmail addon).
+    """Create a generic entry from an external source (Gmail addon, etaverse debug).
 
     Requires Bearer token matching SysConfig 'gmail_addon_api_key'.
 

@@ -187,19 +187,19 @@
         <div class="panel panel-left" id="calendar-panel">
             <div id="calendar-section">
                 <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">Calendar <span id="calendar-time" style="color:#fff;font-weight:normal"></span> <button id="diary-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px">Diary</button></div>
-                <div id="calendar-content">Loading...</div>
+                <div id="calendar-content">Loading calendar...</div>
             </div>
             <div id="named-section">
                 <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">Named Entries <button id="create-entry-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px">Create Entry</button></div>
-                <div id="named-content">Loading...</div>
+                <div id="named-content">Loading named...</div>
             </div>
         </div>
         {% endif %}
         <div class="panel panel-right" id="status-panel">
             <div class="panel-header" style="display:flex; align-items:center;">{% if is_archive %}Archive{% elif is_dialog %}Dialog{% else %}Status{% endif %}<span class="refresh-indicator"><span id="refresh-indicator"></span> <a href="{% url 'logout' %}" style="color:#999;margin-left:12px">Logout</a></span></div>
-            <div id="status-fixed">Loading...</div>
+            <div id="status-fixed">Loading status...</div>
             <div id="entries-header" style="display:flex; align-items:center; gap:12px; margin-top:16px; margin-bottom:8px; border-top:1px solid #333; padding-top:12px; flex-shrink:0;">
-                <span id="entries-label" style="color: #d8a070;">Entries <span style="color:#8a8a8a">with mod time</span></span>
+                <span id="entries-label" style="color: #d8a070;">Entries <span style="color:#8a8a8a">with modified time</span></span>
                 <input type="text" id="entry-search" placeholder="Search..." style="background:#2a2a2a; color:#e0e0e0; border:1px solid #555; padding:2px 6px; font-family:inherit; font-size:inherit; width:180px; border-radius:3px;">
                 <span id="search-clear" style="display:none; cursor:pointer; color:#999; font-size:14px;" title="Clear search (Esc)">&times;</span>
                 <button id="filter-clear" class="filter-clear" title="Clear all filters">clear</button>
@@ -261,7 +261,8 @@
                 const data = await resp.json();
                 renderStatus(data);
             } catch (e) {
-                document.getElementById('status-content').innerHTML = 'Error loading status';
+                console.error('fetchStatus error:', e);
+                document.getElementById('status-fixed').innerHTML = 'Error loading status: ' + e.message;
             }
         }
 
@@ -275,7 +276,8 @@
             }
         }
 
-        document.getElementById('diary-btn').addEventListener('click', async () => {
+        const diaryBtn = document.getElementById('diary-btn');
+        if (diaryBtn) diaryBtn.addEventListener('click', async () => {
             try {
                 const resp = await fetch('/tjai/api/diary/today', { method: 'POST' });
                 const data = await resp.json();
@@ -285,7 +287,8 @@
             }
         });
 
-        document.getElementById('create-entry-btn').addEventListener('click', async () => {
+        const createBtn = document.getElementById('create-entry-btn');
+        if (createBtn) createBtn.addEventListener('click', async () => {
             try {
                 const resp = await fetch('/tjai/api/entry/create', { method: 'POST' });
                 const data = await resp.json();
@@ -578,7 +581,7 @@
         }
 
         function entriesLabel() {
-            const prefix = isFilterActive ? 'filtered' : 'with mod time';
+            const prefix = isFilterActive ? 'filtered' : 'with modified time';
             const countStr = hasMoreEntries ? `${loadedEntryCount} of ${totalEntryCount}` : `${loadedEntryCount}`;
             return `Entries <span style="color:#8a8a8a">${prefix} (${countStr})</span>`;
         }
@@ -1032,6 +1035,13 @@
             syncStateToUrl();
             fetchFilteredEntries();
         }
+
+        // Global error handler — surface JS errors visibly on the page
+        window.onerror = function(msg, src, line, col, err) {
+            const el = document.getElementById('status-fixed');
+            if (el) el.innerHTML = `<div style="color:#ef5350">JS error: ${msg} (line ${line})</div>`;
+            console.error('Uncaught error:', msg, 'at', src, line, col, err);
+        };
 
         // Event delegation for all filter clicks
         document.getElementById('status-fixed').addEventListener('click', function(e) {
