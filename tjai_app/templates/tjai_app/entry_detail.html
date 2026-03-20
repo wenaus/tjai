@@ -69,6 +69,7 @@
         .field-row input:focus { outline: 1px solid #90caf9; border-color: #90caf9; }
         .delete-link { color: #cc4444; cursor: pointer; font-size: 12px; }
         .delete-link:hover { text-decoration: underline; }
+        .public-check { width: 14px; height: 14px; vertical-align: middle; cursor: pointer; accent-color: #9ccc65; }
         .CodeMirror-selected { background: #264f78 !important; }
         .CodeMirror-focused .CodeMirror-selected { background: #264f78 !important; }
         .rel-section { margin-top: 12px; }
@@ -92,6 +93,10 @@
     <div style="margin-bottom: 4px;">
         <span id="first-line"></span>
         <button class="toolbar-btn" id="editBtn" style="margin-left: 8px;">edit</button>
+        <label style="margin-left:16px;cursor:pointer;color:#9ccc65;font-size:12px;" title="Toggle public access">
+            <input type="checkbox" id="publicToggle" class="public-check" {% if is_public %}checked{% endif %}> public
+        </label>
+        <a id="publicLink" href="/tjai/p/{{ public_slug }}/" target="_blank" style="color:#9ccc65;margin-left:6px;font-size:12px;{% if not is_public %}display:none;{% endif %}" title="Open public page">link</a>
     </div>
     <div id="version-label" style="color:#daa520; font-size: 12px; margin-bottom: 4px; display:none;"></div>
     {% if goal_note_url %}
@@ -164,6 +169,7 @@
             {% if entry.name %}<strong>@{{ entry.name }}</strong>{% endif %}
             {% for t in tags %}<span class="tag">:{{ t }}</span> {% endfor %}
             <span style="color: #666;">{{ line_count }} lines</span>
+            {% if is_public %}<a href="/tjai/p/{{ public_slug }}/" style="color:#9ccc65;margin-left:8px;font-size:12px;" title="Public link">public link</a>{% endif %}
         </div>
         {% if entry.data %}
         <div id="entry-data"></div>
@@ -272,6 +278,19 @@
         var saveUrl = "{% url 'api_entry_save' entry.id %}";
         var deleteUrl = "{% url 'api_delete_entry' entry.id %}";
         var cm = null;
+
+        // Public toggle — immediate save without entering edit mode
+        document.getElementById('publicToggle').addEventListener('change', function() {
+            var isPublic = this.checked;
+            fetch(saveUrl, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+                body: JSON.stringify({content: "{{ entry.content|escapejs }}", access: isPublic ? 'public' : null})
+            }).then(function(r) { return r.json(); }).then(function(data) {
+                if (!data.ok) alert('Save failed: ' + (data.error || 'unknown'));
+                document.getElementById('publicLink').style.display = isPublic ? '' : 'none';
+            }).catch(function(err) { alert('Save failed: ' + err); });
+        });
 
         function linkifyContent(content) {
             // [title](entry:uuid) — internal entry links
@@ -406,10 +425,11 @@
             var kind = document.getElementById('kindField').value;
             var priorityVal = document.getElementById('priorityField').value.trim();
             var priority = priorityVal ? parseInt(priorityVal) : null;
+            var isPublic = document.getElementById('publicToggle').checked;
             fetch(saveUrl, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-                body: JSON.stringify({content: content, name: name, context: context, format: fmt, tags: tags, entry_id: entryIdVal, kind: kind, priority: priority})
+                body: JSON.stringify({content: content, name: name, context: context, format: fmt, tags: tags, entry_id: entryIdVal, kind: kind, priority: priority, access: isPublic ? 'public' : null})
             }).then(function(r) { return r.json(); }).then(function(data) {
                 if (data.ok) {
                     var st = document.getElementById('saveStatus');

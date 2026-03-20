@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/tjai/static/tjai/favicon.svg">
+    <title>{{ title }}</title>
+    <style>
+        :root { --bg: #faf8f5; --text: #222; --muted: #888; --link: #1a6fb5; --border: #e0ddd8; --code-bg: #f0ede8; }
+        .dark { --bg: #1a1a1a; --text: #e0e0e0; --muted: #777; --link: #90caf9; --border: #333; --code-bg: #252525; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { height: 100%; }
+        body {
+            background: var(--bg); color: var(--text);
+            font-family: 'Georgia', 'Times New Roman', serif;
+            font-size: 17px; line-height: 1.7;
+            max-width: 720px; margin: 0 auto;
+            padding: 40px 24px 80px;
+            transition: background 0.3s, color 0.3s;
+        }
+        .theme-sw {
+            font-family: sans-serif; font-size: 15px;
+            margin-bottom: 1.5em;
+        }
+        .theme-sw span {
+            color: var(--muted); cursor: default; padding: 2px 0;
+        }
+        .theme-sw a {
+            color: var(--link); cursor: pointer; text-decoration: none; padding: 2px 0;
+        }
+        .theme-sw a:hover { text-decoration: underline; }
+        h1 {
+            font-size: 1.6em; font-weight: 500;
+            margin-bottom: 0.3em; line-height: 1.3;
+        }
+        .timestamp {
+            font-family: sans-serif; font-size: 0.78em;
+            color: var(--muted); margin-bottom: 1.5em; display: block;
+        }
+        .content { margin-top: 1em; }
+        .content p { margin-bottom: 1em; }
+        .content a { color: var(--link); text-decoration: none; }
+        .content a:hover { text-decoration: underline; }
+        .content h1, .content h2, .content h3, .content h4 {
+            margin-top: 1.4em; margin-bottom: 0.4em; line-height: 1.3;
+        }
+        .content h2 { font-size: 1.35em; }
+        .content h3 { font-size: 1.15em; }
+        .content ul, .content ol { margin-left: 1.5em; margin-bottom: 1em; }
+        .content li { margin-bottom: 0.3em; }
+        .content pre {
+            background: var(--code-bg); padding: 12px 16px;
+            border-radius: 4px; overflow-x: auto;
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 0.85em; line-height: 1.5;
+        }
+        .content code {
+            background: var(--code-bg); padding: 2px 5px; border-radius: 3px;
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 0.88em;
+        }
+        .content pre code { background: none; padding: 0; }
+        .content table { border-collapse: collapse; margin-bottom: 1em; width: 100%; }
+        .content th, .content td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
+        .content th { font-weight: 600; }
+        .content blockquote {
+            border-left: 3px solid var(--border); padding-left: 16px;
+            color: var(--muted); margin-bottom: 1em;
+        }
+        .content img { max-width: 100%; }
+        .not-public {
+            text-align: center; margin-top: 120px;
+            color: var(--muted); font-size: 1.1em;
+        }
+    </style>
+</head>
+<body class="dark">
+    {% if not_public %}
+    <div class="not-public">This content is not publicly available.</div>
+    {% else %}
+    <div class="theme-sw"><span id="darkLabel">dark</span> <a id="lightLabel" onclick="setTheme('light')">light</a></div>
+    <h1>{{ title }}</h1>
+    <span class="timestamp">{{ timestamp }}</span>
+    {% if author %}<span class="timestamp" style="margin-top:-1em;">{{ author }}</span>{% endif %}
+    <div class="content">{{ content_html|safe }}</div>
+    {% endif %}
+    <script>
+    function setTheme(t) {
+        const isDark = t === 'dark';
+        document.body.classList.toggle('dark', isDark);
+        localStorage.setItem('tjai-public-theme', t);
+        document.getElementById('darkLabel').outerHTML = isDark
+            ? '<span id="darkLabel">dark</span>'
+            : '<a id="darkLabel" onclick="setTheme(\'dark\')">dark</a>';
+        document.getElementById('lightLabel').outerHTML = isDark
+            ? '<a id="lightLabel" onclick="setTheme(\'light\')">light</a>'
+            : '<span id="lightLabel">light</span>';
+    }
+    (function() {
+        const saved = localStorage.getItem('tjai-public-theme');
+        if (saved === 'light') setTheme('light');
+    })();
+    // Intercept internal links — redirect to public URLs, gentle 404 for non-public
+    document.addEventListener('click', function(e) {
+        const a = e.target.closest('a');
+        if (!a) return;
+        const href = a.getAttribute('href') || '';
+        if (href.startsWith('/tjai/entry/') || href.startsWith('/tjai/entry?')) {
+            e.preventDefault();
+            // Extract the entry_id from the URL
+            let eid = '';
+            if (href.includes('entry_id=')) eid = new URL(href, location.origin).searchParams.get('entry_id');
+            else if (href.includes('name=')) eid = new URL(href, location.origin).searchParams.get('name');
+            else { const m = href.match(/\/entry\/([^/]+)/); if (m) eid = m[1]; }
+            if (eid) window.location.href = '/tjai/p/' + encodeURIComponent(eid) + '/';
+        }
+    });
+    </script>
+</body>
+</html>

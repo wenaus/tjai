@@ -900,6 +900,8 @@ def dashboard_status(request):
                 base_qs = base_qs.filter(id__in=tagged_ids)
     if filter_machine:
         base_qs = base_qs.filter(data__hostname=filter_machine)
+    if request.GET.get('public') == '1':
+        base_qs = base_qs.filter(data__access='public').exclude(context_id__in=['poetry', 'recipe'])
 
     # Daily counts for dialog mode — single raw SQL query for speed
     daily_counts = None
@@ -1102,6 +1104,8 @@ def dashboard_search(request):
     exclude_contexts = [c for c in request.GET.get('exclude_context', '').split(',') if c]
     if exclude_contexts:
         qs = qs.exclude(context_id__in=exclude_contexts)
+    if request.GET.get('public') == '1':
+        qs = qs.filter(data__access='public').exclude(context_id__in=['poetry', 'recipe'])
 
     filter_tag = request.GET.get('tag')
     if filter_tag:
@@ -1322,6 +1326,93 @@ def agent_log_data(request):
     return JsonResponse({'entries': entries})
 
 
+def _lookup_entry(entry_id, request=None):
+    """Resolve entry_id (UUID, data.entry_id, nickname, or name) to an Entry or None."""
+    base = Entry.objects.filter(deleted_at__isnull=True)
+    if request and request.GET.get('uuid'):
+        return base.filter(id=request.GET['uuid']).first()
+    if request and request.GET.get('entry_id'):
+        return base.filter(data__entry_id=request.GET['entry_id']).first()
+    if request and request.GET.get('name'):
+        return base.filter(name=request.GET['name']).first()
+    if entry_id:
+        if re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-', entry_id):
+            return base.filter(id=entry_id).first()
+        return (base.filter(data__entry_id=entry_id).first()
+                or base.filter(data__nickname=entry_id).first()
+                or base.filter(name=entry_id).first())
+    return None
+
+
+def _is_public(entry):
+    """Check if entry has data.access == 'public'."""
+    return isinstance(entry.data, dict) and entry.data.get('access') == 'public'
+
+
+@require_http_methods(["GET"])
+def entry_public(request, entry_id=None):
+    """Public entry detail page — no auth required. Only serves entries with data.access='public'."""
+    import markdown
+    entry = _lookup_entry(entry_id, request)
+    if not entry or not _is_public(entry):
+        return render(request, 'tjai_app/entry_public.html', {'not_public': True})
+    data = entry.data if isinstance(entry.data, dict) else {}
+    ts = fmt_datetime(entry.timestamp_modified)
+    # Poetry: use the existing poetry template (now works without auth)
+    if entry.context_id == 'poetry':
+        content_lines = entry.content.split('\n')
+        poem_title = content_lines[0] if content_lines else ''
+        poem_body = '\n'.join(content_lines[1:]) if len(content_lines) > 1 else ''
+        return render(request, 'tjai_app/entry_detail_poetry.html', {
+            'entry': entry, 'title': poem_title,
+            'poem_title': poem_title, 'poem_body': poem_body,
+            'tags': [],
+        })
+    # General entries: render via public template
+    lines = [l for l in entry.content.split('\n') if l.strip()]
+    first_line = lines[0] if lines else ''
+    body_lines = entry.content.split('\n')
+    body_text = '\n'.join(body_lines[1:]).strip() if len(body_lines) > 1 else ''
+    fmt = data.get('format') or ('txt' if entry.context_id == 'recipe' else 'md')
+    md_exts = ['nl2br', 'tables', 'fenced_code'] if fmt == 'txt' else ['tables', 'fenced_code']
+    content_html = markdown.markdown(_fix_md_list_spacing(body_text), extensions=md_exts, tab_length=2) if body_text else ''
+    # Linkify wiki-links to public URLs
+    def _wiki_link_public(m):
+        ref = m.group(1)
+        if ref.startswith('http://') or ref.startswith('https://'):
+            return f'<a href="{ref}">{ref}</a>'
+        if ref.startswith('@'):
+            return f'<a href="/tjai/p/{ref[1:]}/">{ref}</a>'
+        return f'<a href="/tjai/p/{ref}/">{ref}</a>'
+    content_html = re.sub(r'\[\[([^\]]+)\]\]', _wiki_link_public, content_html)
+    content_html = re.sub(r'(?<!["\'>])(https?://[^\s<]+)', r'<a href="\1">\1</a>', content_html)
+    return render(request, 'tjai_app/entry_public.html', {
+        'title': first_line,
+        'content_html': content_html,
+        'timestamp': ts,
+        'author': data.get('author', ''),
+    })
+
+
+@require_http_methods(["GET"])
+def entry_public_json(request, entry_id=None):
+    """Public JSON API — returns entry content for entries with data.access='public'."""
+    entry = _lookup_entry(entry_id, request)
+    if not entry or not _is_public(entry):
+        return JsonResponse({'error': 'Not found'}, status=404)
+    data = entry.data if isinstance(entry.data, dict) else {}
+    return JsonResponse({
+        'id': str(entry.id),
+        'content': entry.content,
+        'kind': entry.kind,
+        'context': entry.context_id,
+        'created': fmt_datetime(entry.timestamp_created),
+        'modified': fmt_datetime(entry.timestamp_modified),
+        'entry_id': data.get('entry_id', ''),
+        'author': data.get('author', ''),
+    })
+
+
 @login_required
 def entry_detail(request, entry_id=None):
     """Show single entry detail page.
@@ -1473,6 +1564,8 @@ def entry_detail(request, entry_id=None):
                 'changed_by': ver_obj.changed_by,
             }
 
+    is_public = _is_public(entry)
+    public_slug = (data.get('entry_id') or data.get('nickname') or entry.name or str(entry.id)) if data else str(entry.id)
     return render(request, 'tjai_app/entry_detail.html', {
         'entry': entry,
         'content_html': content_html,
@@ -1492,6 +1585,8 @@ def entry_detail(request, entry_id=None):
         'versions_json': json.dumps(versions),
         'restore_version_content': restore_version_content,
         'restore_version_info_json': json.dumps(restore_version_info),
+        'is_public': is_public,
+        'public_slug': public_slug,
     })
 
 
@@ -1587,6 +1682,14 @@ def api_entry_save(request, entry_id):
             entry.data['entry_id'] = eid_val
         else:
             entry.data.pop('entry_id', None)
+    # Public access flag
+    if 'access' in data:
+        if not isinstance(entry.data, dict):
+            entry.data = {}
+        if data['access'] == 'public':
+            entry.data['access'] = 'public'
+        else:
+            entry.data.pop('access', None)
     # Preserve mod time if only tags/context changed (content and other fields unchanged)
     metadata_only = (content == old_content and
                      'name' not in data and not fmt_changed)

@@ -537,6 +537,7 @@
         let expandDialog = false;
         let cachedDailyCounts = null;
         let excludedContexts = new Set();
+        let activePublic = false;
         let isFilterActive = false;
 
         function syncStateToUrl() {
@@ -547,6 +548,7 @@
             if (activeMachine) params.set('machine', activeMachine);
             if (activeStatus) params.set('status', activeStatus);
             if (excludedContexts.size > 0) params.set('exclude', [...excludedContexts].sort().join(','));
+            if (activePublic) params.set('public', '1');
             if (activeDate) params.set('date', activeDate);
             if (activeFromTime) params.set('from_time', activeFromTime);
             if (activeToTime) params.set('to_time', activeToTime);
@@ -569,10 +571,11 @@
             const excl = params.get('exclude');
             if (excl) excl.split(',').forEach(c => excludedContexts.add(c));
             activeDate = params.get('date') || null;
+            activePublic = params.get('public') === '1';
             activeFromTime = params.get('from_time') || null;
             activeToTime = params.get('to_time') || null;
             expandDialog = params.get('expand_dialog') === '1';
-            isFilterActive = !!(activeTags.size > 0 || activeKind || activeContext || activeMachine || activeStatus || activeDate || activeFromTime || activeToTime || excludedContexts.size > 0);
+            isFilterActive = !!(activeTags.size > 0 || activeKind || activeContext || activeMachine || activeStatus || activePublic || activeDate || activeFromTime || activeToTime || excludedContexts.size > 0);
             const searchParam = params.get('search');
             if (searchParam) {
                 document.getElementById('entry-search').value = searchParam;
@@ -594,6 +597,7 @@
             if (activeMachine) params.push(`machine=${encodeURIComponent(activeMachine)}`);
             if (activeStatus) params.push(`status=${encodeURIComponent(activeStatus)}`);
             if (excludedContexts.size > 0) params.push(`exclude_context=${encodeURIComponent([...excludedContexts].join(','))}`);
+            if (activePublic) params.push('public=1');
             if (activeDate) params.push(`date=${encodeURIComponent(activeDate)}`);
             if (activeFromTime) params.push(`from_time=${encodeURIComponent(activeFromTime)}`);
             if (activeToTime) params.push(`to_time=${encodeURIComponent(activeToTime)}`);
@@ -877,6 +881,9 @@
                 html += `<div class="status-line">Machines: ${machineStrs.join(', ')}</div>`;
             }
 
+            // Public filter checkbox
+            html += `<div class="status-line"><label style="cursor:pointer">Public <input type="checkbox" id="public-filter" ${activePublic ? 'checked' : ''} style="width:14px;height:14px;vertical-align:middle;cursor:pointer;accent-color:#9ccc65;margin-left:4px"></label></div>`;
+
             // Daily counts bar (dialog mode) — after machines, at bottom of status
             if (data.daily_counts) cachedDailyCounts = data.daily_counts;
             if (cachedDailyCounts && cachedDailyCounts.length > 0) {
@@ -1064,6 +1071,14 @@
                 return;
             }
 
+            const pubCheck = e.target.closest('#public-filter');
+            if (pubCheck) {
+                activePublic = pubCheck.checked;
+                syncStateToUrl();
+                fetchFilteredEntries();
+                return;
+            }
+
             const machineLink = e.target.closest('.machine-link');
             if (machineLink) { e.preventDefault(); toggleFilter('machine', machineLink.dataset.machine, 'machine-link'); return; }
 
@@ -1124,6 +1139,7 @@
             activeKind = null;
             activeContext = null;
             activeStatus = null;
+            activePublic = false;
             activeDate = null;
             excludedContexts.clear();
             isFilterActive = false;

@@ -86,6 +86,10 @@ urlpatterns = [
     path("api/entry/<uuid:entry_id>/save", views.api_entry_save, name="api_entry_save"),
     path("api/entry/<uuid:entry_id>/purge-versions", views.api_entry_purge_versions, name="api_entry_purge_versions"),
     path("api/entry/<uuid:entry_id>/tag/<str:tag_name>/delete", views.api_entry_tag_delete, name="api_entry_tag_delete"),
+    # Public entry pages (no auth)
+    path("p/<path:entry_id>/json/", views.entry_public_json, name="entry_public_json"),
+    path("p/<path:entry_id>/", views.entry_public, name="entry_public"),
+    # Internal entry pages (auth required)
     path("entry/", views.entry_detail, name="entry_detail_query"),
     path("entry/<path:entry_id>/", views.entry_detail, name="entry_detail"),
     path("context/<str:context_name>/", views.context_entries, name="context_entries"),

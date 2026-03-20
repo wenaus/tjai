@@ -46,7 +46,7 @@
     </style>
 </head>
 <body>
-    <div class="back"><a href="{% url 'dashboard' %}">&larr; Dashboard</a> &nbsp; <a href="{% url 'context_entries' 'poetry' %}">&larr; Poetry</a></div>
+    {% if user.is_authenticated %}<div class="back"><a href="{% url 'dashboard' %}">&larr; Dashboard</a> &nbsp; <a href="{% url 'context_entries' 'poetry' %}">&larr; Poetry</a></div>{% endif %}
 
     <div class="label">1. Lora</div>
     <div class="poem" style="font-family:'Lora',serif;"><span class="title">{{ poem_title }}</span>{{ poem_body }}</div>
