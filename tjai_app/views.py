@@ -1776,6 +1776,26 @@ def _machine_counts_for_entries(entries):
     return sorted(counter.items(), key=lambda x: x[0].lower())
 
 
+@require_http_methods(["GET"])
+def public_context_entries(request, context_name):
+    """Public context entry list — no auth. Only serves contexts where all entries are public."""
+    entries = Entry.objects.filter(
+        context_id=context_name, deleted_at__isnull=True,
+        data__access='public',
+    ).order_by('-timestamp_modified')
+    if not entries.exists():
+        return render(request, 'tjai_app/entry_public.html', {'not_public': True})
+    META_TAGS = {'tjweb', 'dynalist', 'chrome', 'test', 'fave', 'cool', 'readme'}
+    exclude = META_TAGS if context_name == 'recipe' else None
+    tags = _tag_counts_for_entries(entries, exclude_tags=exclude)
+    return render(request, 'tjai_app/entry_list_public.html', {
+        'title': f'={context_name}',
+        'entries': _entries_for_list(entries),
+        'tags': tags,
+        'context_name': context_name,
+    })
+
+
 @login_required
 def context_entries(request, context_name):
     """Show all entries for a context."""

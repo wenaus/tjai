@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/tjai/static/tjai/favicon.svg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <script>
+        (function() {
+            var key = 'scroll_' + location.pathname + location.search;
+            var saved = sessionStorage.getItem(key);
+            if (saved) {
+                var nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+                if (nav && nav.type === 'back_forward') {
+                    document.documentElement.style.visibility = 'hidden';
+                    window.addEventListener('DOMContentLoaded', function() {
+                        window.scrollTo(0, parseInt(saved));
+                        document.documentElement.style.visibility = '';
+                    });
+                }
+            }
+            window.addEventListener('beforeunload', function() {
+                sessionStorage.setItem(key, window.scrollY);
+            });
+        })();
+    </script>
+    <style>
+        :root { --bg: #1a1a1a; --text: #e0e0e0; --muted: #8a8a8a; --link: #90caf9; --accent: #d8a070; --tag: #9ccc65; --ctx: #ce93d8; --chip-bg: #333; --active-text: #1a1a1a; }
+        .light { --bg: #faf8f5; --text: #222; --muted: #888; --link: #1a6fb5; --accent: #b07030; --tag: #558830; --ctx: #8a4a9a; --chip-bg: #e8e4e0; --active-text: #fff; font-weight: bold; font-size: 15px; }
+        .light .tag-bar { font-size: 14px; }
+        .light .tag-chip .count { font-size: 13px; }
+        .light h1 { font-size: 18px; }
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 13px;
+            background: var(--bg); color: var(--text);
+            margin: 0; padding: 16px;
+            transition: background 0.3s, color 0.3s;
+        }
+        .theme-sw { font-size: 13px; margin-bottom: 12px; }
+        .theme-sw span { color: var(--muted); padding: 2px 0; }
+        .theme-sw a { color: var(--link); cursor: pointer; text-decoration: none; padding: 2px 0; }
+        .theme-sw a:hover { text-decoration: underline; }
+        h1 { color: var(--accent); font-size: 16px; margin-bottom: 16px; }
+        .tag-bar { margin-bottom: 16px; line-height: 2.2; font-size: 12px; }
+        .tag-chip {
+            cursor: pointer; padding: 2px 6px; border-radius: 3px;
+            color: var(--tag); white-space: nowrap; display: inline-block;
+        }
+        .tag-chip:hover { background: var(--chip-bg); }
+        .tag-chip.active { background: var(--tag); color: var(--active-text); }
+        .tag-chip.available { outline: 1px solid var(--tag); }
+        .tag-chip .count { color: var(--muted); font-size: 11px; }
+        .tag-chip.active .count { color: var(--active-text); opacity: 0.6; }
+        .clear-btn {
+            background: var(--chip-bg); color: var(--text); border: none;
+            padding: 2px 10px; border-radius: 3px; cursor: pointer;
+            font-family: inherit; font-size: 12px; margin-left: 8px; display: none;
+        }
+        .clear-btn:hover { opacity: 0.8; }
+        .entry { margin: 6px 0; line-height: 1.4; }
+        .entry-num { color: var(--accent); }
+        .timestamp { color: var(--muted); }
+        .context { color: var(--ctx); }
+        .content { color: var(--text); }
+        .lines { color: var(--accent); }
+        .tag { color: var(--tag); cursor: pointer; }
+        .tag:hover { text-decoration: underline; }
+        .tag.active { background: var(--tag); color: var(--active-text); border-radius: 2px; padding: 0 3px; }
+        a { color: inherit; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        #countDisplay { color: var(--muted); }
+        .search-input {
+            background: var(--chip-bg); color: var(--text); border: 1px solid var(--muted);
+            padding: 2px 6px; font-family: inherit; font-size: 13px;
+            width: 180px; border-radius: 3px; margin-left: 12px; vertical-align: middle;
+        }
+        .search-btn {
+            background: var(--chip-bg); color: var(--text); border: 1px solid var(--muted);
+            padding: 2px 8px; border-radius: 3px; cursor: pointer;
+            font-family: inherit; font-size: 12px; vertical-align: middle;
+        }
+        .search-btn:hover { opacity: 0.8; }
+    </style>
+</head>
+<body>
+    <div class="theme-sw"><span id="darkLabel">dark</span> <a id="lightLabel" onclick="setTheme('light')">light</a></div>
+    <h1>{{ title }} <span id="countDisplay">({{ entries|length }} entries)</span>
+        <input type="text" id="entry-search" class="search-input" placeholder="Search...">
+        <button class="search-btn" id="searchTitle">title</button>
+        <span id="search-clear" style="display:none; cursor:pointer; color:var(--muted); font-size:14px;" title="Clear search (Esc)">&times;</span>
+    </h1>
+    {% if tags %}
+    <div class="tag-bar">
+        {% for name, count in tags %}<span class="tag-chip" data-tag="{{ name }}">{{ name }} <span class="count">{{ count }}</span></span> {% endfor %}<button class="clear-btn" id="clearBtn">clear</button>
+    </div>
+    {% endif %}
+    {% for e in entries %}
+    <div class="entry" data-tags="{{ e.all_tags_csv }}">
+        <a href="/tjai/p/{{ e.detail_slug }}/">
+            <span class="entry-num">===</span>
+            <span class="timestamp">{{ e.date_display }}</span>
+        </a>
+        {% if e.context_id %}<span class="context">={{ e.context_id }}</span>{% endif %}
+        {% if e.name %}<span style="color:var(--link);font-weight:bold">@{{ e.name }}</span> {% endif %}
+        <a href="/tjai/p/{{ e.detail_slug }}/" class="content-link"><span class="content" data-content="{{ e.first_line }}"></span></a>
+        {% if e.line_count %}<span class="lines">[{{ e.line_count }} lines]</span>{% endif %}
+        {% for t in e.display_tags %}<span class="tag" data-tag="{{ t }}">:{{ t }}</span> {% endfor %}
+    </div>
+    {% empty %}
+    <p>No entries found.</p>
+    {% endfor %}
+    <script>
+        // Theme
+        function setTheme(t) {
+            var isDark = t === 'dark';
+            document.body.classList.toggle('light', !isDark);
+            localStorage.setItem('tjai-public-theme', t);
+            document.getElementById('darkLabel').outerHTML = isDark
+                ? '<span id="darkLabel">dark</span>'
+                : '<a id="darkLabel" onclick="setTheme(\'dark\')">dark</a>';
+            document.getElementById('lightLabel').outerHTML = isDark
+                ? '<a id="lightLabel" onclick="setTheme(\'light\')">light</a>'
+                : '<span id="lightLabel">light</span>';
+            // Sync mode into URL
+            var p = new URLSearchParams(location.search);
+            p.set('mode', t);
+            history.replaceState(null, '', location.pathname + '?' + p.toString());
+        }
+        (function() {
+            var urlMode = new URLSearchParams(location.search).get('mode');
+            if (urlMode === 'light' || urlMode === 'dark') {
+                localStorage.setItem('tjai-public-theme', urlMode);
+                if (urlMode === 'light') setTheme('light');
+            } else {
+                var saved = localStorage.getItem('tjai-public-theme');
+                if (saved === 'light') setTheme('light');
+            }
+        })();
+
+        // Filters
+        var params = new URLSearchParams(location.search);
+        var activeTags = new Set(params.getAll('tag'));
+        var allEntries = document.querySelectorAll('.entry[data-tags]');
+        var allChips = document.querySelectorAll('.tag-chip[data-tag]');
+        var clearBtn = document.getElementById('clearBtn');
+        var countDisplay = document.getElementById('countDisplay');
+        var totalCount = allEntries.length;
+
+        function updateURL() {
+            var p = new URLSearchParams(location.search);
+            activeTags.size > 0 ? p.set('tag', [...activeTags].join(',')) : p.delete('tag');
+            var qs = p.toString();
+            history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+        }
+
+        function toggleTag(tag) {
+            if (activeTags.has(tag)) activeTags.delete(tag);
+            else activeTags.add(tag);
+            updateURL();
+            applyFilter();
+        }
+
+        var searchQuery = '';
+
+        function applyFilter() {
+            var hasFilters = activeTags.size > 0 || searchQuery;
+            allChips.forEach(function(chip) {
+                chip.classList.toggle('active', activeTags.has(chip.dataset.tag));
+            });
+            document.querySelectorAll('.entry .tag[data-tag]').forEach(function(t) {
+                t.classList.toggle('active', activeTags.has(t.dataset.tag));
+            });
+            var shown = 0;
+            allEntries.forEach(function(el) {
+                var tagMatch = true;
+                if (activeTags.size > 0) {
+                    var entryTags = el.dataset.tags ? el.dataset.tags.split(',') : [];
+                    activeTags.forEach(function(t) { if (entryTags.indexOf(t) === -1) tagMatch = false; });
+                }
+                var searchMatch = true;
+                if (searchQuery) {
+                    var text = (el.textContent || '').toLowerCase();
+                    searchMatch = text.indexOf(searchQuery) >= 0;
+                }
+                el.style.display = (tagMatch && searchMatch) ? '' : 'none';
+                if (tagMatch && searchMatch) shown++;
+            });
+            var availableTags = new Set();
+            if (hasFilters) {
+                allEntries.forEach(function(el) {
+                    if (el.style.display !== 'none') {
+                        (el.dataset.tags || '').split(',').forEach(function(t) { if (t) availableTags.add(t); });
+                    }
+                });
+            }
+            allChips.forEach(function(chip) {
+                chip.classList.toggle('available', hasFilters && !activeTags.has(chip.dataset.tag) && availableTags.has(chip.dataset.tag));
+            });
+            countDisplay.textContent = hasFilters
+                ? '(' + shown + ' of ' + totalCount + ')'
+                : '(' + totalCount + ' entries)';
+            if (clearBtn) clearBtn.style.display = activeTags.size > 0 ? 'inline' : 'none';
+        }
+
+        allChips.forEach(function(chip) { chip.addEventListener('click', function() { toggleTag(chip.dataset.tag); }); });
+        document.querySelectorAll('.entry .tag[data-tag]').forEach(function(t) {
+            t.addEventListener('click', function(e) { e.preventDefault(); toggleTag(t.dataset.tag); });
+        });
+        if (clearBtn) clearBtn.addEventListener('click', function() { activeTags.clear(); updateURL(); applyFilter(); });
+        if (activeTags.size > 0) applyFilter();
+
+        // Title search (client-side only for public)
+        var searchInput = document.getElementById('entry-search');
+        var searchClear = document.getElementById('search-clear');
+        function doTitleSearch() {
+            searchQuery = searchInput.value.trim().toLowerCase();
+            searchClear.style.display = searchQuery ? 'inline' : 'none';
+            applyFilter();
+        }
+        function clearSearch() {
+            searchInput.value = '';
+            searchQuery = '';
+            searchClear.style.display = 'none';
+            applyFilter();
+        }
+        document.getElementById('searchTitle').addEventListener('click', doTitleSearch);
+        searchInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') clearSearch();
+            if (e.key === 'Enter') doTitleSearch();
+        });
+        searchClear.addEventListener('click', function() { clearSearch(); searchInput.focus(); });
+
+        // Linkify content
+        document.querySelectorAll('.content[data-content]').forEach(function(el) {
+            var content = el.dataset.content;
+            var hasUrl = /https?:\/\//.test(content);
+            if (hasUrl) {
+                content = content.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,
+                    '<a href="$2" target="_blank" style="color:var(--link)">$1</a>');
+                content = content.replace(/(^|[^"'])(https?:\/\/[^\s<]+)/g,
+                    '$1<a href="$2" target="_blank" style="color:var(--link)">$2</a>');
+                var wrapper = el.closest('a.content-link');
+                if (wrapper) {
+                    var span = document.createElement('span');
+                    span.className = 'content';
+                    span.innerHTML = content;
+                    wrapper.replaceWith(span);
+                }
+            } else {
+                el.textContent = content;
+            }
+        });
+    </script>
+</body>
+</html>
