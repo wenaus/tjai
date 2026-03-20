@@ -155,9 +155,12 @@
                         ? `/tjai/entry/?entry_id=${encodeURIComponent(e.entry_id)}&edit=1`
                         : `/tjai/entry/?uuid=${e.id}&edit=1`;
                     html += `<div class="diary-item" data-key="${escHtml(key)}">`;
+                    const dateMatch = (e.entry_id || '').match(/^diary-(\d{4}-\d{2}-\d{2})$/);
+                    const synopsisLink = dateMatch ? `/tjai/synopsis/?date=daily-${dateMatch[1]}` : '';
                     html += `<div class="diary-header${collapsed ? ' collapsed' : ''}" onclick="toggleItem('${escHtml(key)}')">`;
                     html += `<span class="toggle">${collapsed ? '\u25B6' : '\u25BC'}</span>`;
                     html += `<a href="${url}" onclick="event.stopPropagation()">${escHtml(e.first_line)}</a>`;
+                    if (synopsisLink) html += `<a href="${synopsisLink}" onclick="event.stopPropagation()" style="margin-left:auto;font-size:11px;color:#90caf9">Daily Synopsis</a>`;
                     html += `</div>`;
                     html += `<div class="diary-body${collapsed ? ' hidden' : ''}">${e.content_html || '<em>empty</em>'}</div>`;
                     html += `</div>`;

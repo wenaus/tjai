@@ -1030,7 +1030,6 @@ function buildEventCard_(ev, gmailUrl) {
   return CardService.newCardBuilder()
     .setHeader(header)
     .addSection(section)
-    .addSection(buildMemorySection_())
     .build();
 }
 
@@ -1139,8 +1138,13 @@ function addToTjai(e) {
 
   // Read edited title from form input, fall back to action parameter
   var formInputs = e.commonEventObject.formInputs || {};
-  var title = (formInputs.title && formInputs.title.stringInputs && formInputs.title.stringInputs.value[0])
-    || params.title;
+  var title = params.title;
+  if (formInputs.title && formInputs.title.stringInputs && formInputs.title.stringInputs.value) {
+    var formTitle = formInputs.title.stringInputs.value[0];
+    if (formTitle && formTitle.trim()) {
+      title = formTitle;
+    }
+  }
 
   var payload = {
     title: title,

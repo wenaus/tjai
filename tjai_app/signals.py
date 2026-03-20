@@ -7,7 +7,7 @@ from django.dispatch import receiver
 from .models import Entry, EntryVersion
 
 # Thread-local or context hint for changed_by — set by views/services before saving
-_changed_by = 'unknown'
+_changed_by = 'web_ui'
 
 
 def set_changed_by(who):
@@ -35,7 +35,7 @@ def snapshot_entry_before_save(sender, instance, **kwargs):
 
     global _changed_by
     if _changed_by == 'autosave':
-        _changed_by = 'unknown'
+        _changed_by = 'web_ui'
         return
     # Next version number: max existing + 1, or 1
     from django.db.models import Max
@@ -48,4 +48,4 @@ def snapshot_entry_before_save(sender, instance, **kwargs):
         changed_by=_changed_by,
         timestamp=time.time(),
     )
-    _changed_by = 'unknown'  # reset after use
+    _changed_by = 'web_ui'  # reset after use

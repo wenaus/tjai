@@ -424,7 +424,7 @@
                         }
                     }
                     timeStr = `<span class="entry-time">${entry.time_display}</span>${localSuffix} `;
-                } else if (!isAnnual && !clockType && !entry.data?._placeholder && entry.context !== 'diary') {
+                } else if (!isAnnual && !clockType && !entry.data?._placeholder && entry.context !== 'diary' && !isDailyEntry) {
                     timeStr = `<span class="entry-time" style="color:#8a8a8a">All day</span> `;
                 }
 

@@ -609,13 +609,15 @@ def api_diary_entries(request):
         fmt = data.get('format') or 'md'
         md_exts = ['nl2br', 'tables', 'fenced_code'] if fmt == 'txt' else ['tables', 'fenced_code']
         content_html = md_lib.markdown(_fix_md_list_spacing(body_text), extensions=md_exts, tab_length=2) if body_text else ''
-        content_html = re.sub(r'(?<!["\'>])(https?://[^\s<]+)', r'<a href="\1">\1</a>', content_html)
         def _wl(m):
             ref = m.group(1)
+            if ref.startswith('http://') or ref.startswith('https://'):
+                return f'<a href="{ref}">{ref}</a>'
             if ref.startswith('@'):
                 return f'<a href="/tjai/entry/?name={ref[1:]}">{ref}</a>'
             return f'<a href="/tjai/entry/?entry_id={ref}">{ref}</a>'
         content_html = re.sub(r'\[\[([^\]]+)\]\]', _wl, content_html)
+        content_html = re.sub(r'(?<!["\'>])(https?://[^\s<]+)', r'<a href="\1">\1</a>', content_html)
         entry_id = data.get('entry_id', '')
         return {
             'id': str(entry.id),
@@ -651,12 +653,22 @@ def dashboard_calendar(request):
     tz = get_app_tz()
     timezone_name = str(tz)
 
-    # Go back 7 days, then to Monday of that week (to show full previous week)
-    seven_days_ago = datetime.now(tz) - timedelta(days=7)
-    days_since_monday = seven_days_ago.weekday()
-    monday_of_prev_week = seven_days_ago - timedelta(days=days_since_monday)
-    start_ts = monday_of_prev_week.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
-    end_ts = now + (60 * 24 * 60 * 60)
+    # Support lazy loading: ?before=TIMESTAMP loads older entries
+    before_ts = request.GET.get('before')
+    if before_ts:
+        try:
+            end_ts = float(before_ts)
+        except ValueError:
+            end_ts = now + (60 * 24 * 60 * 60)
+        start_dt = datetime.fromtimestamp(end_ts, tz=tz) - timedelta(days=30)
+        start_ts = start_dt.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+    else:
+        # Go back 7 days, then to Monday of that week (to show full previous week)
+        seven_days_ago = datetime.now(tz) - timedelta(days=7)
+        days_since_monday = seven_days_ago.weekday()
+        monday_of_prev_week = seven_days_ago - timedelta(days=days_since_monday)
+        start_ts = monday_of_prev_week.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+        end_ts = now + (60 * 24 * 60 * 60)
 
     # Query journal entries with event_date in range (exclude annual, handled separately)
     entries = Entry.objects.filter(
@@ -687,7 +699,7 @@ def dashboard_calendar(request):
             if entry_id.startswith('daily-') and date_key != today_date_str:
                 continue
             date_display = event_dt.strftime('%a %b %-d')
-            is_allday = entry_id.startswith('daily-') or not (event_dt.hour or event_dt.minute)
+            is_allday = entry_id.startswith('daily-') or entry_id.startswith('diary-') or not (event_dt.hour or event_dt.minute)
             time_display = None if is_allday else event_dt.strftime('%H:%M')
             week_num = event_dt.isocalendar()[1]
             week_start = event_dt - timedelta(days=event_dt.weekday())
@@ -745,6 +757,7 @@ def dashboard_calendar(request):
     return JsonResponse({
         'entries': result,
         'server_time': now,
+        'start_ts': start_ts,
         'timezone': timezone_name,
         'today_date': today_date_str,
         'today_date_display': fmt_date(now_dt),
@@ -1361,20 +1374,22 @@ def entry_detail(request, entry_id=None):
             fmt = 'md'
     md_exts = ['nl2br', 'tables', 'fenced_code'] if fmt == 'txt' else ['tables', 'fenced_code']
     content_html = markdown.markdown(_fix_md_list_spacing(body_text), extensions=md_exts, tab_length=2) if body_text else ''
+    # [[wiki-links]] first — before bare URL linkification
+    def _wiki_link(m):
+        ref = m.group(1)
+        if ref.startswith('http://') or ref.startswith('https://'):
+            return f'<a href="{ref}">{ref}</a>'
+        if ref.startswith('@'):
+            name = ref[1:]
+            return f'<a href="/tjai/entry/?name={name}">{ref}</a>'
+        return f'<a href="/tjai/entry/?entry_id={ref}">{ref}</a>'
+    content_html = re.sub(r'\[\[([^\]]+)\]\]', _wiki_link, content_html)
     # Linkify bare URLs not already in anchor tags
     content_html = re.sub(
         r'(?<!["\'>])(https?://[^\s<]+)',
         r'<a href="\1">\1</a>',
         content_html
     )
-    # [[wiki-links]]: [[@name]] → entry by name, [[entry_id]] → entry by entry_id
-    def _wiki_link(m):
-        ref = m.group(1)
-        if ref.startswith('@'):
-            name = ref[1:]
-            return f'<a href="/tjai/entry/?name={name}">{ref}</a>'
-        return f'<a href="/tjai/entry/?entry_id={ref}">{ref}</a>'
-    content_html = re.sub(r'\[\[([^\]]+)\]\]', _wiki_link, content_html)
     first_line = lines[0] if lines else ''
     if entry.context_id == 'poetry':
         content_lines = entry.content.split('\n')
@@ -1943,6 +1958,7 @@ def api_diary_today(request):
         kind='journal',
         context='diary',
         event_date=event_date,
+        event_time='0000',
         data={'entry_id': entry_id},
     )
     if isinstance(result, dict) and 'error' in result:
