@@ -68,6 +68,10 @@
             color: var(--muted); margin-bottom: 1em;
         }
         .content img { max-width: 100%; }
+        .nonpublic-warn { background: #fff0f0; color: #8b1a1a; }
+        .nonpublic-warn a { color: #8b1a1a; }
+        .dark .nonpublic-warn { background: #4a1111; color: #ff8888; }
+        .dark .nonpublic-warn a { color: #ff8888; }
         .not-public {
             text-align: center; margin-top: 120px;
             color: var(--muted); font-size: 1.1em;
@@ -82,6 +86,19 @@
     <h1>{{ title }}</h1>
     <span class="timestamp">{{ timestamp }}</span>
     {% if author %}<span class="timestamp" style="margin-top:-1em;">{{ author }}</span>{% endif %}
+    {% if non_public_refs %}
+    <div class="nonpublic-warn" style="padding:10px 14px;border-radius:6px;margin-bottom:1em;font-family:sans-serif;font-size:0.85em;line-height:1.6;">
+        <strong>Non-public entries linked from this page:</strong>
+        <ul style="margin:0.3em 0 0 1.2em;padding:0;">
+        {% for eid, href in non_public_refs %}
+            <li><a href="{{ href }}">{{ eid }}</a></li>
+        {% endfor %}
+        </ul>
+        {% if is_admin %}
+        <button onclick="setAllPublic()" style="margin-top:0.5em;padding:4px 12px;background:#ff8888;color:#000;border:none;border-radius:4px;cursor:pointer;font-size:0.9em;">Set all to public</button>
+        {% endif %}
+    </div>
+    {% endif %}
     <div class="content">{{ content_html|safe }}</div>
     {% endif %}
     <script>
@@ -100,6 +117,17 @@
         const saved = localStorage.getItem('tjai-public-theme');
         if (saved === 'light') setTheme('light');
     })();
+    function setAllPublic() {
+        const ids = [{% for eid, href in non_public_refs %}'{{ eid }}',{% endfor %}];
+        fetch('/tjai/api/set-public', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+            body: JSON.stringify({entry_ids: ids}),
+        }).then(r => r.json()).then(d => {
+            if (d.ok) location.reload();
+            else alert('Error: ' + (d.error || 'unknown'));
+        }).catch(e => alert('Failed: ' + e));
+    }
     // Intercept internal links — redirect to public URLs, gentle 404 for non-public
     document.addEventListener('click', function(e) {
         const a = e.target.closest('a');

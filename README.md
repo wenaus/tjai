@@ -37,3 +37,4 @@ Built on an offline-first, distributed architecture: the `tj` client works local
 | [Telegram Bot](docs/telegram.md) | Voice/text assistant, setup, voice commands, Mini App |
 | [Add-ons: Gmail & Chrome](docs/addons.md) | Gmail calendar add-on, Chrome bookmark extension |
 | [Bulk Import](docs/bulk-import.md) | Importing bookmarks from external sources |
+| [Entry Versions](docs/versions.md) | Automatic version history, MCP retrieval, change detection |

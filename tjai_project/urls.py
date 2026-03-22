@@ -86,6 +86,7 @@ urlpatterns = [
     path("api/entry/<uuid:entry_id>/save", views.api_entry_save, name="api_entry_save"),
     path("api/entry/<uuid:entry_id>/purge-versions", views.api_entry_purge_versions, name="api_entry_purge_versions"),
     path("api/entry/<uuid:entry_id>/tag/<str:tag_name>/delete", views.api_entry_tag_delete, name="api_entry_tag_delete"),
+    path("api/set-public", views.api_set_public, name="api_set_public"),
     # Public pages (no auth) — context route before <path:> catch-all
     path("p/context/<str:context_name>/", views.public_context_entries, name="public_context_entries"),
     path("p/<path:entry_id>/json/", views.entry_public_json, name="entry_public_json"),

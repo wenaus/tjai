@@ -1078,3 +1078,83 @@ def get_web(entry_id, depth=2, kinds=None, max_content_length=200):
         "entries": list(visited_entries.values()),
         "relations": list(visited_relations.values()),
     }
+
+
+def get_entry_versions(entry_id, version=None, age=None, max_content_length=0):
+    """Get version history for an entry.
+
+    Args:
+        entry_id: UUID of the entry.
+        version: Specific version number (positive) or relative (-1 = previous, -2 = two back).
+        age: Minimum age string (e.g. '24h', '7d') — returns the most recent version
+             at least that old.
+        max_content_length: Truncate content (0 = full).
+
+    Returns single version (if version or age specified) or list of all versions.
+    """
+    from .models import EntryVersion, Entry
+    import time as _time
+
+    try:
+        entry = Entry.objects.get(id=entry_id, deleted_at__isnull=True)
+    except Entry.DoesNotExist:
+        return {"error": "Entry not found"}
+
+    versions = EntryVersion.objects.filter(entry_id=entry.pk).order_by('-version_num')
+
+    if version is not None:
+        if version < 0:
+            # Relative: -1 = previous, -2 = two back
+            idx = abs(version) - 1
+            vlist = list(versions.values('id', 'version_num', 'content', 'data', 'changed_by', 'timestamp'))
+            if idx >= len(vlist):
+                return {"error": f"Only {len(vlist)} versions exist, cannot go back {abs(version)}"}
+            v = vlist[idx]
+        else:
+            v = versions.filter(version_num=version).values(
+                'id', 'version_num', 'content', 'data', 'changed_by', 'timestamp'
+            ).first()
+            if not v:
+                return {"error": f"Version {version} not found"}
+        return _format_version(v, max_content_length)
+
+    if age is not None:
+        cutoff = _time.time() - _parse_duration(age)
+        v = versions.filter(timestamp__lte=cutoff).values(
+            'id', 'version_num', 'content', 'data', 'changed_by', 'timestamp'
+        ).first()
+        if not v:
+            return {"error": f"No version at least {age} old"}
+        return _format_version(v, max_content_length)
+
+    # No filter — return list of all versions (metadata only, content truncated)
+    result = []
+    for v in versions.values('id', 'version_num', 'content', 'data', 'changed_by', 'timestamp')[:50]:
+        result.append(_format_version(v, max_content_length if max_content_length else 100))
+    return result
+
+
+def _format_version(v, max_content_length):
+    from datetime import datetime, timezone
+    content = v['content'] or ''
+    if max_content_length and len(content) > max_content_length:
+        content = content[:max_content_length] + '...'
+    dt = datetime.fromtimestamp(v['timestamp'], tz=timezone.utc).astimezone()
+    return {
+        "version_num": v['version_num'],
+        "content": content,
+        "data": v['data'],
+        "changed_by": v['changed_by'],
+        "timestamp": dt.strftime('%Y-%m-%d %H:%M:%S %Z'),
+    }
+
+
+def _parse_duration(s):
+    """Parse duration string like '24h', '7d', '2w' into seconds."""
+    import re
+    m = re.match(r'^(\d+)\s*([hdwm])$', s.strip().lower())
+    if not m:
+        return 86400  # default 24h
+    val, unit = int(m.group(1)), m.group(2)
+    multipliers = {'h': 3600, 'd': 86400, 'w': 604800, 'm': 2592000}
+    return val * multipliers.get(unit, 86400)

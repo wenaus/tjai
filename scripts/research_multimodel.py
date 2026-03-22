@@ -240,8 +240,8 @@ def _create_and_dispatch_synthesis(base_entry_id, base_entry, synth_entry_id):
             'source_chatgpt_entry_id': f'{base_entry_id}-chatgpt',
         },
     )
-    # No research_topic tag — synthesis is dispatched directly, not queued
     Tag.objects.create(tag_name='fromai', entry=synth)
+    Tag.objects.create(tag_name='research_topic', entry=synth)
 
     # Load synthesis prompt template
     sp_entry = Entry.objects.filter(

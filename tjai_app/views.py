@@ -1334,7 +1334,7 @@ def _lookup_entry(entry_id, request=None):
     if request and request.GET.get('entry_id'):
         return base.filter(data__entry_id=request.GET['entry_id']).first()
     if request and request.GET.get('name'):
-        return base.filter(name=request.GET['name']).first()
+        return base.filter(name__iexact=request.GET['name']).first()
     if entry_id:
         if re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-', entry_id):
             return base.filter(id=entry_id).first()
@@ -1386,12 +1386,66 @@ def entry_public(request, entry_id=None):
         return f'<a href="/tjai/p/{ref}/">{ref}</a>'
     content_html = re.sub(r'\[\[([^\]]+)\]\]', _wiki_link_public, content_html)
     content_html = re.sub(r'(?<!["\'>])(https?://[^\s<]+)', r'<a href="\1">\1</a>', content_html)
+
+    # Rewrite internal /tjai/entry/ links to public /tjai/p/ URLs.
+    # Collect non-public targets for a warning banner.
+    non_public_refs = []
+    def _rewrite_internal_link(m):
+        full_tag = m.group(0)
+        href = m.group(1)
+        # Extract identifier from URL params
+        from urllib.parse import urlparse, parse_qs
+        parsed = urlparse(href)
+        params = parse_qs(parsed.query)
+        eid = (params.get('entry_id', [None])[0]
+               or params.get('name', [None])[0]
+               or params.get('uuid', [None])[0])
+        if not eid:
+            path_parts = parsed.path.rstrip('/').split('/')
+            if path_parts:
+                eid = path_parts[-1]
+        if not eid:
+            return full_tag
+        # Resolve and check public status
+        target = _lookup_entry(eid)
+        if target and _is_public(target):
+            return full_tag.replace(href, f'/tjai/p/{eid}/')
+        else:
+            non_public_refs.append((eid, href))
+            return full_tag.replace(href, f'/tjai/p/{eid}/')
+    content_html = re.sub(r'href="(/tjai/entry/[^"]*)"', _rewrite_internal_link, content_html)
+
     return render(request, 'tjai_app/entry_public.html', {
         'title': first_line,
         'content_html': content_html,
         'timestamp': ts,
         'author': data.get('author', ''),
+        'non_public_refs': non_public_refs,
+        'is_admin': request.user.is_authenticated,
     })
+
+
+@require_http_methods(["POST"])
+@login_required
+def api_set_public(request):
+    """Set data.access='public' on a list of entries identified by entry_id."""
+    import json as _json
+    try:
+        body = _json.loads(request.body)
+    except (ValueError, _json.JSONDecodeError):
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    entry_ids = body.get('entry_ids', [])
+    updated = 0
+    for eid in entry_ids:
+        entry = _lookup_entry(eid)
+        if not entry:
+            continue
+        if not isinstance(entry.data, dict):
+            entry.data = {}
+        entry.data['access'] = 'public'
+        entry.save(update_fields=['data'])
+        updated += 1
+    return JsonResponse({'ok': True, 'updated': updated})
 
 
 @require_http_methods(["GET"])

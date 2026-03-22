@@ -774,3 +774,40 @@ async def get_web(
         entry_id=entry_id, depth=depth, kinds=kinds,
         max_content_length=max_content_length,
     )
+
+
+@mcp.tool()
+async def get_entry_versions(
+    entry_id: str,
+    version: int = None,
+    age: str = None,
+    max_content_length: int = 0,
+):
+    """
+    Get version history for an entry.
+
+    Every content or data change is automatically versioned. Use this to:
+    - See what changed recently in a living document (compare versions)
+    - Recover previous content after an unwanted edit
+    - Track document evolution over time
+
+    Args:
+        entry_id: UUID of the entry.
+        version: Specific version number (positive, e.g. 3) or relative offset
+                 (negative, e.g. -1 for previous version, -2 for two versions back).
+        age: Minimum age — returns the most recent version at least this old.
+             Format: '24h', '7d', '2w'. Useful for "what did this look like yesterday?"
+        max_content_length: Truncate content to this many characters. Default: 0 (full).
+                           When listing all versions (no version/age filter), defaults to
+                           100 chars for the overview.
+
+    Returns:
+        Single version dict (if version or age specified) with: version_num, content,
+        data, changed_by, timestamp. Or list of all versions (newest first, max 50)
+        with truncated content for overview.
+        Returns {"error": "..."} if entry or version not found.
+    """
+    return await sync_to_async(services.get_entry_versions)(
+        entry_id=entry_id, version=version, age=age,
+        max_content_length=max_content_length,
+    )
