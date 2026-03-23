@@ -202,6 +202,12 @@
                 <span id="entries-label" style="color: #d8a070;">Entries <span style="color:#8a8a8a">with modified time</span></span>
                 <input type="text" id="entry-search" placeholder="Search..." style="background:#2a2a2a; color:#e0e0e0; border:1px solid #555; padding:2px 6px; font-family:inherit; font-size:inherit; width:180px; border-radius:3px;">
                 <span id="search-clear" style="display:none; cursor:pointer; color:#999; font-size:14px;" title="Clear search (Esc)">&times;</span>
+                <span id="search-sort-wrap" style="color:#8a8a8a; font-size:0.9em;">
+                    <label style="cursor:pointer;"><input type="radio" name="search-sort" value="time" checked style="accent-color:#d47830; margin:0 2px;"> time</label>
+                    <label style="cursor:pointer; margin-left:6px;"><input type="radio" name="search-sort" value="rank" style="accent-color:#d47830; margin:0 2px;"> rank</label>
+                    <label style="cursor:pointer; margin-left:6px;"><input type="radio" name="search-sort" value="size" style="accent-color:#d47830; margin:0 2px;"> size</label>
+                </span>
+                <button id="search-go" class="filter-clear" title="Search">search</button>
                 <button id="filter-clear" class="filter-clear" title="Clear all filters">clear</button>
             </div>
             <div id="recent-entries">
@@ -742,7 +748,8 @@
         async function searchEntries(query) {
             isSearchActive = true;
             try {
-                const params = [`q=${encodeURIComponent(query)}`, ...buildFilterParams()];
+                const sort = document.querySelector('input[name="search-sort"]:checked').value;
+                const params = [`q=${encodeURIComponent(query)}`, `sort=${sort}`, ...buildFilterParams()];
                 const resp = await fetch(`/tjai/api/dashboard/search?${params.join('&')}`);
                 const data = await resp.json();
                 const count = data.entries ? data.entries.length : 0;
@@ -1158,6 +1165,24 @@
                 refresh();
             }
         }
+
+        // Search button
+        document.getElementById('search-go').addEventListener('click', function() {
+            const q = document.getElementById('entry-search').value.trim();
+            if (q) {
+                searchEntries(q);
+                syncStateToUrl();
+                document.getElementById('search-clear').style.display = 'inline';
+            }
+        });
+
+        // Re-search when sort order changes
+        document.querySelectorAll('input[name="search-sort"]').forEach(r => {
+            r.addEventListener('change', function() {
+                const q = document.getElementById('entry-search').value.trim();
+                if (q && isSearchActive) searchEntries(q);
+            });
+        });
 
         // Search on Enter, Escape to clear
         const searchInput = document.getElementById('entry-search');

@@ -610,7 +610,7 @@ def get_bookmarks(context=None, limit=50, start_date=None, end_date=None, max_co
     return [_format_entry(entry, max_content_length=max_content_length) for entry in qs]
 
 
-def search_entries(query, kind=None, context=None, limit=50, start_date=None, end_date=None, max_content_length=200):
+def search_entries(query, kind=None, context=None, limit=50, start_date=None, end_date=None, max_content_length=200, order_by='time'):
     if not query:
         return {"error": "query is required"}
     if kind is not None and kind not in VALID_KINDS:
@@ -618,9 +618,21 @@ def search_entries(query, kind=None, context=None, limit=50, start_date=None, en
     if not isinstance(limit, int) or limit < 1:
         return {"error": f"limit must be a positive integer, got {limit}"}
 
+    from django.contrib.postgres.search import SearchQuery, SearchRank
+
+    # Full-text search with relevance ranking (replaces icontains substring match)
+    # Uses websearch_to_tsquery for Google-style syntax: quoted phrases, -exclusions
+    try:
+        search_query = SearchQuery(query, search_type='websearch', config='english')
+    except Exception:
+        # Fallback for malformed queries
+        search_query = SearchQuery(query, config='english')
+
     qs = Entry.objects.filter(
-        content__icontains=query,
+        search_vector=search_query,
         deleted_at__isnull=True,
+    ).annotate(
+        rank=SearchRank('search_vector', search_query, normalization=1, cover_density=True),
     ).select_related('context').prefetch_related('tags')
 
     if kind:
@@ -632,7 +644,14 @@ def search_entries(query, kind=None, context=None, limit=50, start_date=None, en
     if err:
         return err
 
-    qs = qs.order_by('-timestamp_modified')[:limit]
+    if order_by == 'rank':
+        qs = qs.order_by('-rank', '-timestamp_modified')
+    elif order_by == 'size':
+        from django.db.models.functions import Length
+        qs = qs.annotate(content_len=Length('content')).order_by('-content_len')
+    else:
+        qs = qs.order_by('-timestamp_modified')
+    qs = qs[:limit]
     return [_format_entry(entry, max_content_length=max_content_length) for entry in qs]
 
 

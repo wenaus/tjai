@@ -1,5 +1,6 @@
 import logging
 
+from django.contrib.postgres.search import SearchVectorField
 from django.db import models
 
 
@@ -38,9 +39,13 @@ class Entry(models.Model):
     status = models.CharField(max_length=50, null=True, blank=True)
     data = models.JSONField(null=True, blank=True)  # Extensible metadata
     mmdd = models.IntegerField(null=True, blank=True, db_index=True)  # Annual event month-day (e.g. 315 = March 15)
+    search_vector = SearchVectorField(null=True)  # Full-text search index
 
     class Meta:
         db_table = 'entries'
+        indexes = [
+            models.Index(fields=['search_vector'], name='entries_search_gin'),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=['context', 'name'],

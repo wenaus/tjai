@@ -334,16 +334,18 @@ async def search_entries(
     start_date: str = None,
     end_date: str = None,
     max_content_length: int = 200,
+    order_by: str = 'time',
 ) -> list:
     """
     Full-text search across entries.
 
-    Performs case-insensitive search in entry content. Use this to find specific
-    information, locate entries by keyword, or explore what the user has stored
-    on a topic.
+    Uses PostgreSQL full-text search with stemming, relevance ranking, and
+    Google-style query syntax (quoted phrases, -exclusions).
 
     Args:
-        query: Search term to find in entry content (case-insensitive substring match).
+        query: Search terms. Supports Google-style syntax: quoted phrases
+               ("streaming workflow"), exclusions (-test), and boolean AND/OR.
+               Stemming is automatic: "computing" matches "computed", "computation".
         kind: Filter to specific entry type: memory, todo, journal, profile,
               ai, bookmark, or list.
         context: Filter to entries in this context/project only.
@@ -354,17 +356,19 @@ async def search_entries(
         max_content_length: Truncate content to this many characters (appends …).
                            Default: 200. Set 0 for full content. Use get_entry() for
                            full content of specific entries.
+        order_by: Sort order. 'time' (default) = newest first by modification date.
+                  'rank' = best match first by search relevance.
 
     Returns:
-        List of matching entries ordered by modification date (newest first),
-        each containing: id, content (preview), kind, context, created, modified, and
-        optional name, priority, status, tags.
+        List of matching entries, each containing: id, content (preview), kind,
+        context, created, modified, and optional name, priority, status, tags.
         Returns {"error": "..."} if parameters are invalid.
     """
     return await sync_to_async(services.search_entries)(
         query=query, kind=kind, context=context, limit=limit,
         start_date=start_date, end_date=end_date,
         max_content_length=max_content_length,
+        order_by=order_by,
     )
 
 

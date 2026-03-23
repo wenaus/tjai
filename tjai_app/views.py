@@ -1081,9 +1081,17 @@ def dashboard_search(request):
     if not q:
         return JsonResponse({'entries': []})
 
+    from django.contrib.postgres.search import SearchQuery, SearchRank
+    try:
+        search_query = SearchQuery(q, search_type='websearch', config='english')
+    except Exception:
+        search_query = SearchQuery(q, config='english')
+
     qs = Entry.objects.filter(
-        content__icontains=q,
+        search_vector=search_query,
         deleted_at__isnull=True,
+    ).annotate(
+        rank=SearchRank('search_vector', search_query, normalization=1, cover_density=True),
     )
 
     # Apply same filters as dashboard_status
@@ -1127,7 +1135,14 @@ def dashboard_search(request):
             timestamp_modified__lt=day_end.timestamp(),
         )
 
-    entries = qs.order_by('-timestamp_modified')[:200]
+    from django.db.models.functions import Length
+    sort = request.GET.get('sort', 'time')
+    if sort == 'rank':
+        entries = qs.order_by('-rank', '-timestamp_modified')[:200]
+    elif sort == 'size':
+        entries = qs.annotate(content_len=Length('content')).order_by('-content_len')[:200]
+    else:
+        entries = qs.order_by('-timestamp_modified')[:200]
 
     # Batch fetch tags
     entry_ids = [e.id for e in entries]
