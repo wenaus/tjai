@@ -186,7 +186,7 @@
         {% if not is_archive and not is_dialog %}
         <div class="panel panel-left" id="calendar-panel">
             <div id="calendar-section">
-                <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">Calendar <span id="calendar-time" style="color:#fff;font-weight:normal"></span> <button id="diary-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px">Diary</button></div>
+                <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">Calendar <span id="calendar-time" style="color:#fff;font-weight:normal"></span> <span><button id="diary-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px">Diary</button> <button id="entry-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px">Entry</button></span></div>
                 <div id="calendar-content">Loading calendar...</div>
             </div>
             <div id="named-section">
@@ -283,7 +283,12 @@
         }
 
         const diaryBtn = document.getElementById('diary-btn');
-        if (diaryBtn) diaryBtn.addEventListener('click', async () => {
+        if (diaryBtn) diaryBtn.addEventListener('click', () => {
+            window.location.href = '{% url "diary_page" %}';
+        });
+
+        const entryBtn = document.getElementById('entry-btn');
+        if (entryBtn) entryBtn.addEventListener('click', async () => {
             try {
                 const resp = await fetch('/tjai/api/diary/today', { method: 'POST' });
                 const data = await resp.json();

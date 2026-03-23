@@ -117,7 +117,47 @@ def collect_postgres():
 
         # Database size
         cur.execute("SELECT pg_database_size('tjai')")
-        metrics['db_size_mb'] = round(cur.fetchone()[0] / (1024 * 1024), 1)
+        db_size = cur.fetchone()[0]
+        metrics['db_size_mb'] = round(db_size / (1024 * 1024), 1)
+
+        # Space breakdown by category
+        cur.execute("""
+            SELECT relname, pg_total_relation_size(quote_ident(relname))
+            FROM pg_stat_user_tables
+        """)
+        table_sizes = {r[0]: r[1] for r in cur.fetchall()}
+
+        # Split entries table into dialog vs non-dialog
+        cur.execute("""
+            SELECT
+                COALESCE(SUM(pg_column_size(e.*)) FILTER (WHERE e.context = %s), 0),
+                COALESCE(SUM(pg_column_size(e.*)) FILTER (WHERE e.context IS DISTINCT FROM %s), 0)
+            FROM entries e
+            WHERE e.deleted_at IS NULL
+        """, ['claude-code', 'claude-code'])
+        dialog_bytes, entries_bytes = cur.fetchone()
+
+        entries_total = table_sizes.get('entries', 0)
+        # Ratio to apportion the full table size (includes indexes, toast)
+        row_total = dialog_bytes + entries_bytes
+        if row_total > 0:
+            dialog_size = int(entries_total * dialog_bytes / row_total)
+            entries_size = entries_total - dialog_size
+        else:
+            dialog_size = 0
+            entries_size = entries_total
+
+        applog_size = table_sizes.get('applog', 0)
+        versions_size = table_sizes.get('entry_versions', 0)
+        other_size = db_size - applog_size - entries_total - versions_size
+
+        metrics['space_breakdown'] = [
+            {'name': 'Entries', 'bytes': entries_size},
+            {'name': 'Dialog', 'bytes': dialog_size},
+            {'name': 'AppLog', 'bytes': applog_size},
+            {'name': 'Versions', 'bytes': versions_size},
+            {'name': 'Other', 'bytes': max(0, other_size)},
+        ]
 
         # Top 5 tables by activity
         cur.execute("""

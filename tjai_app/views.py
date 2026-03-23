@@ -2127,13 +2127,20 @@ def api_add_journal(request):
 @login_required
 @csrf_exempt
 def api_diary_today(request):
-    """Find or create today's diary entry. Returns entry_id for redirect."""
+    """Find or create a diary entry. Accepts optional ?date=YYYY-MM-DD for retroactive creation."""
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
     from .tjai_utils import get_app_tz
-    from datetime import datetime
+    from datetime import datetime, date as date_type
     tz = get_app_tz()
-    today = datetime.now(tz).date()
+    date_str = request.GET.get('date') or request.POST.get('date')
+    if date_str:
+        try:
+            today = date_type.fromisoformat(date_str)
+        except ValueError:
+            return JsonResponse({'error': 'Invalid date format, use YYYY-MM-DD'}, status=400)
+    else:
+        today = datetime.now(tz).date()
     entry_id = f'diary-{today.isoformat()}'
     existing = Entry.objects.filter(
         data__entry_id=entry_id, deleted_at__isnull=True,
