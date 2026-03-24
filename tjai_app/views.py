@@ -1306,11 +1306,180 @@ def git_activity(request):
     return render(request, 'tjai_app/git_activity.html')
 
 
+# Keep in sync with scripts/section_git.py REPOS
+_GIT_REPOS = [
+    ('/home/admin/github/tjrepo', 'https://github.com/wenaus/tjrepo', 'tjrepo'),
+    ('/home/admin/github/swf-testbed', 'https://github.com/BNLNPPS/swf-testbed', 'swf-testbed'),
+    ('/home/admin/github/swf-monitor', 'https://github.com/BNLNPPS/swf-monitor', 'swf-monitor'),
+    ('/home/admin/github/swf-common-lib', 'https://github.com/BNLNPPS/swf-common-lib', 'swf-common-lib'),
+    ('/home/admin/github/swf-remote', 'https://github.com/BNLNPPS/swf-remote', 'swf-remote'),
+    ('/home/admin/github/BNLNPPS.github.io', 'https://github.com/BNLNPPS/BNLNPPS.github.io', 'BNLNPPS.github.io'),
+]
+
+
+def _refresh_recent_git_daily():
+    """Regenerate today and yesterday git daily files from local git state."""
+    import subprocess
+    from datetime import timezone
+    from pathlib import Path
+
+    UTC = timezone.utc
+    git_dir = Path(django_settings.BASE_DIR) / 'data' / 'git_daily'
+    git_dir.mkdir(parents=True, exist_ok=True)
+
+    today = datetime.now(tz=UTC).date()
+    for offset in (0, 1):
+        target = today - timedelta(days=offset)
+        since_dt = datetime(target.year, target.month, target.day, tzinfo=UTC)
+        until_dt = since_dt + timedelta(days=1)
+        since_iso = since_dt.strftime('%Y-%m-%dT%H:%M:%S')
+        until_iso = until_dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+        all_lines = []
+        for repo_path, github_url, label in _GIT_REPOS:
+            if not os.path.isdir(repo_path):
+                continue
+            # Pull latest (best-effort, short timeout)
+            try:
+                subprocess.run(['git', 'pull', '--ff-only'],
+                               capture_output=True, timeout=5, cwd=repo_path)
+            except Exception:
+                pass
+            try:
+                result = subprocess.run(
+                    ['git', 'log', f'--since={since_iso}', f'--until={until_iso}',
+                     '--format=%H%x00%s%x00%b%x01'],
+                    capture_output=True, text=True, timeout=10, cwd=repo_path,
+                )
+            except Exception:
+                continue
+            if not result.stdout.strip():
+                continue
+
+            lines = []
+            for chunk in result.stdout.split('\x01'):
+                chunk = chunk.strip()
+                if not chunk:
+                    continue
+                parts = chunk.split('\x00', 2)
+                if len(parts) < 2:
+                    continue
+                sha = parts[0].strip()
+                subject = parts[1].strip()
+                body = parts[2].strip() if len(parts) > 2 else ''
+                url = f'{github_url}/commit/{sha}'
+                lines.append(f'- [{subject}]({url})')
+                if body:
+                    for bl in body.split('\n'):
+                        bl = bl.strip()
+                        if bl and not bl.startswith('Co-Authored-By:'):
+                            if len(bl) > 90:
+                                bl = bl[:87] + '...'
+                            lines.append(f'  - {bl}')
+                            break
+            if lines:
+                all_lines.append(f'**{label}**')
+                all_lines.extend(lines)
+                all_lines.append('')
+
+        fpath = git_dir / f'{target.isoformat()}.md'
+        if all_lines:
+            fpath.write_text('\n'.join(all_lines).rstrip() + '\n', encoding='utf-8')
+        elif not fpath.exists():
+            pass  # no commits, no existing file — nothing to do
+
+
+def _restructure_git_md(md_text):
+    """Replace repo headers with app-level headers; strip app prefixes from tjrepo commits."""
+    # Only these commit-message prefixes map to actual tjrepo/APP directories
+    _TJREPO_APPS = {
+        'tjai', 'etaverse', 'kozykorner', 'primus', 'epicpp', 'tauerbot',
+        'miranda', 'tjweb', 'wright', 'google', 'blender', 'lsl', 'lslp',
+    }
+    # Display names for apps whose commit prefix casing differs from dir name
+    _APP_DISPLAY = {'kozykorner': 'KozyKorner', 'etaverse': 'Etaverse',
+                    'tjai': 'tjai', 'epicpp': 'ePICpp'}
+
+    lines = md_text.split('\n')
+    current_repo = None
+    commits = []          # list of (app_key, [lines_for_this_commit])
+    current_commit = None  # (app_key, [lines])
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        # Repo header: **reponame**
+        m = re.match(r'^\*\*(.+)\*\*$', stripped)
+        if m:
+            if current_commit is not None:
+                commits.append(current_commit)
+                current_commit = None
+            current_repo = m.group(1)
+            continue
+
+        # New commit line: - [text](url)
+        if stripped.startswith('- [') and current_repo:
+            if current_commit is not None:
+                commits.append(current_commit)
+
+            app_key = current_repo
+            display_line = stripped
+
+            if current_repo == 'tjrepo':
+                link_m = re.match(r'^- \[([^\]]+)\]', stripped)
+                if link_m:
+                    link_text = link_m.group(1)
+                    app_m = re.match(r'^([\w][\w\s]*?):\s+', link_text)
+                    if app_m:
+                        prefix_text = app_m.group(1).strip()
+                        first_word = prefix_text.split()[0].lower()
+                        if first_word in _TJREPO_APPS:
+                            app_key = _APP_DISPLAY.get(first_word, first_word)
+                            rest = link_text[len(app_m.group(0)):]
+                            display_line = stripped.replace(
+                                f'[{link_text}]', f'[{rest}]', 1)
+
+            current_commit = (app_key, [display_line])
+            continue
+
+        # Detail / continuation line — keep original indentation
+        if current_commit is not None:
+            current_commit[1].append(line)
+
+    if current_commit is not None:
+        commits.append(current_commit)
+
+    # Group by app, preserving order of first appearance
+    from collections import OrderedDict
+    grouped = OrderedDict()
+    for app_key, commit_lines in commits:
+        if app_key not in grouped:
+            grouped[app_key] = []
+        grouped[app_key].extend(commit_lines)
+
+    # Rebuild markdown with app-level headers
+    parts = []
+    for app_key, commit_lines in grouped.items():
+        parts.append(f'**{app_key}**')
+        parts.extend(commit_lines)
+        parts.append('')
+
+    return '\n'.join(parts)
+
+
 @login_required
 def git_activity_data(request):
     """Return git activity assembled from daily files."""
     import markdown
     from pathlib import Path
+
+    # Regenerate today and yesterday for up-to-date info
+    try:
+        _refresh_recent_git_daily()
+    except Exception as e:
+        logger.warning("git daily refresh failed: %s", e)
 
     git_dir = Path(django_settings.BASE_DIR) / 'data' / 'git_daily'
     if not git_dir.exists():
@@ -1326,6 +1495,7 @@ def git_activity_data(request):
         except ValueError:
             date_display = date_str
         md_text = f.read_text(encoding='utf-8')
+        md_text = _restructure_git_md(md_text)
         html = markdown.markdown(
             _fix_md_list_spacing(md_text),
             extensions=['nl2br', 'tables', 'fenced_code'],
