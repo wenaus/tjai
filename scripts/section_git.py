@@ -94,7 +94,9 @@ def build(since_ts, target_date):
     # Save daily file for the Git activity page
     if body and target_date:
         GIT_DAILY_DIR.mkdir(parents=True, exist_ok=True)
-        (GIT_DAILY_DIR / f'{target_date.isoformat()}.md').write_text(body + '\n')
+        p = GIT_DAILY_DIR / f'{target_date.isoformat()}.md'
+        p.write_text(body + '\n')
+        p.chmod(0o664)  # group-writable so www-data can refresh on page load
 
     return body
 
@@ -121,7 +123,9 @@ def backfill(days=60):
         if all_lines:
             body = '\n'.join(all_lines).rstrip()
             GIT_DAILY_DIR.mkdir(parents=True, exist_ok=True)
-            (GIT_DAILY_DIR / f'{target.isoformat()}.md').write_text(body + '\n')
+            p = GIT_DAILY_DIR / f'{target.isoformat()}.md'
+            p.write_text(body + '\n')
+            p.chmod(0o664)  # group-writable so www-data can refresh on page load
             print(f'{target}: {len(all_lines)} lines')
         else:
             print(f'{target}: no commits')
