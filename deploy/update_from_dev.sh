@@ -11,8 +11,11 @@ rsync -av \
   --exclude '.venv' --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' --exclude '.env' --exclude 'data/' \
   "$REPO_ROOT/" "$TARGET_DIR/"
 
-# Fix permissions for Apache (exclude .venv which has different ownership)
-find "$TARGET_DIR" -path "$TARGET_DIR/.venv" -prune -o -type f -exec chmod g+w,o+r {} \; -o -type d -exec chmod g+wx,o+rx {} \;
+# Fix permissions for Apache (exclude .venv and data/ which have their own ownership)
+find "$TARGET_DIR" -path "$TARGET_DIR/.venv" -prune -o -path "$TARGET_DIR/data" -prune -o -type f -exec chmod g+w,o+r {} \; -o -type d -exec chmod g+wx,o+rx {} \;
+
+# Data dir: world-writable so both admin (nightly) and www-data (WSGI) can write
+chmod -R a+rwX "$TARGET_DIR/data/" 2>/dev/null || true
 
 # ensure env
 if [[ ! -f $TARGET_DIR/.env ]]; then

@@ -1326,6 +1326,10 @@ def _refresh_recent_git_daily():
     UTC = timezone.utc
     git_dir = Path(django_settings.BASE_DIR) / 'data' / 'git_daily'
     git_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(str(git_dir), 0o777)
+    except OSError:
+        pass
 
     today = datetime.now(tz=UTC).date()
     for offset in (0, 1):
@@ -1379,6 +1383,10 @@ def _refresh_recent_git_daily():
         fpath = git_dir / f'{target.isoformat()}.md'
         if all_lines:
             fpath.write_text('\n'.join(all_lines).rstrip() + '\n', encoding='utf-8')
+            try:
+                os.chmod(str(fpath), 0o666)
+            except OSError:
+                pass
 
 
 def _restructure_git_md(md_text):

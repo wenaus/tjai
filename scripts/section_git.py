@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Appends ## Git to the daily synopsis entry."""
 import logging
+import os
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -94,9 +95,10 @@ def build(since_ts, target_date):
     # Save daily file for the Git activity page
     if body and target_date:
         GIT_DAILY_DIR.mkdir(parents=True, exist_ok=True)
+        os.chmod(str(GIT_DAILY_DIR), 0o777)
         p = GIT_DAILY_DIR / f'{target_date.isoformat()}.md'
         p.write_text(body + '\n')
-        p.chmod(0o664)  # group-writable so www-data can refresh on page load
+        p.chmod(0o666)  # world-writable so both admin and www-data can write
 
     return body
 
@@ -125,7 +127,7 @@ def backfill(days=60):
             GIT_DAILY_DIR.mkdir(parents=True, exist_ok=True)
             p = GIT_DAILY_DIR / f'{target.isoformat()}.md'
             p.write_text(body + '\n')
-            p.chmod(0o664)  # group-writable so www-data can refresh on page load
+            p.chmod(0o666)  # world-writable so both admin and www-data can write
             print(f'{target}: {len(all_lines)} lines')
         else:
             print(f'{target}: no commits')
