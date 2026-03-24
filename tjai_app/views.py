@@ -1301,6 +1301,51 @@ def daily_synopsis_rerun(request):
 
 
 @login_required
+def git_activity(request):
+    """Git activity page — reverse chronological from daily files."""
+    return render(request, 'tjai_app/git_activity.html')
+
+
+@login_required
+def git_activity_data(request):
+    """Return git activity assembled from daily files."""
+    import markdown
+    from pathlib import Path
+
+    git_dir = Path(django_settings.BASE_DIR) / 'data' / 'git_daily'
+    if not git_dir.exists():
+        return JsonResponse({'days': []})
+
+    files = sorted(git_dir.glob('*.md'), reverse=True)
+    days = []
+    for f in files[:120]:
+        date_str = f.stem
+        try:
+            dt = datetime.strptime(date_str, '%Y-%m-%d')
+            date_display = dt.strftime('%a %b %-d %Y')
+        except ValueError:
+            date_display = date_str
+        md_text = f.read_text(encoding='utf-8')
+        html = markdown.markdown(
+            _fix_md_list_spacing(md_text),
+            extensions=['nl2br', 'tables', 'fenced_code'],
+            tab_length=2,
+        )
+        html = re.sub(
+            r'(?<!["\'>])(https?://[^\s<]+)',
+            r'<a href="\1" target="_blank">\1</a>',
+            html,
+        )
+        days.append({
+            'date': date_str,
+            'date_display': date_display,
+            'html': html,
+        })
+
+    return JsonResponse({'days': days})
+
+
+@login_required
 def agent_log(request):
     """Agent log page — shows recent log entries from the AppLog table."""
     return render(request, 'tjai_app/agent_log.html')
