@@ -367,6 +367,43 @@ def main():
         except Exception as e:
             logger.error("daily-history: extract_history failed: %s", e)
 
+    # Post-process ideation: set entry_id on log, append link to synopsis
+    if action_id == 'ideation-agent' and exit_code in (0, 124):
+        try:
+            from datetime import datetime
+            from tjai_app.services import get_timezone
+            from synopsis_utils import find_daily_entry, append_section
+
+            today = datetime.now(get_timezone()).date()
+            date_str = today.isoformat()
+            yyyymmdd = today.strftime('%Y%m%d')
+            entry_id = f'ideation_{yyyymmdd}'
+
+            # Find the ideation log entry (created in last hour) and stamp entry_id
+            log_tag = Tag.objects.filter(tag_name='ideation-log').values_list('entry_id', flat=True)
+            log_entry = Entry.objects.filter(
+                id__in=log_tag,
+                deleted_at__isnull=True,
+                timestamp_created__gte=time.time() - 3600,
+            ).order_by('-timestamp_created').first()
+            if log_entry:
+                data = log_entry.data if isinstance(log_entry.data, dict) else {}
+                data['entry_id'] = entry_id
+                log_entry.data = data
+                log_entry.save(update_fields=['data'])
+                logger.info("ideation-agent: set entry_id=%s on log %s", entry_id, log_entry.id)
+
+            # Append link to daily synopsis
+            synopsis = find_daily_entry(today)
+            if synopsis:
+                link = f'[Ideation \u2014 {date_str}](/tjai/entry/?entry_id={entry_id})'
+                append_section(synopsis, 'Ideation', link)
+                logger.info("ideation-agent: appended ideation link to daily-%s", date_str)
+            else:
+                logger.warning("ideation-agent: daily-%s not found, skipping synopsis link", date_str)
+        except Exception as e:
+            logger.error("ideation-agent: failed to post-process ideation: %s", e)
+
     # Queue drain for research-agent: auto-chain to next pending item
     if action_id == 'research-agent' and exit_code in (0, 124):
         _research_queue_drain(now)

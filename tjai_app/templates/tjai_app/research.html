@@ -142,8 +142,9 @@
 <body>
     {% with current_page="research" %}{% include "tjai_app/_menu.html" %}{% endwith %}
     <div class="research-header">
+        <span id="ideation-prompt-link"></span>
         <span id="sysprompt-link"></span>
-        <button class="btn-submit" id="btn-all" onclick="submitAllOrStop()">Submit All</button>
+        <a href="#" onclick="event.preventDefault();createResearchTopic()">New Topic</a>
         <span class="stats" id="stats"></span>
     </div>
     <div class="agent-banner agent-idle" id="agent-banner">Agent: loading...</div>
@@ -167,6 +168,24 @@
             return '/tjai/entry/?uuid=' + uuid;
         }
 
+        async function createResearchTopic() {
+            try {
+                const resp = await fetch('/tjai/api/entry/create', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                    body: JSON.stringify({
+                        content: 'Research topic title\n\nDescribe the territory to explore here.',
+                        kind: 'memory',
+                        context: 'tjai',
+                        tags: ['research_topic'],
+                        data: {entry_id: 'research-', source: 'manual'},
+                    }),
+                });
+                const data = await resp.json();
+                if (data.id) window.location.href = '/tjai/entry/?uuid=' + data.id + '&edit=1';
+            } catch (e) { alert('Failed: ' + e.message); }
+        }
+
         let agentRunning = false;
         let hasPending = false;
 
@@ -182,7 +201,6 @@
                 agentRunning = (data.agent || {}).status === 'running';
                 hasPending = (data.items || []).some(i => i.status !== 'done');
                 render(data);
-                updateAllBtn();
             } catch (e) {
                 document.getElementById('content').innerHTML =
                     '<div class="error">Error loading research data</div>';
@@ -190,12 +208,18 @@
         }
 
         function render(data) {
+            // Ideation prompt link
+            const ipEl = document.getElementById('ideation-prompt-link');
+            if (data.ideation_prompt_id) {
+                ipEl.innerHTML = `<a href="${entryUrl(data.ideation_prompt_id, 'ideation-agent')}">Ideation Prompt</a>`;
+            }
+
             // Sysprompt link
             const spEl = document.getElementById('sysprompt-link');
             if (data.sysprompt_id) {
-                spEl.innerHTML = `<a href="${entryUrl(data.sysprompt_id, 'research-system-prompt-v2')}">System Prompt</a>`;
+                spEl.innerHTML = `<a href="${entryUrl(data.sysprompt_id, 'research-system-prompt-v2')}">Research Prompt</a>`;
             } else {
-                spEl.innerHTML = '<span style="color:#666">No system prompt</span>';
+                spEl.innerHTML = '<span style="color:#666">No research prompt</span>';
             }
 
             // Agent status banner with activity dot
@@ -392,66 +416,6 @@
             }
         }
 
-        function updateAllBtn() {
-            const btn = document.getElementById('btn-all');
-            if (agentRunning) {
-                btn.textContent = 'Stop';
-                btn.style.color = '#ef5350';
-                btn.style.borderColor = '#ef5350';
-                btn.disabled = false;
-            } else if (hasPending) {
-                btn.textContent = 'Submit All';
-                btn.style.color = '#90caf9';
-                btn.style.borderColor = '#90caf9';
-                btn.disabled = false;
-            } else {
-                btn.textContent = 'Submit All';
-                btn.style.color = '#555';
-                btn.style.borderColor = '#444';
-                btn.disabled = true;
-            }
-        }
-
-        async function submitAllOrStop() {
-            const btn = document.getElementById('btn-all');
-            btn.disabled = true;
-            if (agentRunning) {
-                btn.textContent = 'Stopping...';
-                try {
-                    await fetch('/tjai/api/research/stop', {
-                        method: 'POST',
-                        headers: {'X-CSRFToken': getCsrf()},
-                    });
-                } catch (e) { /* will refresh on next poll */ }
-                setTimeout(fetchData, 3000);
-            } else {
-                btn.textContent = 'Submitting...';
-                try {
-                    const resp = await fetch('/tjai/api/research/run', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
-                        body: JSON.stringify({entry_id: 'all'}),
-                    });
-                    const data = await resp.json();
-                    if (data.error) {
-                        btn.textContent = data.error;
-                        setTimeout(updateAllBtn, 3000);
-                        return;
-                    }
-                    if (data.warning) {
-                        btn.textContent = data.warning;
-                        btn.style.color = '#ff9800';
-                        setTimeout(updateAllBtn, 5000);
-                        return;
-                    }
-                } catch (e) {
-                    btn.textContent = 'Error';
-                    setTimeout(updateAllBtn, 3000);
-                    return;
-                }
-                setTimeout(fetchData, 3000);
-            }
-        }
 
         fetchData();
         setInterval(fetchData, 10000);

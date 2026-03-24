@@ -14,7 +14,7 @@ def build(since_ts, target_date):
         deleted_at__isnull=True,
         kind='bookmark',
     ).exclude(
-        Q(context_id='picks') & ~Q(data__kept=True)
+        Q(context_id='picks') & ~Q(data__kept=True) & ~Q(data__readme=True)
     ).prefetch_related('tags').order_by('-timestamp_modified'))
     if not entries:
         return None

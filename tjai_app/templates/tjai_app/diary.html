@@ -160,7 +160,9 @@
             html += `<div class="diary-header collapsed" style="cursor:default">`;
             html += `<span class="toggle" style="visibility:hidden">\u25B6</span>`;
             html += `<a href="#" onclick="event.preventDefault();event.stopPropagation();createDiaryEntry('${dateStr}')" style="color:#bbb">${escHtml(label)}</a>`;
-            html += `<a href="${synopsisLink}" onclick="event.stopPropagation()" style="margin-left:auto;font-size:11px;color:#90caf9">Daily Synopsis</a>`;
+            const ideationEid = 'ideation_' + dateStr.replace(/-/g, '');
+            html += `<a href="${synopsisLink}" onclick="event.stopPropagation()" style="margin-left:auto;font-size:11px;color:#90caf9">Synopsis</a>`;
+            html += `<a href="/tjai/entry/?entry_id=${ideationEid}" onclick="event.stopPropagation()" style="font-size:11px;color:#90caf9">Ideation</a>`;
             html += `</div></div>`;
             return html;
         }
@@ -174,10 +176,12 @@
             let html = `<div class="diary-item" data-key="${escHtml(key)}">`;
             const dateMatch = (e.entry_id || '').match(/^diary-(\d{4}-\d{2}-\d{2})$/);
             const synopsisLink = dateMatch ? `/tjai/synopsis/?date=daily-${dateMatch[1]}` : '';
+            const ideationLink = dateMatch ? `/tjai/entry/?entry_id=ideation_${dateMatch[1].replace(/-/g, '')}` : '';
             html += `<div class="diary-header${collapsed ? ' collapsed' : ''}" onclick="toggleItem('${escHtml(key)}')">`;
             html += `<span class="toggle">${collapsed ? '\u25B6' : '\u25BC'}</span>`;
             html += `<a href="${url}" onclick="event.stopPropagation()">${escHtml(e.first_line)}</a>`;
-            if (synopsisLink) html += `<a href="${synopsisLink}" onclick="event.stopPropagation()" style="margin-left:auto;font-size:11px;color:#90caf9">Daily Synopsis</a>`;
+            if (synopsisLink) html += `<a href="${synopsisLink}" onclick="event.stopPropagation()" style="margin-left:auto;font-size:11px;color:#90caf9">Synopsis</a>`;
+            if (ideationLink) html += `<a href="${ideationLink}" onclick="event.stopPropagation()" style="font-size:11px;color:#90caf9">Ideation</a>`;
             html += `</div>`;
             html += `<div class="diary-body${collapsed ? ' hidden' : ''}">${e.content_html || '<em>empty</em>'}</div>`;
             html += `</div>`;

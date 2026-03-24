@@ -2401,20 +2401,34 @@ def api_diary_today(request):
 @login_required
 @csrf_exempt
 def api_entry_create(request):
-    """Create a new blank entry and return its UUID for redirect to edit page."""
+    """Create a new entry and return its UUID for redirect to edit page.
+
+    Accepts optional JSON body to seed the entry:
+        content, kind, context, data, tags (list of strings)
+    """
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
     import uuid
     import time
     now = time.time()
+    body = {}
+    if request.body:
+        try:
+            body = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            pass
     entry = Entry.objects.create(
         id=str(uuid.uuid4()),
-        content='',
-        kind='memory',
+        content=body.get('content', ''),
+        kind=body.get('kind', 'memory'),
+        context_id=body.get('context') or None,
+        data=body.get('data') or None,
         timestamp_created=now,
         timestamp_modified=now,
         is_dirty=1,
     )
+    for tag_name in (body.get('tags') or []):
+        Tag.objects.create(tag_name=tag_name, entry_id=entry.id)
     return JsonResponse({'id': str(entry.id)})
 
 
@@ -2974,9 +2988,13 @@ def api_research_data(request):
             'started_at': data.get('started_at'),
         })
 
-    # System prompt entry UUID
+    # System prompt and ideation prompt entry UUIDs
     sysprompt = Entry.objects.filter(
         data__entry_id='research-system-prompt',
+        deleted_at__isnull=True,
+    ).values_list('id', flat=True).first()
+    ideation_prompt = Entry.objects.filter(
+        data__entry_id='ideation-agent',
         deleted_at__isnull=True,
     ).values_list('id', flat=True).first()
 
@@ -3045,6 +3063,7 @@ def api_research_data(request):
     return JsonResponse({
         'items': items,
         'sysprompt_id': str(sysprompt) if sysprompt else None,
+        'ideation_prompt_id': str(ideation_prompt) if ideation_prompt else None,
         'agent': agent_status,
     })
 
