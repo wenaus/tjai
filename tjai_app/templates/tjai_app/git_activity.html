@@ -53,7 +53,7 @@
 (async function() {
     const el = document.getElementById('content');
     try {
-        const resp = await fetch('/tjai/api/git/data');
+        const resp = await fetch('/tjai/api/git/data?_=' + Date.now());
         if (!resp.ok) {
             const text = await resp.text();
             el.innerHTML = `<div class="loading" style="color:#ef5350;">HTTP ${resp.status}: ${text.slice(0, 200)}</div>`;
@@ -65,6 +65,14 @@
             return;
         }
         let html = '';
+        if (data.errors && data.errors.length > 0) {
+            html += '<div style="color:#ef5350;background:#2a1a1a;padding:10px;margin-bottom:16px;border:1px solid #ef5350;border-radius:4px;">';
+            html += '<strong>Refresh errors:</strong><br>';
+            for (const err of data.errors) {
+                html += `${err}<br>`;
+            }
+            html += '</div>';
+        }
         for (const day of data.days) {
             html += `<div class="day-header">${day.date_display}</div>`;
             html += `<div class="day-content">${day.html}</div>`;

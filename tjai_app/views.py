@@ -1318,18 +1318,19 @@ _GIT_REPOS = [
 
 
 def _refresh_recent_git_daily():
-    """Regenerate today and yesterday git daily files from local git state."""
+    """Regenerate today and yesterday git daily files from local git state.
+
+    Returns list of error strings (empty if all OK). Errors are always
+    logged AND returned so the caller can surface them to the user.
+    """
     import subprocess
     from datetime import timezone
     from pathlib import Path
 
+    errors = []
     UTC = timezone.utc
     git_dir = Path(django_settings.BASE_DIR) / 'data' / 'git_daily'
-    git_dir.mkdir(parents=True, exist_ok=True)
-    try:
-        os.chmod(str(git_dir), 0o777)
-    except OSError:
-        pass
+    git_dir.mkdir(parents=True, exist_ok=True, mode=0o777)
 
     today = datetime.now(tz=UTC).date()
     for offset in (0, 1):
@@ -1345,11 +1346,21 @@ def _refresh_recent_git_daily():
                 continue
             try:
                 result = subprocess.run(
-                    ['git', 'log', f'--since={since_iso}', f'--until={until_iso}',
+                    ['git', '-c', 'safe.directory=*', 'log',
+                     f'--since={since_iso}', f'--until={until_iso}',
                      '--format=%H%x00%s%x00%b%x01'],
-                    capture_output=True, text=True, timeout=10, cwd=repo_path,
+                    capture_output=True, timeout=10, cwd=repo_path,
+                    encoding='utf-8', errors='replace',
                 )
-            except Exception:
+            except Exception as e:
+                msg = f"git subprocess error for {label}: {e}"
+                logger.error(msg)
+                errors.append(msg)
+                continue
+            if result.returncode != 0:
+                msg = f"git log failed for {label} (rc={result.returncode}): {result.stderr.strip()}"
+                logger.error(msg)
+                errors.append(msg)
                 continue
             if not result.stdout.strip():
                 continue
@@ -1385,8 +1396,10 @@ def _refresh_recent_git_daily():
             fpath.write_text('\n'.join(all_lines).rstrip() + '\n', encoding='utf-8')
             try:
                 os.chmod(str(fpath), 0o666)
-            except OSError:
-                pass
+            except OSError as e:
+                logger.warning("chmod failed on %s (non-fatal): %s", fpath, e)
+
+    return errors
 
 
 def _restructure_git_md(md_text):
@@ -1476,10 +1489,13 @@ def git_activity_data(request):
     from pathlib import Path
 
     # Refresh today and yesterday files from live git log
+    refresh_errors = []
     try:
-        _refresh_recent_git_daily()
+        refresh_errors = _refresh_recent_git_daily()
     except Exception as e:
-        logger.warning("git daily refresh failed: %s", e)
+        msg = f"git daily refresh crashed: {e}"
+        logger.error(msg)
+        refresh_errors.append(msg)
 
     git_dir = Path(django_settings.BASE_DIR) / 'data' / 'git_daily'
     if not git_dir.exists():
@@ -1512,7 +1528,9 @@ def git_activity_data(request):
             'html': html,
         })
 
-    return JsonResponse({'days': days})
+    response = JsonResponse({'days': days, 'errors': refresh_errors})
+    response['Cache-Control'] = 'no-store'
+    return response
 
 
 @login_required
