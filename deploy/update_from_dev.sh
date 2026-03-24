@@ -12,7 +12,7 @@ rsync -av \
   "$REPO_ROOT/" "$TARGET_DIR/"
 
 # Fix permissions for Apache (exclude .venv which has different ownership)
-find "$TARGET_DIR" -path "$TARGET_DIR/.venv" -prune -o -type f -exec chmod o+r {} \; -o -type d -exec chmod o+rx {} \;
+find "$TARGET_DIR" -path "$TARGET_DIR/.venv" -prune -o -type f -exec chmod g+w,o+r {} \; -o -type d -exec chmod g+wx,o+rx {} \;
 
 # ensure env
 if [[ ! -f $TARGET_DIR/.env ]]; then
