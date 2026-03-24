@@ -1339,12 +1339,6 @@ def _refresh_recent_git_daily():
         for repo_path, github_url, label in _GIT_REPOS:
             if not os.path.isdir(repo_path):
                 continue
-            # Pull latest (best-effort, short timeout)
-            try:
-                subprocess.run(['git', 'pull', '--ff-only'],
-                               capture_output=True, timeout=5, cwd=repo_path)
-            except Exception:
-                pass
             try:
                 result = subprocess.run(
                     ['git', 'log', f'--since={since_iso}', f'--until={until_iso}',
@@ -1385,8 +1379,6 @@ def _refresh_recent_git_daily():
         fpath = git_dir / f'{target.isoformat()}.md'
         if all_lines:
             fpath.write_text('\n'.join(all_lines).rstrip() + '\n', encoding='utf-8')
-        elif not fpath.exists():
-            pass  # no commits, no existing file — nothing to do
 
 
 def _restructure_git_md(md_text):
@@ -1475,7 +1467,7 @@ def git_activity_data(request):
     import markdown
     from pathlib import Path
 
-    # Regenerate today and yesterday for up-to-date info
+    # Refresh today and yesterday files from live git log
     try:
         _refresh_recent_git_daily()
     except Exception as e:
