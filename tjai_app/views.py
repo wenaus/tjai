@@ -1917,13 +1917,42 @@ def api_entry_tag_delete(request, entry_id, tag_name):
 
 
 def api_entry_save(request, entry_id):
-    """Save entry content from the inline editor."""
+    """Save entry content from the inline editor.
+
+    Accepts ?beacon=1 for sendBeacon saves on tab close (CSRF skipped,
+    authenticated by session cookie via @login_required).
+    """
     from .signals import set_changed_by
+    # sendBeacon can't set X-CSRFToken header — skip CSRF for beacon saves
+    # (still authenticated by session cookie)
+    if request.GET.get('beacon') == '1':
+        from django.middleware.csrf import CsrfViewMiddleware
+        setattr(request, '_dont_enforce_csrf_checks', True)
     body_peek = json.loads(request.body) if request.body else {}
-    set_changed_by('autosave' if body_peek.get('autosave') else 'web_ui')
+    if body_peek.get('first_autosave'):
+        set_changed_by('first_autosave')
+    elif body_peek.get('autosave'):
+        set_changed_by('autosave')
+    else:
+        set_changed_by('web_ui')
     entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
     if not entry:
         return JsonResponse({'error': 'Entry not found'}, status=404)
+    # Conflict detection: reject if entry was modified since client's known timestamp
+    expected_ts = body_peek.get('expected_ts')
+    conflict = False
+    if expected_ts:
+        server_ts = float(entry.timestamp_modified)
+        client_ts = float(expected_ts)
+        if server_ts - client_ts > 0.5:  # server is newer than what client knew
+            conflict = True
+            if body_peek.get('autosave'):
+                # Autosave: reject — don't silently overwrite external changes
+                return JsonResponse({
+                    'ok': False, 'conflict': True,
+                    'error': 'Entry modified elsewhere',
+                    'timestamp_modified': server_ts,
+                })
     try:
         data = json.loads(request.body)
         content = data.get('content', '')
@@ -2007,7 +2036,10 @@ def api_entry_save(request, entry_id):
         url = f'/tjai/entry/?name={entry.name}'
     else:
         url = f'/tjai/entry/?uuid={entry.id}'
-    return JsonResponse({'ok': True, 'url': url})
+    resp = {'ok': True, 'url': url, 'timestamp_modified': entry.timestamp_modified}
+    if conflict:
+        resp['conflict'] = True
+    return JsonResponse(resp)
 
 
 def _entries_for_list(entries):

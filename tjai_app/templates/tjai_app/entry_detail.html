@@ -53,7 +53,7 @@
         .status { color: #9ccc65; font-size: 12px; margin-left: 8px; }
         #editMode { display: none; }
         .edit-toolbar { margin-top: 8px; }
-        .CodeMirror { height: 70vh !important; }
+        .CodeMirror { height: calc({{ line_count|add:10 }} * 1.4em) !important; max-height: 70vh !important; }
         .CodeMirror, .CodeMirror-scroll, .CodeMirror-gutters,
         .CodeMirror-sizer, .CodeMirror-gutter-filler,
         .CodeMirror-hscrollbar, .CodeMirror-vscrollbar,
@@ -98,7 +98,7 @@
         </label>
         <a id="publicLink" href="/tjai/p/{{ public_slug }}/" target="_blank" style="color:#9ccc65;margin-left:6px;font-size:12px;{% if not is_public %}display:none;{% endif %}" title="Open public page">link</a>
     </div>
-    <div id="version-label" style="color:#daa520; font-size: 12px; margin-bottom: 4px; display:none;"></div>
+    <div id="version-label" style="color:#daa520; font-size: 12px; margin-bottom: 4px; display:none;"><span id="version-label-text"></span> <span id="autosave-inline" style="color:#888;"></span></div>
     {% if goal_note_url %}
     <div id="goalNoteDiv" style="margin-top: 4px;">
         {% if goal_note_exists %}
@@ -223,7 +223,9 @@
     <script>
     (function() {
         var versions = JSON.parse('{{ versions_json|escapejs }}');
-        if (!versions.length) return;
+        var hasLocal = false;
+        try { hasLocal = !!localStorage.getItem('tjai-autosave-{{ entry.id }}'); } catch(e) {}
+        if (!versions.length && !hasLocal) return;
         var el = document.getElementById('version-history');
         var html = '<div style="border-top: 1px solid #333; padding-top: 12px;">';
         html += '<div style="color:#8a8a8a; margin-bottom: 8px; font-size: 12px;">Version History (' + versions.length + ')';
@@ -231,6 +233,22 @@
         html += '</div>';
         html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
         html += '<tr style="color:#8a8a8a;text-align:left;"><th style="padding:3px 8px">V</th><th style="padding:3px 8px">Date</th><th style="padding:3px 8px">By</th><th style="padding:3px 8px">Lines</th><th style="padding:3px 8px">Preview</th><th style="padding:3px 8px"></th></tr>';
+        // localStorage backup row — rendered live, updated by autosave
+        html += '<tr id="local-version-row" style="border-top:1px solid #2a2a2a;background:#2a2200;display:none;">';
+        html += '<td style="padding:4px 8px;color:#ff9800;white-space:nowrap">local</td>';
+        html += '<td id="local-version-date" style="padding:4px 8px;color:#ff9800;white-space:nowrap"></td>';
+        html += '<td style="padding:4px 8px;color:#ff9800;white-space:nowrap">autosave</td>';
+        html += '<td id="local-version-lines" style="padding:4px 8px;color:#888;white-space:nowrap"></td>';
+        html += '<td id="local-version-preview" style="padding:4px 8px;color:#bbb;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></td>';
+        html += '<td style="padding:4px 8px"><a href="#" onclick="event.preventDefault();restoreFromLocal()" style="color:#ff9800;font-size:11px">edit</a> <a href="#" onclick="event.preventDefault();clearLocal()" style="color:#888;font-size:11px">clear</a></td>';
+        html += '</tr>';
+        // Initial render from existing localStorage
+        (function() {
+            try {
+                var localData = JSON.parse(localStorage.getItem('tjai-autosave-{{ entry.id }}'));
+                if (localData && localData.content) window._updateLocalVersionRow(localData);
+            } catch(e) {}
+        })();
         for (var i = 0; i < versions.length; i++) {
             var v = versions[i];
             var d = document.createElement('div');
@@ -250,6 +268,24 @@
         html += '</table></div>';
         el.innerHTML = html;
     })();
+    function restoreFromLocal() {
+        try {
+            var localData = JSON.parse(localStorage.getItem('tjai-autosave-{{ entry.id }}'));
+            if (!localData || !localData.content) { alert('No local backup found'); return; }
+            // Navigate to edit mode with local content — save it to server as the entry content
+            if (confirm('Restore from local autosave backup? This will open the editor with the backed-up content.')) {
+                // Store intent so startEdit picks it up
+                sessionStorage.setItem('tjai-restore-local-{{ entry.id }}', localData.content);
+                window.location.href = window.location.pathname + '?uuid={{ entry.id }}&edit=1&restore_local=1';
+            }
+        } catch(e) { alert('Restore failed: ' + e.message); }
+    }
+    function clearLocal() {
+        if (confirm('Delete local autosave backup?')) {
+            try { localStorage.removeItem('tjai-autosave-{{ entry.id }}'); } catch(e) {}
+            location.reload();
+        }
+    }
     async function purgeVersions() {
         try {
             var resp = await fetch('/tjai/api/entry/{{ entry.id }}/purge-versions', {
@@ -267,6 +303,15 @@
     <script>
         var originalContent = "{{ entry.content|escapejs }}";
         var restoreContent = {% if restore_version_content is not None %}"{{ restore_version_content|escapejs }}"{% else %}null{% endif %};
+        // Check for local store restore
+        (function() {
+            var lsKey = 'tjai-restore-local-{{ entry.id }}';
+            var lsContent = sessionStorage.getItem(lsKey);
+            if (lsContent && new URLSearchParams(window.location.search).get('restore_local') === '1') {
+                restoreContent = lsContent;
+                sessionStorage.removeItem(lsKey);
+            }
+        })();
         var restoreVersionInfo = JSON.parse('{{ restore_version_info_json|escapejs }}');
         var originalName = "{{ entry.name|default:''|escapejs }}";
         var originalContext = "{{ entry.context_id|default:''|escapejs }}";
@@ -279,13 +324,14 @@
         var deleteUrl = "{% url 'api_delete_entry' entry.id %}";
         var cm = null;
 
-        // Public toggle — immediate save without entering edit mode
+        // Public toggle — immediate save, uses current editor content if editing
         document.getElementById('publicToggle').addEventListener('change', function() {
             var isPublic = this.checked;
+            var content = cm ? cm.getValue() : "{{ entry.content|escapejs }}";
             fetch(saveUrl, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-                body: JSON.stringify({content: "{{ entry.content|escapejs }}", access: isPublic ? 'public' : null})
+                body: JSON.stringify({content: content, access: isPublic ? 'public' : null})
             }).then(function(r) { return r.json(); }).then(function(data) {
                 if (!data.ok) alert('Save failed: ' + (data.error || 'unknown'));
                 document.getElementById('publicLink').style.display = isPublic ? '' : 'none';
@@ -388,23 +434,26 @@
             restoreContent = null;
             var label = document.getElementById('version-label');
             var warn = document.getElementById('restoreWarning');
+            var labelText = document.getElementById('version-label-text');
             if (isRestore && restoreVersionInfo) {
-                label.textContent = 'Editing v' + restoreVersionInfo.num;
+                labelText.textContent = 'Editing v' + restoreVersionInfo.num;
                 label.style.display = 'block';
                 warn.innerHTML = 'Editing v' + restoreVersionInfo.num +
                     ' (' + restoreVersionInfo.datetime + ', by ' + restoreVersionInfo.changed_by +
                     '). Saving will replace current with this content.';
                 warn.style.display = 'block';
             } else {
-                label.textContent = 'Editing current';
+                labelText.textContent = 'Editing current';
                 label.style.display = 'block';
                 warn.style.display = 'none';
             }
             cm.refresh();
             cm.focus();
+            if (typeof _startAutosave === 'function') _startAutosave();
         }
 
         function cancelEdit() {
+            if (typeof _stopAutosave === 'function') _stopAutosave();
             document.title = baseTitle;
             document.getElementById('viewMode').style.display = 'block';
             document.getElementById('editMode').style.display = 'none';
@@ -416,6 +465,8 @@
         }
 
         function doSave() {
+            // Stop autosave before manual save to prevent race
+            if (typeof _stopAutosave === 'function') _stopAutosave();
             var content = cm ? cm.getValue() : document.getElementById('editor').value;
             var name = document.getElementById('nameField').value.trim();
             var context = document.getElementById('contextField').value.trim().replace(/^=/, '');
@@ -429,17 +480,28 @@
             fetch(saveUrl, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-                body: JSON.stringify({content: content, name: name, context: context, format: fmt, tags: tags, entry_id: entryIdVal, kind: kind, priority: priority, access: isPublic ? 'public' : null})
+                body: JSON.stringify({content: content, name: name, context: context, format: fmt, tags: tags, entry_id: entryIdVal, kind: kind, priority: priority, access: isPublic ? 'public' : null, expected_ts: _serverTimestamp})
             }).then(function(r) { return r.json(); }).then(function(data) {
+                if (data.conflict) {
+                    alert('WARNING: Entry was modified elsewhere. Your save went through but may have overwritten other changes. Reload to check.');
+                }
                 if (data.ok) {
+                    _lastSavedContent = content;
+                    if (data.timestamp_modified) _serverTimestamp = data.timestamp_modified;
                     var st = document.getElementById('saveStatus');
                     st.style.display = 'inline';
                     setTimeout(function() { st.style.display = 'none'; }, 2000);
                     location.href = data.url;
                 } else {
                     alert('Save failed: ' + (data.error || 'unknown'));
+                    // Restart autosave since we stopped it
+                    if (typeof _startAutosave === 'function') _startAutosave();
                 }
-            }).catch(function(err) { alert('Save failed: ' + err); });
+            }).catch(function(err) {
+                alert('Save failed: ' + err);
+                // Restart autosave since we stopped it
+                if (typeof _startAutosave === 'function') _startAutosave();
+            });
         }
 
         var deleting = false;
@@ -459,33 +521,110 @@
             }).catch(function(err) { alert('Delete failed: ' + err); });
         }
 
+        // Autosave state — MUST be before startEdit can be called
+        var _autosaveInterval = null;
+        var _lastSavedContent = originalContent;
+        var _autosaveKey = 'tjai-autosave-{{ entry.id }}';
+        var _serverTimestamp = {{ entry.timestamp_modified }};
+        var _isFirstAutosave = true;
+        var _autosaveFailCount = 0;
+        var _lastAutosaveTime = 0;
+        setInterval(function() {
+            if (!_lastAutosaveTime) return;
+            var inline = document.getElementById('autosave-inline');
+            if (!inline || inline.style.color === 'rgb(239, 83, 80)') return; // don't overwrite errors
+            var ago = Math.round((Date.now() - _lastAutosaveTime) / 1000);
+            inline.textContent = '— autosaved ' + ago + 's ago';
+        }, 1000);
+
         document.getElementById('editBtn').addEventListener('click', startEdit);
         document.getElementById('saveBtn').addEventListener('click', doSave);
         document.getElementById('cancelBtn').addEventListener('click', cancelEdit);
         document.getElementById('deleteBtn').addEventListener('click', doDelete);
         if (new URLSearchParams(window.location.search).get('edit') === '1') startEdit();
 
-        // Autosave system
-        var _autosaveInterval = null;
-        var _lastSavedContent = originalContent;
-        var _autosaveKey = 'tjai-autosave-{{ entry.id }}';
-
         function _startAutosave() {
+            _isFirstAutosave = true;
             // Check for locally saved content newer than server
             try {
                 var local = JSON.parse(localStorage.getItem(_autosaveKey));
-                if (local && local.content !== _lastSavedContent && local.ts > {{ entry.timestamp_modified }}) {
+                if (local && local.content !== _lastSavedContent && local.ts > _serverTimestamp) {
                     if (confirm('Found locally saved edits from ' + new Date(local.ts * 1000).toLocaleString() + '. Restore?')) {
                         cm.setValue(local.content);
                     }
                 }
             } catch(e) {}
-            _autosaveInterval = setInterval(_doAutosave, 30000);
+            _autosaveInterval = setInterval(_doAutosave, 10000);
+            window.addEventListener('beforeunload', _onBeforeUnload);
         }
 
         function _stopAutosave() {
             if (_autosaveInterval) { clearInterval(_autosaveInterval); _autosaveInterval = null; }
-            try { localStorage.removeItem(_autosaveKey); } catch(e) {}
+            window.removeEventListener('beforeunload', _onBeforeUnload);
+            // Never delete localStorage — it's the safety net
+        }
+
+        function _onBeforeUnload() {
+            if (!cm) return;
+            var content = cm.getValue();
+            if (content === _lastSavedContent) return;
+            // Always save to localStorage
+            var now = Date.now() / 1000;
+            try { localStorage.setItem(_autosaveKey, JSON.stringify({content: content, ts: now})); } catch(e) {}
+            // sendBeacon — fire-and-forget, but it's the best we can do on tab close.
+            // localStorage is the real safety net; sendBeacon is best-effort server sync.
+            var sent = false;
+            try { sent = navigator.sendBeacon(saveUrl + '?beacon=1', new Blob([JSON.stringify({content: content, autosave: true})], {type: 'application/json'})); } catch(e) {}
+            if (!sent) {
+                // Can't show UI on beforeunload (page is closing), but localStorage has the content.
+                // Next page load will offer restore from localStorage.
+            }
+        }
+
+        window._updateLocalVersionRow = function(localData) {
+            var row = document.getElementById('local-version-row');
+            if (!row) return;
+            if (!localData || !localData.content) { row.style.display = 'none'; return; }
+            document.getElementById('local-version-date').textContent = new Date(localData.ts * 1000).toLocaleString();
+            document.getElementById('local-version-lines').textContent = localData.content.split('\n').length;
+            document.getElementById('local-version-preview').textContent = localData.content.substring(0, 120).replace(/\n/g, ' ');
+            row.style.display = '';
+        };
+
+        function _showAutosaveStatus(msg, isError) {
+            if (isError) {
+                // Errors: loud banner below toolbar, stays visible
+                var el = document.getElementById('autosave-error');
+                if (!el) {
+                    el = document.createElement('div');
+                    el.id = 'autosave-error';
+                    el.style.cssText = 'background:#b71c1c;color:#fff;padding:6px 12px;border-radius:3px;font-size:12px;font-family:inherit;margin-bottom:8px;';
+                    var toolbar = document.querySelector('.edit-toolbar');
+                    if (toolbar) toolbar.parentNode.insertBefore(el, toolbar.nextSibling);
+                    else document.body.prepend(el);
+                }
+                el.textContent = msg;
+                el.style.display = 'block';
+                // Also show on the editing line
+                var inline = document.getElementById('autosave-inline');
+                if (inline) { inline.textContent = '— ' + msg; inline.style.color = '#ef5350'; }
+            } else {
+                // Success: on the "Editing current" line, persistent "autosaved Ns ago"
+                var inline = document.getElementById('autosave-inline');
+                if (inline) {
+                    if (msg === 'autosaved') {
+                        _lastAutosaveTime = Date.now();
+                        inline.textContent = '— autosaved 0s ago';
+                        inline.style.color = '#888';
+                    } else {
+                        inline.textContent = '— ' + msg;
+                        inline.style.color = '#888';
+                    }
+                }
+                // Clear any error banner on success
+                var errEl = document.getElementById('autosave-error');
+                if (errEl) errEl.style.display = 'none';
+            }
         }
 
         function _doAutosave() {
@@ -494,32 +633,50 @@
             if (content === _lastSavedContent) return;
             // Always save to localStorage first
             var now = Date.now() / 1000;
-            try { localStorage.setItem(_autosaveKey, JSON.stringify({content: content, ts: now})); } catch(e) {}
-            // Try server save silently
+            var localPayload = {content: content, ts: now};
+            try {
+                localStorage.setItem(_autosaveKey, JSON.stringify(localPayload));
+                if (window._updateLocalVersionRow) window._updateLocalVersionRow(localPayload);
+                _showAutosaveStatus('saving...', false);
+            } catch(e) {
+                _showAutosaveStatus('localStorage FAILED: ' + e.message, true);
+            }
+            // First autosave creates a pre-edit version snapshot
+            var body = {content: content, autosave: true, expected_ts: _serverTimestamp};
+            var wasFirstAutosave = _isFirstAutosave;
+            if (_isFirstAutosave) {
+                body.first_autosave = true;
+            }
+            // Server save with visible error reporting
             fetch(saveUrl, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-                body: JSON.stringify({content: content, autosave: true})
-            }).then(function(r) { return r.json(); }).then(function(data) {
-                if (data.ok) {
-                    _lastSavedContent = content;
-                    try { localStorage.removeItem(_autosaveKey); } catch(e) {}
+                body: JSON.stringify(body)
+            }).then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            }).then(function(data) {
+                if (data.conflict) {
+                    _showAutosaveStatus('CONFLICT: Entry modified elsewhere — reload to see current version', true);
+                    return;  // Don't update baseline on conflict
                 }
-            }).catch(function() { /* silent — localStorage has the backup */ });
+                if (data.ok) {
+                    _isFirstAutosave = false;  // Only clear after confirmed success
+                    _lastSavedContent = content;
+                    _serverTimestamp = data.timestamp_modified || _serverTimestamp;
+                    _autosaveFailCount = 0;
+                    _showAutosaveStatus('autosaved', false);
+                } else {
+                    throw new Error(data.error || 'save failed');
+                }
+            }).catch(function(err) {
+                _autosaveFailCount++;
+                if (wasFirstAutosave) _isFirstAutosave = true;  // Retry version snapshot
+                _showAutosaveStatus('AUTOSAVE FAILED: ' + err.message + ' (backup in localStorage)', true);
+            });
         }
 
-        // Hook autosave into edit lifecycle
-        var _origStartEdit = startEdit;
-        startEdit = function() { _origStartEdit(); _startAutosave(); };
-        var _origCancelEdit = cancelEdit;
-        cancelEdit = function() { _stopAutosave(); _origCancelEdit(); };
-        // On manual save success, update baseline and clear local
-        var _origDoSave = doSave;
-        doSave = function() {
-            _stopAutosave();
-            if (cm) _lastSavedContent = cm.getValue();
-            _origDoSave();
-        };
+        // Autosave hooks are directly in startEdit/cancelEdit/doSave — no wrappers
 
         // Goal note creation
         var createNoteBtn = document.getElementById('createNoteBtn');
