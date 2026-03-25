@@ -1348,7 +1348,7 @@ def api_assessment_dates(request):
     launched = agent_keys.get('agent_llm-assessment_launched')
     agent = {
         'status': agent_status,
-        'launched_dur': _epoch_dur(launched) if launched else None,
+        'launched_dur': fmt_duration(int(time.time() - float(launched))) if launched else None,
         'last_error': agent_keys.get('agent_llm-assessment_last_error'),
     }
 
