@@ -3455,6 +3455,7 @@ def api_research_rerun_models(request):
     base_data.pop('run_completed_at', None)
     base_data.pop('run_exit_code', None)
     base_data.pop('run_duration_seconds', None)
+    base_data.pop('run_error', None)
     base_data.pop('subagent_count', None)
     base_data.pop('synthesis_triggered', None)
     base.data = base_data

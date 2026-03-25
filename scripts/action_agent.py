@@ -71,6 +71,7 @@ def sleep_until_next(trigger_filter=None):
     deadline = now + sleep_secs
     last_sysconfig_check = 0
     last_health_check = 0
+    last_multimodel_check = 0
 
     while time.time() < deadline:
         if shutdown_requested or wake_requested:
@@ -99,6 +100,13 @@ def sleep_until_next(trigger_filter=None):
                 _check_agent_health()
             except Exception as e:
                 logger.error("Agent health check failed: %s", e)
+        # Periodic multimodel subprocess watchdog
+        if now_loop - last_multimodel_check >= MULTIMODEL_WATCHDOG_INTERVAL:
+            last_multimodel_check = now_loop
+            try:
+                _check_multimodel_stale()
+            except Exception as e:
+                logger.error("Multimodel watchdog failed: %s", e)
         time.sleep(1)
 
     if wake_requested:
@@ -111,7 +119,11 @@ def sleep_until_next(trigger_filter=None):
 
 
 def _check_kill_request():
-    """Kill zombie claude agent processes if requested via sysconfig flag."""
+    """Kill zombie agent processes if requested via sysconfig flag.
+
+    Kills both Claude agent processes (found by /proc scan) and
+    Gemini/ChatGPT subprocesses (found by stored PID in sysconfig).
+    """
     from tjai_app.models import SysConfig
     req = SysConfig.objects.filter(key='agent_kill_requested').first()
     if not req or not req.value:
@@ -148,10 +160,108 @@ def _check_kill_request():
             killed += 1
         except ProcessLookupError:
             pass
+
+    # Kill Gemini/ChatGPT subprocesses tracked by PID in sysconfig
+    for sc in SysConfig.objects.filter(key__startswith='research_', key__endswith='_pid'):
+        if not sc.value:
+            continue
+        try:
+            pid = int(sc.value)
+            os.kill(pid, signal.SIGTERM)
+            logger.warning("Killed research subprocess PID %d (%s)", pid, sc.key)
+            killed += 1
+        except (ValueError, ProcessLookupError):
+            pass
+        # Clear the PID entry regardless (process dead or killed)
+        sc.value = ''
+        sc.timestamp_modified = time.time()
+        sc.save(update_fields=['value', 'timestamp_modified'])
+
     logger.info("Kill request completed: %d process(es) killed", killed)
 
 
 HEALTH_CHECK_INTERVAL = 30  # seconds between agent health checks
+MULTIMODEL_WATCHDOG_INTERVAL = 300  # 5 min between stale multimodel checks
+MULTIMODEL_STALE_THRESHOLD = 900  # 15 min (API_TIMEOUT=600 + 5min margin)
+
+
+def _check_multimodel_stale():
+    """Detect Gemini/ChatGPT subprocesses that crashed without updating entries.
+
+    These subprocesses have no agent_complete.py — if they crash before writing
+    status, the model entry stays 'active' forever.  Check stored PIDs; if the
+    process is dead and the entry is still active beyond the timeout threshold,
+    mark it blocked.
+    """
+    from tjai_app.models import SysConfig, Entry
+
+    now = time.time()
+    for sc in SysConfig.objects.filter(key__startswith='research_', key__endswith='_pid'):
+        if not sc.value:
+            continue
+        pid_str = sc.value
+        # Key format: research_{base_entry_id}_{model}_pid
+        parts = sc.key.rsplit('_', 2)  # ['research_{base}', '{model}', 'pid']
+        if len(parts) < 3:
+            continue
+        model = parts[-2]
+        if model not in ('gemini', 'chatgpt'):
+            continue
+
+        # Check if process is alive
+        try:
+            pid = int(pid_str)
+            os.kill(pid, 0)  # signal 0 = existence check
+            continue  # still alive, nothing to do
+        except (ValueError, ProcessLookupError):
+            pass  # dead or invalid — check the entry
+        except PermissionError:
+            continue  # alive but owned by different user
+
+        # Process is dead — check if we've waited long enough since PID was stored
+        age = now - sc.timestamp_modified
+        if age < MULTIMODEL_STALE_THRESHOLD:
+            continue  # might have just finished normally, give it time
+
+        # Find the model entry via the base_entry_id encoded in the key
+        base_entry_id = sc.key[len('research_'):-(len(model) + 5)]  # strip research_ prefix and _{model}_pid suffix
+        model_entry_id = f'{base_entry_id}-{model}'
+        entry = Entry.objects.filter(
+            data__entry_id=model_entry_id, deleted_at__isnull=True,
+            status='active',
+        ).first()
+        if not entry:
+            # Entry already done/blocked, just clear stale PID
+            sc.value = ''
+            sc.timestamp_modified = now
+            sc.save(update_fields=['value', 'timestamp_modified'])
+            continue
+
+        # Process dead + entry still active = crashed subprocess
+        logger.warning("%s: process PID %s dead, entry still active after %.0fs — marking blocked",
+                       model_entry_id, pid_str, age)
+        entry.status = 'blocked'
+        entry_data = entry.data if isinstance(entry.data, dict) else {}
+        entry_data['run_error'] = f'Process PID {pid_str} died without completing'
+        entry.data = entry_data
+        entry.save(update_fields=['status', 'data'])
+
+        # Update base entry's model status
+        if base_entry_id:
+            base = Entry.objects.filter(
+                data__entry_id=base_entry_id, deleted_at__isnull=True,
+            ).first()
+            if base:
+                bd = base.data if isinstance(base.data, dict) else {}
+                bd[f'{model}_status'] = 'blocked'
+                base.data = bd
+                base.save(update_fields=['data'])
+                logger.info("Set %s_status=blocked on base %s", model, base_entry_id)
+
+        # Clear the stale PID
+        sc.value = ''
+        sc.timestamp_modified = now
+        sc.save(update_fields=['value', 'timestamp_modified'])
 
 
 def _check_agent_health():

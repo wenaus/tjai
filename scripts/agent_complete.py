@@ -414,19 +414,22 @@ def main():
         except Exception as e:
             logger.error("ideation-agent: failed to post-process ideation: %s", e)
 
-    # Queue drain for research-agent: auto-chain to next pending item
+    # Research-agent post-processing: model completion first, then queue drain.
+    # Order matters — synthesis must set next_target before queue drain overwrites it.
     if action_id == 'research-agent' and exit_code in (0, 124):
-        _research_queue_drain(now)
         # Update base entry tracking and check if all 3 models are done
         if entry:
             entry_data = entry.data if isinstance(entry.data, dict) else {}
-            if entry_data.get('source') == 'multimodel' and entry_data.get('model'):
+            if (entry_data.get('source') == 'multimodel'
+                    and entry_data.get('model')
+                    and entry_data.get('model') != 'synthesis'):
                 try:
                     from research_multimodel import research_model_complete
                     research_model_complete(entry)
                 except Exception as e:
                     logger.error("research_model_complete failed: %s", e,
                                  extra=ref_extra)
+        _research_queue_drain(now)
 
     # Claude failure on multimodel entry: mark model status as blocked on base
     if action_id == 'research-agent' and exit_code not in (0, 124) and entry:
