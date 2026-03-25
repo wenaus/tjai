@@ -57,14 +57,14 @@
             margin-bottom: 20px; line-height: 1.5;
         }
 
-        /* Score table — vertical layout */
+        /* Score table — vertical layout with inline chart */
         .score-row {
             display: grid;
-            grid-template-columns: 70px 50px 50px 1fr 120px;
+            grid-template-columns: 70px 40px 40px 1fr 180px;
             gap: 8px;
             padding: 4px 0;
             border-bottom: 1px solid #222;
-            align-items: baseline;
+            align-items: center;
         }
         .score-row.header {
             color: #d8a070; font-size: 11px;
@@ -77,7 +77,20 @@
         .score-val.neg { color: #ef5350; }
         .score-cum { text-align: right; color: #e8c87a; font-size: 12px; }
         .score-precis { color: #e0e0e0; font-size: 12px; }
-        .score-chart { font-family: monospace; font-size: 11px; color: #8a8a8a; white-space: pre; }
+        .score-chart {
+            height: 16px; position: relative;
+            border-left: 1px solid #555;
+        }
+        .score-bar {
+            position: absolute; top: 2px; height: 12px;
+            border-radius: 2px;
+        }
+        .score-bar.pos { background: #9ccc65; }
+        .score-bar.neg { background: #ef5350; }
+        .score-marker {
+            position: absolute; top: 0; height: 16px; width: 1px;
+            background: #555;
+        }
 
         /* Markdown content (observations section) */
         .md-content { margin-top: 24px; line-height: 1.6; }
@@ -202,51 +215,29 @@
             });
         }
 
-        function renderChart(scores) {
-            if (!scores || scores.length === 0) return '';
-            const vals = scores.map(s => s.cumulative);
-            const mx = Math.max(...vals, 1);
-            const mn = Math.min(...vals, -1);
-            const height = 8;
-            const range = mx - mn || 1;
-            // Build column-wise: for each score, determine which row it occupies
-            let cols = scores.map(s => {
-                const y = Math.round(((s.cumulative - mn) / range) * height);
-                return { y, ch: s.score > 0 ? '+' : 'x' };
-            });
-            let lines = [];
-            for (let row = height; row >= 0; row--) {
-                const val = mn + (row / height) * range;
-                let label = (val >= 0 ? '+' : '') + val.toFixed(0);
-                label = label.padStart(4);
-                let line = label + ' ';
-                for (const c of cols) {
-                    if (c.y === row) {
-                        line += c.ch;
-                    } else if (row === Math.round(((0 - mn) / range) * height)) {
-                        line += '·';
-                    } else {
-                        line += ' ';
-                    }
-                }
-                lines.push(line);
-            }
-            lines.push('     ' + '─'.repeat(scores.length));
-            return lines.join('\n');
-        }
-
-        function renderScoreRow(s, chartCol) {
+        function renderScoreRow(s, chartRange) {
             const dt = new Date(s.dt);
             const timeStr = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
             const scoreClass = s.score > 0 ? 'pos' : 'neg';
             const scoreStr = s.score > 0 ? '+' + s.score : '' + s.score;
             const cumStr = s.cumulative > 0 ? '+' + s.cumulative : '' + s.cumulative;
+            // Inline bar chart: zero line in center, bar extends left (neg) or right (pos)
+            const { mn, mx } = chartRange;
+            const range = mx - mn || 1;
+            const chartW = 170; // px width of chart cell
+            const zeroPos = Math.round(((0 - mn) / range) * chartW);
+            const cumPos = Math.round(((s.cumulative - mn) / range) * chartW);
+            const barLeft = Math.min(zeroPos, cumPos);
+            const barWidth = Math.max(Math.abs(cumPos - zeroPos), 2);
+            const barClass = s.cumulative >= 0 ? 'pos' : 'neg';
+            const chartHtml = `<span class="score-marker" style="left:${zeroPos}px"></span>` +
+                `<span class="score-bar ${barClass}" style="left:${barLeft}px;width:${barWidth}px"></span>`;
             return `<div class="score-row">` +
                 `<span class="score-time">${timeStr}</span>` +
                 `<span class="score-val ${scoreClass}">${scoreStr}</span>` +
                 `<span class="score-cum">${cumStr}</span>` +
                 `<span class="score-precis">${escHtml(s.precis || '')}</span>` +
-                `<span class="score-chart">${escHtml(chartCol)}</span>` +
+                `<span class="score-chart">${chartHtml}</span>` +
                 `</div>`;
         }
 
@@ -271,11 +262,12 @@
                     return;
                 }
                 const scores = data.scores || [];
-                const chart = renderChart(scores);
-
-                // Build chart columns per row for inline display
-                const chartLines = chart.split('\n');
-                // Each score corresponds to a column index in the chart
+                // Compute chart range across all scores
+                const cums = scores.map(s => s.cumulative);
+                const chartRange = {
+                    mn: Math.min(...cums, -1, 0),
+                    mx: Math.max(...cums, 1, 0),
+                };
 
                 let html = `<div class="assessment-header">` +
                     `<h1>AI Assessment: ${escHtml(data.date_display || entryId)}</h1>` +
@@ -287,17 +279,12 @@
                     html += `<div class="assessment-summary">${escHtml(data.summary)}</div>`;
                 }
 
-                // Chart
-                if (scores.length > 0) {
-                    html += `<pre style="color:#8a8a8a; margin-bottom:20px; font-size:11px;">${escHtml(chart)}</pre>`;
-                }
-
-                // Score table
+                // Score table with inline chart bars
                 html += `<div class="score-row header">` +
                     `<span>Time</span><span style="text-align:right">Score</span>` +
-                    `<span style="text-align:right">Cum</span><span>Event</span><span></span></div>`;
+                    `<span style="text-align:right">Cum</span><span>Event</span><span>Chart</span></div>`;
                 for (const s of scores) {
-                    html += renderScoreRow(s, '');
+                    html += renderScoreRow(s, chartRange);
                 }
 
                 if (scores.length === 0) {
