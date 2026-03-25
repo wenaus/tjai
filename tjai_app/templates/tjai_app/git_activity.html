@@ -24,6 +24,97 @@
             padding: 20px 32px;
             max-width: 900px;
         }
+        /* Heatmap */
+        .heatmap { margin-bottom: 24px; }
+        .heatmap-grid {
+            display: flex;
+            gap: 2px;
+        }
+        .heatmap-week {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .heatmap-cell {
+            width: 11px;
+            height: 11px;
+            border-radius: 2px;
+            cursor: pointer;
+        }
+        .heatmap-cell:hover {
+            outline: 1px solid #aaa;
+        }
+        .heatmap-months {
+            display: flex;
+            font-size: 10px;
+            color: #888;
+            margin-bottom: 4px;
+            padding-left: 28px;
+        }
+        .heatmap-month { text-align: left; }
+        .heatmap-days {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            margin-right: 4px;
+            font-size: 9px;
+            color: #888;
+            justify-content: space-between;
+            padding: 0;
+        }
+        .heatmap-days span {
+            height: 11px;
+            line-height: 11px;
+        }
+        .heatmap-body { display: flex; }
+        .stats-row {
+            display: flex;
+            gap: 12px;
+            font-size: 11px;
+            color: #888;
+            margin-top: 6px;
+        }
+        .stats-row:first-of-type { margin-top: 10px; }
+        .stats-label { color: #666; min-width: 70px; }
+        .stats-row strong { color: #39d353; }
+        .heatmap-leaderboard {
+            display: flex;
+            gap: 12px;
+            margin-top: 8px;
+            font-size: 11px;
+            color: #888;
+        }
+        .lb-entry {
+            cursor: pointer;
+        }
+        .lb-entry:hover { color: #e0e0e0; }
+        .lb-entry strong { color: #39d353; }
+        .heatmap-legend {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            margin-top: 6px;
+            font-size: 10px;
+            color: #888;
+        }
+        .heatmap-legend-cell {
+            width: 11px;
+            height: 11px;
+            border-radius: 2px;
+        }
+        .heatmap-tooltip {
+            position: fixed;
+            background: #333;
+            color: #e0e0e0;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            pointer-events: none;
+            z-index: 100;
+            display: none;
+            white-space: nowrap;
+        }
+        /* Day list */
         .day-header {
             font-size: 1.1em;
             font-weight: bold;
@@ -46,12 +137,143 @@
 </head>
 <body>
 {% with current_page="git" %}{% include "tjai_app/_menu.html" %}{% endwith %}
+<div class="heatmap-tooltip" id="tooltip"></div>
 <div class="content" id="content">
     <div class="loading">Loading git activity...</div>
 </div>
 <script>
+function buildHeatmap(heatmap) {
+    // Grid from Feb 1 2026 (retirement day 1) to today
+    const today = new Date();
+    const endDay = new Date(today);
+    endDay.setDate(endDay.getDate() + (6 - endDay.getDay()));
+
+    // Start on the Sunday of the week containing Feb 1
+    const feb1 = new Date(2026, 1, 1); // Feb 1 2026
+    const startDay = new Date(feb1);
+    startDay.setDate(startDay.getDate() - startDay.getDay()); // back to Sunday
+
+    // Collect all cells
+    const cells = [];
+    const d = new Date(startDay);
+    while (d <= endDay) {
+        const iso = d.toISOString().slice(0, 10);
+        const count = heatmap[iso] || 0;
+        const future = d > today;
+        cells.push({ date: iso, count, dow: d.getDay(), future });
+        d.setDate(d.getDate() + 1);
+    }
+
+    // Color scale (GitHub-style greens on dark bg)
+    const colors = ['#2d2d2d', '#0e4429', '#006d32', '#26a641', '#39d353'];
+    function getColor(count, future) {
+        if (future) return '#1a1a1a';
+        if (count === 0) return colors[0];
+        if (count <= 2) return colors[1];
+        if (count <= 5) return colors[2];
+        if (count <= 9) return colors[3];
+        return colors[4];
+    }
+
+    // Group into weeks (columns)
+    const weeks = [];
+    let week = [];
+    for (const cell of cells) {
+        if (cell.dow === 0 && week.length > 0) {
+            weeks.push(week);
+            week = [];
+        }
+        week.push(cell);
+    }
+    if (week.length > 0) weeks.push(week);
+
+    // Month labels
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    let monthsHtml = '';
+    let lastMonth = -1;
+    const weekWidth = 13; // 11px cell + 2px gap
+    for (let wi = 0; wi < weeks.length; wi++) {
+        const firstInWeek = new Date(weeks[wi][0].date);
+        const m = firstInWeek.getMonth();
+        if (m !== lastMonth && !(m === 0 && firstInWeek.getFullYear() === 2026)) {
+            monthsHtml += `<span class="heatmap-month" style="width:${weekWidth}px">${monthNames[m]}</span>`;
+            lastMonth = m;
+        } else {
+            monthsHtml += `<span style="width:${weekWidth}px"></span>`;
+        }
+    }
+
+    // Day labels (Mon, Wed, Fri)
+    const dayLabels = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
+    let daysHtml = '';
+    for (let i = 0; i < 7; i++) {
+        daysHtml += `<span>${dayLabels[i]}</span>`;
+    }
+
+    // Grid
+    let gridHtml = '';
+    for (const w of weeks) {
+        let weekHtml = '';
+        // Pad first week if it doesn't start on Sunday
+        if (w === weeks[0]) {
+            for (let pad = 0; pad < w[0].dow; pad++) {
+                weekHtml += `<div class="heatmap-cell" style="background:#1a1a1a;cursor:default;"></div>`;
+            }
+        }
+        for (const cell of w) {
+            const bg = getColor(cell.count, cell.future);
+            const dt = new Date(cell.date + 'T12:00:00');
+            const dayName = cell.future ? '' : dt.toLocaleDateString('en-US', {weekday:'short'}) + ' ' + dt.toLocaleDateString('en-US', {month:'short'}) + ' ' + dt.getDate();
+            const label = cell.future ? '' : `${dayName}: ${cell.count} commit${cell.count !== 1 ? 's' : ''}`;
+            weekHtml += `<div class="heatmap-cell" style="background:${bg};" data-tip="${label}" data-date="${cell.date}"></div>`;
+        }
+        gridHtml += `<div class="heatmap-week">${weekHtml}</div>`;
+    }
+
+    return `<div class="heatmap">
+        <div class="heatmap-months">${monthsHtml}</div>
+        <div class="heatmap-body">
+            <div class="heatmap-days">${daysHtml}</div>
+            <div class="heatmap-grid">${gridHtml}</div>
+        </div>
+    </div>`;
+}
+
+function buildStats(heatmap) {
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    // Monthly totals (from Feb 2026 onward)
+    const months = {};
+    for (const [date, count] of Object.entries(heatmap)) {
+        if (count === 0 || date < '2026-02') continue;
+        const key = date.slice(0, 7);
+        months[key] = (months[key] || 0) + count;
+    }
+    const sortedMonths = Object.entries(months).sort();
+    let monthHtml = '<span class="stats-label">Monthly:</span>';
+    for (const [ym, count] of sortedMonths) {
+        const m = parseInt(ym.slice(5, 7)) - 1;
+        monthHtml += `<span>${monthNames[m]} <strong>${count}</strong></span>`;
+    }
+
+    // Leaderboard — top 5 days
+    const ranked = Object.entries(heatmap)
+        .filter(([d, c]) => c > 0)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+    let lbHtml = '<span class="stats-label">Leaderboard:</span>';
+    for (const [date, count] of ranked) {
+        const dt = new Date(date + 'T12:00:00');
+        const label = dt.toLocaleDateString('en-US', {weekday:'short'}) + ' ' + dt.toLocaleDateString('en-US', {month:'short'}) + ' ' + dt.getDate();
+        lbHtml += `<span class="lb-entry" data-date="${date}">${label} <strong>${count}</strong></span>`;
+    }
+
+    return `<div class="stats-row">${monthHtml}</div><div class="stats-row">${lbHtml}</div>`;
+}
+
 (async function() {
     const el = document.getElementById('content');
+    const tooltip = document.getElementById('tooltip');
     try {
         const resp = await fetch('/tjai/api/git/data?_=' + Date.now());
         if (!resp.ok) {
@@ -73,11 +295,49 @@
             }
             html += '</div>';
         }
+        // Heatmap, then stats, then day list
+        if (data.heatmap) {
+            html += buildHeatmap(data.heatmap);
+            html += buildStats(data.heatmap);
+        }
         for (const day of data.days) {
-            html += `<div class="day-header">${day.date_display}</div>`;
+            const countBadge = day.commits ? ` <span style="font-size:.8em;color:#888;font-weight:normal;">(${day.commits} commit${day.commits !== 1 ? 's' : ''})</span>` : '';
+            html += `<div class="day-header" data-isodate="${day.date}">${day.date_display}${countBadge}</div>`;
             html += `<div class="day-content">${day.html}</div>`;
         }
         el.innerHTML = html;
+
+        // Tooltip + click-to-scroll on heatmap cells
+        el.addEventListener('mouseover', function(e) {
+            const tip = e.target.dataset?.tip;
+            if (tip) {
+                tooltip.textContent = tip;
+                tooltip.style.display = 'block';
+                tooltip.style.left = (e.clientX + 12) + 'px';
+                tooltip.style.top = (e.clientY - 8) + 'px';
+            }
+        });
+        el.addEventListener('mousemove', function(e) {
+            if (tooltip.style.display === 'block') {
+                tooltip.style.left = (e.clientX + 12) + 'px';
+                tooltip.style.top = (e.clientY - 8) + 'px';
+            }
+        });
+        el.addEventListener('mouseout', function(e) {
+            if (e.target.dataset?.tip) {
+                tooltip.style.display = 'none';
+            }
+        });
+        el.addEventListener('click', function(e) {
+            const date = e.target.dataset?.date || e.target.closest('[data-date]')?.dataset?.date;
+            if (!date) return;
+            const header = el.querySelector(`.day-header[data-isodate="${date}"]`);
+            if (header) {
+                header.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                header.style.background = '#333';
+                setTimeout(() => header.style.background = '', 1500);
+            }
+        });
     } catch (e) {
         el.innerHTML = `<div class="loading" style="color:#ef5350;">Error: ${e.message}</div>`;
     }

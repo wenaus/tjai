@@ -8,9 +8,8 @@ from pathlib import Path
 
 import bootstrap  # noqa: F401 - Django setup
 from django.conf import settings
+from tjai_app.tjai_utils import get_app_tz
 from synopsis_utils import main_section
-
-UTC = timezone.utc
 GIT_DAILY_DIR = Path(settings.BASE_DIR) / 'data' / 'git_daily'
 REPOS = [
     (Path('/home/admin/github/tjrepo'), 'https://github.com/wenaus/tjrepo', 'tjrepo'),
@@ -62,6 +61,7 @@ def _repo_commits(repo_dir, github_url, since_iso, until_iso=None):
             for bl in body.split('\n'):
                 bl = bl.strip()
                 if bl and not bl.startswith('Co-Authored-By:'):
+                    bl = bl.lstrip('- ')
                     if len(bl) > 90:
                         bl = bl[:87] + '...'
                     lines.append(f'  - {bl}')
@@ -72,8 +72,9 @@ def _repo_commits(repo_dir, github_url, since_iso, until_iso=None):
 
 def build(since_ts, target_date):
     """Return markdown body or None."""
-    since_dt = datetime.fromtimestamp(since_ts, tz=UTC)
-    since_iso = since_dt.strftime('%Y-%m-%dT%H:%M:%S')
+    tz = get_app_tz()
+    since_dt = datetime.fromtimestamp(since_ts, tz=tz)
+    since_iso = since_dt.strftime('%Y-%m-%dT%H:%M:%S%z')
 
     all_lines = []
     for repo_dir, github_url, label in REPOS:
@@ -94,11 +95,15 @@ def build(since_ts, target_date):
 
     # Save daily file for the Git activity page
     if body and target_date:
-        GIT_DAILY_DIR.mkdir(parents=True, exist_ok=True)
-        os.chmod(str(GIT_DAILY_DIR), 0o777)
-        p = GIT_DAILY_DIR / f'{target_date.isoformat()}.md'
-        p.write_text(body + '\n')
-        p.chmod(0o666)  # world-writable so both admin and www-data can write
+        old_umask = os.umask(0)
+        try:
+            GIT_DAILY_DIR.mkdir(parents=True, exist_ok=True, mode=0o777)
+            p = GIT_DAILY_DIR / f'{target_date.isoformat()}.md'
+            fd = os.open(str(p), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666)
+            os.write(fd, (body + '\n').encode())
+            os.close(fd)
+        finally:
+            os.umask(old_umask)
 
     return body
 
@@ -106,13 +111,14 @@ def build(since_ts, target_date):
 def backfill(days=60):
     """Generate git daily files for the past N days."""
     from datetime import timedelta
-    today = datetime.now(tz=UTC).date()
+    tz = get_app_tz()
+    today = datetime.now(tz=tz).date()
     for i in range(days):
         target = today - timedelta(days=i)
-        since_dt = datetime(target.year, target.month, target.day, tzinfo=UTC)
+        since_dt = datetime(target.year, target.month, target.day, tzinfo=tz)
         until_dt = since_dt + timedelta(days=1)
-        since_iso = since_dt.strftime('%Y-%m-%dT%H:%M:%S')
-        until_iso = until_dt.strftime('%Y-%m-%dT%H:%M:%S')
+        since_iso = since_dt.strftime('%Y-%m-%dT%H:%M:%S%z')
+        until_iso = until_dt.strftime('%Y-%m-%dT%H:%M:%S%z')
         all_lines = []
         for repo_dir, github_url, label in REPOS:
             if not repo_dir.exists():
@@ -124,10 +130,15 @@ def backfill(days=60):
                 all_lines.append('')
         if all_lines:
             body = '\n'.join(all_lines).rstrip()
-            GIT_DAILY_DIR.mkdir(parents=True, exist_ok=True)
-            p = GIT_DAILY_DIR / f'{target.isoformat()}.md'
-            p.write_text(body + '\n')
-            p.chmod(0o666)  # world-writable so both admin and www-data can write
+            old_umask = os.umask(0)
+            try:
+                GIT_DAILY_DIR.mkdir(parents=True, exist_ok=True, mode=0o777)
+                p = GIT_DAILY_DIR / f'{target.isoformat()}.md'
+                fd = os.open(str(p), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666)
+                os.write(fd, (body + '\n').encode())
+                os.close(fd)
+            finally:
+                os.umask(old_umask)
             print(f'{target}: {len(all_lines)} lines')
         else:
             print(f'{target}: no commits')

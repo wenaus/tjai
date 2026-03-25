@@ -1324,21 +1324,21 @@ def _refresh_recent_git_daily():
     logged AND returned so the caller can surface them to the user.
     """
     import subprocess
-    from datetime import timezone
     from pathlib import Path
+    from .services import get_timezone
 
     errors = []
-    UTC = timezone.utc
+    tz = get_timezone()
     git_dir = Path(django_settings.BASE_DIR) / 'data' / 'git_daily'
     git_dir.mkdir(parents=True, exist_ok=True, mode=0o777)
 
-    today = datetime.now(tz=UTC).date()
+    today = datetime.now(tz=tz).date()
     for offset in (0, 1):
         target = today - timedelta(days=offset)
-        since_dt = datetime(target.year, target.month, target.day, tzinfo=UTC)
+        since_dt = datetime(target.year, target.month, target.day, tzinfo=tz)
         until_dt = since_dt + timedelta(days=1)
-        since_iso = since_dt.strftime('%Y-%m-%dT%H:%M:%S')
-        until_iso = until_dt.strftime('%Y-%m-%dT%H:%M:%S')
+        since_iso = since_dt.strftime('%Y-%m-%dT%H:%M:%S%z')
+        until_iso = until_dt.strftime('%Y-%m-%dT%H:%M:%S%z')
 
         all_lines = []
         for repo_path, github_url, label in _GIT_REPOS:
@@ -1382,6 +1382,7 @@ def _refresh_recent_git_daily():
                     for bl in body.split('\n'):
                         bl = bl.strip()
                         if bl and not bl.startswith('Co-Authored-By:'):
+                            bl = bl.lstrip('- ')
                             if len(bl) > 90:
                                 bl = bl[:87] + '...'
                             lines.append(f'  - {bl}')
@@ -1393,11 +1394,13 @@ def _refresh_recent_git_daily():
 
         fpath = git_dir / f'{target.isoformat()}.md'
         if all_lines:
-            fpath.write_text('\n'.join(all_lines).rstrip() + '\n', encoding='utf-8')
+            old_umask = os.umask(0)
             try:
-                os.chmod(str(fpath), 0o666)
-            except OSError as e:
-                logger.warning("chmod failed on %s (non-fatal): %s", fpath, e)
+                fd = os.open(str(fpath), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666)
+                os.write(fd, ('\n'.join(all_lines).rstrip() + '\n').encode('utf-8'))
+                os.close(fd)
+            finally:
+                os.umask(old_umask)
 
     return errors
 
@@ -1503,6 +1506,14 @@ def git_activity_data(request):
 
     files = sorted(git_dir.glob('*.md'), reverse=True)
     days = []
+    heatmap = {}  # date_str -> commit count for all files
+    for f in git_dir.glob('*.md'):
+        raw = f.read_text(encoding='utf-8')
+        count = raw.count('\n- [')
+        if raw.startswith('- ['):
+            count += 1
+        heatmap[f.stem] = count
+
     for f in files[:120]:
         date_str = f.stem
         try:
@@ -1526,9 +1537,10 @@ def git_activity_data(request):
             'date': date_str,
             'date_display': date_display,
             'html': html,
+            'commits': heatmap.get(date_str, 0),
         })
 
-    response = JsonResponse({'days': days, 'errors': refresh_errors})
+    response = JsonResponse({'days': days, 'heatmap': heatmap, 'errors': refresh_errors})
     response['Cache-Control'] = 'no-store'
     return response
 
