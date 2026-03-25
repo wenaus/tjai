@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/tjai/static/tjai/favicon.svg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>tjai AI</title>
+    <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 13px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .container { display: flex; flex: 1; overflow: hidden; }
+        .panel-left {
+            width: 200px; min-width: 200px;
+            border-right: 1px solid #333;
+            overflow-y: auto; padding: 12px 0;
+        }
+        .panel-right { flex: 1; overflow-y: auto; padding: 20px 32px; }
+        .date-item {
+            padding: 6px 16px; cursor: pointer;
+            color: #8a8a8a; white-space: nowrap;
+            display: flex; justify-content: space-between;
+        }
+        .date-item:hover { background: #2a2a2a; color: #e0e0e0; }
+        .date-item.selected {
+            background: #2a2a2a; color: #e0e0e0;
+            border-right: 2px solid #d8a070;
+        }
+        .date-item.today { color: #9ccc65; font-weight: bold; }
+        .date-item.today.selected { color: #9ccc65; }
+        .date-score {
+            font-size: 11px; font-weight: bold; margin-left: 8px;
+        }
+        .date-score.pos { color: #9ccc65; }
+        .date-score.neg { color: #ef5350; }
+        .date-score.zero { color: #8a8a8a; }
+
+        /* Assessment content */
+        .assessment-header {
+            display: flex; align-items: baseline; gap: 12px;
+            margin-bottom: 20px;
+        }
+        .assessment-header h1 {
+            color: #d8a070; font-size: 18px;
+        }
+        .assessment-summary {
+            color: #8a8a8a; font-size: 12px;
+            margin-bottom: 20px; line-height: 1.5;
+        }
+
+        /* Score table — vertical layout */
+        .score-row {
+            display: grid;
+            grid-template-columns: 70px 50px 50px 1fr 120px;
+            gap: 8px;
+            padding: 4px 0;
+            border-bottom: 1px solid #222;
+            align-items: baseline;
+        }
+        .score-row.header {
+            color: #d8a070; font-size: 11px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 6px; margin-bottom: 4px;
+        }
+        .score-time { color: #8a8a8a; font-size: 12px; }
+        .score-val { font-weight: bold; text-align: right; }
+        .score-val.pos { color: #9ccc65; }
+        .score-val.neg { color: #ef5350; }
+        .score-cum { text-align: right; color: #e8c87a; font-size: 12px; }
+        .score-precis { color: #e0e0e0; font-size: 12px; }
+        .score-chart { font-family: monospace; font-size: 11px; color: #8a8a8a; white-space: pre; }
+
+        /* Markdown content (observations section) */
+        .md-content { margin-top: 24px; line-height: 1.6; }
+        .md-content h2 { color: #d8a070; font-size: 15px; margin-top: 20px; margin-bottom: 8px; }
+        .md-content h3 { color: #ce93d8; font-size: 14px; margin-top: 16px; margin-bottom: 6px; }
+        .md-content p { margin-bottom: 8px; }
+        .md-content ul, .md-content ol { margin-left: 20px; margin-bottom: 8px; }
+        .md-content li { margin-bottom: 4px; }
+        .md-content a { color: #90caf9; text-decoration: none; }
+        .md-content a:hover { text-decoration: underline; }
+        .md-content strong { color: #e8c87a; }
+        .md-content em { color: #ce93d8; }
+
+        .loading { color: #8a8a8a; padding: 20px; }
+        .error { color: #ef5350; padding: 20px; }
+        a.entry-link {
+            color: #8a8a8a; font-size: 11px;
+            text-decoration: none; margin-left: 12px;
+        }
+        a.entry-link:hover { color: #e0e0e0; }
+        .btn-rerun {
+            display: inline-block; background: #333; color: #e0e0e0;
+            border: 1px solid #555; padding: 2px 10px; border-radius: 12px;
+            cursor: pointer; font-family: inherit; font-size: 11px;
+            margin-left: 12px; vertical-align: middle;
+        }
+        .btn-rerun:hover { background: #444; }
+        .btn-rerun:disabled { opacity: 0.5; cursor: default; }
+
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1a1a1a; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+        * { scrollbar-width: thin; scrollbar-color: #444 #1a1a1a; }
+    </style>
+</head>
+<body>
+    {% with current_page="assessment" %}{% include "tjai_app/_menu.html" %}{% endwith %}
+    <div class="container">
+        <div class="panel-left" id="date-list">
+            <div class="loading">Loading dates...</div>
+        </div>
+        <div class="panel-right" id="content-panel">
+            <div class="loading">Select a date to view the assessment.</div>
+        </div>
+    </div>
+
+    <script>
+        let allDates = [];
+        let todayKey = '';
+        let selectedEntryId = null;
+
+        async function fetchDates() {
+            try {
+                const resp = await fetch('/tjai/api/assessment/dates');
+                const data = await resp.json();
+                if (data.error) {
+                    document.getElementById('date-list').innerHTML = `<div class="error">${data.error}</div>`;
+                    return;
+                }
+                allDates = data.dates || [];
+                todayKey = data.today_key || '';
+                renderDateList();
+                if (allDates.length > 0) {
+                    const params = new URLSearchParams(window.location.search);
+                    let target = params.get('entry_id');
+                    if (!target && todayKey) {
+                        const todayEntry = allDates.find(d => d.date_key === todayKey);
+                        target = todayEntry ? todayEntry.entry_id : allDates[0].entry_id;
+                    }
+                    target = target || allDates[0].entry_id;
+                    const found = allDates.find(d => d.entry_id === target);
+                    selectDate(found ? target : allDates[0].entry_id);
+                }
+            } catch (e) {
+                document.getElementById('date-list').innerHTML = '<div class="error">Error loading dates</div>';
+            }
+        }
+
+        function renderDateList() {
+            let html = '';
+            for (const d of allDates) {
+                const isToday = d.date_key === todayKey;
+                const todayClass = isToday ? ' today' : '';
+                const score = d.final_cumulative;
+                const scoreClass = score > 0 ? 'pos' : score < 0 ? 'neg' : 'zero';
+                const scoreStr = score > 0 ? '+' + score : '' + score;
+                html += `<div class="date-item${todayClass}" data-entry-id="${d.entry_id}" data-date-key="${d.date_key}">` +
+                    `<span>${d.date_display}</span>` +
+                    `<span class="date-score ${scoreClass}">${scoreStr}</span>` +
+                    `</div>`;
+            }
+            document.getElementById('date-list').innerHTML = html || '<div class="loading">No assessments found.</div>';
+            document.querySelectorAll('.date-item').forEach(el => {
+                el.addEventListener('click', function() { selectDate(this.dataset.entryId); });
+            });
+        }
+
+        function renderChart(scores) {
+            if (!scores || scores.length === 0) return '';
+            const vals = scores.map(s => s.cumulative);
+            const mx = Math.max(...vals, 1);
+            const mn = Math.min(...vals, -1);
+            const height = 8;
+            const range = mx - mn || 1;
+            // Build column-wise: for each score, determine which row it occupies
+            let cols = scores.map(s => {
+                const y = Math.round(((s.cumulative - mn) / range) * height);
+                return { y, ch: s.score > 0 ? '+' : 'x' };
+            });
+            let lines = [];
+            for (let row = height; row >= 0; row--) {
+                const val = mn + (row / height) * range;
+                let label = (val >= 0 ? '+' : '') + val.toFixed(0);
+                label = label.padStart(4);
+                let line = label + ' ';
+                for (const c of cols) {
+                    if (c.y === row) {
+                        line += c.ch;
+                    } else if (row === Math.round(((0 - mn) / range) * height)) {
+                        line += '·';
+                    } else {
+                        line += ' ';
+                    }
+                }
+                lines.push(line);
+            }
+            lines.push('     ' + '─'.repeat(scores.length));
+            return lines.join('\n');
+        }
+
+        function renderScoreRow(s, chartCol) {
+            const dt = new Date(s.dt);
+            const timeStr = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+            const scoreClass = s.score > 0 ? 'pos' : 'neg';
+            const scoreStr = s.score > 0 ? '+' + s.score : '' + s.score;
+            const cumStr = s.cumulative > 0 ? '+' + s.cumulative : '' + s.cumulative;
+            return `<div class="score-row">` +
+                `<span class="score-time">${timeStr}</span>` +
+                `<span class="score-val ${scoreClass}">${scoreStr}</span>` +
+                `<span class="score-cum">${cumStr}</span>` +
+                `<span class="score-precis">${escHtml(s.precis || '')}</span>` +
+                `<span class="score-chart">${escHtml(chartCol)}</span>` +
+                `</div>`;
+        }
+
+        function escHtml(s) {
+            return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        }
+
+        async function selectDate(entryId) {
+            selectedEntryId = entryId;
+            const url = new URL(window.location);
+            url.searchParams.set('entry_id', entryId);
+            history.replaceState(null, '', url);
+            document.querySelectorAll('.date-item').forEach(el => {
+                el.classList.toggle('selected', el.dataset.entryId === entryId);
+            });
+            document.getElementById('content-panel').innerHTML = '<div class="loading">Loading...</div>';
+            try {
+                const resp = await fetch(`/tjai/api/assessment/content?entry_id=${encodeURIComponent(entryId)}`);
+                const data = await resp.json();
+                if (data.error) {
+                    document.getElementById('content-panel').innerHTML = `<div class="error">${data.error}</div>`;
+                    return;
+                }
+                const scores = data.scores || [];
+                const chart = renderChart(scores);
+
+                // Build chart columns per row for inline display
+                const chartLines = chart.split('\n');
+                // Each score corresponds to a column index in the chart
+
+                let html = `<div class="assessment-header">` +
+                    `<h1>AI Assessment: ${escHtml(data.date_display || entryId)}</h1>` +
+                    `<a class="entry-link" href="/tjai/entry/?entry_id=${encodeURIComponent(entryId)}">[edit]</a>` +
+                    `<button class="btn-rerun" onclick="rerunAssessment('${escHtml(entryId)}', this)">Rerun</button>` +
+                    `</div>`;
+
+                if (data.summary) {
+                    html += `<div class="assessment-summary">${escHtml(data.summary)}</div>`;
+                }
+
+                // Chart
+                if (scores.length > 0) {
+                    html += `<pre style="color:#8a8a8a; margin-bottom:20px; font-size:11px;">${escHtml(chart)}</pre>`;
+                }
+
+                // Score table
+                html += `<div class="score-row header">` +
+                    `<span>Time</span><span style="text-align:right">Score</span>` +
+                    `<span style="text-align:right">Cum</span><span>Event</span><span></span></div>`;
+                for (const s of scores) {
+                    html += renderScoreRow(s, '');
+                }
+
+                if (scores.length === 0) {
+                    html += `<div class="loading">No scored events for this date.</div>`;
+                }
+
+                // Observations (markdown content)
+                if (data.content_html) {
+                    html += `<div class="md-content">${data.content_html}</div>`;
+                }
+
+                document.getElementById('content-panel').innerHTML = html;
+            } catch (e) {
+                document.getElementById('content-panel').innerHTML = '<div class="error">Error loading assessment</div>';
+            }
+        }
+
+        async function rerunAssessment(entryId, btn) {
+            btn.disabled = true;
+            btn.textContent = 'Requesting...';
+            try {
+                const resp = await fetch('/tjai/api/assessment/rerun', {
+                    method: 'POST',
+                    headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: 'entry_id=' + encodeURIComponent(entryId),
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.error) {
+                    btn.textContent = 'Failed';
+                    alert('Rerun failed: ' + (data.error || 'Unknown error'));
+                    return;
+                }
+                btn.textContent = 'Running...';
+                let attempts = 0;
+                const poll = setInterval(async () => {
+                    attempts++;
+                    if (attempts > 120) { clearInterval(poll); btn.textContent = 'Timeout'; return; }
+                    try {
+                        const cr = await fetch(`/tjai/api/assessment/content?entry_id=${encodeURIComponent(entryId)}`);
+                        if (cr.ok) {
+                            const cd = await cr.json();
+                            if (cd.scores && cd.scores.length > 0) {
+                                clearInterval(poll);
+                                selectDate(entryId);
+                            }
+                        }
+                    } catch(e) {}
+                }, 5000);
+            } catch (e) {
+                btn.textContent = 'Error';
+            }
+        }
+
+        fetchDates();
+    </script>
+</body>
+</html>

@@ -437,6 +437,37 @@ def _check_daily_rerun():
     execute_action(action, target_date=target_date)
 
 
+def _check_assessment_rerun():
+    """Run llm-assessment action for a specific date if requested via sysconfig."""
+    from tjai_app.models import SysConfig
+    from datetime import datetime
+
+    req = SysConfig.objects.filter(key='assessment_rerun_date').first()
+    if not req or not req.value:
+        return
+    date_str = req.value
+    req.value = ''
+    req.timestamp_modified = time.time()
+    req.save(update_fields=['value', 'timestamp_modified'])
+
+    try:
+        target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        logger.error("Invalid assessment rerun date: %s", date_str)
+        return
+
+    action = Entry.objects.filter(
+        data__entry_id='llm-assessment', kind='action',
+        deleted_at__isnull=True,
+    ).first()
+    if not action:
+        logger.error("llm-assessment action not found for rerun")
+        return
+
+    logger.info("Rerunning llm-assessment for %s (requested)", date_str)
+    execute_action(action, target_date=target_date)
+
+
 def _check_health_refresh():
     """Run system health collection if requested via sysconfig flag."""
     from tjai_app.models import SysConfig
@@ -522,6 +553,7 @@ def main():
         try:
             _check_health_refresh()
             _check_daily_rerun()
+            _check_assessment_rerun()
 
             # Prune old operational log entries (once per hour)
             now_ts = time.time()

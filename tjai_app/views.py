@@ -1300,6 +1300,126 @@ def daily_synopsis_rerun(request):
     return JsonResponse({'success': True, 'date': date_str})
 
 
+# ---------- AI Assessment ----------
+
+@login_required
+def assessment_page(request):
+    """Render the AI performance assessment page."""
+    return render(request, 'tjai_app/assessment.html')
+
+
+@login_required
+def api_assessment_dates(request):
+    """Return list of assessment dates as JSON."""
+    entries = Entry.objects.filter(
+        data__entry_id__startswith='assessment-',
+        kind='memory',
+        deleted_at__isnull=True,
+    ).exclude(
+        data__entry_id__contains='-prompt'
+    ).order_by('-data__date')
+
+    tz = get_app_tz()
+    today_key = datetime.now(tz).strftime('%Y%m%d')
+
+    result = []
+    for entry in entries:
+        data = entry.data if isinstance(entry.data, dict) else {}
+        entry_id = data.get('entry_id', '')
+        date_str = entry_id.replace('assessment-', '') if entry_id.startswith('assessment-') else ''
+        date_key = date_str.replace('-', '')
+        try:
+            dt = datetime.strptime(date_str, '%Y-%m-%d')
+            date_display = dt.strftime('%a %b %-d')
+        except ValueError:
+            date_display = date_str
+        result.append({
+            'entry_id': entry_id,
+            'date_display': date_display,
+            'date_key': date_key,
+            'final_cumulative': data.get('final_cumulative', 0),
+        })
+
+    return JsonResponse({'dates': result, 'today_key': today_key})
+
+
+@login_required
+def api_assessment_content(request):
+    """Return assessment data for a specific date."""
+    import markdown as md
+
+    entry_id = request.GET.get('entry_id')
+    if not entry_id:
+        return JsonResponse({'error': 'entry_id parameter required'}, status=400)
+
+    entry = Entry.objects.filter(
+        data__entry_id=entry_id, deleted_at__isnull=True,
+    ).first()
+    if not entry:
+        return JsonResponse({'error': 'Assessment not found'}, status=404)
+
+    data = entry.data if isinstance(entry.data, dict) else {}
+    date_str = data.get('date', entry_id.replace('assessment-', ''))
+    try:
+        dt = datetime.strptime(date_str, '%Y-%m-%d')
+        date_display = dt.strftime('%a %b %-d, %Y')
+    except ValueError:
+        date_display = date_str
+
+    # Render observations section (content after scored events table) as HTML
+    content_html = md.markdown(
+        _fix_md_list_spacing(entry.content),
+        extensions=['nl2br', 'tables', 'fenced_code'],
+        tab_length=2,
+    )
+    content_html = re.sub(
+        r'(?<!["\'>])(https?://[^\s<]+)',
+        r'<a href="\1" target="_blank">\1</a>',
+        content_html,
+    )
+
+    return JsonResponse({
+        'entry_id': entry_id,
+        'date_display': date_display,
+        'scores': data.get('scores', []),
+        'total_turns': data.get('total_turns', 0),
+        'scored_events': data.get('scored_events', 0),
+        'final_cumulative': data.get('final_cumulative', 0),
+        'summary': f"{data.get('total_turns', '?')} turns analyzed, "
+                   f"{data.get('scored_events', '?')} scored events, "
+                   f"final cumulative: {data.get('final_cumulative', '?')}",
+        'content_html': content_html,
+    })
+
+
+@login_required
+def api_assessment_rerun(request):
+    """Request re-run of llm-assessment action for a specific date."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    entry_id = request.POST.get('entry_id', '')
+    if not entry_id.startswith('assessment-'):
+        return JsonResponse({'error': 'Invalid entry_id'}, status=400)
+
+    date_str = entry_id.replace('assessment-', '')
+    from datetime import datetime as dt
+    try:
+        dt.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return JsonResponse({'error': f'Cannot parse date from {entry_id}'}, status=400)
+
+    now = time.time()
+    SysConfig.objects.update_or_create(
+        key='assessment_rerun_date',
+        defaults={'value': date_str, 'timestamp_modified': now})
+    SysConfig.objects.update_or_create(
+        key='action_agent_wake_requested',
+        defaults={'value': '1', 'timestamp_modified': now})
+
+    return JsonResponse({'success': True, 'date': date_str})
+
+
 @login_required
 def git_activity(request):
     """Git activity page — reverse chronological from daily files."""
