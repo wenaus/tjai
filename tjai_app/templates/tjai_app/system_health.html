@@ -445,6 +445,47 @@
             }
             html += '</div>';
 
+            // Watchdog section
+            const wd = data.watchdog || {};
+            if (wd.status) {
+                html += '<div class="section"><div class="section-title">Watchdog</div>';
+                const wdCls = wd.status === 'ok' ? 'metric-value' : wd.status === 'warning' ? 'metric-warn' : 'metric-crit';
+                const checkCount = (wd.results || []).length;
+                const nonOkCount = (wd.results || []).filter(r => r.status !== 'ok').length;
+                html += '<div class="metric-grid">';
+                html += metric('Status', wd.status.toUpperCase(), wdCls);
+                html += metric('Last Check', wd.last_run_ago || 'never');
+                html += metric('Checks', `${checkCount} total, ${nonOkCount} flagged`);
+                html += '</div>';
+                const flagged = (wd.results || []).filter(r => r.status !== 'ok');
+                if (flagged.length > 0) {
+                    html += '<div style="margin-top:8px">';
+                    for (const r of flagged) {
+                        const cls = r.status === 'critical' ? 'issue-red' : 'issue-yellow';
+                        html += `<div class="issue ${cls}">[${r.status.toUpperCase()}] ${r.check}: ${r.detail}</div>`;
+                    }
+                    html += '</div>';
+                }
+                if (wd.recent_alerts && wd.recent_alerts.length > 0) {
+                    html += '<div style="margin-top:12px;margin-bottom:4px;color:#8a8a8a;font-size:12px">Alerts (24h)</div>';
+                    html += '<table><tr><th>Time</th><th>Level</th><th>Message</th></tr>';
+                    for (const a of wd.recent_alerts) {
+                        const cls = a.level === 'ERROR' ? 'metric-crit' : 'metric-warn';
+                        html += `<tr><td style="white-space:nowrap">${a.timestamp}</td><td class="${cls}">${a.level}</td><td>${a.message}</td></tr>`;
+                    }
+                    html += '</table>';
+                }
+                if (wd.escalations && wd.escalations.length > 0) {
+                    html += '<div style="margin-top:12px;margin-bottom:4px;color:#8a8a8a;font-size:12px">Escalations (24h)</div>';
+                    html += '<table><tr><th>Time</th><th>Message</th></tr>';
+                    for (const e of wd.escalations) {
+                        html += `<tr><td style="white-space:nowrap">${e.timestamp}</td><td>${e.message}</td></tr>`;
+                    }
+                    html += '</table>';
+                }
+                html += '</div>';
+            }
+
             // CloudWatch section
             if (cw && !cw.error) {
                 html += '<div class="section"><div class="section-title">CloudWatch</div>';

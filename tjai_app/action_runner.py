@@ -532,6 +532,8 @@ def execute_action(action, target_date=None):
                 status='done'
             ).exclude(
                 data__source='multimodel'
+            ).exclude(
+                data__has_key='run_status'     # skip already-researched entries
             ).order_by('priority', 'timestamp_created').first()
             if next_primary:
                 np_data = next_primary.data if isinstance(next_primary.data, dict) else {}
@@ -547,6 +549,12 @@ def execute_action(action, target_date=None):
 
         # Capture before dispatch_ai clears ephemeral keys
         multimodel_target_uuid = data.get('next_target_entry_id') if action_id == 'research-agent' else None
+
+        # For research-agent: mark target entry as 'active' before dispatch
+        if multimodel_target_uuid:
+            Entry.objects.filter(
+                id=multimodel_target_uuid, deleted_at__isnull=True,
+            ).update(status='active')
 
         if not dispatch_ai(action, entry_id=entry_id if isinstance(entry_id, str) else None,
                            target_date=target_date):

@@ -128,17 +128,17 @@ def backfill(days=60):
                 all_lines.append(f'**{label}**')
                 all_lines.extend(commits)
                 all_lines.append('')
+        content = ('\n'.join(all_lines).rstrip() + '\n') if all_lines else ''
+        old_umask = os.umask(0)
+        try:
+            GIT_DAILY_DIR.mkdir(parents=True, exist_ok=True, mode=0o777)
+            p = GIT_DAILY_DIR / f'{target.isoformat()}.md'
+            fd = os.open(str(p), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666)
+            os.write(fd, content.encode())
+            os.close(fd)
+        finally:
+            os.umask(old_umask)
         if all_lines:
-            body = '\n'.join(all_lines).rstrip()
-            old_umask = os.umask(0)
-            try:
-                GIT_DAILY_DIR.mkdir(parents=True, exist_ok=True, mode=0o777)
-                p = GIT_DAILY_DIR / f'{target.isoformat()}.md'
-                fd = os.open(str(p), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666)
-                os.write(fd, (body + '\n').encode())
-                os.close(fd)
-            finally:
-                os.umask(old_umask)
             print(f'{target}: {len(all_lines)} lines')
         else:
             print(f'{target}: no commits')

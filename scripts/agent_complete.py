@@ -338,8 +338,15 @@ def main():
                 data['run_error'] = stderr_content[-200:]
             elif 'run_error' in data:
                 del data['run_error']
+            # For research-agent: system takes responsibility for marking done.
+            # Don't rely on the AI to do it — it may spawn subagents and never
+            # reach the final step.  Successful or timed-out runs are "done".
+            update_fields = ['data']
+            if action_id == 'research-agent' and exit_code in (0, 124):
+                entry.status = 'done'
+                update_fields.append('status')
             entry.data = data
-            entry.save(update_fields=['data'])
+            entry.save(update_fields=update_fields)
             logger.info("%s: wrote run result to entry %s (duration=%ss, subagents=%d)",
                         action_id, current_entry,
                         duration, subagent_count, extra=ref_extra)
@@ -436,6 +443,8 @@ def _research_queue_drain(now):
         status='done'
     ).exclude(
         data__source='multimodel'
+    ).exclude(
+        data__has_key='run_status'     # skip already-researched entries
     ).order_by('priority', 'timestamp_created').first()
 
     if not next_item:

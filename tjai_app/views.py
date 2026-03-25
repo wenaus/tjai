@@ -1393,14 +1393,14 @@ def _refresh_recent_git_daily():
                 all_lines.append('')
 
         fpath = git_dir / f'{target.isoformat()}.md'
-        if all_lines:
-            old_umask = os.umask(0)
-            try:
-                fd = os.open(str(fpath), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666)
-                os.write(fd, ('\n'.join(all_lines).rstrip() + '\n').encode('utf-8'))
-                os.close(fd)
-            finally:
-                os.umask(old_umask)
+        content = ('\n'.join(all_lines).rstrip() + '\n') if all_lines else ''
+        old_umask = os.umask(0)
+        try:
+            fd = os.open(str(fpath), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666)
+            os.write(fd, content.encode('utf-8'))
+            os.close(fd)
+        finally:
+            os.umask(old_umask)
 
     return errors
 
@@ -3963,6 +3963,60 @@ def api_system_data(request):
     # Pre-format collection timestamp
     if data.get('timestamp'):
         data['timestamp_ago'] = fmt_ago(data['timestamp'])
+
+    # Watchdog data
+    wd_status = SysConfig.objects.filter(
+        key='watchdog_status'
+    ).values_list('value', flat=True).first()
+    wd_last_run = SysConfig.objects.filter(
+        key='watchdog_last_run'
+    ).values_list('value', flat=True).first()
+    wd_results_raw = SysConfig.objects.filter(
+        key='watchdog_last_results'
+    ).values_list('value', flat=True).first()
+
+    wd_data = {
+        'status': wd_status or 'unknown',
+        'last_run': float(wd_last_run) if wd_last_run else None,
+        'last_run_ago': fmt_ago(float(wd_last_run)) if wd_last_run else None,
+        'results': json.loads(wd_results_raw) if wd_results_raw else [],
+    }
+
+    # Recent non-OK watchdog logs (24h)
+    from django.utils import timezone as wd_tz
+    wd_cutoff = wd_tz.now() - timedelta(hours=24)
+    wd_logs = list(AppLog.objects.filter(
+        source='watchdog',
+        timestamp__gte=wd_cutoff,
+    ).order_by('-timestamp')[:50].values_list(
+        'timestamp', 'levelname', 'message'
+    ))
+    app_tz = get_app_tz()
+    wd_data['recent_alerts'] = [
+        {
+            'timestamp': ts.astimezone(app_tz).strftime('%H:%M'),
+            'level': lvl,
+            'message': msg,
+        }
+        for ts, lvl, msg in wd_logs
+    ]
+
+    # Escalation history (24h)
+    esc_logs = list(AppLog.objects.filter(
+        source='watchdog_escalation',
+        timestamp__gte=wd_cutoff,
+    ).order_by('-timestamp')[:20].values_list(
+        'timestamp', 'message'
+    ))
+    wd_data['escalations'] = [
+        {
+            'timestamp': ts.astimezone(app_tz).strftime('%H:%M'),
+            'message': msg,
+        }
+        for ts, msg in esc_logs
+    ]
+
+    data['watchdog'] = wd_data
 
     return JsonResponse(data)
 

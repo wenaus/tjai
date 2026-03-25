@@ -415,6 +415,11 @@
                                     cm.replaceRange('', {line: cur.line, ch: 0}, {line: cur.line, ch: line.length});
                                     return;
                                 }
+                                // Cursor at line start — insert blank line above, don't duplicate bullet
+                                if (cur.ch === 0) {
+                                    cm.replaceRange('\n', {line: cur.line, ch: 0});
+                                    return;
+                                }
                                 var prefix = match[1] + match[2] + ' ';
                                 // Increment number for ordered lists
                                 if (/^\d+/.test(match[2])) {
