@@ -106,6 +106,13 @@
         }
         .btn-rerun:hover { background: #444; }
         .btn-rerun:disabled { opacity: 0.5; cursor: default; }
+        .agent-banner {
+            padding: 6px 24px; font-size: 12px;
+            border-bottom: 1px solid #333; flex-shrink: 0;
+        }
+        .agent-idle { color: #8a8a8a; }
+        .agent-running { color: #ffd54f; }
+        .agent-failed { color: #ef5350; }
 
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #1a1a1a; }
@@ -116,6 +123,7 @@
 </head>
 <body>
     {% with current_page="assessment" %}{% include "tjai_app/_menu.html" %}{% endwith %}
+    <div class="agent-banner agent-idle" id="agent-banner">Agent: loading...</div>
     <div class="container">
         <div class="panel-left" id="date-list">
             <div class="loading">Loading dates...</div>
@@ -130,6 +138,23 @@
         let todayKey = '';
         let selectedEntryId = null;
 
+        function updateBanner(agent) {
+            const banner = document.getElementById('agent-banner');
+            if (!agent || !banner) return;
+            if (agent.status === 'running') {
+                const dur = agent.launched_dur ? ' for ' + agent.launched_dur : '';
+                banner.className = 'agent-banner agent-running';
+                banner.innerHTML = `Agent: <strong>running</strong>${dur}`;
+            } else if (agent.status === 'failed') {
+                const err = agent.last_error ? ' — ' + agent.last_error : '';
+                banner.className = 'agent-banner agent-failed';
+                banner.innerHTML = `Agent: <strong>failed</strong>${err}`;
+            } else {
+                banner.className = 'agent-banner agent-idle';
+                banner.innerHTML = 'Agent: idle';
+            }
+        }
+
         async function fetchDates() {
             try {
                 const resp = await fetch('/tjai/api/assessment/dates');
@@ -140,6 +165,7 @@
                 }
                 allDates = data.dates || [];
                 todayKey = data.today_key || '';
+                updateBanner(data.agent);
                 renderDateList();
                 if (allDates.length > 0) {
                     const params = new URLSearchParams(window.location.search);
@@ -326,6 +352,27 @@
         }
 
         fetchDates();
+        // Poll agent status every 15s
+        setInterval(async () => {
+            try {
+                const r = await fetch('/tjai/api/assessment/dates');
+                if (r.ok) {
+                    const d = await r.json();
+                    updateBanner(d.agent);
+                    // If new dates appeared, refresh the list
+                    if ((d.dates || []).length !== allDates.length) {
+                        allDates = d.dates || [];
+                        renderDateList();
+                        // Re-highlight selected
+                        if (selectedEntryId) {
+                            document.querySelectorAll('.date-item').forEach(el => {
+                                el.classList.toggle('selected', el.dataset.entryId === selectedEntryId);
+                            });
+                        }
+                    }
+                }
+            } catch(e) {}
+        }, 15000);
     </script>
 </body>
 </html>

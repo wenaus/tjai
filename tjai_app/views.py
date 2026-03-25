@@ -1340,7 +1340,19 @@ def api_assessment_dates(request):
             'final_cumulative': data.get('final_cumulative', 0),
         })
 
-    return JsonResponse({'dates': result, 'today_key': today_key})
+    # Agent status
+    agent_keys = {}
+    for sc in SysConfig.objects.filter(key__startswith='agent_llm-assessment'):
+        agent_keys[sc.key] = sc.value
+    agent_status = agent_keys.get('agent_llm-assessment_status', 'idle')
+    launched = agent_keys.get('agent_llm-assessment_launched')
+    agent = {
+        'status': agent_status,
+        'launched_dur': _epoch_dur(launched) if launched else None,
+        'last_error': agent_keys.get('agent_llm-assessment_last_error'),
+    }
+
+    return JsonResponse({'dates': result, 'today_key': today_key, 'agent': agent})
 
 
 @login_required
