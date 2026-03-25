@@ -3432,6 +3432,11 @@ def api_research_rerun_models(request):
     # Set selected models to 'rerun', delete their old entries
     base_data = base.data if isinstance(base.data, dict) else {}
     now = time.time()
+    # Backfill: old entries may lack per-model status — default unset to 'done'
+    # so _dispatch_research_3way doesn't treat None as "needs dispatch"
+    for m in valid_models:
+        if f'{m}_status' not in base_data:
+            base_data[f'{m}_status'] = 'done'
     for model in models:
         base_data[f'{model}_status'] = 'rerun'
         # Soft-delete old model entry so it's recreated fresh

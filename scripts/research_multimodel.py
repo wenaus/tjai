@@ -138,7 +138,7 @@ def _call_gemini(prompt):
     config = types.GenerateContentConfig(tools=[grounding_tool])
 
     logger.info("Calling Gemini API (gemini-2.5-pro)...")
-    config.http_options = {'timeout': API_TIMEOUT}
+    config.http_options = {'timeout': API_TIMEOUT * 1000}  # milliseconds
     response = client.models.generate_content(
         model='gemini-2.5-pro',
         contents=prompt,
