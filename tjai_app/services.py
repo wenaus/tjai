@@ -302,10 +302,15 @@ def get_profile():
 
 
 def get_ai_guidance(context=None):
+    from django.db.models.functions import Coalesce
     qs = Entry.objects.filter(
         kind='ai',
         deleted_at__isnull=True,
-    ).select_related('context').prefetch_related('tags').order_by('context__name', '-timestamp_modified')
+    ).select_related('context').prefetch_related('tags').order_by(
+        Coalesce('priority', 9999),  # priority-1 first, nulls last
+        'context__name',
+        '-timestamp_modified',
+    )
 
     results = []
     for entry in qs:
