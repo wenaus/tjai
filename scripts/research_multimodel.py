@@ -138,6 +138,7 @@ def _call_gemini(prompt):
     config = types.GenerateContentConfig(tools=[grounding_tool])
 
     logger.info("Calling Gemini API (gemini-2.5-pro)...")
+    config.http_options = {'timeout': API_TIMEOUT}
     response = client.models.generate_content(
         model='gemini-2.5-pro',
         contents=prompt,
@@ -158,7 +159,7 @@ def _call_chatgpt(prompt):
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY not set in environment")
 
-    client = OpenAI(api_key=api_key)
+    client = OpenAI(api_key=api_key, timeout=API_TIMEOUT)
 
     logger.info("Calling ChatGPT API (gpt-4o)...")
     response = client.responses.create(
@@ -175,44 +176,83 @@ def _call_chatgpt(prompt):
     return result
 
 
-def _check_and_trigger_synthesis(entry):
-    """Check if all 3 models are done and trigger synthesis if so."""
-    data = entry.data if isinstance(entry.data, dict) else {}
+def research_model_complete(model_entry):
+    """Called when any model (claude/gemini/chatgpt) finishes research.
+
+    Updates the base entry's tracking, checks if all 3 are done,
+    and triggers synthesis if this is the last to finish.
+    Shared code path — no model is special.
+    """
+    data = model_entry.data if isinstance(model_entry.data, dict) else {}
     base_entry_id = data.get('base_entry_id')
-    if not base_entry_id:
-        logger.warning("No base_entry_id in entry data, cannot check synthesis")
+    model = data.get('model')
+    if not base_entry_id or not model:
+        logger.warning("Missing base_entry_id or model in entry data")
         return
 
-    # Look up all three entries
-    base = Entry.objects.filter(
-        data__entry_id=base_entry_id, deleted_at__isnull=True,
-    ).first()
-    gemini = Entry.objects.filter(
-        data__entry_id=f'{base_entry_id}-gemini', deleted_at__isnull=True,
-    ).first()
-    chatgpt = Entry.objects.filter(
-        data__entry_id=f'{base_entry_id}-chatgpt', deleted_at__isnull=True,
-    ).first()
+    # Update this model's status on the base entry (serialized to prevent race)
+    from django.db import transaction
 
-    if not all([base, gemini, chatgpt]):
-        logger.info("Not all model entries exist yet, skipping synthesis check")
+    with transaction.atomic():
+        base = Entry.objects.select_for_update().filter(
+            data__entry_id=base_entry_id, deleted_at__isnull=True,
+        ).first()
+        if not base:
+            logger.error("Base entry %s not found", base_entry_id)
+            return
+
+        base_data = base.data if isinstance(base.data, dict) else {}
+        base_data[f'{model}_status'] = 'done'
+
+        # Check if all 3 are done
+        statuses = {
+            m: base_data.get(f'{m}_status')
+            for m in ('claude', 'gemini', 'chatgpt')
+        }
+        all_done = all(s == 'done' for s in statuses.values())
+
+        if all_done:
+            base.status = 'done'
+
+        base.data = base_data
+        update_fields = ['data']
+        if all_done:
+            update_fields.append('status')
+        base.save(update_fields=update_fields)
+
+    logger.info("Updated base %s: %s_status=done", base_entry_id, model)
+
+    if not all_done:
+        logger.info("Not all models done: %s", statuses)
         return
 
-    if not all(e.status == 'done' for e in [base, gemini, chatgpt]):
-        logger.info("Not all models done yet (base=%s, gemini=%s, chatgpt=%s)",
-                     base.status, gemini.status, chatgpt.status)
-        return
+    logger.info("Base %s: all models done, status=done", base_entry_id)
 
-    # Check if synthesis already exists
+    # Trigger synthesis (flag prevents race between concurrent completions)
     synth_entry_id = f'{base_entry_id}-synthesis'
+    if base_data.get('synthesis_triggered'):
+        logger.info("Synthesis %s already triggered", synth_entry_id)
+        return
+    with transaction.atomic():
+        base = Entry.objects.select_for_update().filter(
+            data__entry_id=base_entry_id, deleted_at__isnull=True,
+        ).first()
+        base_data = base.data if isinstance(base.data, dict) else {}
+        if base_data.get('synthesis_triggered'):
+            logger.info("Synthesis %s already triggered (race)", synth_entry_id)
+            return
+        base_data['synthesis_triggered'] = True
+        base.data = base_data
+        base.save(update_fields=['data'])
+
     existing = Entry.objects.filter(
         data__entry_id=synth_entry_id, deleted_at__isnull=True,
     ).first()
     if existing:
-        logger.info("Synthesis entry %s already exists, skipping", synth_entry_id)
+        logger.info("Synthesis %s already exists", synth_entry_id)
         return
 
-    logger.info("All 3 models done! Creating synthesis entry: %s", synth_entry_id)
+    logger.info("All 3 models done for %s — triggering synthesis", base_entry_id)
     _create_and_dispatch_synthesis(base_entry_id, base, synth_entry_id)
 
 
@@ -235,7 +275,7 @@ def _create_and_dispatch_synthesis(base_entry_id, base_entry, synth_entry_id):
             'base_entry_id': base_entry_id,
             'base_uuid': str(base_entry.id),
             'model': 'synthesis',
-            'source_claude_entry_id': base_entry_id,
+            'source_claude_entry_id': f'{base_entry_id}-claude',
             'source_gemini_entry_id': f'{base_entry_id}-gemini',
             'source_chatgpt_entry_id': f'{base_entry_id}-chatgpt',
         },
@@ -349,8 +389,8 @@ def main():
         completion_logger.info("research-agent/%s: exit_code=0, status=completed",
                                 model, extra=ref_extra)
 
-        # Check if synthesis is ready
-        _check_and_trigger_synthesis(entry)
+        # Update base entry and check if all 3 models are done
+        research_model_complete(entry)
 
     except Exception as e:
         duration_sec = round(time.time() - start_time)
@@ -363,6 +403,24 @@ def main():
         entry.content = f"{topic}\n\nERROR: {error_msg}"
         entry.status = 'blocked'
         entry.save(update_fields=['content', 'status'])
+
+        # Update base entry's model status so it's not stuck at 'active'
+        try:
+            edata = entry.data if isinstance(entry.data, dict) else {}
+            base_eid = edata.get('base_entry_id')
+            if base_eid:
+                base = Entry.objects.filter(
+                    data__entry_id=base_eid, deleted_at__isnull=True,
+                ).first()
+                if base:
+                    bd = base.data if isinstance(base.data, dict) else {}
+                    bd[f'{model}_status'] = 'blocked'
+                    base.data = bd
+                    base.save(update_fields=['data'])
+                    logger.info("Set %s_status=blocked on base %s", model, base_eid)
+        except Exception as be:
+            logger.error("Failed to update base entry on failure: %s", be)
+
         sys.exit(1)
 
 

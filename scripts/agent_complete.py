@@ -342,8 +342,11 @@ def main():
             # Don't rely on the AI to do it — it may spawn subagents and never
             # reach the final step.  Successful or timed-out runs are "done".
             update_fields = ['data']
-            if action_id == 'research-agent' and exit_code in (0, 124):
-                entry.status = 'done'
+            if action_id == 'research-agent':
+                if exit_code in (0, 124):
+                    entry.status = 'done'
+                else:
+                    entry.status = 'blocked'
                 update_fields.append('status')
             entry.data = data
             entry.save(update_fields=update_fields)
@@ -414,9 +417,39 @@ def main():
     # Queue drain for research-agent: auto-chain to next pending item
     if action_id == 'research-agent' and exit_code in (0, 124):
         _research_queue_drain(now)
-        # Check if multimodel synthesis should be triggered
-        if current_entry:
-            _check_and_trigger_synthesis(current_entry)
+        # Update base entry tracking and check if all 3 models are done
+        if entry:
+            entry_data = entry.data if isinstance(entry.data, dict) else {}
+            if entry_data.get('source') == 'multimodel' and entry_data.get('model'):
+                try:
+                    from research_multimodel import research_model_complete
+                    research_model_complete(entry)
+                except Exception as e:
+                    logger.error("research_model_complete failed: %s", e,
+                                 extra=ref_extra)
+
+    # Claude failure on multimodel entry: mark model status as blocked on base
+    if action_id == 'research-agent' and exit_code not in (0, 124) and entry:
+        entry_data = entry.data if isinstance(entry.data, dict) else {}
+        if entry_data.get('source') == 'multimodel' and entry_data.get('model'):
+            model = entry_data['model']
+            base_entry_id = entry_data.get('base_entry_id')
+            if base_entry_id:
+                try:
+                    base = Entry.objects.filter(
+                        data__entry_id=base_entry_id, deleted_at__isnull=True,
+                    ).first()
+                    if base:
+                        bd = base.data if isinstance(base.data, dict) else {}
+                        bd[f'{model}_status'] = 'blocked'
+                        base.data = bd
+                        base.save(update_fields=['data'])
+                        logger.info("%s: set %s_status=blocked on base %s",
+                                    action_id, model, base_entry_id,
+                                    extra=ref_extra)
+                except Exception as e:
+                    logger.error("%s: failed to update base on failure: %s",
+                                 action_id, e, extra=ref_extra)
 
 
 def _research_queue_drain(now):
@@ -441,6 +474,8 @@ def _research_queue_drain(now):
         deleted_at__isnull=True,
     ).exclude(
         status='done'
+    ).exclude(
+        status='active'            # models already dispatched
     ).exclude(
         data__source='multimodel'
     ).exclude(
@@ -475,22 +510,11 @@ def _research_queue_drain(now):
     logger.info("research-agent: chaining to %s — %s",
                 next_entry_id, next_item.content[:60])
 
-    # Wake action agent via sysconfig flag
+    # Wake action agent via sysconfig flag —
+    # execute_action will handle creating all 3 model entries and dispatching
     SysConfig.objects.update_or_create(
         key='action_agent_wake_requested',
         defaults={'value': '1', 'timestamp_modified': now})
-
-    # Also dispatch Gemini and ChatGPT in parallel
-    topic_text = next_item.content.split('\n')[0].strip()
-    base_entry_id = (next_item.data or {}).get('entry_id')
-    if base_entry_id and topic_text:
-        from tjai_app.action_runner import dispatch_multimodel
-        dispatch_multimodel(
-            topic_text=topic_text,
-            base_entry_id=base_entry_id,
-            base_uuid=str(next_item.id),
-            context_obj=next_item.context,
-        )
 
 
 def _linkify_synthesis_sources(current_entry_uuid):
@@ -558,67 +582,6 @@ def _linkify_synthesis_sources(current_entry_uuid):
         logger.info("Linkified source reports in synthesis entry %s",
                      current_entry_uuid)
 
-
-def _check_and_trigger_synthesis(current_entry_uuid):
-    """Check if all 3 models are done and trigger synthesis.
-
-    Called after Claude finishes a research item. Delegates to the shared
-    implementation in research_multimodel.py to avoid duplicating logic.
-    """
-    entry = Entry.objects.filter(
-        id=current_entry_uuid, deleted_at__isnull=True,
-    ).first()
-    if not entry:
-        return
-
-    data = entry.data if isinstance(entry.data, dict) else {}
-    entry_id = data.get('entry_id')
-    if not entry_id:
-        return
-
-    # Only applies to base research entries (not -gemini, -chatgpt, -synthesis)
-    if any(entry_id.endswith(suffix) for suffix in ('-gemini', '-chatgpt', '-synthesis')):
-        return
-
-    # Check if gemini and chatgpt entries exist at all — if they don't,
-    # this topic wasn't submitted with multimodel dispatch
-    gemini = Entry.objects.filter(
-        data__entry_id=f'{entry_id}-gemini', deleted_at__isnull=True,
-    ).first()
-    chatgpt = Entry.objects.filter(
-        data__entry_id=f'{entry_id}-chatgpt', deleted_at__isnull=True,
-    ).first()
-
-    if not gemini or not chatgpt:
-        return  # No multimodel dispatch for this topic
-
-    if not all(e.status == 'done' for e in [entry, gemini, chatgpt]):
-        logger.info("Synthesis check: not all models done (base=%s, gemini=%s, chatgpt=%s)",
-                     entry.status, gemini.status, chatgpt.status)
-        return
-
-    # Check if synthesis already exists
-    synth_entry_id = f'{entry_id}-synthesis'
-    existing = Entry.objects.filter(
-        data__entry_id=synth_entry_id, deleted_at__isnull=True,
-    ).first()
-    if existing:
-        logger.info("Synthesis entry %s already exists", synth_entry_id)
-        return
-
-    # Delegate to research_multimodel's synthesis creation
-    logger.info("All 3 models done for %s — triggering synthesis", entry_id)
-    try:
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            'research_multimodel',
-            str(Path(__file__).parent / 'research_multimodel.py'),
-        )
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        mod._create_and_dispatch_synthesis(entry_id, entry, synth_entry_id)
-    except Exception as e:
-        logger.error("Failed to trigger synthesis for %s: %s", entry_id, e)
 
 
 try:

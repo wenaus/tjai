@@ -13,8 +13,6 @@ import traceback
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from zoneinfo import ZoneInfo
-
 from .db_log_handler import DbLogHandler
 from .models import Entry, SysConfig, Tag
 from . import services
@@ -396,58 +394,101 @@ def dispatch_ai(action, entry_id=None, target_date=None):
     return True
 
 
-def dispatch_multimodel(topic_text, base_entry_id, base_uuid, context_obj):
-    """Create gemini/chatgpt entries and launch background processes.
+def _dispatch_research_3way(action, data, base_entry, base_entry_id,
+                            topic_text, base_uuid):
+    """Create and dispatch all model entries for research.
 
-    Called from views.py api_research_run() alongside the Claude dispatch.
-    Creates a research entry for each model and launches research_multimodel.py
-    in a detached subprocess.
+    The single code path for all research dispatch — first run, rerun-all,
+    and selective rerun.  Creates entries and launches processes for every
+    model that needs to run.  No other function should create model entries
+    or launch model processes for research.
+
+    On first run: all 3 models have status=None → dispatches all.
+    On selective rerun: only models with status='rerun' are dispatched.
+
+    Dispatch mechanisms differ per model (Claude via tj agent, others via
+    research_multimodel.py subprocess) but the control flow is uniform.
     """
-    import uuid
+    import uuid as _uuid
 
-    now = time.time()
+    now_ts = time.time()
+    base_data = base_entry.data if isinstance(base_entry.data, dict) else {}
     script_path = SCRIPTS_DIR / 'research_multimodel.py'
 
-    for model in ('gemini', 'chatgpt'):
-        model_entry_id = f'{base_entry_id}-{model}'
+    # Determine which models to run
+    models_to_run = []
+    for model in ('claude', 'gemini', 'chatgpt'):
+        model_status = base_data.get(f'{model}_status')
+        if model_status == 'rerun' or model_status is None:
+            models_to_run.append(model)
 
-        # Check if entry already exists (idempotent)
+    if not models_to_run:
+        logger.info("No models to dispatch for %s", base_entry_id)
+        return
+
+    # Create entries and dispatch — uniform loop, all models
+    for model in models_to_run:
+        model_entry_id = f'{base_entry_id}-{model}'
         existing = Entry.objects.filter(
             data__entry_id=model_entry_id, deleted_at__isnull=True,
         ).first()
         if existing:
-            logger.info("Multimodel: %s entry already exists, skipping", model_entry_id)
-            continue
+            entry = existing
+            entry.status = 'active'
+            entry.save(update_fields=['status'])
+        else:
+            entry = Entry.objects.create(
+                id=str(_uuid.uuid4()),
+                content=topic_text,
+                kind='memory',
+                context=base_entry.context,
+                status='active',
+                timestamp_created=now_ts,
+                timestamp_modified=now_ts,
+                is_dirty=1,
+                data={
+                    'entry_id': model_entry_id,
+                    'source': 'multimodel',
+                    'base_entry_id': base_entry_id,
+                    'base_uuid': base_uuid,
+                    'model': model,
+                },
+            )
+            Tag.objects.create(tag_name='research_topic', entry=entry)
 
-        # Create the model-specific entry
-        entry = Entry.objects.create(
-            id=str(uuid.uuid4()),
-            content=topic_text,
-            kind='memory',
-            context=context_obj,
-            timestamp_created=now,
-            timestamp_modified=now,
-            is_dirty=1,
-            data={
-                'entry_id': model_entry_id,
-                'source': 'multimodel',
-                'base_entry_id': base_entry_id,
-                'base_uuid': base_uuid,
-                'model': model,
-                'started_at': now,
-            },
-        )
-        Tag.objects.create(tag_name='research_topic', entry=entry)
+        base_data[f'{model}_entry_id'] = model_entry_id
+        base_data[f'{model}_status'] = 'active'
 
-        # Launch research_multimodel.py in a detached subprocess.
-        # Use DEVNULL — script logs via DbLogHandler, no need for pipe I/O.
-        proc = subprocess.Popen(
-            [sys.executable, str(script_path), model, str(entry.id)],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-        logger.info("Multimodel: launched %s (PID %d, entry %s)",
-                     model, proc.pid, model_entry_id)
+        # Dispatch — mechanism differs per model, control flow is uniform
+        if model == 'claude':
+            data['next_target_entry_id'] = str(entry.id)
+            next_target = data.get('next_target', '')
+            if next_target:
+                data['next_target'] = next_target.replace(
+                    f'Entry UUID: {base_uuid}',
+                    f'Entry UUID: {entry.id}',
+                )
+            action.data = data
+            action.save(update_fields=['data'])
+            dispatch_ai(action, target_date=None)
+        else:
+            proc = subprocess.Popen(
+                [sys.executable, str(script_path), model, str(entry.id)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            logger.info("Launched %s (PID %d, entry %s)",
+                         model, proc.pid, model_entry_id)
+            # Track PID for abort capability
+            SysConfig.objects.update_or_create(
+                key=f'research_{base_entry_id}_{model}_pid',
+                defaults={'value': str(proc.pid),
+                          'timestamp_modified': now_ts})
+
+    # Save base entry tracking
+    base_entry.data = base_data
+    base_entry.status = 'active'  # models dispatched, awaiting results
+    base_entry.save(update_fields=['data', 'status'])
 
 
 def update_last_run(action):
@@ -531,6 +572,8 @@ def execute_action(action, target_date=None):
             ).exclude(
                 status='done'
             ).exclude(
+                status='active'            # models already dispatched
+            ).exclude(
                 data__source='multimodel'
             ).exclude(
                 data__has_key='run_status'     # skip already-researched entries
@@ -547,41 +590,34 @@ def execute_action(action, target_date=None):
                 action.save(update_fields=['data'])
                 logger.info("Research scheduled run — set target: %s", np_eid)
 
-        # Capture before dispatch_ai clears ephemeral keys
-        multimodel_target_uuid = data.get('next_target_entry_id') if action_id == 'research-agent' else None
-
-        # For research-agent: mark target entry as 'active' before dispatch
-        if multimodel_target_uuid:
-            Entry.objects.filter(
-                id=multimodel_target_uuid, deleted_at__isnull=True,
-            ).update(status='active')
-
-        if not dispatch_ai(action, entry_id=entry_id if isinstance(entry_id, str) else None,
-                           target_date=target_date):
-            logger.error("AI dispatch failed")
-            _write_agent_error(action_id, "AI dispatch failed")
-            update_last_run(action)
-            return False
-
-        # For research-agent: also dispatch Gemini/ChatGPT in parallel with Claude
-        # Only for primary research entries — not derivatives (synthesis, gemini, chatgpt)
+        # For research-agent on primary topics: create all 3 model entries
+        # and dispatch in parallel.  _dispatch_research_3way handles everything
+        # including Claude dispatch — no separate dispatch_ai needed.
+        research_3way_handled = False
         if action_id == 'research-agent':
-            target_uuid = multimodel_target_uuid
-            if target_uuid:
+            multimodel_target_uuid = data.get('next_target_entry_id')
+            if multimodel_target_uuid:
                 target_entry = Entry.objects.filter(
-                    id=target_uuid, deleted_at__isnull=True,
+                    id=multimodel_target_uuid, deleted_at__isnull=True,
                 ).first()
                 if target_entry:
                     target_data = target_entry.data if isinstance(target_entry.data, dict) else {}
                     base_entry_id = target_data.get('entry_id')
                     topic_text = target_entry.content.split('\n')[0].strip()
                     if base_entry_id and topic_text and target_data.get('source') != 'multimodel':
-                        dispatch_multimodel(
-                            topic_text=topic_text,
-                            base_entry_id=base_entry_id,
-                            base_uuid=target_uuid,
-                            context_obj=target_entry.context,
+                        _dispatch_research_3way(
+                            action, data, target_entry, base_entry_id,
+                            topic_text, multimodel_target_uuid,
                         )
+                        research_3way_handled = True
+
+        if not research_3way_handled:
+            if not dispatch_ai(action, entry_id=entry_id if isinstance(entry_id, str) else None,
+                               target_date=target_date):
+                logger.error("AI dispatch failed")
+                _write_agent_error(action_id, "AI dispatch failed")
+                update_last_run(action)
+                return False
 
         update_last_run(action)
         logger.info("Done.")

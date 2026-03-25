@@ -3030,6 +3030,10 @@ def api_research_data(request):
             'modified': e.timestamp_modified,
             'modified_ago': fmt_ago(e.timestamp_modified),
             'started_at': data.get('started_at'),
+            'source': data.get('source'),
+            'claude_status': data.get('claude_status'),
+            'gemini_status': data.get('gemini_status'),
+            'chatgpt_status': data.get('chatgpt_status'),
         })
 
     # System prompt and ideation prompt entry UUIDs
@@ -3154,6 +3158,8 @@ def api_research_run(request):
         if not target:
             logger.error("api_research_run: no entry with data.entry_id=%r", entry_id)
             return JsonResponse({'error': f'Research entry not found: {entry_id}'}, status=404)
+        if target.status == 'active':
+            return JsonResponse({'error': 'Research already in progress for this entry'}, status=409)
         data['next_target'] = (
             f"SPECIFIC TARGET:\nEntry UUID: {target.id}\n"
             f"Topic: {target.content}"
@@ -3168,7 +3174,15 @@ def api_research_run(request):
             id__in=research_ids,
             kind='memory',
             deleted_at__isnull=True,
-        ).exclude(status='done').order_by('priority', 'timestamp_created').first()
+        ).exclude(
+            status='done'
+        ).exclude(
+            status='active'            # models already dispatched
+        ).exclude(
+            data__source='multimodel'
+        ).exclude(
+            data__has_key='run_status'
+        ).order_by('priority', 'timestamp_created').first()
         if not first_item:
             return JsonResponse({'error': 'No pending research items'}, status=400)
         data['next_target'] = (
@@ -3227,22 +3241,7 @@ def api_research_run(request):
 
     _log_research(logging.INFO, "Action agent woken", entry_id=target_uuid)
 
-    # Dispatch Gemini and ChatGPT in parallel (single-item only)
-    if entry_id != 'all' and target_uuid:
-        target_entry = Entry.objects.filter(id=target_uuid).first()
-        if target_entry:
-            tdata = target_entry.data or {}
-            base_entry_id = tdata.get('entry_id')
-            topic_text = target_entry.content.split('\n')[0].strip()
-            if base_entry_id and topic_text:
-                from .action_runner import dispatch_multimodel
-                dispatch_multimodel(
-                    topic_text=topic_text,
-                    base_entry_id=base_entry_id,
-                    base_uuid=str(target_entry.id),
-                    context_obj=target_entry.context,
-                )
-
+    # _dispatch_research_3way handles all 3 models when the action agent picks this up.
     return JsonResponse({'ok': True, 'entry_id': entry_id})
 
 
@@ -3376,15 +3375,7 @@ def api_research_rerun(request):
                 defaults={'value': '1', 'timestamp_modified': now})
 
             _wake_action_agent()
-
-            # Dispatch Gemini and ChatGPT in parallel
-            from .action_runner import dispatch_multimodel
-            dispatch_multimodel(
-                topic_text=topic,
-                base_entry_id=new_entry_id,
-                base_uuid=str(new_entry.id),
-                context_obj=context_obj,
-            )
+            # _dispatch_research_3way handles all 3 models when agent picks this up
 
             _log_research(logging.INFO,
                           f"Rerun auto-submitted: {new_entry_id}",
@@ -3397,6 +3388,114 @@ def api_research_rerun(request):
         'new_uuid': str(new_entry.id),
         'version': next_ver,
         'auto_submitted': auto_submitted,
+    })
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_research_rerun_models(request):
+    """Rerun selected models for a completed research topic.
+
+    Sets selected models' status to 'rerun' on the base entry.
+    Deletes old model entries so they're recreated fresh.
+    Triggers the research-agent to dispatch only the 'rerun' models.
+    """
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    entry_id = body.get('entry_id')
+    models = body.get('models', [])  # e.g. ['claude', 'gemini']
+    if not entry_id:
+        return JsonResponse({'error': 'entry_id required'}, status=400)
+
+    # Check if agent is already running
+    status_val = SysConfig.objects.filter(
+        key='agent_research-agent_status'
+    ).values_list('value', flat=True).first()
+    if status_val == 'running':
+        return JsonResponse({'error': 'Research agent already running'}, status=409)
+
+    valid_models = {'claude', 'gemini', 'chatgpt'}
+    models = [m for m in models if m in valid_models]
+    if not models:
+        return JsonResponse({'error': 'No valid models selected'}, status=400)
+
+    base = Entry.objects.filter(
+        data__entry_id=entry_id, deleted_at__isnull=True,
+    ).first()
+    if not base:
+        return JsonResponse({'error': f'Entry not found: {entry_id}'}, status=404)
+
+    # Set selected models to 'rerun', delete their old entries
+    base_data = base.data if isinstance(base.data, dict) else {}
+    now = time.time()
+    for model in models:
+        base_data[f'{model}_status'] = 'rerun'
+        # Soft-delete old model entry so it's recreated fresh
+        old = Entry.objects.filter(
+            data__entry_id=f'{entry_id}-{model}', deleted_at__isnull=True,
+        ).first()
+        if old:
+            old.deleted_at = now
+            old.save(update_fields=['deleted_at'])
+
+    # Also delete old synthesis (will be regenerated)
+    old_synth = Entry.objects.filter(
+        data__entry_id=f'{entry_id}-synthesis', deleted_at__isnull=True,
+    ).first()
+    if old_synth:
+        old_synth.deleted_at = now
+        old_synth.save(update_fields=['deleted_at'])
+
+    # Clear stale run/synthesis metadata so rerun works correctly
+    base_data.pop('run_status', None)
+    base_data.pop('run_completed_at', None)
+    base_data.pop('run_exit_code', None)
+    base_data.pop('run_duration_seconds', None)
+    base_data.pop('subagent_count', None)
+    base_data.pop('synthesis_triggered', None)
+    base.data = base_data
+    base.status = 'active'  # re-activate for processing
+    base.save(update_fields=['data', 'status'])
+
+    # Trigger research-agent
+    research_action = Entry.objects.filter(
+        kind='action', deleted_at__isnull=True,
+        data__entry_id='research-agent',
+    ).first()
+    if research_action:
+        status_val = SysConfig.objects.filter(
+            key='agent_research-agent_status'
+        ).values_list('value', flat=True).first()
+        if status_val != 'running':
+            rdata = research_action.data or {}
+            original_scheduled = rdata.get('scheduled_time')
+            if original_scheduled:
+                rdata['scheduled_time_config'] = original_scheduled
+                tz = get_app_tz()
+                rdata['scheduled_time'] = datetime.now(tz).strftime('%H%M')
+            rdata['last_run'] = 0
+            rdata['next_target'] = (
+                f"SPECIFIC TARGET:\nEntry UUID: {base.id}\n"
+                f"Topic: {base.content}"
+            )
+            rdata['next_target_entry_id'] = str(base.id)
+            research_action.data = rdata
+            research_action.timestamp_modified = now
+            research_action.save(update_fields=['data', 'timestamp_modified'])
+            _wake_action_agent()
+
+    _log_research(logging.INFO,
+                  f"Model rerun: {entry_id} models={models}",
+                  entry_id=str(base.id))
+
+    return JsonResponse({
+        'ok': True,
+        'entry_id': entry_id,
+        'models': models,
     })
 
 

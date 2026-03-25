@@ -73,9 +73,13 @@
             border-radius: 3px;
         }
         .status-pending { background: #1a3a5c; color: #90caf9; }
+        .status-active { background: rgba(255, 213, 79, 0.15); color: #ffd54f; }
         .status-running { background: rgba(255, 213, 79, 0.15); color: #ffd54f; }
         .status-done { background: #1a3c1a; color: #4caf50; }
+        .status-blocked { background: rgba(239, 83, 80, 0.15); color: #ef5350; }
+        .research-item.active { border-left-color: #ffd54f; }
         .research-item.running { border-left-color: #ffd54f; }
+        .research-item.blocked { border-left-color: #ef5350; }
         .item-content {
             color: #bbb;
             font-size: 12px;
@@ -187,7 +191,6 @@
         }
 
         let agentRunning = false;
-        let hasPending = false;
 
         async function fetchData() {
             try {
@@ -199,7 +202,6 @@
                     return;
                 }
                 agentRunning = (data.agent || {}).status === 'running';
-                hasPending = (data.items || []).some(i => i.status !== 'done');
                 render(data);
             } catch (e) {
                 document.getElementById('content').innerHTML =
@@ -275,9 +277,15 @@
 
             // Stats
             const pending = items.filter(i => i.status === 'pending').length;
+            const active = items.filter(i => i.status === 'active').length;
             const done = items.filter(i => i.status === 'done').length;
-            document.getElementById('stats').textContent =
-                `${items.length} topics, ${pending} pending, ${done} completed`;
+            const blocked = items.filter(i => i.status === 'blocked').length;
+            let statsText = `${items.length} topics`;
+            if (pending) statsText += `, ${pending} pending`;
+            if (active) statsText += `, ${active} active`;
+            if (done) statsText += `, ${done} completed`;
+            if (blocked) statsText += `, ${blocked} blocked`;
+            document.getElementById('stats').textContent = statsText;
 
             // Items
             if (items.length === 0) {
@@ -290,9 +298,10 @@
             let html = '';
             for (const item of items) {
                 const isRunning = agentRunning && item.id === currentEntry && item.status !== 'done';
-                const cls = item.status === 'done' ? 'done' : isRunning ? 'running' : 'pending';
-                const statusCls = item.status === 'done' ? 'status-done' : isRunning ? 'status-running' : 'status-pending';
-                const label = item.status === 'done' ? 'done' : isRunning ? 'running' : 'pending';
+                const st = item.status;
+                const cls = st === 'done' ? 'done' : st === 'blocked' ? 'blocked' : isRunning ? 'running' : st === 'active' ? 'active' : 'pending';
+                const statusCls = 'status-' + cls;
+                const label = st === 'done' ? 'done' : st === 'blocked' ? 'blocked' : isRunning ? 'running' : st === 'active' ? 'active' : 'pending';
 
                 html += `<div class="research-item ${cls}">`;
                 html += '<div class="item-header">';
@@ -301,14 +310,27 @@
                 if (item.priority) {
                     html += `<span style="color:#666;font-size:11px">P${item.priority}</span>`;
                 }
-                if (item.status === 'done' || isRunning) {
+                if (item.status === 'done' || item.status === 'active' || item.status === 'blocked' || isRunning) {
                     const itemName = encodeURIComponent(item.entry_id || item.id.substring(0,8));
                     html += `<a href="/tjai/agent-log?ref=${item.id}&name=${itemName}" style="color:#90caf9;font-size:11px">log</a>`;
                     html += `<a href="/tjai/research/studies/?uuid=${item.id}&name=${itemName}" style="color:#90caf9;font-size:11px">studies</a>`;
                 }
                 if (isRunning) {
                     html += `<button class="btn-submit" style="color:#ef5350;border-color:#ef5350" onclick="abortAgent(this)">Abort</button>`;
-                } else if (item.status === 'done') {
+                } else if ((item.status === 'done' || item.status === 'blocked') && item.source !== 'multimodel') {
+                    // Model checkboxes for selective rerun
+                    const mNames = {claude: 'Claude', gemini: 'Gemini', chatgpt: 'ChatGPT'};
+                    const mColors = {done: '#9ccc65', active: '#ffd54f', blocked: '#ef5350'};
+                    html += '<span style="margin-left:8px;font-size:11px">';
+                    for (const [m, label] of Object.entries(mNames)) {
+                        const st = item[m + '_status'];
+                        const clr = mColors[st] || '#b0bec5';
+                        html += `<label style="margin-right:8px;cursor:pointer;color:${clr}"><input type="checkbox" class="model-cb-${esc(item.entry_id)}" value="${m}" style="vertical-align:middle;margin-right:2px">${label}</label>`;
+                    }
+                    html += '</span>';
+                    html += `<button class="btn-submit" onclick="rerunModels('${esc(item.entry_id)}', this)">Rerun</button>`;
+                    html += `<button class="btn-submit" onclick="rerunItem('${esc(item.entry_id)}', this)">Rerun All</button>`;
+                } else if (item.status === 'done' || item.status === 'blocked') {
                     html += `<button class="btn-submit" onclick="rerunItem('${esc(item.entry_id)}', this)">Rerun</button>`;
                 } else {
                     const disabled = agentRunning ? ' disabled' : '';
@@ -386,6 +408,33 @@
                     return;
                 }
                 btn.textContent = data.new_entry_id;
+                btn.style.color = '#4caf50';
+                setTimeout(fetchData, 2000);
+            } catch (e) {
+                btn.textContent = 'Error';
+                setTimeout(() => { btn.textContent = 'Rerun'; btn.disabled = false; }, 3000);
+            }
+        }
+
+        async function rerunModels(entryId, btn) {
+            const cbs = document.querySelectorAll(`.model-cb-${CSS.escape(entryId)}:checked`);
+            const models = Array.from(cbs).map(cb => cb.value);
+            if (!models.length) { alert('Select at least one model'); return; }
+            btn.disabled = true;
+            btn.textContent = 'Rerunning...';
+            try {
+                const resp = await fetch('/tjai/api/research/rerun-models', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                    body: JSON.stringify({entry_id: entryId, models: models}),
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    btn.textContent = data.error;
+                    setTimeout(() => { btn.textContent = 'Rerun'; btn.disabled = false; }, 3000);
+                    return;
+                }
+                btn.textContent = 'Queued ' + models.join('+');
                 btn.style.color = '#4caf50';
                 setTimeout(fetchData, 2000);
             } catch (e) {
