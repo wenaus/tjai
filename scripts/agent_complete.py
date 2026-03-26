@@ -476,7 +476,12 @@ def main():
 
 
 def _assessment_backfill_chain(now):
-    """If backfill_all flag is set, find the next date needing assessment and chain."""
+    """If backfill_all flag is set, find the next date needing assessment and chain.
+
+    Flag format: 'overwrite' or '1' starts from yesterday.
+    After each run, flag is updated to 'overwrite:YYYY-MM-DD' or '1:YYYY-MM-DD'
+    to track progress — next run continues from the day BEFORE that date.
+    """
     backfill = SysConfig.objects.filter(key='assessment_backfill_all').first()
     if not backfill or not backfill.value:
         return
@@ -487,11 +492,21 @@ def _assessment_backfill_chain(now):
     tz = get_timezone()
     today = datetime.now(tz).date()
 
-    # Walk backwards from yesterday, find next date with dialog but no assessment
-    # (or any date with dialog if overwriting)
-    overwrite = backfill.value == 'overwrite'
-    candidate = today - timedelta(days=1)
-    max_lookback = 90  # don't go further than 90 days
+    # Parse flag: mode or mode:last_date
+    parts = backfill.value.split(':', 1)
+    mode = parts[0]  # 'overwrite' or '1'
+    overwrite = mode == 'overwrite'
+
+    if len(parts) > 1 and parts[1]:
+        try:
+            last_done = datetime.strptime(parts[1], '%Y-%m-%d').date()
+            candidate = last_done - timedelta(days=1)
+        except ValueError:
+            candidate = today - timedelta(days=1)
+    else:
+        candidate = today - timedelta(days=1)
+
+    max_lookback = 90
 
     for _ in range(max_lookback):
         date_str = candidate.isoformat()
@@ -511,14 +526,13 @@ def _assessment_backfill_chain(now):
         ).exists()
 
         if not has_dialog:
-            # No dialog this date — we've gone past the history
             logger.info("assessment backfill: no dialog for %s, stopping", date_str)
             backfill.value = ''
             backfill.timestamp_modified = now
             backfill.save(update_fields=['value', 'timestamp_modified'])
             return
 
-        # Check if assessment already exists
+        # In non-overwrite mode, skip existing assessments
         if not overwrite:
             existing = Entry.objects.filter(
                 data__entry_id=f'assessment-{date_str}',
@@ -528,7 +542,11 @@ def _assessment_backfill_chain(now):
                 candidate -= timedelta(days=1)
                 continue
 
-        # Found a date to assess — queue it
+        # Found a date to assess — update flag with progress marker, then queue
+        backfill.value = f'{mode}:{date_str}'
+        backfill.timestamp_modified = now
+        backfill.save(update_fields=['value', 'timestamp_modified'])
+
         SysConfig.objects.update_or_create(
             key='assessment_rerun_date',
             defaults={'value': date_str, 'timestamp_modified': now})
@@ -538,7 +556,6 @@ def _assessment_backfill_chain(now):
         logger.info("assessment backfill: chaining to %s", date_str)
         return
 
-    # Exhausted lookback — done
     logger.info("assessment backfill: reached %d-day lookback limit, stopping", max_lookback)
     backfill.value = ''
     backfill.timestamp_modified = now

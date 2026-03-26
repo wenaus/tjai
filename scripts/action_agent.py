@@ -72,6 +72,7 @@ def sleep_until_next(trigger_filter=None):
     last_sysconfig_check = 0
     last_health_check = 0
     last_multimodel_check = 0
+    last_flood_check = 0
 
     while time.time() < deadline:
         if shutdown_requested or wake_requested:
@@ -100,6 +101,13 @@ def sleep_until_next(trigger_filter=None):
                 _check_agent_health()
             except Exception as e:
                 logger.error("Agent health check failed: %s", e)
+        # Periodic entry flood detection
+        if now_loop - last_flood_check >= ENTRY_FLOOD_INTERVAL:
+            last_flood_check = now_loop
+            try:
+                _check_entry_flood()
+            except Exception as e:
+                logger.error("Entry flood check failed: %s", e)
         # Periodic multimodel subprocess watchdog
         if now_loop - last_multimodel_check >= MULTIMODEL_WATCHDOG_INTERVAL:
             last_multimodel_check = now_loop
@@ -262,6 +270,95 @@ def _check_multimodel_stale():
         sc.value = ''
         sc.timestamp_modified = now
         sc.save(update_fields=['value', 'timestamp_modified'])
+
+
+ENTRY_FLOOD_INTERVAL = 300  # check every 5 min
+ENTRY_FLOOD_WINDOW = 1800   # 30 min lookback
+ENTRY_FLOOD_THRESHOLD = 5   # same content prefix appearing this many times = flood
+
+
+def _jaccard(words_a, words_b):
+    """Jaccard similarity of two word sets."""
+    if not words_a or not words_b:
+        return 0.0
+    intersection = words_a & words_b
+    union = words_a | words_b
+    return len(intersection) / len(union)
+
+
+def _check_entry_flood():
+    """Detect rapid creation of similar entries via Jaccard similarity on word sets.
+
+    Clusters recent entries by pairwise Jaccard > 0.7. If any cluster has
+    ENTRY_FLOOD_THRESHOLD+ members, it's a flood — likely a runaway dispatch.
+    """
+    from tjai_app.models import SysConfig, Entry
+
+    now = time.time()
+    cutoff = now - ENTRY_FLOOD_WINDOW
+
+    recent = Entry.objects.filter(
+        timestamp_created__gte=cutoff,
+        deleted_at__isnull=True,
+    ).values_list('content', flat=True)
+
+    # Build word sets from first 200 chars of each entry
+    word_sets = []
+    for content in recent:
+        if content:
+            word_sets.append(set(content[:200].lower().split()))
+
+    if len(word_sets) < ENTRY_FLOOD_THRESHOLD:
+        SysConfig.objects.filter(key='watchdog_entry_flood').update(
+            value='', timestamp_modified=now)
+        return
+
+    # Cluster by greedy assignment: each entry joins the first cluster
+    # it has >0.7 Jaccard with, or starts a new one
+    clusters = []  # list of (representative_words, [indices])
+    for i, ws in enumerate(word_sets):
+        placed = False
+        for cluster in clusters:
+            if _jaccard(ws, cluster[0]) > 0.7:
+                cluster[1].append(i)
+                placed = True
+                break
+        if not placed:
+            clusters.append((ws, [i]))
+
+    # Check for floods
+    flood_clusters = [c for c in clusters if len(c[1]) >= ENTRY_FLOOD_THRESHOLD]
+
+    if flood_clusters:
+        worst = max(flood_clusters, key=lambda c: len(c[1]))
+        count = len(worst[1])
+        sample = ' '.join(sorted(worst[0]))[:80]
+        msg = (f"ENTRY FLOOD: {count} similar entries in {ENTRY_FLOOD_WINDOW // 60}min "
+               f"(words: {sample})")
+        logger.error(msg)
+        SysConfig.objects.update_or_create(
+            key='watchdog_entry_flood',
+            defaults={'value': msg, 'timestamp_modified': now})
+        # Email alert — only if not already sent for this flood
+        prev = SysConfig.objects.filter(key='watchdog_entry_flood_emailed').first()
+        if not prev or not prev.value:
+            try:
+                from watchdog import send_watchdog_email
+                send_watchdog_email(
+                    f"[tjai] ENTRY FLOOD: {count} similar entries in {ENTRY_FLOOD_WINDOW // 60}min",
+                    msg,
+                )
+                SysConfig.objects.update_or_create(
+                    key='watchdog_entry_flood_emailed',
+                    defaults={'value': '1', 'timestamp_modified': now})
+                logger.info("Flood alert email sent")
+            except Exception as e:
+                logger.error("Failed to send flood alert email: %s", e)
+    else:
+        SysConfig.objects.filter(key='watchdog_entry_flood').update(
+            value='', timestamp_modified=now)
+        SysConfig.objects.filter(key='watchdog_entry_flood_emailed').update(
+            value='', timestamp_modified=now)
 
 
 def _check_agent_health():
@@ -549,6 +646,7 @@ def main():
     )
     logger.info("Action agent started (PID %d)", pid)
     last_applog_cleanup = 0
+    _action_run_log = {}  # action_id -> [timestamps] for runaway detection
     while not shutdown_requested:
         try:
             _check_health_refresh()
@@ -572,8 +670,24 @@ def main():
             for action in due:
                 if shutdown_requested:
                     break
+                # Runaway detection: block if same action ran >5 times in 30 min
+                action_id = (action.data or {}).get('entry_id', str(action.id))
+                now_rd = time.time()
+                run_times = _action_run_log.get(action_id, [])
+                run_times = [t for t in run_times if now_rd - t < 1800]  # 30 min window
+                if len(run_times) >= 5:
+                    logger.error("RUNAWAY DETECTED: %s ran %d times in 30min — blocking. "
+                                 "Clear agent_runaway_blocked_%s sysconfig to resume.",
+                                 action_id, len(run_times), action_id)
+                    from tjai_app.models import SysConfig as SC
+                    SC.objects.update_or_create(
+                        key=f'agent_runaway_blocked_{action_id}',
+                        defaults={'value': str(len(run_times)), 'timestamp_modified': now_rd})
+                    continue
                 try:
                     execute_action(action)
+                    run_times.append(time.time())
+                    _action_run_log[action_id] = run_times
                 except Exception as e:
                     logger.error("Action %s failed: %s", action.id, e,
                                  exc_info=True)
