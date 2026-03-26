@@ -218,6 +218,75 @@
             });
         }
 
+        function renderTimePlot(scores, cums, chartRange) {
+            const W = 700, H = 120, pad = {l: 40, r: 20, t: 10, b: 25};
+            const plotW = W - pad.l - pad.r;
+            const plotH = H - pad.t - pad.b;
+            const {mn, mx} = chartRange;
+            const range = mx - mn || 1;
+
+            // Parse times as minutes since midnight for x positioning
+            const times = scores.map(s => {
+                const d = new Date(s.dt);
+                return d.getHours() * 60 + d.getMinutes();
+            });
+            const tMin = Math.min(...times) - 15;
+            const tMax = Math.max(...times) + 15;
+            const tRange = tMax - tMin || 1;
+
+            function x(t) { return pad.l + ((t - tMin) / tRange) * plotW; }
+            function y(v) { return pad.t + plotH - ((v - mn) / range) * plotH; }
+
+            // Zero line
+            const y0 = y(0);
+            let svg = `<svg width="${W}" height="${H}" style="display:block;margin-bottom:16px;">`;
+            // Grid: zero line
+            svg += `<line x1="${pad.l}" y1="${y0}" x2="${W-pad.r}" y2="${y0}" stroke="#555" stroke-dasharray="3,3"/>`;
+            // Y axis labels
+            svg += `<text x="${pad.l-5}" y="${y(mx)+4}" text-anchor="end" fill="#8a8a8a" font-size="10" font-family="monospace">+${mx}</text>`;
+            svg += `<text x="${pad.l-5}" y="${y(mn)+4}" text-anchor="end" fill="#8a8a8a" font-size="10" font-family="monospace">${mn}</text>`;
+            if (mn < 0 && mx > 0) {
+                svg += `<text x="${pad.l-5}" y="${y0+4}" text-anchor="end" fill="#555" font-size="10" font-family="monospace">0</text>`;
+            }
+
+            // Area fill: green above zero, red below
+            // Build path points starting from first score
+            const pts = scores.map((s, i) => ({
+                x: x(times[i]),
+                y: y(cums[i]),
+                cum: cums[i]
+            }));
+
+            // Draw filled area segments between zero line and curve
+            for (let i = 0; i < pts.length - 1; i++) {
+                const p1 = pts[i], p2 = pts[i+1];
+                const color = (p1.cum >= 0 && p2.cum >= 0) ? '#9ccc6530' :
+                              (p1.cum <= 0 && p2.cum <= 0) ? '#ef535030' : '#88888820';
+                svg += `<polygon points="${p1.x},${y0} ${p1.x},${p1.y} ${p2.x},${p2.y} ${p2.x},${y0}" fill="${color}"/>`;
+            }
+
+            // Line connecting points
+            const linePts = pts.map(p => `${p.x},${p.y}`).join(' ');
+            svg += `<polyline points="${linePts}" fill="none" stroke="#e0e0e0" stroke-width="1.5"/>`;
+
+            // Dots at each score
+            pts.forEach((p, i) => {
+                const sc = scores[i].score ?? scores[i].delta ?? 0;
+                const color = sc > 0 ? '#9ccc65' : sc < 0 ? '#ef5350' : '#8a8a8a';
+                svg += `<circle cx="${p.x}" cy="${p.y}" r="3" fill="${color}"/>`;
+            });
+
+            // X axis time labels (every 2 hours within range)
+            for (let m = Math.ceil(tMin/60)*60; m <= tMax; m += 120) {
+                const hr = Math.floor(m / 60);
+                const lbl = hr.toString().padStart(2,'0') + ':00';
+                svg += `<text x="${x(m)}" y="${H-3}" text-anchor="middle" fill="#8a8a8a" font-size="10" font-family="monospace">${lbl}</text>`;
+            }
+
+            svg += `</svg>`;
+            return svg;
+        }
+
         function renderScoreRow(s, chartRange) {
             // Normalize field names (agents may use score/cumulative or delta/cumul)
             const score = s.score ?? s.delta ?? 0;
@@ -283,6 +352,11 @@
 
                 if (data.summary) {
                     html += `<div class="assessment-summary">${escHtml(data.summary)}</div>`;
+                }
+
+                // Time-based plot across the top
+                if (scores.length > 0) {
+                    html += renderTimePlot(scores, cums, chartRange);
                 }
 
                 // Score table with inline chart bars
