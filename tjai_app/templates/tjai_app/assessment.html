@@ -489,9 +489,16 @@
             svg += `<text x="5" y="12" fill="#d8a070" font-size="11" font-family="monospace">${label}</text>`;
             // Zero line
             svg += `<line x1="${pad.l}" y1="${y0}" x2="${W-pad.r}" y2="${y0}" stroke="#555" stroke-dasharray="3,3"/>`;
-            // Y labels
-            svg += `<text x="${pad.l-5}" y="${y(mx)+4}" text-anchor="end" fill="#8a8a8a" font-size="10" font-family="monospace">${mx > 0 ? '+' : ''}${mx}</text>`;
-            svg += `<text x="${pad.l-5}" y="${y(mn)+4}" text-anchor="end" fill="#8a8a8a" font-size="10" font-family="monospace">${mn}</text>`;
+            // Y scale: ticks every 10 for endpoint, every 200 for integral
+            const tickStep = field === 'endpoint' ? 10 : 200;
+            const tickMin = Math.ceil(mn / tickStep) * tickStep;
+            const tickMax = Math.floor(mx / tickStep) * tickStep;
+            for (let tv = tickMin; tv <= tickMax; tv += tickStep) {
+                const ty = y(tv);
+                svg += `<line x1="${pad.l-3}" y1="${ty}" x2="${pad.l}" y2="${ty}" stroke="#8a8a8a"/>`;
+                svg += `<line x1="${pad.l}" y1="${ty}" x2="${W-pad.r}" y2="${ty}" stroke="#333" stroke-dasharray="2,4"/>`;
+                svg += `<text x="${pad.l-5}" y="${ty+3}" text-anchor="end" fill="#8a8a8a" font-size="9" font-family="monospace">${tv > 0 ? '+' : ''}${tv}</text>`;
+            }
 
             // Area fill
             for (let i = 0; i < days.length - 1; i++) {
@@ -509,7 +516,7 @@
             days.forEach((d, i) => {
                 const dotColor = vals[i] > 0 ? '#9ccc65' : vals[i] < 0 ? '#ef5350' : '#8a8a8a';
                 const eidSuffix = currentAssessor === 'gemini' ? '-gemini' : '';
-                svg += `<circle cx="${x(i)}" cy="${y(vals[i])}" r="3" fill="${dotColor}" style="cursor:pointer" onclick="selectDate('assessment-${d.date}${eidSuffix}')"/>`;
+                svg += `<circle cx="${x(i)}" cy="${y(vals[i])}" r="3" fill="${dotColor}" style="cursor:pointer" onclick="selectDate('assessment-${d.date}${eidSuffix}')"><title>${d.date}: ${vals[i]}</title></circle>`;
             });
 
             // Vertical marker: 1M context GA (2026-03-13)
