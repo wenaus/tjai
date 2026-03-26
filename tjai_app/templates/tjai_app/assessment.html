@@ -215,7 +215,8 @@
         }
 
         function renderDateList() {
-            let html = `<div class="date-item dashboard-item" data-entry-id="__dashboard__">Dashboard</div>`;
+            let html = `<div class="date-item dashboard-item" data-entry-id="__dashboard__">Dashboard</div>` +
+                `<div class="date-item" data-entry-id="assessment-system-prompt" style="font-size:11px;border-bottom:1px solid #333;margin-bottom:4px;padding-bottom:8px">System Prompt</div>`;
             for (const d of allDates) {
                 const isToday = d.date_key === todayKey;
                 const todayClass = isToday ? ' today' : '';
@@ -359,6 +360,20 @@
             if (entryId === '__dashboard__') {
                 return loadDashboard();
             }
+            if (entryId === 'assessment-system-prompt') {
+                // Not a date page — just show the content
+                document.getElementById('content-panel').innerHTML = '<div class="loading">Loading...</div>';
+                try {
+                    const r = await fetch(`/tjai/api/assessment/content?entry_id=${encodeURIComponent(entryId)}`);
+                    const d = await r.json();
+                    if (d.error) { document.getElementById('content-panel').innerHTML = `<div class="error">${d.error}</div>`; return; }
+                    document.getElementById('content-panel').innerHTML =
+                        `<div class="assessment-header"><h1>Assessment System Prompt</h1>` +
+                        `<a class="entry-link" href="/tjai/entry/?entry_id=${encodeURIComponent(entryId)}">[edit]</a></div>` +
+                        `<div class="md-content">${d.content_html}</div>`;
+                } catch(e) { document.getElementById('content-panel').innerHTML = '<div class="error">Error loading</div>'; }
+                return;
+            }
             document.getElementById('content-panel').innerHTML = '<div class="loading">Loading...</div>';
             try {
                 const resp = await fetch(`/tjai/api/assessment/content?entry_id=${encodeURIComponent(entryId)}`);
@@ -381,28 +396,19 @@
                     `<button class="btn-rerun" onclick="rerunAssessment('${escHtml(entryId)}', this)">Rerun</button>` +
                     `</div>`;
 
-                if (data.summary) {
-                    html += `<div class="assessment-summary">${escHtml(data.summary)}</div>`;
-                }
-
-                // Time-based plot across the top
                 if (scores.length > 0) {
+                    if (data.summary) {
+                        html += `<div class="assessment-summary">${escHtml(data.summary)}</div>`;
+                    }
                     html += renderTimePlot(scores, cums, chartRange);
+                    html += `<div class="score-row header">` +
+                        `<span>Time</span><span style="text-align:right">Score</span>` +
+                        `<span style="text-align:right">Cum</span><span>Event</span><span>Chart</span></div>`;
+                    for (const s of scores) {
+                        html += renderScoreRow(s, chartRange);
+                    }
                 }
 
-                // Score table with inline chart bars
-                html += `<div class="score-row header">` +
-                    `<span>Time</span><span style="text-align:right">Score</span>` +
-                    `<span style="text-align:right">Cum</span><span>Event</span><span>Chart</span></div>`;
-                for (const s of scores) {
-                    html += renderScoreRow(s, chartRange);
-                }
-
-                if (scores.length === 0) {
-                    html += `<div class="loading">No scored events for this date.</div>`;
-                }
-
-                // Observations (markdown content)
                 if (data.content_html) {
                     html += `<div class="md-content">${data.content_html}</div>`;
                 }

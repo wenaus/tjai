@@ -1313,10 +1313,9 @@ def api_assessment_dates(request):
     """Return list of assessment dates as JSON."""
     entries = Entry.objects.filter(
         data__entry_id__startswith='assessment-',
+        data__has_key='scores',
         kind='memory',
         deleted_at__isnull=True,
-    ).exclude(
-        data__entry_id__contains='-prompt'
     ).order_by('-data__date')
 
     tz = get_app_tz()
