@@ -87,6 +87,9 @@ def normalize_entry(entry):
             data.get('scores') != canonical_scores):
         changed = True
 
+    if entry.name:
+        changed = True
+
     if not changed:
         return False
 
@@ -102,7 +105,14 @@ def normalize_entry(entry):
         data.pop(old_key, None)
 
     entry.data = data
-    entry.save(update_fields=['data'])
+    update_fields = ['data']
+
+    # Clear name if AI set it (assessment entries use data.entry_id, not name)
+    if entry.name:
+        entry.name = None
+        update_fields.append('name')
+
+    entry.save(update_fields=update_fields)
     return True
 
 
