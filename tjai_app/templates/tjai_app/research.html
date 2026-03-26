@@ -317,8 +317,9 @@
                 }
                 if (isRunning) {
                     html += `<button class="btn-submit" style="color:#ef5350;border-color:#ef5350" onclick="abortAgent(this)">Abort</button>`;
-                } else if ((item.status === 'done' || item.status === 'blocked') && item.source !== 'multimodel') {
-                    // Model checkboxes for selective rerun
+                }
+                // Always show model checkboxes + rerun for base entries (not model sub-entries)
+                if (!isRunning && item.source !== 'multimodel') {
                     const mNames = {claude: 'Claude', gemini: 'Gemini', chatgpt: 'ChatGPT'};
                     const mColors = {done: '#9ccc65', active: '#ffd54f', blocked: '#ef5350'};
                     html += '<span style="margin-left:8px;font-size:11px">';
@@ -330,11 +331,7 @@
                     html += '</span>';
                     html += `<button class="btn-submit" onclick="rerunModels('${esc(item.entry_id)}', this)">Rerun</button>`;
                     html += `<button class="btn-submit" onclick="rerunItem('${esc(item.entry_id)}', this)">Rerun All</button>`;
-                } else if (item.status === 'done' || item.status === 'blocked') {
-                    html += `<button class="btn-submit" onclick="rerunItem('${esc(item.entry_id)}', this)">Rerun</button>`;
-                } else {
-                    const disabled = agentRunning ? ' disabled' : '';
-                    html += `<button class="btn-submit"${disabled} onclick="submitItem('${esc(item.entry_id)}', this)">Submit</button>`;
+                    html += `<button class="btn-submit" onclick="submitItem('${esc(item.entry_id)}', this)">Submit</button>`;
                 }
                 html += '</div>';
                 const topic = item.content.split('\n')[0];
