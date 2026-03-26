@@ -65,6 +65,7 @@ def check_loop_detection():
             WHERE source = 'agent_complete'
               AND timestamp >= %s
               AND extra_data->>'entry_id' IS NOT NULL
+              AND extra_data->>'action_id' != 'watchdog-escalation'
             GROUP BY eid
             HAVING COUNT(*) >= %s
         """, [cutoff, LOOP_MIN_DISPATCHES])

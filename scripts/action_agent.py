@@ -300,6 +300,8 @@ def _check_entry_flood():
     recent = Entry.objects.filter(
         timestamp_created__gte=cutoff,
         deleted_at__isnull=True,
+    ).exclude(
+        context_id='claude-code',
     ).values_list('content', flat=True)
 
     # Build word sets from first 200 chars of each entry

@@ -246,22 +246,21 @@ def main():
         ref_extra['tracking'] = tracking_uuid
     if duration_sec is not None:
         ref_extra['duration_sec'] = duration_sec
-    logger.info("%s: exit_code=%d, status=%s", action_id, exit_code, status,
-                extra=ref_extra)
 
-    # Log captured stderr from the claude subprocess (single aggregated entry)
+    # Read stderr before logging so we can consolidate into one log entry
     stderr_content = ''
     if stderr_file:
         try:
             stderr_content = open(stderr_file).read().strip()
             os.unlink(stderr_file)
-            if stderr_content:
-                log_fn = logger.error if exit_code not in (0, 124) else logger.info
-                log_fn("%s stderr:\n%s", action_id, stderr_content,
-                       extra=ref_extra)
         except Exception as e:
             logger.error("%s: failed to read stderr file %s: %s",
-                         action_id, stderr_file, e, extra=ref_extra)
+                         action_id, stderr_file, e)
+
+    stderr_summary = f"\n{stderr_content}" if stderr_content else ''
+    log_fn = logger.error if exit_code not in (0, 124) else logger.info
+    log_fn("%s: exit_code=%d, status=%s%s", action_id, exit_code, status,
+           stderr_summary, extra=ref_extra)
 
     # On timeout, wait for subagents before finalizing
     subagent_count = 0
@@ -349,9 +348,6 @@ def main():
                 update_fields.append('status')
             entry.data = data
             entry.save(update_fields=update_fields)
-            logger.info("%s: wrote run result to entry %s (duration=%ss, subagents=%d)",
-                        action_id, current_entry,
-                        duration, subagent_count, extra=ref_extra)
         except Exception as e:
             logger.error("%s: failed to write run result: %s",
                          action_id, e, extra=ref_extra)
