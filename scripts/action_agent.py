@@ -465,6 +465,24 @@ def _check_agent_health():
                     SysConfig.objects.update_or_create(
                         key=key,
                         defaults={'value': value, 'timestamp_modified': now})
+                # Mark the stuck entry as blocked
+                entry_uuid = SysConfig.objects.filter(
+                    key=f'agent_{action_id}_entry'
+                ).values_list('value', flat=True).first()
+                if entry_uuid:
+                    stuck = Entry.objects.filter(
+                        id=entry_uuid, deleted_at__isnull=True,
+                        status='active',
+                    ).first()
+                    if stuck:
+                        stuck.status = 'blocked'
+                        sd = stuck.data if isinstance(stuck.data, dict) else {}
+                        sd['run_status'] = 'failed'
+                        sd['run_error'] = error_msg
+                        stuck.data = sd
+                        stuck.save(update_fields=['status', 'data'])
+                        logger.warning("%s: marked entry %s as blocked",
+                                       action_id, entry_uuid)
                 # Reset counter
                 SysConfig.objects.filter(key=stale_key).delete()
             else:
