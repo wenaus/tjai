@@ -46,6 +46,7 @@ urlpatterns = [
     path("api/assessment/dates", views.api_assessment_dates, name="api_assessment_dates"),
     path("api/assessment/content", views.api_assessment_content, name="api_assessment_content"),
     path("api/assessment/rerun", views.api_assessment_rerun, name="api_assessment_rerun"),
+    path("api/assessment/dashboard", views.api_assessment_dashboard, name="api_assessment_dashboard"),
     path("git/", views.git_activity, name="git_activity"),
     path("api/git/data", views.git_activity_data, name="git_activity_data"),
     path("agent-log/", views.agent_log, name="agent_log"),

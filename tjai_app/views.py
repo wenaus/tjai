@@ -1446,6 +1446,83 @@ def api_assessment_rerun(request):
 
 
 @login_required
+def api_assessment_dashboard(request):
+    """Return dashboard data: daily trends and session breakdowns."""
+    entries = Entry.objects.filter(
+        data__entry_id__startswith='assessment-',
+        kind='memory',
+        deleted_at__isnull=True,
+    ).exclude(data__entry_id__contains='-prompt').order_by('data__date')
+
+    SESSION_GAP = 30 * 60  # 30 min gap = new session
+
+    days = []
+    for entry in entries:
+        data = entry.data if isinstance(entry.data, dict) else {}
+        scores = data.get('scores', [])
+        date_str = data.get('date', '')
+        if not date_str:
+            continue
+        endpoint = data.get('final_cumulative', 0)
+        integral = data.get('integral', 0)
+
+        # Infer sessions from time gaps in scores
+        sessions = []
+        current_session = []
+        for s in scores:
+            dt_str = s.get('dt', '')
+            if not dt_str:
+                current_session.append(s)
+                continue
+            if current_session:
+                prev_dt = current_session[-1].get('dt', '')
+                if prev_dt and dt_str:
+                    try:
+                        from dateutil.parser import parse as dtparse
+                        gap = (dtparse(dt_str) - dtparse(prev_dt)).total_seconds()
+                        if gap > SESSION_GAP:
+                            sessions.append(current_session)
+                            current_session = []
+                    except Exception:
+                        pass
+            current_session.append(s)
+        if current_session:
+            sessions.append(current_session)
+
+        session_summaries = []
+        for sess in sessions:
+            net = sum(s.get('score', 0) for s in sess)
+            sess_integral = sum(s.get('cumulative', 0) for s in sess)
+            first_dt = sess[0].get('dt', '')
+            last_dt = sess[-1].get('dt', '') if len(sess) > 1 else first_dt
+            try:
+                from dateutil.parser import parse as dtparse
+                dur_sec = (dtparse(last_dt) - dtparse(first_dt)).total_seconds()
+                dur_min = int(dur_sec / 60)
+            except Exception:
+                dur_min = 0
+            session_summaries.append({
+                'start': first_dt,
+                'end': last_dt,
+                'duration_min': dur_min,
+                'events': len(sess),
+                'net': net,
+                'integral': sess_integral,
+                'precis': data.get('session_precis', {}).get(first_dt, ''),
+            })
+
+        days.append({
+            'date': date_str,
+            'endpoint': endpoint,
+            'integral': integral,
+            'scored_events': len(scores),
+            'sessions': session_summaries,
+        })
+
+    return JsonResponse({'days': days})
+
+
+@login_required
 def git_activity(request):
     """Git activity page — reverse chronological from daily files."""
     return render(request, 'tjai_app/git_activity.html')

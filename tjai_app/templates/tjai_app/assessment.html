@@ -126,6 +126,22 @@
         .agent-idle { color: #8a8a8a; }
         .agent-running { color: #ffd54f; }
         .agent-failed { color: #ef5350; }
+        .date-item.dashboard-item {
+            color: #d8a070; font-weight: bold;
+            border-bottom: 1px solid #333;
+            margin-bottom: 4px; padding-bottom: 8px;
+        }
+        .session-row {
+            display: grid;
+            grid-template-columns: 80px 50px 50px 50px 1fr;
+            gap: 8px; padding: 3px 0;
+            border-bottom: 1px solid #222;
+            font-size: 12px;
+        }
+        .session-row.header { color: #d8a070; font-size: 11px; border-bottom: 1px solid #444; }
+        .session-dur { color: #8a8a8a; }
+        .session-net { font-weight: bold; }
+        .session-precis { color: #e0e0e0; }
 
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #1a1a1a; }
@@ -180,16 +196,16 @@
                 todayKey = data.today_key || '';
                 updateBanner(data.agent);
                 renderDateList();
-                if (allDates.length > 0) {
-                    const params = new URLSearchParams(window.location.search);
-                    let target = params.get('entry_id');
-                    if (!target && todayKey) {
-                        const todayEntry = allDates.find(d => d.date_key === todayKey);
-                        target = todayEntry ? todayEntry.entry_id : allDates[0].entry_id;
-                    }
-                    target = target || allDates[0].entry_id;
+                const params = new URLSearchParams(window.location.search);
+                let target = params.get('entry_id');
+                if (!target) {
+                    target = '__dashboard__';
+                }
+                if (target === '__dashboard__') {
+                    selectDate('__dashboard__');
+                } else if (allDates.length > 0) {
                     const found = allDates.find(d => d.entry_id === target);
-                    selectDate(found ? target : allDates[0].entry_id);
+                    selectDate(found ? target : '__dashboard__');
                 }
             } catch (e) {
                 document.getElementById('date-list').innerHTML = '<div class="error">Error loading dates</div>';
@@ -197,7 +213,7 @@
         }
 
         function renderDateList() {
-            let html = '';
+            let html = `<div class="date-item dashboard-item" data-entry-id="__dashboard__">Dashboard</div>`;
             for (const d of allDates) {
                 const isToday = d.date_key === todayKey;
                 const todayClass = isToday ? ' today' : '';
@@ -338,6 +354,9 @@
             document.querySelectorAll('.date-item').forEach(el => {
                 el.classList.toggle('selected', el.dataset.entryId === entryId);
             });
+            if (entryId === '__dashboard__') {
+                return loadDashboard();
+            }
             document.getElementById('content-panel').innerHTML = '<div class="loading">Loading...</div>';
             try {
                 const resp = await fetch(`/tjai/api/assessment/content?entry_id=${encodeURIComponent(entryId)}`);
@@ -389,6 +408,122 @@
                 document.getElementById('content-panel').innerHTML = html;
             } catch (e) {
                 document.getElementById('content-panel').innerHTML = '<div class="error">Error loading assessment</div>';
+            }
+        }
+
+        function renderDailyPlot(days, field, label, color) {
+            if (!days || days.length === 0) return '';
+            const W = 700, H = 130, pad = {l: 50, r: 20, t: 15, b: 30};
+            const plotW = W - pad.l - pad.r;
+            const plotH = H - pad.t - pad.b;
+            const vals = days.map(d => d[field]);
+            const mx = Math.max(...vals, 1);
+            const mn = Math.min(...vals, -1);
+            const range = mx - mn || 1;
+            function x(i) { return pad.l + (i / Math.max(days.length - 1, 1)) * plotW; }
+            function y(v) { return pad.t + plotH - ((v - mn) / range) * plotH; }
+            const y0 = y(0);
+
+            let svg = `<svg width="${W}" height="${H}" style="display:block;margin-bottom:8px;">`;
+            svg += `<text x="5" y="12" fill="#d8a070" font-size="11" font-family="monospace">${label}</text>`;
+            // Zero line
+            svg += `<line x1="${pad.l}" y1="${y0}" x2="${W-pad.r}" y2="${y0}" stroke="#555" stroke-dasharray="3,3"/>`;
+            // Y labels
+            svg += `<text x="${pad.l-5}" y="${y(mx)+4}" text-anchor="end" fill="#8a8a8a" font-size="10" font-family="monospace">${mx > 0 ? '+' : ''}${mx}</text>`;
+            svg += `<text x="${pad.l-5}" y="${y(mn)+4}" text-anchor="end" fill="#8a8a8a" font-size="10" font-family="monospace">${mn}</text>`;
+
+            // Area fill
+            for (let i = 0; i < days.length - 1; i++) {
+                const v1 = vals[i], v2 = vals[i+1];
+                const fillColor = (v1 >= 0 && v2 >= 0) ? '#9ccc6530' :
+                                  (v1 <= 0 && v2 <= 0) ? '#ef535030' : '#88888820';
+                svg += `<polygon points="${x(i)},${y0} ${x(i)},${y(v1)} ${x(i+1)},${y(v2)} ${x(i+1)},${y0}" fill="${fillColor}"/>`;
+            }
+
+            // Line
+            const pts = days.map((d, i) => `${x(i)},${y(vals[i])}`).join(' ');
+            svg += `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5"/>`;
+
+            // Dots
+            days.forEach((d, i) => {
+                const dotColor = vals[i] > 0 ? '#9ccc65' : vals[i] < 0 ? '#ef5350' : '#8a8a8a';
+                svg += `<circle cx="${x(i)}" cy="${y(vals[i])}" r="3" fill="${dotColor}" style="cursor:pointer" onclick="selectDate('assessment-${d.date}')"/>`;
+            });
+
+            // X labels (every Nth day)
+            const step = Math.max(1, Math.floor(days.length / 10));
+            for (let i = 0; i < days.length; i += step) {
+                const lbl = days[i].date.substring(5); // MM-DD
+                svg += `<text x="${x(i)}" y="${H-3}" text-anchor="middle" fill="#8a8a8a" font-size="9" font-family="monospace">${lbl}</text>`;
+            }
+            // Always label last day
+            if (days.length > 1) {
+                const last = days.length - 1;
+                svg += `<text x="${x(last)}" y="${H-3}" text-anchor="end" fill="#8a8a8a" font-size="9" font-family="monospace">${days[last].date.substring(5)}</text>`;
+            }
+
+            svg += `</svg>`;
+            return svg;
+        }
+
+        async function loadDashboard() {
+            document.getElementById('content-panel').innerHTML = '<div class="loading">Loading dashboard...</div>';
+            try {
+                const resp = await fetch('/tjai/api/assessment/dashboard');
+                const data = await resp.json();
+                if (data.error) {
+                    document.getElementById('content-panel').innerHTML = `<div class="error">${data.error}</div>`;
+                    return;
+                }
+                const days = data.days || [];
+                let html = `<h1 style="color:#d8a070;font-size:18px;margin-bottom:16px">AI Performance Dashboard</h1>`;
+
+                if (days.length === 0) {
+                    html += '<div class="loading">No assessments yet.</div>';
+                    document.getElementById('content-panel').innerHTML = html;
+                    return;
+                }
+
+                // Daily endpoint plot
+                html += renderDailyPlot(days, 'endpoint', 'Daily Endpoint', '#e0e0e0');
+                // Daily integral plot
+                html += renderDailyPlot(days, 'integral', 'Daily Integral', '#ce93d8');
+
+                // Session list — all sessions, reverse chronological
+                html += `<h2 style="color:#d8a070;font-size:15px;margin:20px 0 8px">Sessions</h2>`;
+                html += `<div class="session-row header">` +
+                    `<span>Date</span><span>Dur</span><span>Net</span><span>Intg</span><span>Precis</span></div>`;
+
+                // Flatten all sessions with their dates, reverse order
+                const allSessions = [];
+                for (const day of days) {
+                    for (const sess of (day.sessions || [])) {
+                        allSessions.push({...sess, date: day.date});
+                    }
+                }
+                allSessions.reverse();
+
+                for (const s of allSessions) {
+                    const netClass = s.net > 0 ? 'pos' : s.net < 0 ? 'neg' : 'zero';
+                    const netStr = s.net > 0 ? '+' + s.net : '' + s.net;
+                    const intgClass = s.integral > 0 ? 'pos' : s.integral < 0 ? 'neg' : 'zero';
+                    const intgStr = s.integral > 0 ? '+' + s.integral : '' + s.integral;
+                    const durStr = s.duration_min > 0 ? s.duration_min + 'm' : '<1m';
+                    const dateShort = s.date.substring(5); // MM-DD
+                    const startTime = s.start ? new Date(s.start).toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit',hour12:false}) : '';
+                    const precis = s.precis || `${s.events} events`;
+                    html += `<div class="session-row">` +
+                        `<span class="session-dur" style="cursor:pointer" onclick="selectDate('assessment-${s.date}')">${dateShort} ${startTime}</span>` +
+                        `<span class="session-dur">${durStr}</span>` +
+                        `<span class="session-net ${netClass}">${netStr}</span>` +
+                        `<span class="session-net ${intgClass}">${intgStr}</span>` +
+                        `<span class="session-precis">${escHtml(precis)}</span>` +
+                        `</div>`;
+                }
+
+                document.getElementById('content-panel').innerHTML = html;
+            } catch (e) {
+                document.getElementById('content-panel').innerHTML = '<div class="error">Error loading dashboard</div>';
             }
         }
 
