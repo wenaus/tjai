@@ -46,7 +46,8 @@ def normalize_entry(entry):
 
     changed = False
 
-    # Normalize each score object
+    # Sort by timestamp, then normalize each score object
+    scores.sort(key=lambda s: _pick(s, DT_KEYS, ''))
     canonical_scores = []
     running_cum = 0
     for s in scores:
@@ -55,12 +56,9 @@ def normalize_entry(entry):
         dt_val = _pick(s, DT_KEYS, '')
         precis_val = _pick(s, PRECIS_KEYS, '')
 
-        # Recompute cumulative if missing
-        if cum_val is None:
-            running_cum += score_val
-            cum_val = running_cum
-        else:
-            running_cum = cum_val
+        # Always recompute cumulative (sort may have changed order)
+        running_cum += score_val
+        cum_val = running_cum
 
         canonical = {
             'dt': dt_val,
