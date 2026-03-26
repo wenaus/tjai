@@ -209,8 +209,7 @@
                 const intgStr = intg > 0 ? '+' + intg : '' + intg;
                 html += `<div class="date-item${todayClass}" data-entry-id="${d.entry_id}" data-date-key="${d.date_key}">` +
                     `<span>${d.date_display}</span>` +
-                    `<span><span class="date-score ${scoreClass}">${scoreStr}</span> ` +
-                    `<span class="date-score ${intgClass}" style="font-size:10px;opacity:0.7">${intgStr}</span></span>` +
+                    `<span class="date-score"><span class="${scoreClass}">${scoreStr}</span> <span class="${intgClass}">${intgStr}</span></span>` +
                     `</div>`;
             }
             document.getElementById('date-list').innerHTML = html || '<div class="loading">No assessments found.</div>';
