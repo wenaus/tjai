@@ -1003,6 +1003,35 @@ def dashboard_status(request):
             'all_tags': entry_tags,
         })
 
+    # Inject recent ERROR-level logs as pseudo-entries (first page only),
+    # sorted into proper time order with real entries
+    if offset == 0:
+        from django.utils import timezone as _tz
+        error_cutoff = _tz.now() - timedelta(hours=24)
+        error_logs = AppLog.objects.filter(
+            level__gte=40,  # ERROR and above
+            timestamp__gte=error_cutoff,
+        ).order_by('-timestamp')[:10]
+        for log in error_logs:
+            log_ts = log.timestamp.astimezone(app_tz)
+            recent_entries.append({
+                'id': f'log-{log.id}',
+                'content': log.message[:200] if log.message else '',
+                'kind': 'log',
+                'timestamp': log.timestamp.timestamp(),
+                'date_display': log_ts.strftime('%a %m/%d/%H:%M'),
+                'context': log.source,
+                'status': 'blocked',
+                'entry_id': None,
+                'name': None,
+                'nickname': None,
+                'priority': None,
+                'event_date_display': None,
+                'all_tags': [],
+            })
+        if error_logs:
+            recent_entries.sort(key=lambda e: e.get('timestamp', 0), reverse=True)
+
     has_more = len(recent_entries) == DASHBOARD_PAGE
     total_count = offset + len(recent_entries) + (1 if has_more else 0)  # approximate, avoid full count
 
