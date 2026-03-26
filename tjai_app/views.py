@@ -1592,7 +1592,9 @@ def _refresh_recent_git_daily():
             if not result.stdout.strip():
                 continue
 
-            lines = []
+            # Parse commits, determine subdir for monorepos
+            is_monorepo = label == 'tjrepo'
+            commit_groups = {}  # subdir -> [md_lines]
             for chunk in result.stdout.split('\x01'):
                 chunk = chunk.strip()
                 if not chunk:
@@ -1604,7 +1606,7 @@ def _refresh_recent_git_daily():
                 subject = parts[1].strip()
                 body = parts[2].strip() if len(parts) > 2 else ''
                 url = f'{github_url}/commit/{sha}'
-                lines.append(f'- [{subject}]({url})')
+                md = [f'- [{subject}]({url})']
                 if body:
                     for bl in body.split('\n'):
                         bl = bl.strip()
@@ -1612,10 +1614,31 @@ def _refresh_recent_git_daily():
                             bl = bl.lstrip('- ')
                             if len(bl) > 90:
                                 bl = bl[:87] + '...'
-                            lines.append(f'  - {bl}')
+                            md.append(f'  - {bl}')
                             break
-            if lines:
-                all_lines.append(f'**{label}**')
+
+                # Determine group label
+                grp = label
+                if is_monorepo:
+                    try:
+                        dr = subprocess.run(
+                            ['git', '-c', 'safe.directory=*', 'diff-tree',
+                             '--no-commit-id', '--name-only', '-r', sha],
+                            capture_output=True, timeout=5, cwd=repo_path,
+                            encoding='utf-8', errors='replace',
+                        )
+                        counts = {}
+                        for f in dr.stdout.strip().split('\n'):
+                            d = f.split('/')[0] if '/' in f else '(root)'
+                            counts[d] = counts.get(d, 0) + 1
+                        if counts:
+                            grp = max(counts, key=counts.get)
+                    except Exception:
+                        pass
+                commit_groups.setdefault(grp, []).extend(md)
+
+            for grp, lines in commit_groups.items():
+                all_lines.append(f'**{grp}**')
                 all_lines.extend(lines)
                 all_lines.append('')
 
