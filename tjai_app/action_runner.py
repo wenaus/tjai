@@ -488,10 +488,9 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
                 defaults={'value': str(proc.pid),
                           'timestamp_modified': now_ts})
 
-    # Save base entry tracking
+    # Save base entry tracking (model entries track their own status)
     base_entry.data = base_data
-    base_entry.status = 'active'  # models dispatched, awaiting results
-    base_entry.save(update_fields=['data', 'status'])
+    base_entry.save(update_fields=['data'])
 
 
 def update_last_run(action):
