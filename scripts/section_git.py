@@ -19,12 +19,20 @@ REPOS = [
     (Path('/home/admin/github/swf-remote'), 'https://github.com/BNLNPPS/swf-remote', 'swf-remote'),
     (Path('/home/admin/github/BNLNPPS.github.io'), 'https://github.com/BNLNPPS/BNLNPPS.github.io', 'BNLNPPS.github.io'),
 ]
+# Monorepo: attribute commits to top-level subdirectory instead of repo name
+MONOREPO_SUBDIRS = {
+    'tjrepo': True,  # repos listed here get per-subdir attribution
+}
 
 logger = logging.getLogger('section_git')
 
 
 def _repo_commits(repo_dir, github_url, since_iso, until_iso=None):
-    """Return list of markdown lines for commits in one repo, or empty list."""
+    """Return list of (label, markdown_lines) for commits in one repo.
+
+    For monorepos, label is the top-level subdirectory. Otherwise repo name.
+    Returns list of (label, [line, ...]) tuples.
+    """
     try:
         cmd = ['git', 'log', f'--since={since_iso}',
                '--format=%H%x00%s%x00%b%x01']
@@ -41,7 +49,7 @@ def _repo_commits(repo_dir, github_url, since_iso, until_iso=None):
     if not result.stdout.strip():
         return []
 
-    lines = []
+    commits = []
     for chunk in result.stdout.split('\x01'):
         chunk = chunk.strip()
         if not chunk:
@@ -54,7 +62,7 @@ def _repo_commits(repo_dir, github_url, since_iso, until_iso=None):
         body = parts[2].strip() if len(parts) > 2 else ''
 
         url = f'{github_url}/commit/{sha}'
-        lines.append(f'- [{subject}]({url})')
+        md_lines = [f'- [{subject}]({url})']
 
         # First substantive body line as a nested sub-item
         if body:
@@ -64,10 +72,41 @@ def _repo_commits(repo_dir, github_url, since_iso, until_iso=None):
                     bl = bl.lstrip('- ')
                     if len(bl) > 90:
                         bl = bl[:87] + '...'
-                    lines.append(f'  - {bl}')
+                    md_lines.append(f'  - {bl}')
                     break
 
-    return lines
+        commits.append((sha, md_lines))
+
+    return commits
+
+
+def _commit_subdir(repo_dir, sha):
+    """Determine the primary top-level subdirectory for a commit."""
+    try:
+        result = subprocess.run(
+            ['git', 'diff-tree', '--no-commit-id', '--name-only', '-r', sha],
+            capture_output=True, text=True, timeout=5, cwd=repo_dir,
+        )
+        counts = {}
+        for f in result.stdout.strip().split('\n'):
+            d = f.split('/')[0] if '/' in f else '(root)'
+            counts[d] = counts.get(d, 0) + 1
+        if not counts:
+            return None
+        # Return the subdirectory with the most changed files
+        return max(counts, key=counts.get)
+    except Exception:
+        return None
+
+
+def _group_commits_by_subdir(repo_dir, commits):
+    """Group commits by top-level subdirectory. Returns {label: [md_lines]}."""
+    from collections import OrderedDict
+    groups = OrderedDict()
+    for sha, md_lines in commits:
+        subdir = _commit_subdir(repo_dir, sha) or 'other'
+        groups.setdefault(subdir, []).extend(md_lines)
+    return groups
 
 
 def build(since_ts, target_date):
@@ -87,9 +126,16 @@ def build(since_ts, target_date):
             logger.warning("git pull failed for %s: %s", label, e)
         commits = _repo_commits(repo_dir, github_url, since_iso)
         if commits:
-            all_lines.append(f'**{label}**')
-            all_lines.extend(commits)
-            all_lines.append('')
+            if label in MONOREPO_SUBDIRS:
+                for subdir, md_lines in _group_commits_by_subdir(repo_dir, commits).items():
+                    all_lines.append(f'**{subdir}**')
+                    all_lines.extend(md_lines)
+                    all_lines.append('')
+            else:
+                all_lines.append(f'**{label}**')
+                for _, md_lines in commits:
+                    all_lines.extend(md_lines)
+                all_lines.append('')
 
     body = '\n'.join(all_lines).rstrip() if all_lines else None
 
@@ -125,9 +171,16 @@ def backfill(days=60):
                 continue
             commits = _repo_commits(repo_dir, github_url, since_iso, until_iso)
             if commits:
-                all_lines.append(f'**{label}**')
-                all_lines.extend(commits)
-                all_lines.append('')
+                if label in MONOREPO_SUBDIRS:
+                    for subdir, md_lines in _group_commits_by_subdir(repo_dir, commits).items():
+                        all_lines.append(f'**{subdir}**')
+                        all_lines.extend(md_lines)
+                        all_lines.append('')
+                else:
+                    all_lines.append(f'**{label}**')
+                    for _, md_lines in commits:
+                        all_lines.extend(md_lines)
+                    all_lines.append('')
         content = ('\n'.join(all_lines).rstrip() + '\n') if all_lines else ''
         old_umask = os.umask(0)
         try:
