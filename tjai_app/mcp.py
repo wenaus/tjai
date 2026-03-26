@@ -295,6 +295,40 @@ async def get_memories(
 
 
 @mcp.tool()
+async def get_dialog(
+    host: str,
+    start_date: str = None,
+    end_date: str = None,
+    max_content_length: int = 200,
+) -> list:
+    """
+    Get Claude Code dialog turns for a host and time range.
+
+    Retrieves recorded human-AI dialog turns ordered chronologically.
+    Use this to review prior session dialog for continuity or assessment.
+
+    To get your local hostname: read ~/.tjai/config.json field "location_name".
+
+    Args:
+        host: Hostname to retrieve dialog for (e.g. 'ec2dev', 'MacbookPro'),
+              or 'all' for all hosts.
+        start_date: Start of date range (YYYYMMDD, ISO format, or natural language
+                    like '1d', '7d', 'yesterday', 'monday'). Required.
+        end_date: End of date range. Optional — defaults to now.
+        max_content_length: Truncate content to this many chars. Default: 200.
+                           Pass 0 for full content (use sparingly on large ranges).
+
+    Returns:
+        List of dialog turns ordered chronologically, each containing:
+        timestamp, role (user/assistant), hostname, content.
+    """
+    return await sync_to_async(services.get_dialog)(
+        host=host, start_date=start_date, end_date=end_date,
+        max_content_length=max_content_length,
+    )
+
+
+@mcp.tool()
 async def get_bookmarks(
     context: str = None,
     limit: int = 50,

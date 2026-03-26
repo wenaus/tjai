@@ -595,6 +595,41 @@ def get_memories(context=None, limit=50, start_date=None, end_date=None, max_con
     return [_format_entry(entry, max_content_length=max_content_length) for entry in qs]
 
 
+def get_dialog(host, start_date=None, end_date=None, max_content_length=200):
+    if not host:
+        return {"error": "host is required (e.g. 'ec2dev', 'MacbookPro', or 'all')"}
+    if not start_date:
+        return {"error": "start_date is required"}
+
+    dialog_ids = Tag.objects.filter(tag_name='ccdialog').values_list('entry_id', flat=True)
+    qs = Entry.objects.filter(
+        id__in=dialog_ids,
+        deleted_at__isnull=True,
+    )
+    if host != 'all':
+        qs = qs.filter(data__hostname=host)
+
+    qs, err = _apply_date_filter(qs, start_date, end_date)
+    if err:
+        return err
+
+    qs = qs.order_by('timestamp_created')
+    tz = get_app_tz()
+    turns = []
+    for e in qs:
+        data = e.data if isinstance(e.data, dict) else {}
+        content = e.content
+        if max_content_length and len(content) > max_content_length:
+            content = content[:max_content_length] + '…'
+        turns.append({
+            'timestamp': datetime.fromtimestamp(e.timestamp_created, tz=tz).isoformat(),
+            'role': data.get('role', 'unknown'),
+            'hostname': data.get('hostname', ''),
+            'content': content,
+        })
+    return turns
+
+
 def get_bookmarks(context=None, limit=50, start_date=None, end_date=None, max_content_length=200):
     if not isinstance(limit, int) or limit < 1:
         return {"error": f"limit must be a positive integer, got {limit}"}

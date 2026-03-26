@@ -39,7 +39,7 @@ if not logger.handlers:
     _sh.setFormatter(_fmt)
     logger.addHandler(_sh)
 
-CLAUDE_TIMEOUT = 1200  # 20 minutes
+CLAUDE_TIMEOUT = 1800  # 30 minutes
 
 
 # Import shared functions from assessment_gemini (dialog fetch, prompt build, entry write)
