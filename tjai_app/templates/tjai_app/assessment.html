@@ -140,6 +140,8 @@
         }
         .session-row.header { color: #d8a070; font-size: 11px; border-bottom: 1px solid #444; }
         .session-dur { color: #8a8a8a; }
+        .session-dur.pos { color: #9ccc65; }
+        .session-dur.neg { color: #ef5350; }
         .session-net { font-weight: bold; }
         .session-precis { color: #e0e0e0; }
 
@@ -512,9 +514,13 @@
                     const dateShort = s.date.substring(5); // MM-DD
                     const startTime = s.start ? new Date(s.start).toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit',hour12:false}) : '';
                     const precis = s.precis || `${s.events} events`;
+                    // Color date+dur when net and integral agree on direction
+                    const bothPos = s.net > 0 && s.integral > 0;
+                    const bothNeg = s.net < 0 && s.integral < 0;
+                    const rowColor = bothPos ? 'pos' : bothNeg ? 'neg' : '';
                     html += `<div class="session-row">` +
-                        `<span class="session-dur" style="cursor:pointer" onclick="selectDate('assessment-${s.date}')">${dateShort} ${startTime}</span>` +
-                        `<span class="session-dur">${durStr}</span>` +
+                        `<span class="session-dur ${rowColor}" style="cursor:pointer" onclick="selectDate('assessment-${s.date}')">${dateShort} ${startTime}</span>` +
+                        `<span class="session-dur ${rowColor}">${durStr}</span>` +
                         `<span class="session-net ${netClass}">${netStr}</span>` +
                         `<span class="session-net ${intgClass}">${intgStr}</span>` +
                         `<span class="session-precis">${escHtml(precis)}</span>` +
