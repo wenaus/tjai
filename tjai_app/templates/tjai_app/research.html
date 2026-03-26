@@ -256,9 +256,6 @@
                     banner.className = 'agent-banner agent-running';
                     banner.innerHTML = `<span class="activity-dot ${dotClass}"></span>Agent: <strong>running</strong> ${esc(entryName)}${dur}${activityInfo}${procInfo}${logLink}`;
                 }
-            } else if (agent.status === 'failed') {
-                banner.className = 'agent-banner agent-failed';
-                banner.innerHTML = '<span class="activity-dot dot-stale"></span>Agent: <strong>failed</strong>';
             } else {
                 banner.className = 'agent-banner agent-idle';
                 let text = '<span class="activity-dot dot-off"></span>Agent: idle';
