@@ -414,6 +414,17 @@ def main():
         except Exception as e:
             logger.error("ideation-agent: failed to post-process ideation: %s", e)
 
+    # Post-process assessment: normalize field names to canonical schema
+    if action_id == 'llm-assessment' and exit_code in (0, 124):
+        try:
+            from normalize_assessment import normalize_date
+            from tjai_app.services import get_timezone
+            from datetime import datetime
+            date_str = datetime.now(get_timezone()).date().isoformat()
+            normalize_date(date_str)
+        except Exception as e:
+            logger.error("llm-assessment: normalize failed: %s", e)
+
     # Research-agent post-processing: model completion first, then queue drain.
     # Order matters — synthesis must set next_target before queue drain overwrites it.
     if action_id == 'research-agent' and exit_code in (0, 124):
