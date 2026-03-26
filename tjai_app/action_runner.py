@@ -134,11 +134,13 @@ def get_template_vars(target_date):
     """Build template variables from target date."""
     tz = services.get_timezone()
     today = datetime.now(tz).date()
+    next_day = target_date + timedelta(days=1)
     return {
         'mm-dd': target_date.strftime('%m-%d'),
         'yyyymmdd': target_date.strftime('%Y%m%d'),
         'yyyy-mm-dd': target_date.strftime('%Y-%m-%d'),
         'date_str': target_date.strftime('%a %b %-d, %Y'),
+        'next-day-yyyy-mm-dd': next_day.strftime('%Y-%m-%d'),
         # Today's date (for health reports that look backward, not forward)
         'today-yyyy-mm-dd': today.isoformat(),
         'today-yyyymmdd': today.strftime('%Y%m%d'),
@@ -320,7 +322,8 @@ def dispatch_ai(action, entry_id=None, target_date=None):
             data__entry_id=system_prompt_entry_id_id, deleted_at__isnull=True
         ).first()
         if sp_entry:
-            env['TJAI_SYSTEM_PROMPT'] = sp_entry.content
+            env['TJAI_SYSTEM_PROMPT'] = resolve_prompt_template(
+                sp_entry.content, target_date=target_date)
         else:
             logger.error("System prompt entry '%s' not found — agent will run without it",
                          system_prompt_entry_id_id)

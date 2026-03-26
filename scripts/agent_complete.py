@@ -493,9 +493,9 @@ def _assessment_backfill_chain(now):
     today = datetime.now(tz).date()
 
     # Parse flag: mode or mode:last_date
+    # Both modes always re-assess (overwrite existing entries)
     parts = backfill.value.split(':', 1)
-    mode = parts[0]  # 'overwrite' or '1'
-    overwrite = mode == 'overwrite'
+    mode = parts[0]
 
     if len(parts) > 1 and parts[1]:
         try:
@@ -526,21 +526,9 @@ def _assessment_backfill_chain(now):
         ).exists()
 
         if not has_dialog:
-            logger.info("assessment backfill: no dialog for %s, stopping", date_str)
-            backfill.value = ''
-            backfill.timestamp_modified = now
-            backfill.save(update_fields=['value', 'timestamp_modified'])
-            return
-
-        # In non-overwrite mode, skip existing assessments
-        if not overwrite:
-            existing = Entry.objects.filter(
-                data__entry_id=f'assessment-{date_str}',
-                deleted_at__isnull=True,
-            ).exists()
-            if existing:
-                candidate -= timedelta(days=1)
-                continue
+            logger.info("assessment backfill: no dialog for %s, skipping", date_str)
+            candidate -= timedelta(days=1)
+            continue
 
         # Found a date to assess — update flag with progress marker, then queue
         backfill.value = f'{mode}:{date_str}'
