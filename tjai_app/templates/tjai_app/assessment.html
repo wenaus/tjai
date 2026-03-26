@@ -126,6 +126,16 @@
         .agent-idle { color: #8a8a8a; }
         .agent-running { color: #ffd54f; }
         .agent-failed { color: #ef5350; }
+        .assessor-toggle {
+            display: inline-flex; gap: 0; margin-left: 12px; vertical-align: middle;
+        }
+        .assessor-btn {
+            background: #333; color: #8a8a8a; border: 1px solid #555;
+            padding: 3px 12px; cursor: pointer; font-family: inherit; font-size: 11px;
+        }
+        .assessor-btn:first-child { border-radius: 10px 0 0 10px; }
+        .assessor-btn:last-child { border-radius: 0 10px 10px 0; border-left: none; }
+        .assessor-btn.active { background: #444; color: #e0e0e0; font-weight: bold; }
         .date-item.dashboard-item {
             color: #d8a070; font-weight: bold;
             border-bottom: 1px solid #333;
@@ -154,7 +164,13 @@
 </head>
 <body>
     {% with current_page="assessment" %}{% include "tjai_app/_menu.html" %}{% endwith %}
-    <div class="agent-banner agent-idle" id="agent-banner">Agent: loading...</div>
+    <div class="agent-banner agent-idle" id="agent-banner">
+        <span id="agent-status-text">Agent: loading...</span>
+        <span class="assessor-toggle">
+            <button class="assessor-btn active" data-assessor="claude" onclick="switchAssessor('claude')">Claude</button>
+            <button class="assessor-btn" data-assessor="gemini" onclick="switchAssessor('gemini')">Gemini</button>
+        </span>
+    </div>
     <div class="container">
         <div class="panel-left" id="date-list">
             <div class="loading">Loading dates...</div>
@@ -168,27 +184,57 @@
         let allDates = [];
         let todayKey = '';
         let selectedEntryId = null;
+        let currentAssessor = new URLSearchParams(window.location.search).get('assessor') || 'claude';
+
+        function switchAssessor(assessor) {
+            currentAssessor = assessor;
+            document.querySelectorAll('.assessor-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.assessor === assessor);
+            });
+            // Preserve current date when toggling
+            let targetEntryId = null;
+            if (selectedEntryId && selectedEntryId.startsWith('assessment-') && selectedEntryId !== 'assessment-system-prompt') {
+                const dateStr = selectedEntryId.replace('assessment-', '').replace('-gemini', '');
+                targetEntryId = 'assessment-' + dateStr + (assessor === 'gemini' ? '-gemini' : '');
+            }
+            const url = new URL(window.location);
+            url.searchParams.set('assessor', assessor);
+            if (targetEntryId) {
+                url.searchParams.set('entry_id', targetEntryId);
+            }
+            history.replaceState(null, '', url);
+            selectedEntryId = targetEntryId;
+            fetchDates();
+        }
+
+        // Set initial toggle state from URL
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('.assessor-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.assessor === currentAssessor);
+            });
+        });
 
         function updateBanner(agent) {
             const banner = document.getElementById('agent-banner');
-            if (!agent || !banner) return;
+            const statusText = document.getElementById('agent-status-text');
+            if (!agent || !banner || !statusText) return;
             if (agent.status === 'running') {
                 const dur = agent.launched_dur ? ' for ' + agent.launched_dur : '';
                 banner.className = 'agent-banner agent-running';
-                banner.innerHTML = `Agent: <strong>running</strong>${dur}`;
+                statusText.innerHTML = `Agent: <strong>running</strong>${dur}`;
             } else if (agent.status === 'failed') {
                 const err = agent.last_error ? ' — ' + agent.last_error : '';
                 banner.className = 'agent-banner agent-failed';
-                banner.innerHTML = `Agent: <strong>failed</strong>${err}`;
+                statusText.innerHTML = `Agent: <strong>failed</strong>${err}`;
             } else {
                 banner.className = 'agent-banner agent-idle';
-                banner.innerHTML = 'Agent: idle';
+                statusText.innerHTML = 'Agent: idle';
             }
         }
 
         async function fetchDates() {
             try {
-                const resp = await fetch('/tjai/api/assessment/dates');
+                const resp = await fetch(`/tjai/api/assessment/dates?assessor=${currentAssessor}`);
                 const data = await resp.json();
                 if (data.error) {
                     document.getElementById('date-list').innerHTML = `<div class="error">${data.error}</div>`;
@@ -198,16 +244,14 @@
                 todayKey = data.today_key || '';
                 updateBanner(data.agent);
                 renderDateList();
-                const params = new URLSearchParams(window.location.search);
-                let target = params.get('entry_id');
+                let target = selectedEntryId || new URLSearchParams(window.location.search).get('entry_id');
                 if (!target) {
                     target = '__dashboard__';
                 }
                 if (target === '__dashboard__') {
                     selectDate('__dashboard__');
-                } else if (allDates.length > 0) {
-                    const found = allDates.find(d => d.entry_id === target);
-                    selectDate(found ? target : '__dashboard__');
+                } else {
+                    selectDate(target);
                 }
             } catch (e) {
                 document.getElementById('date-list').innerHTML = '<div class="error">Error loading dates</div>';
@@ -237,6 +281,8 @@
             });
         }
 
+        const TZ = 'America/New_York';
+
         // Normalize a score object's field names
         function norm(s) {
             return {
@@ -247,6 +293,17 @@
             };
         }
 
+        // Extract hours and minutes in Eastern time
+        function etMinutes(isoStr) {
+            const d = new Date(isoStr);
+            const parts = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ }).split(':');
+            return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+        }
+
+        function etTimeStr(isoStr) {
+            return new Date(isoStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ });
+        }
+
         function renderTimePlot(scores, cums, chartRange) {
             const W = 700, H = 120, pad = {l: 40, r: 20, t: 10, b: 25};
             const plotW = W - pad.l - pad.r;
@@ -254,11 +311,8 @@
             const {mn, mx} = chartRange;
             const range = mx - mn || 1;
 
-            // Parse times as minutes since midnight for x positioning
-            const times = scores.map(s => {
-                const d = new Date(norm(s).dt);
-                return d.getHours() * 60 + d.getMinutes();
-            });
+            // Parse times as minutes since midnight (Eastern) for x positioning
+            const times = scores.map(s => etMinutes(norm(s).dt));
             const tMin = Math.min(...times) - 15;
             const tMax = Math.max(...times) + 15;
             const tRange = tMax - tMin || 1;
@@ -320,8 +374,7 @@
             const n = norm(s);
             const score = n.score;
             const cumulative = n.cumulative;
-            const dt = new Date(n.dt);
-            const timeStr = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+            const timeStr = etTimeStr(n.dt);
             const scoreClass = score > 0 ? 'pos' : 'neg';
             const scoreStr = score > 0 ? '+' + score : '' + score;
             const cumStr = cumulative > 0 ? '+' + cumulative : '' + cumulative;
@@ -455,7 +508,8 @@
             // Dots
             days.forEach((d, i) => {
                 const dotColor = vals[i] > 0 ? '#9ccc65' : vals[i] < 0 ? '#ef5350' : '#8a8a8a';
-                svg += `<circle cx="${x(i)}" cy="${y(vals[i])}" r="3" fill="${dotColor}" style="cursor:pointer" onclick="selectDate('assessment-${d.date}')"/>`;
+                const eidSuffix = currentAssessor === 'gemini' ? '-gemini' : '';
+                svg += `<circle cx="${x(i)}" cy="${y(vals[i])}" r="3" fill="${dotColor}" style="cursor:pointer" onclick="selectDate('assessment-${d.date}${eidSuffix}')"/>`;
             });
 
             // X labels (every Nth day)
@@ -477,14 +531,15 @@
         async function loadDashboard() {
             document.getElementById('content-panel').innerHTML = '<div class="loading">Loading dashboard...</div>';
             try {
-                const resp = await fetch('/tjai/api/assessment/dashboard');
+                const resp = await fetch(`/tjai/api/assessment/dashboard?assessor=${currentAssessor}`);
                 const data = await resp.json();
                 if (data.error) {
                     document.getElementById('content-panel').innerHTML = `<div class="error">${data.error}</div>`;
                     return;
                 }
                 const days = data.days || [];
-                let html = `<h1 style="color:#d8a070;font-size:18px;margin-bottom:16px">AI Performance Dashboard</h1>`;
+                const assessorLabel = currentAssessor.charAt(0).toUpperCase() + currentAssessor.slice(1);
+                let html = `<h1 style="color:#d8a070;font-size:18px;margin-bottom:16px">AI Performance Dashboard — ${assessorLabel}</h1>`;
 
                 if (days.length === 0) {
                     html += '<div class="loading">No assessments yet.</div>';
@@ -518,14 +573,14 @@
                     const intgStr = s.integral > 0 ? '+' + s.integral : '' + s.integral;
                     const durStr = s.duration_min > 0 ? s.duration_min + 'm' : '<1m';
                     const dateShort = s.date.substring(5); // MM-DD
-                    const startTime = s.start ? new Date(s.start).toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit',hour12:false}) : '';
+                    const startTime = s.start ? etTimeStr(s.start) : '';
                     const precis = s.precis || `${s.events} events`;
                     // Color date+dur when net and integral agree on direction
                     const bothPos = s.net > 0 && s.integral > 0;
                     const bothNeg = s.net < 0 && s.integral < 0;
                     const rowColor = bothPos ? 'pos' : bothNeg ? 'neg' : '';
                     html += `<div class="session-row">` +
-                        `<span class="session-dur ${rowColor}" style="cursor:pointer" onclick="selectDate('assessment-${s.date}')">${dateShort} ${startTime}</span>` +
+                        `<span class="session-dur ${rowColor}" style="cursor:pointer" onclick="selectDate('assessment-${s.date}${currentAssessor === 'gemini' ? '-gemini' : ''}')">${dateShort} ${startTime}</span>` +
                         `<span class="session-dur ${rowColor}">${durStr}</span>` +
                         `<span class="session-net ${netClass}">${netStr}</span>` +
                         `<span class="session-net ${intgClass}">${intgStr}</span>` +
@@ -579,7 +634,7 @@
         // Poll agent status every 15s
         setInterval(async () => {
             try {
-                const r = await fetch('/tjai/api/assessment/dates');
+                const r = await fetch(`/tjai/api/assessment/dates?assessor=${currentAssessor}`);
                 if (r.ok) {
                     const d = await r.json();
                     updateBanner(d.agent);

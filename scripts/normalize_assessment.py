@@ -116,9 +116,14 @@ def normalize_entry(entry):
     return True
 
 
-def normalize_date(date_str):
-    """Normalize assessment for a specific date."""
-    entry_id = f'assessment-{date_str}'
+def normalize_date(date_str, suffix=''):
+    """Normalize assessment for a specific date.
+
+    Args:
+        date_str: Date in YYYY-MM-DD format.
+        suffix: Optional suffix like '-gemini' for alternate assessors.
+    """
+    entry_id = f'assessment-{date_str}{suffix}'
     entry = Entry.objects.filter(
         data__entry_id=entry_id, deleted_at__isnull=True,
     ).first()

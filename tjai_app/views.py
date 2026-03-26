@@ -1341,13 +1341,27 @@ def assessment_page(request):
 
 @login_required
 def api_assessment_dates(request):
-    """Return list of assessment dates as JSON."""
+    """Return list of assessment dates as JSON.
+
+    Query params:
+        assessor: 'claude' (default) or 'gemini' — which assessor's entries to show.
+    """
+    assessor = request.GET.get('assessor', 'claude')
+
     entries = Entry.objects.filter(
         data__entry_id__startswith='assessment-',
         data__has_key='scores',
         kind='memory',
         deleted_at__isnull=True,
-    ).order_by('-data__date')
+    ).exclude(data__entry_id__contains='-prompt').order_by('-data__date')
+
+    # Filter by assessor
+    if assessor == 'gemini':
+        entries = entries.filter(data__entry_id__endswith='-gemini')
+        suffix = '-gemini'
+    else:
+        entries = entries.exclude(data__entry_id__endswith='-gemini')
+        suffix = ''
 
     tz = get_app_tz()
     today_key = datetime.now(tz).strftime('%Y%m%d')
@@ -1356,7 +1370,11 @@ def api_assessment_dates(request):
     for entry in entries:
         data = entry.data if isinstance(entry.data, dict) else {}
         entry_id = data.get('entry_id', '')
-        date_str = entry_id.replace('assessment-', '') if entry_id.startswith('assessment-') else ''
+        # Strip entry_id to just the date for display
+        date_str = data.get('date', '')
+        if not date_str:
+            stripped = entry_id.replace('assessment-', '').replace('-gemini', '')
+            date_str = stripped
         date_key = date_str.replace('-', '')
         try:
             dt = datetime.strptime(date_str, '%Y-%m-%d')
@@ -1373,16 +1391,17 @@ def api_assessment_dates(request):
             'integral': integral,
         })
 
-    # Agent status
+    # Agent status — use assessor-specific action id
+    action_id = 'llm-assessment-gemini' if assessor == 'gemini' else 'llm-assessment'
     agent_keys = {}
-    for sc in SysConfig.objects.filter(key__startswith='agent_llm-assessment'):
+    for sc in SysConfig.objects.filter(key__startswith=f'agent_{action_id}'):
         agent_keys[sc.key] = sc.value
-    agent_status = agent_keys.get('agent_llm-assessment_status', 'idle')
-    launched = agent_keys.get('agent_llm-assessment_launched')
+    agent_status = agent_keys.get(f'agent_{action_id}_status', 'idle')
+    launched = agent_keys.get(f'agent_{action_id}_launched')
     agent = {
         'status': agent_status,
         'launched_dur': fmt_duration(int(time.time() - float(launched))) if launched else None,
-        'last_error': agent_keys.get('agent_llm-assessment_last_error'),
+        'last_error': agent_keys.get(f'agent_{action_id}_last_error'),
     }
 
     return JsonResponse({'dates': result, 'today_key': today_key, 'agent': agent})
@@ -1449,7 +1468,10 @@ def api_assessment_content(request):
 
 @login_required
 def api_assessment_rerun(request):
-    """Request re-run of llm-assessment action for a specific date."""
+    """Request re-run of assessment action for a specific date.
+
+    Handles both Claude (assessment-YYYY-MM-DD) and Gemini (assessment-YYYY-MM-DD-gemini).
+    """
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
 
@@ -1457,7 +1479,9 @@ def api_assessment_rerun(request):
     if not entry_id.startswith('assessment-'):
         return JsonResponse({'error': 'Invalid entry_id'}, status=400)
 
-    date_str = entry_id.replace('assessment-', '')
+    is_gemini = entry_id.endswith('-gemini')
+    date_str = entry_id.replace('assessment-', '').replace('-gemini', '')
+
     from datetime import datetime as dt
     try:
         dt.strptime(date_str, '%Y-%m-%d').date()
@@ -1465,8 +1489,9 @@ def api_assessment_rerun(request):
         return JsonResponse({'error': f'Cannot parse date from {entry_id}'}, status=400)
 
     now = time.time()
+    rerun_key = 'assessment_gemini_rerun_date' if is_gemini else 'assessment_rerun_date'
     SysConfig.objects.update_or_create(
-        key='assessment_rerun_date',
+        key=rerun_key,
         defaults={'value': date_str, 'timestamp_modified': now})
     SysConfig.objects.update_or_create(
         key='action_agent_wake_requested',
@@ -1477,12 +1502,23 @@ def api_assessment_rerun(request):
 
 @login_required
 def api_assessment_dashboard(request):
-    """Return dashboard data: daily trends and session breakdowns."""
+    """Return dashboard data: daily trends and session breakdowns.
+
+    Query params:
+        assessor: 'claude' (default) or 'gemini'.
+    """
+    assessor = request.GET.get('assessor', 'claude')
+
     entries = Entry.objects.filter(
         data__entry_id__startswith='assessment-',
         kind='memory',
         deleted_at__isnull=True,
     ).exclude(data__entry_id__contains='-prompt').order_by('data__date')
+
+    if assessor == 'gemini':
+        entries = entries.filter(data__entry_id__endswith='-gemini')
+    else:
+        entries = entries.exclude(data__entry_id__endswith='-gemini')
 
     SESSION_GAP = 30 * 60  # 30 min gap = new session
 

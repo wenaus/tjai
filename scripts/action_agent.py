@@ -552,12 +552,18 @@ def _check_daily_rerun():
     execute_action(action, target_date=target_date)
 
 
-def _check_assessment_rerun():
-    """Run llm-assessment action for a specific date if requested via sysconfig."""
+def _check_assessment_rerun_for(sysconfig_key, action_entry_id):
+    """Run an assessment action for a specific date if requested via sysconfig.
+
+    Non-blocking: launches the script as a background subprocess.
+    """
+    import subprocess as sp
+    import threading
     from tjai_app.models import SysConfig
     from datetime import datetime
+    from pathlib import Path
 
-    req = SysConfig.objects.filter(key='assessment_rerun_date').first()
+    req = SysConfig.objects.filter(key=sysconfig_key).first()
     if not req or not req.value:
         return
     date_str = req.value
@@ -566,21 +572,182 @@ def _check_assessment_rerun():
     req.save(update_fields=['value', 'timestamp_modified'])
 
     try:
-        target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        datetime.strptime(date_str, '%Y-%m-%d').date()
     except ValueError:
         logger.error("Invalid assessment rerun date: %s", date_str)
         return
 
     action = Entry.objects.filter(
-        data__entry_id='llm-assessment', kind='action',
+        data__entry_id=action_entry_id, kind='action',
         deleted_at__isnull=True,
     ).first()
     if not action:
-        logger.error("llm-assessment action not found for rerun")
+        logger.error("%s action not found for rerun", action_entry_id)
         return
 
-    logger.info("Rerunning llm-assessment for %s (requested)", date_str)
-    execute_action(action, target_date=target_date)
+    script_name = (action.data or {}).get('mechanical_script')
+    if not script_name:
+        logger.error("%s: no mechanical_script configured", action_entry_id)
+        return
+
+    script_path = Path(__file__).resolve().parent / script_name
+    if not script_path.exists():
+        logger.error("%s: script not found: %s", action_entry_id, script_path)
+        return
+
+    now = time.time()
+    SysConfig.objects.update_or_create(
+        key=f'agent_{action_entry_id}_status',
+        defaults={'value': 'running', 'timestamp_modified': now})
+    SysConfig.objects.update_or_create(
+        key=f'agent_{action_entry_id}_launched',
+        defaults={'value': str(now), 'timestamp_modified': now})
+
+    cmd = [sys.executable, str(script_path), date_str]
+    logger.info("Rerunning %s for %s (non-blocking)", action_entry_id, date_str)
+    proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
+
+    def _monitor(proc, action_entry_id, date_str):
+        try:
+            stdout, stderr = proc.communicate()
+            if stdout:
+                for line in stdout.rstrip().split('\n'):
+                    logger.info("rerun %s: %s", action_entry_id, line)
+            if proc.returncode != 0:
+                logger.error("rerun %s: %s failed (exit %d)", action_entry_id, date_str, proc.returncode)
+                if stderr:
+                    for line in stderr.rstrip().split('\n')[:10]:
+                        logger.error("rerun %s:   %s", action_entry_id, line)
+            from django.db import connection
+            connection.ensure_connection()
+            now = time.time()
+            SysConfig.objects.update_or_create(
+                key=f'agent_{action_entry_id}_status',
+                defaults={'value': 'completed' if proc.returncode == 0 else 'failed',
+                          'timestamp_modified': now})
+        except Exception:
+            import traceback
+            logger.error("rerun %s monitor error:\n%s", action_entry_id, traceback.format_exc())
+
+    thread = threading.Thread(target=_monitor, args=(proc, action_entry_id, date_str), daemon=True)
+    thread.start()
+
+
+def _check_assessment_rerun():
+    _check_assessment_rerun_for('assessment_rerun_date', 'llm-assessment')
+
+
+def _check_assessment_gemini_rerun():
+    _check_assessment_rerun_for('assessment_gemini_rerun_date', 'llm-assessment-gemini')
+
+
+def _check_assessment_backfill(flag_key, action_entry_id):
+    """Poll a backfill flag and launch the next assessment as a background subprocess.
+
+    Non-blocking. No daemon threads. No in-memory state. Fully restart-safe.
+
+    1. Check DB status — if already running, return.
+    2. Read flag, find next date with dialog.
+    3. Advance flag in DB BEFORE launching (restart-safe).
+    4. Set status to 'running' in DB.
+    5. Launch subprocess (Popen, fire-and-forget).
+    6. The subprocess sets status to 'completed'/'failed' when done.
+    """
+    import subprocess as sp
+    from pathlib import Path
+    from tjai_app.models import SysConfig, Tag
+    from datetime import datetime, timedelta
+    from django.utils.timezone import make_aware
+    from tjai_app.services import get_timezone
+
+    # Don't launch another if one is already running
+    status = SysConfig.objects.filter(
+        key=f'agent_{action_entry_id}_status'
+    ).values_list('value', flat=True).first()
+    if status == 'running':
+        return
+
+    backfill = SysConfig.objects.filter(key=flag_key).first()
+    if not backfill or not backfill.value:
+        return
+
+    parts = backfill.value.split(':', 1)
+    mode = parts[0]
+    if len(parts) < 2 or not parts[1]:
+        return
+
+    try:
+        candidate = datetime.strptime(parts[1], '%Y-%m-%d').date()
+    except ValueError:
+        logger.error("Invalid backfill date in %s: %s", flag_key, parts[1])
+        return
+
+    tz = get_timezone()
+
+    # Walk backwards from candidate, skipping dates with no dialog
+    for _ in range(90):
+        date_str = candidate.isoformat()
+        next_day = candidate + timedelta(days=1)
+        start_ts = make_aware(datetime.combine(candidate, datetime.min.time()), tz).timestamp()
+        end_ts = make_aware(datetime.combine(next_day, datetime.min.time()), tz).timestamp()
+        dialog_ids = Tag.objects.filter(tag_name='ccdialog').values_list('entry_id', flat=True)
+        has_dialog = Entry.objects.filter(
+            id__in=dialog_ids,
+            deleted_at__isnull=True,
+            timestamp_created__gte=start_ts,
+            timestamp_created__lt=end_ts,
+        ).exists()
+
+        if not has_dialog:
+            candidate -= timedelta(days=1)
+            continue
+
+        # Found a date — resolve script
+        action = Entry.objects.filter(
+            data__entry_id=action_entry_id, kind='action',
+            deleted_at__isnull=True,
+        ).first()
+        if not action:
+            logger.error("backfill %s: action %s not found", flag_key, action_entry_id)
+            return
+
+        script_name = (action.data or {}).get('mechanical_script')
+        if not script_name:
+            logger.error("backfill %s: no mechanical_script in %s", flag_key, action_entry_id)
+            return
+
+        script_path = Path(__file__).resolve().parent / script_name
+        if not script_path.exists():
+            logger.error("backfill %s: script not found: %s", flag_key, script_path)
+            return
+
+        # 1. Advance flag BEFORE launch — survives restart
+        next_candidate = (candidate - timedelta(days=1)).isoformat()
+        now = time.time()
+        backfill.value = f'{mode}:{next_candidate}'
+        backfill.timestamp_modified = now
+        backfill.save(update_fields=['value', 'timestamp_modified'])
+
+        # 2. Set status to running
+        SysConfig.objects.update_or_create(
+            key=f'agent_{action_entry_id}_status',
+            defaults={'value': 'running', 'timestamp_modified': now})
+        SysConfig.objects.update_or_create(
+            key=f'agent_{action_entry_id}_launched',
+            defaults={'value': str(now), 'timestamp_modified': now})
+
+        # 3. Launch — fire and forget. Script updates status in DB when done.
+        cmd = [sys.executable, str(script_path), date_str,
+               '--action-id', action_entry_id]
+        logger.info("backfill %s: launching %s %s (non-blocking)", flag_key, script_name, date_str)
+        sp.Popen(cmd, stdout=open('/dev/null', 'w'), stderr=open('/dev/null', 'w'))
+        return
+
+    # Exhausted lookback — done
+    logger.info("backfill %s: reached 90-day lookback limit, stopping", flag_key)
+    backfill.value = ''
+    backfill.timestamp_modified = time.time()
+    backfill.save(update_fields=['value', 'timestamp_modified'])
 
 
 def _check_health_refresh():
@@ -670,6 +837,9 @@ def main():
             _check_health_refresh()
             _check_daily_rerun()
             _check_assessment_rerun()
+            _check_assessment_gemini_rerun()
+            _check_assessment_backfill('assessment_backfill_all', 'llm-assessment')
+            _check_assessment_backfill('assessment_gemini_backfill_all', 'llm-assessment-gemini')
 
             # Prune old operational log entries (once per hour)
             now_ts = time.time()

@@ -413,12 +413,10 @@ def main():
         except Exception as e:
             logger.error("ideation-agent: failed to post-process ideation: %s", e)
 
-    # Post-process assessment: normalize field names, then backfill chain
-    if action_id == 'llm-assessment' and exit_code in (0, 124):
-        # Normalize the just-completed assessment
+    # Post-process assessment: normalize field names (legacy MCP path)
+    if action_id == 'llm-assessment-mcp' and exit_code in (0, 124):
         try:
             from normalize_assessment import normalize_date
-            # Figure out which date was just assessed from the entry data
             assessed_date = None
             if entry:
                 edata = entry.data if isinstance(entry.data, dict) else {}
@@ -426,12 +424,9 @@ def main():
             if assessed_date:
                 normalize_date(assessed_date)
             else:
-                logger.warning("llm-assessment: could not determine assessed date for normalization")
+                logger.warning("llm-assessment-mcp: could not determine assessed date for normalization")
         except Exception as e:
-            logger.error("llm-assessment: normalize failed: %s", e)
-
-        # Backfill chain: if flag set, find next date and queue it
-        _assessment_backfill_chain(now)
+            logger.error("llm-assessment-mcp: normalize failed: %s", e)
 
     # Research-agent post-processing: model completion first, then queue drain.
     # Order matters — synthesis must set next_target before queue drain overwrites it.
@@ -474,79 +469,6 @@ def main():
                                  action_id, e, extra=ref_extra)
 
 
-def _assessment_backfill_chain(now):
-    """If backfill_all flag is set, find the next date needing assessment and chain.
-
-    Flag format: 'overwrite' or '1' starts from yesterday.
-    After each run, flag is updated to 'overwrite:YYYY-MM-DD' or '1:YYYY-MM-DD'
-    to track progress — next run continues from the day BEFORE that date.
-    """
-    backfill = SysConfig.objects.filter(key='assessment_backfill_all').first()
-    if not backfill or not backfill.value:
-        return
-
-    from datetime import datetime, timedelta
-    from tjai_app.services import get_timezone
-
-    tz = get_timezone()
-    today = datetime.now(tz).date()
-
-    # Parse flag: mode or mode:last_date
-    # Both modes always re-assess (overwrite existing entries)
-    parts = backfill.value.split(':', 1)
-    mode = parts[0]
-
-    if len(parts) > 1 and parts[1]:
-        try:
-            last_done = datetime.strptime(parts[1], '%Y-%m-%d').date()
-            candidate = last_done - timedelta(days=1)
-        except ValueError:
-            candidate = today - timedelta(days=1)
-    else:
-        candidate = today - timedelta(days=1)
-
-    max_lookback = 90
-
-    for _ in range(max_lookback):
-        date_str = candidate.isoformat()
-
-        # Check if dialog exists for this date
-        from tjai_app.models import Tag
-        dialog_ids = Tag.objects.filter(tag_name='ccdialog').values_list('entry_id', flat=True)
-        next_day = candidate + timedelta(days=1)
-        from django.utils.timezone import make_aware
-        start_ts = make_aware(datetime.combine(candidate, datetime.min.time()), tz).timestamp()
-        end_ts = make_aware(datetime.combine(next_day, datetime.min.time()), tz).timestamp()
-        has_dialog = Entry.objects.filter(
-            id__in=dialog_ids,
-            deleted_at__isnull=True,
-            timestamp_created__gte=start_ts,
-            timestamp_created__lt=end_ts,
-        ).exists()
-
-        if not has_dialog:
-            logger.info("assessment backfill: no dialog for %s, skipping", date_str)
-            candidate -= timedelta(days=1)
-            continue
-
-        # Found a date to assess — update flag with progress marker, then queue
-        backfill.value = f'{mode}:{date_str}'
-        backfill.timestamp_modified = now
-        backfill.save(update_fields=['value', 'timestamp_modified'])
-
-        SysConfig.objects.update_or_create(
-            key='assessment_rerun_date',
-            defaults={'value': date_str, 'timestamp_modified': now})
-        SysConfig.objects.update_or_create(
-            key='action_agent_wake_requested',
-            defaults={'value': '1', 'timestamp_modified': now})
-        logger.info("assessment backfill: chaining to %s", date_str)
-        return
-
-    logger.info("assessment backfill: reached %d-day lookback limit, stopping", max_lookback)
-    backfill.value = ''
-    backfill.timestamp_modified = now
-    backfill.save(update_fields=['value', 'timestamp_modified'])
 
 
 def _research_queue_drain(now):
