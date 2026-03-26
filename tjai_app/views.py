@@ -1333,11 +1333,14 @@ def api_assessment_dates(request):
             date_display = dt.strftime('%a %b %-d')
         except ValueError:
             date_display = date_str
+        scores = data.get('scores', [])
+        integral = sum(s.get('cumulative') or s.get('cumul', 0) for s in scores)
         result.append({
             'entry_id': entry_id,
             'date_display': date_display,
             'date_key': date_key,
             'final_cumulative': data.get('final_cumulative') or data.get('final_score', 0),
+            'integral': integral,
         })
 
     # Agent status
@@ -1391,20 +1394,25 @@ def api_assessment_content(request):
     )
 
     # Normalize field names — agents may use varying keys
+    scores = data.get('scores', [])
     total_turns = data.get('total_turns') or data.get('turn_count_estimated', 0)
-    scored_events = data.get('scored_events') or len(data.get('scores', []))
+    scored_events = data.get('scored_events') or len(scores)
     final_cum = data.get('final_cumulative') or data.get('final_score', 0)
+    # Integral: sum of all cumulative values — captures sustained pain/joy
+    integral = sum(s.get('cumulative') or s.get('cumul', 0) for s in scores)
 
     return JsonResponse({
         'entry_id': entry_id,
         'date_display': date_display,
-        'scores': data.get('scores', []),
+        'scores': scores,
         'total_turns': total_turns,
         'scored_events': scored_events,
         'final_cumulative': final_cum,
-        'summary': f"{total_turns} turns analyzed, "
-                   f"{scored_events} scored events, "
-                   f"final cumulative: {final_cum}",
+        'integral': integral,
+        'summary': f"{total_turns} turns, "
+                   f"{scored_events} scored, "
+                   f"endpoint: {final_cum}, "
+                   f"integral: {integral}",
         'content_html': content_html,
     })
 
