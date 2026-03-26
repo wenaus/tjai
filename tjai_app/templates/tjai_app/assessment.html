@@ -218,6 +218,16 @@
             });
         }
 
+        // Normalize a score object's field names
+        function norm(s) {
+            return {
+                dt: s.dt || s.datetime || '',
+                score: s.score ?? s.delta ?? 0,
+                cumulative: s.cumulative ?? s.cumul ?? 0,
+                precis: s.precis || '',
+            };
+        }
+
         function renderTimePlot(scores, cums, chartRange) {
             const W = 700, H = 120, pad = {l: 40, r: 20, t: 10, b: 25};
             const plotW = W - pad.l - pad.r;
@@ -227,7 +237,7 @@
 
             // Parse times as minutes since midnight for x positioning
             const times = scores.map(s => {
-                const d = new Date(s.dt);
+                const d = new Date(norm(s).dt);
                 return d.getHours() * 60 + d.getMinutes();
             });
             const tMin = Math.min(...times) - 15;
@@ -271,7 +281,7 @@
 
             // Dots at each score
             pts.forEach((p, i) => {
-                const sc = scores[i].score ?? scores[i].delta ?? 0;
+                const sc = norm(scores[i]).score;
                 const color = sc > 0 ? '#9ccc65' : sc < 0 ? '#ef5350' : '#8a8a8a';
                 svg += `<circle cx="${p.x}" cy="${p.y}" r="3" fill="${color}"/>`;
             });
@@ -288,10 +298,10 @@
         }
 
         function renderScoreRow(s, chartRange) {
-            // Normalize field names (agents may use score/cumulative or delta/cumul)
-            const score = s.score ?? s.delta ?? 0;
-            const cumulative = s.cumulative ?? s.cumul ?? 0;
-            const dt = new Date(s.dt);
+            const n = norm(s);
+            const score = n.score;
+            const cumulative = n.cumulative;
+            const dt = new Date(n.dt);
             const timeStr = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
             const scoreClass = score > 0 ? 'pos' : 'neg';
             const scoreStr = score > 0 ? '+' + score : '' + score;
@@ -311,7 +321,7 @@
                 `<span class="score-time">${timeStr}</span>` +
                 `<span class="score-val ${scoreClass}">${scoreStr}</span>` +
                 `<span class="score-cum">${cumStr}</span>` +
-                `<span class="score-precis">${escHtml(s.precis || '')}</span>` +
+                `<span class="score-precis">${escHtml(n.precis)}</span>` +
                 `<span class="score-chart">${chartHtml}</span>` +
                 `</div>`;
         }
@@ -338,7 +348,7 @@
                 }
                 const scores = data.scores || [];
                 // Compute chart range across all scores
-                const cums = scores.map(s => s.cumulative ?? s.cumul ?? 0);
+                const cums = scores.map(s => norm(s).cumulative);
                 const chartRange = {
                     mn: Math.min(...cums, -1, 0),
                     mx: Math.max(...cums, 1, 0),
