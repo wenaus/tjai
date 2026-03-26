@@ -158,6 +158,55 @@ def check_zombie_processes():
     return {'check': 'zombie_processes', 'status': 'ok', 'detail': ''}
 
 
+def check_entry_flood(window=1800, threshold=5):
+    """Detect rapid creation of similar entries via Jaccard similarity.
+
+    Clusters entries created in the last `window` seconds by word-set
+    similarity (Jaccard > 0.7). If any cluster has `threshold`+ members,
+    that's a flood — likely a runaway dispatch.
+    """
+    now = time.time()
+    cutoff = now - window
+    recent = Entry.objects.filter(
+        timestamp_created__gte=cutoff,
+        deleted_at__isnull=True,
+    ).values_list('content', flat=True)
+
+    word_sets = []
+    for content in recent:
+        if content:
+            word_sets.append(set(content[:200].lower().split()))
+
+    if len(word_sets) < threshold:
+        return {'check': 'entry_flood', 'status': 'ok', 'detail': ''}
+
+    # Cluster by greedy Jaccard > 0.7
+    clusters = []
+    for ws in word_sets:
+        placed = False
+        for cluster in clusters:
+            intersection = ws & cluster[0]
+            union = ws | cluster[0]
+            if union and len(intersection) / len(union) > 0.7:
+                cluster[1] += 1
+                placed = True
+                break
+        if not placed:
+            clusters.append([ws, 1])
+
+    floods = [c for c in clusters if c[1] >= threshold]
+    if floods:
+        worst = max(floods, key=lambda c: c[1])
+        count = worst[1]
+        sample = ' '.join(sorted(worst[0]))[:80]
+        return {
+            'check': 'entry_flood',
+            'status': 'critical',
+            'detail': f"{count} similar entries in {window // 60}min (words: {sample})",
+        }
+    return {'check': 'entry_flood', 'status': 'ok', 'detail': ''}
+
+
 def check_error_storm():
     """Check for excessive errors in AppLog in the last N minutes."""
     cutoff = timezone.now() - timedelta(minutes=ERROR_STORM_WINDOW_MIN)
@@ -349,6 +398,7 @@ def main():
         check_stale_agents(),
         check_zombie_processes(),
         check_error_storm(),
+        check_entry_flood(),
         check_heartbeat(),
         check_resources(),
     ]

@@ -27,11 +27,22 @@ def snapshot_entry_before_save(sender, instance, **kwargs):
     except Entry.DoesNotExist:
         return
 
-    # Only snapshot if content or data actually changed
+    # Only snapshot if content or substantive data changed.
+    # Operational metadata keys (timestamps, run state, retry counters)
+    # change frequently and are not worth versioning.
+    _OPERATIONAL_KEYS = {
+        'last_run', 'retry_after', 'retry_count', 'scheduled_time_config',
+        'next_target', 'next_target_entry_id',
+        'run_status', 'run_completed_at', 'run_exit_code', 'run_duration_seconds',
+        'run_error', 'subagent_count', 'started_at',
+    }
     old_data = old.data if isinstance(old.data, dict) else {}
     new_data = instance.data if isinstance(instance.data, dict) else {}
     content_changed = old.content != instance.content
-    data_changed = old_data != new_data
+    # Data changed = any non-operational key differs
+    substantive_old = {k: v for k, v in old_data.items() if k not in _OPERATIONAL_KEYS}
+    substantive_new = {k: v for k, v in new_data.items() if k not in _OPERATIONAL_KEYS}
+    data_changed = substantive_old != substantive_new
     if not content_changed and not data_changed:
         return
 
