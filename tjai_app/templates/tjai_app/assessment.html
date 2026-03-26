@@ -216,20 +216,23 @@
         }
 
         function renderScoreRow(s, chartRange) {
+            // Normalize field names (agents may use score/cumulative or delta/cumul)
+            const score = s.score ?? s.delta ?? 0;
+            const cumulative = s.cumulative ?? s.cumul ?? 0;
             const dt = new Date(s.dt);
             const timeStr = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-            const scoreClass = s.score > 0 ? 'pos' : 'neg';
-            const scoreStr = s.score > 0 ? '+' + s.score : '' + s.score;
-            const cumStr = s.cumulative > 0 ? '+' + s.cumulative : '' + s.cumulative;
+            const scoreClass = score > 0 ? 'pos' : 'neg';
+            const scoreStr = score > 0 ? '+' + score : '' + score;
+            const cumStr = cumulative > 0 ? '+' + cumulative : '' + cumulative;
             // Inline bar chart: zero line in center, bar extends left (neg) or right (pos)
             const { mn, mx } = chartRange;
             const range = mx - mn || 1;
             const chartW = 170; // px width of chart cell
             const zeroPos = Math.round(((0 - mn) / range) * chartW);
-            const cumPos = Math.round(((s.cumulative - mn) / range) * chartW);
+            const cumPos = Math.round(((cumulative - mn) / range) * chartW);
             const barLeft = Math.min(zeroPos, cumPos);
             const barWidth = Math.max(Math.abs(cumPos - zeroPos), 2);
-            const barClass = s.cumulative >= 0 ? 'pos' : 'neg';
+            const barClass = cumulative >= 0 ? 'pos' : 'neg';
             const chartHtml = `<span class="score-marker" style="left:${zeroPos}px"></span>` +
                 `<span class="score-bar ${barClass}" style="left:${barLeft}px;width:${barWidth}px"></span>`;
             return `<div class="score-row">` +
@@ -263,7 +266,7 @@
                 }
                 const scores = data.scores || [];
                 // Compute chart range across all scores
-                const cums = scores.map(s => s.cumulative);
+                const cums = scores.map(s => s.cumulative ?? s.cumul ?? 0);
                 const chartRange = {
                     mn: Math.min(...cums, -1, 0),
                     mx: Math.max(...cums, 1, 0),

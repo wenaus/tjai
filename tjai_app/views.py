@@ -1337,7 +1337,7 @@ def api_assessment_dates(request):
             'entry_id': entry_id,
             'date_display': date_display,
             'date_key': date_key,
-            'final_cumulative': data.get('final_cumulative', 0),
+            'final_cumulative': data.get('final_cumulative') or data.get('final_score', 0),
         })
 
     # Agent status
@@ -1390,16 +1390,21 @@ def api_assessment_content(request):
         content_html,
     )
 
+    # Normalize field names — agents may use varying keys
+    total_turns = data.get('total_turns') or data.get('turn_count_estimated', 0)
+    scored_events = data.get('scored_events') or len(data.get('scores', []))
+    final_cum = data.get('final_cumulative') or data.get('final_score', 0)
+
     return JsonResponse({
         'entry_id': entry_id,
         'date_display': date_display,
         'scores': data.get('scores', []),
-        'total_turns': data.get('total_turns', 0),
-        'scored_events': data.get('scored_events', 0),
-        'final_cumulative': data.get('final_cumulative', 0),
-        'summary': f"{data.get('total_turns', '?')} turns analyzed, "
-                   f"{data.get('scored_events', '?')} scored events, "
-                   f"final cumulative: {data.get('final_cumulative', '?')}",
+        'total_turns': total_turns,
+        'scored_events': scored_events,
+        'final_cumulative': final_cum,
+        'summary': f"{total_turns} turns analyzed, "
+                   f"{scored_events} scored events, "
+                   f"final cumulative: {final_cum}",
         'content_html': content_html,
     })
 
