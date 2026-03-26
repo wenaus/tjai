@@ -248,6 +248,10 @@ def _set_status(action_id, status):
     SysConfig.objects.update_or_create(
         key=f'agent_{action_id}_status',
         defaults={'value': status, 'timestamp_modified': now})
+    # Wake the action agent so it launches the next backfill immediately
+    SysConfig.objects.update_or_create(
+        key='action_agent_wake_requested',
+        defaults={'value': '1', 'timestamp_modified': now})
 
 
 def _parse_args():

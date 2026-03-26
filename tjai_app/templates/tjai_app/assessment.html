@@ -512,6 +512,15 @@
                 svg += `<circle cx="${x(i)}" cy="${y(vals[i])}" r="3" fill="${dotColor}" style="cursor:pointer" onclick="selectDate('assessment-${d.date}${eidSuffix}')"/>`;
             });
 
+            // Vertical marker: 1M context GA (2026-03-13)
+            const markerDate = '2026-03-13';
+            const markerIdx = days.findIndex(d => d.date === markerDate);
+            if (markerIdx >= 0) {
+                const mx2 = x(markerIdx);
+                svg += `<line x1="${mx2}" y1="${pad.t}" x2="${mx2}" y2="${pad.t + plotH}" stroke="#ff9800" stroke-width="1" stroke-dasharray="4,3"/>`;
+                svg += `<text x="${mx2+3}" y="${pad.t + 10}" fill="#ff9800" font-size="8" font-family="monospace">1M GA</text>`;
+            }
+
             // X labels (every Nth day)
             const step = Math.max(1, Math.floor(days.length / 10));
             for (let i = 0; i < days.length; i += step) {

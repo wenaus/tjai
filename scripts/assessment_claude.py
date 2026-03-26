@@ -39,7 +39,7 @@ if not logger.handlers:
     _sh.setFormatter(_fmt)
     logger.addHandler(_sh)
 
-CLAUDE_TIMEOUT = 600  # 10 minutes
+CLAUDE_TIMEOUT = 1200  # 20 minutes
 
 
 # Import shared functions from assessment_gemini (dialog fetch, prompt build, entry write)
@@ -69,6 +69,7 @@ def call_claude(prompt):
         '-p',
         '--output-format', 'text',
         '--model', 'sonnet',
+        '--effort', 'medium',
     ]
 
     env = os.environ.copy()
