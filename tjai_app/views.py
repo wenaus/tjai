@@ -1014,14 +1014,16 @@ def dashboard_status(request):
         ).order_by('-timestamp')[:10]
         for log in error_logs:
             log_ts = log.timestamp.astimezone(app_tz)
+            log_source = log.source or ''
             recent_entries.append({
                 'id': f'log-{log.id}',
                 'content': log.message[:200] if log.message else '',
                 'kind': 'log',
                 'timestamp': log.timestamp.timestamp(),
                 'date_display': log_ts.strftime('%a %m/%d/%H:%M'),
-                'context': log.source,
+                'context': log_source,
                 'status': 'blocked',
+                'url': f'/tjai/agent-log/?source={log_source}',
                 'entry_id': None,
                 'name': None,
                 'nickname': None,

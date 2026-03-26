@@ -491,7 +491,8 @@
                 const kindMap = {memory: 'm', todo: 'do', profile: 'p', bookmark: 'b', ai: 'ai', journal: 'j', log: 'log'};
                 const kindAbbr = kindMap[entry.kind] || entry.kind;
 
-                const entryUrl = entry.entry_id ? `/tjai/entry/?entry_id=${encodeURIComponent(entry.entry_id)}`
+                const entryUrl = entry.url ? entry.url
+                    : entry.entry_id ? `/tjai/entry/?entry_id=${encodeURIComponent(entry.entry_id)}`
                     : entry.nickname ? `/tjai/entry/?nickname=${encodeURIComponent(entry.nickname)}`
                     : entry.name ? `/tjai/entry/?name=${encodeURIComponent(entry.name)}`
                     : `/tjai/entry/?uuid=${entry.id}`;

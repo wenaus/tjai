@@ -249,7 +249,7 @@ def main():
     logger.info("%s: exit_code=%d, status=%s", action_id, exit_code, status,
                 extra=ref_extra)
 
-    # Log captured stderr from the claude subprocess
+    # Log captured stderr from the claude subprocess (single aggregated entry)
     stderr_content = ''
     if stderr_file:
         try:
@@ -257,9 +257,8 @@ def main():
             os.unlink(stderr_file)
             if stderr_content:
                 log_fn = logger.error if exit_code not in (0, 124) else logger.info
-                for line in stderr_content.split('\n'):
-                    log_fn("%s stderr: %s", action_id, line,
-                           extra=ref_extra)
+                log_fn("%s stderr:\n%s", action_id, stderr_content,
+                       extra=ref_extra)
         except Exception as e:
             logger.error("%s: failed to read stderr file %s: %s",
                          action_id, stderr_file, e, extra=ref_extra)
