@@ -1492,7 +1492,12 @@ def api_assessment_dashboard(request):
         session_summaries = []
         for sess in sessions:
             net = sum(s.get('score', 0) for s in sess)
-            sess_integral = sum(s.get('cumulative', 0) for s in sess)
+            # Session-local integral: cumulative scoped to this session
+            sess_cum = 0
+            sess_integral = 0
+            for s in sess:
+                sess_cum += s.get('score', 0)
+                sess_integral += sess_cum
             first_dt = sess[0].get('dt', '')
             last_dt = sess[-1].get('dt', '') if len(sess) > 1 else first_dt
             try:
