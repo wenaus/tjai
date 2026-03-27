@@ -289,6 +289,21 @@ def check_resources():
     except OSError:
         pass
 
+    # Dropbox cache (old_files grows silently and can consume hundreds of GB)
+    dropbox_cache = os.path.expanduser('~/Dropbox/.dropbox.cache')
+    if os.path.isdir(dropbox_cache):
+        try:
+            cache_bytes = sum(
+                os.path.getsize(os.path.join(dp, f))
+                for dp, _, fns in os.walk(dropbox_cache)
+                for f in fns
+            )
+            cache_gb = cache_bytes / (1024 ** 3)
+            if cache_gb > 100:
+                issues.append(f'Dropbox cache {cache_gb:.0f}GB')
+        except OSError:
+            pass
+
     if issues:
         return {
             'check': 'resources',
