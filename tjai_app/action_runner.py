@@ -525,6 +525,14 @@ def execute_action(action, target_date=None):
     target_date: optional date override (used by rerun). If None, uses get_target_date().
     """
     data = action.data or {}
+
+    # Overnight actions assess yesterday, not today
+    if target_date is None:
+        if data.get('trigger') == 'overnight':
+            target_date = get_target_date() - timedelta(days=1)
+        else:
+            target_date = get_target_date()
+
     last_run = data.get('last_run')
     if last_run:
         from datetime import datetime
@@ -532,8 +540,8 @@ def execute_action(action, target_date=None):
     else:
         last_run_str = 'never'
     logger.info("Action: %s", action.content[:80])
-    logger.info("  Trigger: %s, Last run: %s",
-                data.get('trigger', '?'), last_run_str)
+    logger.info("  Trigger: %s, Last run: %s, Target date: %s",
+                data.get('trigger', '?'), last_run_str, target_date)
 
     action_id = data.get('entry_id')
     _log_context.action_id = action_id

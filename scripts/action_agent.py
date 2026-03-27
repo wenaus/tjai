@@ -418,11 +418,24 @@ def _check_agent_health():
         ).values_list('value', flat=True).first()
         launch_age = (now - float(launched_val)) if launched_val else None
 
+        # Use action's configured timeout for health thresholds
+        action_entry = Entry.objects.filter(
+            data__entry_id=action_id, kind='action', deleted_at__isnull=True,
+        ).first()
+        if action_entry:
+            action_timeout = (action_entry.data or {}).get('timeout')
+            if action_timeout is None:
+                logger.error("%s: no timeout configured in action entry — cannot determine health", action_id)
+                continue
+        else:
+            logger.error("%s: action entry not found — cannot determine health", action_id)
+            continue
+
         if activity_age is not None and activity_age < 120:
             health = 'active'
-        elif activity_age is not None and activity_age < 600:
+        elif activity_age is not None and activity_age < action_timeout:
             health = 'idle'
-        elif launch_age is not None and launch_age < 300:
+        elif launch_age is not None and launch_age < action_timeout:
             health = 'starting'
         else:
             health = 'stale'

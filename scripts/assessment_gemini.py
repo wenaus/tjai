@@ -278,8 +278,9 @@ def main():
 
     date_str, action_id = _parse_args()
     if not date_str:
-        tz = get_timezone()
-        date_str = datetime.now(tz).strftime('%Y-%m-%d')
+        logger.error("No date argument provided — date is required")
+        _set_status(action_id, 'failed')
+        sys.exit(1)
 
     try:
         datetime.strptime(date_str, '%Y-%m-%d')

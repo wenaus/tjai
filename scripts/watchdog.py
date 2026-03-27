@@ -38,7 +38,7 @@ if not logger.handlers:
 
 # ── Thresholds ──────────────────────────────────────────────────────────
 LOOP_WINDOW_HOURS = 2
-LOOP_MIN_DISPATCHES = 3
+LOOP_MIN_DISPATCHES = 10
 STALE_AGENT_HOURS = 2
 ERROR_STORM_WINDOW_MIN = 10
 ERROR_STORM_THRESHOLD = 20

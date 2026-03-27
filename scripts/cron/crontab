@@ -1,0 +1,12 @@
+# tjai ec2dev cron jobs
+# Install: crontab /home/admin/github/tjrepo/tjai/scripts/cron/crontab
+# Source: tjrepo/tjai/scripts/cron/
+
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+# Every 10 min — pull all repos (swf-* tracks highest infra/baseline-vNN)
+*/10 * * * * /home/admin/github/tjrepo/tjai/scripts/cron/git_pull_repos.sh >> /tmp/cron_git_pull.log 2>&1
+
+# Daily 04:00 — purge Claude Code session detritus older than 2 days
+0 4 * * * /home/admin/github/tjrepo/tjai/scripts/cron/cleanup_claude_sessions.sh >> /tmp/cron_cleanup_claude.log 2>&1

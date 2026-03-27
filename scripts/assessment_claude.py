@@ -75,6 +75,7 @@ def call_claude(prompt):
     env = os.environ.copy()
     env.pop('CLAUDECODE', None)
     env.pop('ANTHROPIC_API_KEY', None)  # Force subscription auth
+    env['TJAI_ACTION_ID'] = 'llm-assessment'  # Prevent dialog recording
 
     logger.info("Calling claude -p (sonnet, subscription, %d char prompt via stdin)...", len(prompt))
     try:
@@ -147,8 +148,9 @@ def main():
 
     date_str, action_id = _parse_args()
     if not date_str:
-        tz = get_timezone()
-        date_str = datetime.now(tz).strftime('%Y-%m-%d')
+        logger.error("No date argument provided — date is required")
+        _set_status(action_id, 'failed')
+        sys.exit(1)
 
     try:
         datetime.strptime(date_str, '%Y-%m-%d')
