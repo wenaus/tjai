@@ -19,7 +19,7 @@ import time
 import bootstrap  # noqa: F401 - Django setup
 from tjai_app.action_runner import (
     get_due_actions, get_next_scheduled_time, execute_action, write_heartbeat,
-    logger,
+    update_last_run, logger,
 )
 from tjai_app.models import Entry
 
@@ -879,13 +879,15 @@ def main():
                 run_times = _action_run_log.get(action_id, [])
                 run_times = [t for t in run_times if now_rd - t < 1800]  # 30 min window
                 if len(run_times) >= 5:
-                    logger.error("RUNAWAY DETECTED: %s ran %d times in 30min — blocking. "
-                                 "Clear agent_runaway_blocked_%s sysconfig to resume.",
-                                 action_id, len(run_times), action_id)
+                    logger.error("RUNAWAY DETECTED: %s ran %d times in 30min — "
+                                 "updating last_run to stop retries until next schedule.",
+                                 action_id, len(run_times))
                     from tjai_app.models import SysConfig as SC
                     SC.objects.update_or_create(
                         key=f'agent_runaway_blocked_{action_id}',
                         defaults={'value': str(len(run_times)), 'timestamp_modified': now_rd})
+                    update_last_run(action)  # stop it being due until next scheduled time
+                    _action_run_log[action_id] = []  # reset so we don't log every 30s
                     continue
                 try:
                     execute_action(action)

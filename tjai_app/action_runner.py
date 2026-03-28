@@ -168,8 +168,12 @@ def resolve_prompt_template(prompt_template, extra_vars=None, target_date=None):
     return result
 
 
-def _run_one_script(script_cmd, target_date=None):
-    """Run a single mechanical script. Returns True on success."""
+def _run_one_script(script_cmd, target_date=None, timeout=3600):
+    """Run a single mechanical script. Returns True on success.
+
+    timeout: seconds before killing the script. Default 3600s (1 hour).
+    run_mechanical passes the action's configured timeout from data.timeout.
+    """
     parts = script_cmd.split()
     script_name = parts[0]
     script_args = parts[1:]
@@ -182,14 +186,13 @@ def _run_one_script(script_cmd, target_date=None):
         return False
 
     cmd = [sys.executable, str(script_path)] + script_args
-    logger.info("Running: %s", ' '.join(cmd))
+    logger.info("Running: %s (timeout=%ds)", ' '.join(cmd), timeout)
 
-    SCRIPT_TIMEOUT = 300  # 5 minutes — no mechanical script should take longer
     try:
         result = subprocess.run(cmd, capture_output=True, text=True,
-                                timeout=SCRIPT_TIMEOUT)
+                                timeout=timeout)
     except subprocess.TimeoutExpired:
-        logger.error("%s timed out after %ds — killed", script_name, SCRIPT_TIMEOUT)
+        logger.error("%s timed out after %ds — killed", script_name, timeout)
         return False
     if result.stdout:
         for line in result.stdout.rstrip().split('\n'):
@@ -209,19 +212,22 @@ def run_mechanical(action, target_date=None):
 
     mechanical_script can be a single string or a list of strings.
     If a list, scripts run in order; abort on first failure.
+    Uses the action's data.timeout for the script timeout.
     """
     data = action.data or {}
     script_cmd = data.get('mechanical_script')
     if not script_cmd:
         return True
 
+    timeout = data.get('timeout', 3600)
+
     if isinstance(script_cmd, list):
         for cmd in script_cmd:
-            if not _run_one_script(cmd, target_date=target_date):
+            if not _run_one_script(cmd, target_date=target_date, timeout=timeout):
                 return False
         return True
     else:
-        return _run_one_script(script_cmd, target_date=target_date)
+        return _run_one_script(script_cmd, target_date=target_date, timeout=timeout)
 
 
 def create_journal_entry(action, target_date=None):
@@ -567,6 +573,7 @@ def execute_action(action, target_date=None):
         if not run_mechanical(action, target_date=target_date):
             logger.error("Mechanical step failed, aborting")
             _write_agent_error(action_id, "Mechanical step failed")
+            update_last_run(action)  # prevent infinite retry on next loop
             return False
 
         # For research-agent: ensure target is set before dispatch.
