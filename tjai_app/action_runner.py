@@ -168,17 +168,16 @@ def resolve_prompt_template(prompt_template, extra_vars=None, target_date=None):
     return result
 
 
-def _run_one_script(script_cmd, target_date=None, timeout=3600):
+def _run_one_script(script_cmd, timeout=3600):
     """Run a single mechanical script. Returns True on success.
 
     timeout: seconds before killing the script. Default 3600s (1 hour).
-    run_mechanical passes the action's configured timeout from data.timeout.
+    Template vars in script_cmd (e.g. {yyyy-mm-dd}) are resolved by run_mechanical
+    before this function is called.
     """
     parts = script_cmd.split()
     script_name = parts[0]
     script_args = parts[1:]
-    if target_date:
-        script_args.append(target_date.strftime('%Y-%m-%d'))
 
     script_path = SCRIPTS_DIR / script_name
     if not script_path.exists():
@@ -213,6 +212,7 @@ def run_mechanical(action, target_date=None):
     mechanical_script can be a single string or a list of strings.
     If a list, scripts run in order; abort on first failure.
     Uses the action's data.timeout for the script timeout.
+    Template vars like {yyyy-mm-dd} in script commands are resolved from target_date.
     """
     data = action.data or {}
     script_cmd = data.get('mechanical_script')
@@ -220,14 +220,20 @@ def run_mechanical(action, target_date=None):
         return True
 
     timeout = data.get('timeout', 3600)
+    template_vars = get_template_vars(target_date or get_target_date())
+
+    def resolve(cmd):
+        for key, value in template_vars.items():
+            cmd = cmd.replace('{' + key + '}', str(value))
+        return cmd
 
     if isinstance(script_cmd, list):
         for cmd in script_cmd:
-            if not _run_one_script(cmd, target_date=target_date, timeout=timeout):
+            if not _run_one_script(resolve(cmd), timeout=timeout):
                 return False
         return True
     else:
-        return _run_one_script(script_cmd, target_date=target_date, timeout=timeout)
+        return _run_one_script(resolve(script_cmd), timeout=timeout)
 
 
 def create_journal_entry(action, target_date=None):

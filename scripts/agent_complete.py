@@ -367,27 +367,34 @@ def main():
             from extract_history import process_date
             if process_date(date_str):
                 logger.info("daily-history: extracted history HTML for %s", date_str)
+                # Clear retry tracking on success
+                SysConfig.objects.filter(key='daily_history_postcheck_retries').delete()
             else:
-                # Agent reported success but produced nothing — retry once
-                action = Entry.objects.filter(
-                    kind='action', deleted_at__isnull=True,
-                    data__entry_id='daily-history',
-                ).first()
-                if action:
-                    adata = action.data or {}
-                    retry_count = adata.get('retry_count', 0)
-                    if retry_count < 1:
+                # Agent reported success but produced nothing — retry once.
+                # Track retries in sysconfig (not action data) because
+                # update_last_run clears action data retry fields.
+                sc = SysConfig.objects.filter(key='daily_history_postcheck_retries').first()
+                retry_count = int(sc.value) if sc and sc.value else 0
+                if retry_count < 1:
+                    action = Entry.objects.filter(
+                        kind='action', deleted_at__isnull=True,
+                        data__entry_id='daily-history',
+                    ).first()
+                    if action:
+                        adata = action.data or {}
                         adata['retry_after'] = time.time() + 300  # 5 minutes
-                        adata['retry_count'] = retry_count + 1
                         action.data = adata
                         action.save(update_fields=['data'])
-                        logger.warning("daily-history: no history section for %s — "
-                                       "scheduled retry in 5 min", date_str)
-                    else:
-                        logger.error("daily-history: no history section for %s "
-                                     "after retry — giving up", date_str)
+                    SysConfig.objects.update_or_create(
+                        key='daily_history_postcheck_retries',
+                        defaults={'value': str(retry_count + 1),
+                                  'timestamp_modified': time.time()})
+                    logger.warning("daily-history: no history section for %s — "
+                                   "scheduled retry in 5 min", date_str)
                 else:
-                    logger.warning("daily-history: no history section found for %s", date_str)
+                    logger.error("daily-history: no history section for %s "
+                                 "after retry — giving up", date_str)
+                    SysConfig.objects.filter(key='daily_history_postcheck_retries').delete()
         except Exception as e:
             logger.error("daily-history: extract_history failed: %s", e)
 

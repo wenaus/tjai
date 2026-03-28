@@ -600,12 +600,15 @@ def _check_assessment_rerun_for(sysconfig_key, action_entry_id):
         logger.error("%s action not found for rerun", action_entry_id)
         return
 
-    script_name = (action.data or {}).get('mechanical_script')
-    if not script_name:
+    script_cmd = (action.data or {}).get('mechanical_script')
+    if not script_cmd:
         logger.error("%s: no mechanical_script configured", action_entry_id)
         return
 
-    script_path = Path(__file__).resolve().parent / script_name
+    # mechanical_script may contain template vars (e.g. "assessment_claude.py {yyyy-mm-dd}")
+    # Extract just the script filename (first token)
+    script_file = script_cmd.split()[0]
+    script_path = Path(__file__).resolve().parent / script_file
     if not script_path.exists():
         logger.error("%s: script not found: %s", action_entry_id, script_path)
         return
@@ -726,12 +729,14 @@ def _check_assessment_backfill(flag_key, action_entry_id):
             logger.error("backfill %s: action %s not found", flag_key, action_entry_id)
             return
 
-        script_name = (action.data or {}).get('mechanical_script')
-        if not script_name:
+        script_cmd = (action.data or {}).get('mechanical_script')
+        if not script_cmd:
             logger.error("backfill %s: no mechanical_script in %s", flag_key, action_entry_id)
             return
 
-        script_path = Path(__file__).resolve().parent / script_name
+        # mechanical_script may contain template vars — extract just the filename
+        script_file = script_cmd.split()[0]
+        script_path = Path(__file__).resolve().parent / script_file
         if not script_path.exists():
             logger.error("backfill %s: script not found: %s", flag_key, script_path)
             return
