@@ -4443,7 +4443,7 @@ def api_system_data(request):
     cron_path = os.path.join(django_settings.BASE_DIR, 'scripts', 'cron', 'crontab')
     cron_jobs = []
     try:
-        with open(cron_path) as f:
+        with open(cron_path, encoding='utf-8') as f:
             comment = ''
             for line in f:
                 line = line.strip()
@@ -4461,8 +4461,8 @@ def api_system_data(request):
                             'description': comment,
                         })
                     comment = ''
-    except FileNotFoundError:
-        pass
+    except Exception as e:
+        cron_jobs = [{'schedule': '', 'script': 'ERROR', 'description': str(e)}]
     data['cron'] = cron_jobs
 
     return JsonResponse(data)

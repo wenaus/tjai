@@ -390,6 +390,16 @@
                     html += '</table>';
                 }
 
+                // Cron section
+                if (data.cron && data.cron.length > 0) {
+                    html += '<div style="margin-top:12px;margin-bottom:4px;color:#8a8a8a;font-size:12px">Cron</div>';
+                    html += '<table><tr><th>Schedule</th><th>Script</th><th>Description</th></tr>';
+                    for (const job of data.cron) {
+                        html += `<tr><td style="white-space:nowrap;color:#b0bec5">${job.schedule}</td><td>${job.script}</td><td>${job.description}</td></tr>`;
+                    }
+                    html += '</table>';
+                }
+
                 // Machines
                 if (tj.machines && tj.machines.length > 0) {
                     html += '<div style="margin-top:12px;margin-bottom:4px;color:#8a8a8a;font-size:12px">Sync Machines</div>';
@@ -522,16 +532,6 @@
                 html += '</div>';
             } else if (cw && cw.error) {
                 html += `<div class="section"><div class="section-title">CloudWatch</div><div style="color:#ef5350">Error: ${cw.error}</div></div>`;
-            }
-
-            // Cron section
-            if (data.cron && data.cron.length > 0) {
-                html += '<div class="section"><div class="section-title">Cron</div>';
-                html += '<table><tr><th>Schedule</th><th>Script</th><th>Description</th></tr>';
-                for (const job of data.cron) {
-                    html += `<tr><td style="white-space:nowrap;color:#b0bec5">${job.schedule}</td><td>${job.script}</td><td>${job.description}</td></tr>`;
-                }
-                html += '</table></div>';
             }
 
             // SysConfig section
