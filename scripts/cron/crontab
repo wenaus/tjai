@@ -10,3 +10,6 @@ PATH=/usr/local/bin:/usr/bin:/bin
 
 # Daily 04:00 — purge Claude Code session detritus older than 2 days
 0 4 * * * /home/admin/github/tjrepo/tjai/scripts/cron/cleanup_claude_sessions.sh >> /tmp/cron_cleanup_claude.log 2>&1
+
+# Daily 03:30 — purge entry versions older than 3 days (keep min 2 per entry)
+30 3 * * * /home/admin/github/tjrepo/tjai/scripts/cron/purge_old_versions.py >> /tmp/cron_purge_versions.log 2>&1

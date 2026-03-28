@@ -4439,6 +4439,32 @@ def api_system_data(request):
 
     data['watchdog'] = wd_data
 
+    # Cron jobs — parse the crontab file
+    cron_path = os.path.join(settings.BASE_DIR, 'scripts', 'cron', 'crontab')
+    cron_jobs = []
+    try:
+        with open(cron_path) as f:
+            comment = ''
+            for line in f:
+                line = line.strip()
+                if line.startswith('#') and not line.startswith('# Install:') and not line.startswith('# Source:') and not line.startswith('# tjai'):
+                    comment = line.lstrip('# ').strip()
+                elif line and not line.startswith('#') and '=' not in line:
+                    parts = line.split(None, 5)
+                    if len(parts) >= 6:
+                        schedule = ' '.join(parts[:5])
+                        cmd = parts[5].split('>>')[0].strip()
+                        script = os.path.basename(cmd)
+                        cron_jobs.append({
+                            'schedule': schedule,
+                            'script': script,
+                            'description': comment,
+                        })
+                    comment = ''
+    except FileNotFoundError:
+        pass
+    data['cron'] = cron_jobs
+
     return JsonResponse(data)
 
 

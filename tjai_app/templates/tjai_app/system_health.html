@@ -524,6 +524,16 @@
                 html += `<div class="section"><div class="section-title">CloudWatch</div><div style="color:#ef5350">Error: ${cw.error}</div></div>`;
             }
 
+            // Cron section
+            if (data.cron && data.cron.length > 0) {
+                html += '<div class="section"><div class="section-title">Cron</div>';
+                html += '<table><tr><th>Schedule</th><th>Script</th><th>Description</th></tr>';
+                for (const job of data.cron) {
+                    html += `<tr><td style="white-space:nowrap;color:#b0bec5">${job.schedule}</td><td>${job.script}</td><td>${job.description}</td></tr>`;
+                }
+                html += '</table></div>';
+            }
+
             // SysConfig section
             if (data.sysconfig && data.sysconfig.length > 0) {
                 html += '<div class="section"><div class="section-title">SysConfig</div>';
