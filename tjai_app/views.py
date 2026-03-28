@@ -4440,7 +4440,7 @@ def api_system_data(request):
     data['watchdog'] = wd_data
 
     # Cron jobs — parse the crontab file
-    cron_path = os.path.join(settings.BASE_DIR, 'scripts', 'cron', 'crontab')
+    cron_path = os.path.join(django_settings.BASE_DIR, 'scripts', 'cron', 'crontab')
     cron_jobs = []
     try:
         with open(cron_path) as f:
