@@ -1166,6 +1166,15 @@ def dashboard_search(request):
             timestamp_modified__lt=day_end.timestamp(),
         )
 
+    # Title search: restrict FTS results to entries whose first line matches
+    field = request.GET.get('field')
+    if field == 'title':
+        words = q.lower().split()
+        qs = qs.extra(where=[
+            "LOWER(SPLIT_PART(content, E'\\n', 1)) LIKE %s"
+            for _ in words
+        ], params=[f'%{w}%' for w in words])
+
     from django.db.models.functions import Length
     sort = request.GET.get('sort', 'time')
     if sort == 'rank':

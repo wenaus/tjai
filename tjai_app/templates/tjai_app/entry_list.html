@@ -278,17 +278,14 @@
         }
 
         function doTitleSearch() {
-            if (isBodySearch) {
-                isBodySearch = false;
-                allEntries.forEach(el => { el.style.display = ''; });
-                document.querySelectorAll('.body-result').forEach(el => el.remove());
-            }
-            searchQuery = searchInput.value.trim().toLowerCase();
-            searchClear.style.display = searchQuery ? 'inline' : 'none';
-            applyFilter();
+            doSearch('title');
         }
 
         function doBodySearch() {
+            doSearch('body');
+        }
+
+        function doSearch(mode) {
             var q = searchInput.value.trim();
             if (!q) return;
             searchClear.style.display = 'inline';
@@ -297,11 +294,12 @@
             document.querySelectorAll('.body-result').forEach(el => el.remove());
             var context = '{{ context_name|default:"" }}';
             var url = '/tjai/api/dashboard/search?q=' + encodeURIComponent(q);
+            if (mode === 'title') url += '&field=title';
             if (context) url += '&context=' + encodeURIComponent(context);
             fetch(url).then(r => r.json()).then(function(data) {
                 var entries = data.entries || [];
                 var container = document.querySelector('.entry, .back').parentElement;
-                countDisplay.textContent = '(' + entries.length + ' body results)';
+                countDisplay.textContent = '(' + entries.length + ' ' + mode + ' results)';
                 entries.forEach(function(e) {
                     var div = document.createElement('div');
                     div.className = 'entry body-result';
