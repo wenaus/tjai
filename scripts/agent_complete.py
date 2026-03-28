@@ -356,11 +356,11 @@ def main():
     if current_entry and exit_code in (0, 124):
         _linkify_synthesis_sources(current_entry)
 
-    # Post-process daily-history: extract digested history to file for KozyKorner
+    # Post-process daily-history: extract digested history to file for KozyKorner.
+    # If the AI agent completed but didn't write the History section, schedule
+    # a single retry after 5 minutes.
     if action_id == 'daily-history' and exit_code in (0, 124):
         try:
-            # entry may be None (daily-history doesn't set next_target_entry_id).
-            # Derive date from today and look up the daily entry directly.
             from tjai_app.services import get_timezone
             from datetime import datetime
             date_str = datetime.now(get_timezone()).date().isoformat()
@@ -368,7 +368,26 @@ def main():
             if process_date(date_str):
                 logger.info("daily-history: extracted history HTML for %s", date_str)
             else:
-                logger.warning("daily-history: no history section found for %s", date_str)
+                # Agent reported success but produced nothing — retry once
+                action = Entry.objects.filter(
+                    kind='action', deleted_at__isnull=True,
+                    data__entry_id='daily-history',
+                ).first()
+                if action:
+                    adata = action.data or {}
+                    retry_count = adata.get('retry_count', 0)
+                    if retry_count < 1:
+                        adata['retry_after'] = time.time() + 300  # 5 minutes
+                        adata['retry_count'] = retry_count + 1
+                        action.data = adata
+                        action.save(update_fields=['data'])
+                        logger.warning("daily-history: no history section for %s — "
+                                       "scheduled retry in 5 min", date_str)
+                    else:
+                        logger.error("daily-history: no history section for %s "
+                                     "after retry — giving up", date_str)
+                else:
+                    logger.warning("daily-history: no history section found for %s", date_str)
         except Exception as e:
             logger.error("daily-history: extract_history failed: %s", e)
 
