@@ -433,6 +433,55 @@
                         },
                     }
                 });
+                // Flash notification for entry detail page
+                function flashNotice(msg) {
+                    var box = document.getElementById('tjai-flash');
+                    if (!box) {
+                        box = document.createElement('div');
+                        box.id = 'tjai-flash';
+                        box.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#2a2a3a;color:#9ccc65;padding:12px 24px;border:1px solid #9ccc65;border-radius:4px;font-size:14px;z-index:9999;transition:opacity 0.5s;pointer-events:none';
+                        document.body.appendChild(box);
+                    }
+                    box.textContent = msg;
+                    box.style.opacity = '1';
+                    box.style.display = 'block';
+                    clearTimeout(box._timer);
+                    box._timer = setTimeout(function() {
+                        box.style.opacity = '0';
+                        setTimeout(function() { box.style.display = 'none'; }, 500);
+                    }, 2000);
+                }
+
+                // Intelligent paste: if clipboard HTML contains tjai entry UUIDs,
+                // fetch full entries and paste as markdown with links/tags
+                cm.on('paste', function(cm, e) {
+                    const html = e.clipboardData && e.clipboardData.getData('text/html');
+                    if (!html || !html.includes('data-tjai-entry-id')) return;
+
+                    e.preventDefault();
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const items = doc.querySelectorAll('[data-tjai-entry-id]');
+                    if (items.length === 0) return;
+
+                    const uuids = [...items].map(el => el.dataset.tjaiEntryId);
+
+                    Promise.all(uuids.map(uuid =>
+                        fetch(`/tjai/api/entry/${uuid}/content`).then(r => r.json())
+                    )).then(entries => {
+                        const lines = entries.map(ent => {
+                            if (ent.error) return '- (entry not found)';
+                            const tags = (ent.tags || []).map(t => ':' + t).join(' ');
+                            const tagStr = tags ? '   ' + tags : '';
+                            return '- ' + ent.content.split('\n')[0] + tagStr;
+                        });
+                        cm.replaceSelection(lines.join('\n'));
+                        flashNotice(`Pasted ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} (entry-aware)`);
+                    }).catch(() => {
+                        const plain = e.clipboardData.getData('text/plain');
+                        if (plain) cm.replaceSelection(plain);
+                    });
+                });
             }
             var isRestore = !!restoreContent;
             cm.setValue(restoreContent || originalContent);

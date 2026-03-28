@@ -527,7 +527,7 @@
                     }
                 }
 
-                html += `<div class="entry" id="e-${entry.id}" style="margin-left:0" data-context="${entry.context || ''}" data-machine="${entry.hostname || ''}" data-kind="${entry.kind || ''}" data-tags="${(entry.all_tags || entry.tags || []).join(',')}">${line}</div>`;
+                html += `<div class="entry" id="e-${entry.id}" style="margin-left:0" data-context="${entry.context || ''}" data-machine="${entry.hostname || ''}" data-kind="${entry.kind || ''}" data-tags="${(entry.all_tags || entry.tags || []).join(',')}" data-content="${escapeHtml(entry.content)}" data-entry-kind="${entry.kind || ''}">${line}</div>`;
             }
             return html;
         }
@@ -1235,6 +1235,60 @@
 
         // Update refresh display every second
         setInterval(updateRefreshDisplay, 1000);
+
+        // Intelligent copy: embed entry UUIDs in clipboard HTML so paste can reconstruct
+        // Flash notification — centered, auto-dismiss
+        function flashNotice(msg) {
+            var box = document.getElementById('tjai-flash');
+            if (!box) {
+                box = document.createElement('div');
+                box.id = 'tjai-flash';
+                box.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#2a2a3a;color:#9ccc65;padding:12px 24px;border:1px solid #9ccc65;border-radius:4px;font-size:14px;z-index:9999;transition:opacity 0.5s;pointer-events:none';
+                document.body.appendChild(box);
+            }
+            box.textContent = msg;
+            box.style.opacity = '1';
+            box.style.display = 'block';
+            clearTimeout(box._timer);
+            box._timer = setTimeout(function() {
+                box.style.opacity = '0';
+                setTimeout(function() { box.style.display = 'none'; }, 500);
+            }, 2000);
+        }
+
+        // Intelligent copy: embed entry UUIDs in clipboard HTML
+        document.addEventListener('copy', function(e) {
+            const sel = window.getSelection();
+            if (!sel.rangeCount) return;
+
+            const entryDivs = document.querySelectorAll('.entry[id^="e-"]');
+            const selected = [];
+            for (const div of entryDivs) {
+                if (sel.containsNode(div, true)) {
+                    const uuid = div.id.substring(2);
+                    const content = div.dataset.content || '';
+                    const kind = div.dataset.entryKind || '';
+                    const tags = div.dataset.tags || '';
+                    selected.push({uuid, content, kind, tags});
+                }
+            }
+            if (selected.length === 0) return;
+
+            const plainLines = [];
+            const htmlLines = [];
+            for (const s of selected) {
+                const tagStr = s.tags ? ' ' + s.tags.split(',').filter(Boolean).map(t => ':' + t).join(' ') : '';
+                const line = s.content + tagStr;
+                plainLines.push('- ' + line);
+                htmlLines.push(`<div data-tjai-entry-id="${s.uuid}" data-tjai-kind="${s.kind}">${escapeHtml(line)}</div>`);
+            }
+
+            e.clipboardData.setData('text/plain', plainLines.join('\n'));
+            e.clipboardData.setData('text/html',
+                `<div data-tjai-copy="1">${htmlLines.join('\n')}</div>`);
+            e.preventDefault();
+            flashNotice(`Copied ${selected.length} entr${selected.length === 1 ? 'y' : 'ies'} (entry-aware)`);
+        });
     </script>
 </body>
 </html>
