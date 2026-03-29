@@ -176,6 +176,14 @@ def main():
         response = call_claude(prompt)
         logger.info("Claude response: %d chars", len(response))
 
+        # Save raw response for debugging parse failures
+        from pathlib import Path
+        response_dir = Path(__file__).resolve().parent.parent / 'data' / 'assessment-responses'
+        response_dir.mkdir(parents=True, exist_ok=True)
+        response_file = response_dir / f'{date_str}-claude.txt'
+        response_file.write_text(response, encoding='utf-8')
+        logger.info("Saved raw response to %s", response_file)
+
         scores_data, content = parse_response(response)
         logger.info("Parsed: %d scored events", len(scores_data.get('scores', [])))
 

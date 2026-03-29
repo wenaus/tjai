@@ -16,6 +16,7 @@ import sys
 import time
 import traceback
 import uuid as uuid_mod
+from pathlib import Path
 
 import bootstrap  # noqa: F401 - Django setup
 
@@ -175,14 +176,41 @@ def call_gemini(prompt):
     return response.text
 
 
+def _clean_json(raw):
+    """Fix common LLM JSON errors: trailing commas, comments, truncation."""
+    # Remove single-line comments (// ...)
+    s = re.sub(r'//[^\n]*', '', raw)
+    # Remove trailing commas before } or ]
+    s = re.sub(r',\s*([}\]])', r'\1', s)
+    # Try parsing as-is first
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError:
+        pass
+    # Truncated JSON — try closing open structures
+    for fix in ('}', ']}', '"]}', '"}]}', '""]}'):
+        try:
+            return json.loads(s + fix)
+        except json.JSONDecodeError:
+            continue
+    # Last resort: find the largest parseable prefix
+    for end in range(len(s), 0, -100):
+        for fix in ('', '}', ']}', '"]}', '"}]}'):
+            try:
+                return json.loads(s[:end] + fix)
+            except json.JSONDecodeError:
+                continue
+    raise json.JSONDecodeError("Could not repair JSON", s, 0)
+
+
 def parse_response(response_text):
-    """Parse Gemini response to extract scores JSON and markdown content."""
+    """Parse LLM response to extract scores JSON and markdown content."""
     # Extract JSON block
     json_match = re.search(r'```json\s*\n(.*?)\n```', response_text, re.DOTALL)
     if not json_match:
-        raise RuntimeError("No ```json``` block found in Gemini response")
+        raise RuntimeError("No ```json``` block found in response")
 
-    scores_data = json.loads(json_match.group(1))
+    scores_data = _clean_json(json_match.group(1))
 
     # Extract markdown content — everything from the first # header after JSON
     after_json = response_text[json_match.end():]
@@ -305,6 +333,13 @@ def main():
 
         response = call_gemini(prompt)
         logger.info("Gemini response: %d chars", len(response))
+
+        # Save raw response for debugging parse failures
+        response_dir = Path(__file__).resolve().parent.parent / 'data' / 'assessment-responses'
+        response_dir.mkdir(parents=True, exist_ok=True)
+        response_file = response_dir / f'{date_str}-gemini.txt'
+        response_file.write_text(response, encoding='utf-8')
+        logger.info("Saved raw response to %s", response_file)
 
         scores_data, content = parse_response(response)
         logger.info("Parsed: %d scored events", len(scores_data.get('scores', [])))
