@@ -558,7 +558,7 @@ def execute_action(action, target_date=None):
     action_id = data.get('entry_id')
     _log_context.action_id = action_id
 
-    # Set running status for all actions (not just AI dispatches)
+    # Set running status and clear stale errors from previous runs
     if action_id:
         now = time.time()
         SysConfig.objects.update_or_create(
@@ -567,6 +567,10 @@ def execute_action(action, target_date=None):
         SysConfig.objects.update_or_create(
             key=f'agent_{action_id}_launched',
             defaults={'value': str(now), 'timestamp_modified': now})
+        SysConfig.objects.filter(key=f'agent_{action_id}_last_error').update(
+            value='', timestamp_modified=now)
+        SysConfig.objects.filter(key=f'agent_{action_id}_last_error_time').update(
+            value='', timestamp_modified=now)
 
     try:
         # Journal entry must exist before mechanical scripts (they may append to it)
