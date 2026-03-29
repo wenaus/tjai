@@ -2295,6 +2295,8 @@ def api_entry_save(request, entry_id):
         content = data.get('content', '')
     except (json.JSONDecodeError, KeyError):
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    # Strip trailing whitespace from each line (common paste artifact)
+    content = '\n'.join(line.rstrip() for line in content.split('\n'))
     old_content = entry.content
     entry.content = content
     if 'name' in data:
