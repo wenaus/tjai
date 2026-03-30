@@ -172,7 +172,7 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
 
         repository = RepositoryFactory.get_repository()
 
-        entry_id = str(uuid.uuid4())
+        entry_id = str(uuid.uuid7())
 
         # Use timestamp_override if provided, otherwise use current time
         if hasattr(args, 'timestamp_override') and args.timestamp_override is not None:

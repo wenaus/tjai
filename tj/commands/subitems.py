@@ -56,7 +56,7 @@ def handle_add_subitem(args) -> None:
                     tags.add(tag_name)
 
         # Create sub-item entry
-        entry_id = str(uuid.uuid4())
+        entry_id = str(uuid.uuid7())
         now = datetime.now(timezone.utc).timestamp()
 
         entry = Entry(

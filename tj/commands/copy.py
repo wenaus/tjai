@@ -102,7 +102,7 @@ def handle_copy(args) -> None:
     repository = RepositoryFactory.get_repository()
 
     # Generate new ID
-    new_id = str(uuid.uuid4())
+    new_id = str(uuid.uuid7())
 
     # Create the new entry
     from tj.repository import Entry

@@ -2635,7 +2635,7 @@ def api_add_bookmark(request):
 
     now = time.time()
     entry = Entry.objects.create(
-        id=str(uuid.uuid4()),
+        id=str(uuid.uuid7()),
         content=content,
         kind='bookmark',
         timestamp_created=now,
@@ -2709,7 +2709,7 @@ def api_add_journal(request):
 
     now = time.time()
     entry = Entry.objects.create(
-        id=str(uuid.uuid4()),
+        id=str(uuid.uuid7()),
         content=content,
         kind='journal',
         data={'event_date': float(event_timestamp)},
@@ -2789,7 +2789,7 @@ def api_entry_create(request):
         except (json.JSONDecodeError, ValueError):
             pass
     entry = Entry.objects.create(
-        id=str(uuid.uuid4()),
+        id=str(uuid.uuid7()),
         content=body.get('content', ''),
         kind=body.get('kind', 'memory'),
         context_id=body.get('context') or None,
@@ -2888,7 +2888,7 @@ def api_add_entry(request):
 
     now = time.time()
     entry = Entry.objects.create(
-        id=str(uuid.uuid4()),
+        id=str(uuid.uuid7()),
         content=content,
         kind=kind,
         context=context_obj,
@@ -3010,7 +3010,7 @@ def api_dialog(request):
                     extra_tags.append('research-subagent')
 
     entry = Entry.objects.create(
-        id=str(uuid.uuid4()),
+        id=str(uuid.uuid7()),
         content=content,
         kind='memory',
         context_id='claude-code',
@@ -3641,7 +3641,7 @@ def api_research_rerun(request):
     now = time.time()
     context_obj = original.context
     new_entry = Entry.objects.create(
-        id=str(uuid.uuid4()),
+        id=str(uuid.uuid7()),
         content=topic,
         kind='memory',
         context=context_obj,
@@ -4701,7 +4701,7 @@ def api_rss_readme(request):
         content = f"[{title}]({url})" if title else url
         now = time.time()
         entry = Entry.objects.create(
-            id=str(uuid.uuid4()),
+            id=str(uuid.uuid7()),
             content=content,
             kind='bookmark',
             timestamp_created=now,
@@ -5190,7 +5190,7 @@ def api_goal_create_note(request):
     goal_title = goal.content.split('\n')[0].strip()
     now = time.time()
     note = Entry.objects.create(
-        id=str(uuid.uuid4()),
+        id=str(uuid.uuid7()),
         content=f'{goal_title} notes',
         kind='memory',
         context=goal.context,

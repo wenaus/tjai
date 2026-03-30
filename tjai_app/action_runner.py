@@ -352,7 +352,7 @@ def dispatch_ai(action, entry_id=None, target_date=None):
                 entry1_id=action.id,
                 entry2_id=target_entry_uuid,
                 defaults={
-                    'id': str(_uuid.uuid4()),
+                    'id': str(_uuid.uuid7()),
                     'relation_type': 'dispatched',
                     'timestamp_created': time.time(),
                     'timestamp_modified': time.time(),
@@ -453,7 +453,7 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
             entry.save(update_fields=['status'])
         else:
             entry = Entry.objects.create(
-                id=str(_uuid.uuid4()),
+                id=str(_uuid.uuid7()),
                 content=topic_text,
                 kind='memory',
                 context=base_entry.context,

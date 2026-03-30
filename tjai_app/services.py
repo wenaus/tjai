@@ -421,7 +421,7 @@ def create_entry(content, kind="memory", context=None, name=None, tags=None,
         entry_mmdd = event_dt.month * 100 + event_dt.day
 
     entry = Entry.objects.create(
-        id=str(uuid.uuid4()),
+        id=str(uuid.uuid7()),
         content=actual_content,
         kind=kind,
         context=context_obj,
@@ -501,7 +501,7 @@ def copy_calendar_entry(entry_id, event_date, event_time=None):
 
     now = time.time()
     entry = Entry.objects.create(
-        id=str(uuid.uuid4()),
+        id=str(uuid.uuid7()),
         content=source.content,
         kind='journal',
         context=source.context,
@@ -1011,7 +1011,7 @@ def create_relation(entry1_id, entry2_id, relation_type, data=None):
 
     now = time.time()
     rel = Relation.objects.create(
-        id=str(uuid.uuid4()),
+        id=str(uuid.uuid7()),
         entry1_id=entry1_id,
         entry2_id=entry2_id,
         relation_type=relation_type,

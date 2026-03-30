@@ -115,7 +115,7 @@ def handle_clock_start(args) -> None:
 
     # Create journal entry with clock data
     repository = RepositoryFactory.get_repository()
-    entry_id = str(uuid.uuid4())
+    entry_id = str(uuid.uuid7())
     now = datetime.now(timezone.utc).timestamp()
 
     entry = Entry(
@@ -174,7 +174,7 @@ def handle_clock_stop(args) -> None:
 
     # Create stop entry with same context as start
     repository = RepositoryFactory.get_repository()
-    stop_entry_id = str(uuid.uuid4())
+    stop_entry_id = str(uuid.uuid7())
     now = datetime.now(timezone.utc).timestamp()
 
     stop_entry = Entry(

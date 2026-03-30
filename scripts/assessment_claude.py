@@ -125,7 +125,7 @@ def _write_claude_entry(date_str, scores_data, content):
         return existing
 
     entry = Entry.objects.create(
-        id=str(uuid_mod.uuid4()),
+        id=str(uuid_mod.uuid7()),
         content=content,
         kind='memory',
         context_id='tjai',

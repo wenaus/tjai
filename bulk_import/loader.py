@@ -141,7 +141,7 @@ def bulk_import_bookmarks(items, source_tag=None, skip_existing=True,
         # Create entry with custom timestamp
         timestamp = item.get('timestamp') or time.time()
         entry = Entry.objects.create(
-            id=str(uuid.uuid4()),
+            id=str(uuid.uuid7()),
             content=content,
             kind='bookmark',
             context=context_obj,

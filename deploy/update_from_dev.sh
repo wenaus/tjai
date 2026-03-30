@@ -8,15 +8,13 @@ VENV=$TARGET_DIR/.venv
 PYTHON=/opt/python-3.14/bin/python3.14
 
 # rsync code (preserve .venv, .env, data/)
-rsync -av \
-  --exclude '.venv' --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' --exclude '.env' --exclude 'data/' \
+# --chmod ensures files are world-readable so www-data (gunicorn) can read them
+rsync -av --chmod=D755,F644 \
+  --exclude '.venv' --exclude '.venv.*' --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' --exclude '.env' --exclude 'data/' \
   "$REPO_ROOT/" "$TARGET_DIR/"
 
-# Fix permissions (exclude .venv and data/ which have their own ownership)
-find "$TARGET_DIR" -path "$TARGET_DIR/.venv" -prune -o -path "$TARGET_DIR/data" -prune -o -type f -exec chmod g+w,o+r {} \; -o -type d -exec chmod g+wx,o+rx {} \;
-
-# Data dir: world-writable so both admin and www-data can write
-chmod -R a+rwX "$TARGET_DIR/data/" 2>/dev/null || true
+# Safety net: ensure world-readable in case of manual rsyncs without --chmod
+find "$TARGET_DIR" -path "$TARGET_DIR/.venv" -prune -o -path "$TARGET_DIR/.venv.*" -prune -o -path "$TARGET_DIR/data" -prune -o -type f -exec chmod o+r {} \; -o -type d -exec chmod o+rx {} \;
 
 # ensure env
 if [[ ! -f $TARGET_DIR/.env ]]; then

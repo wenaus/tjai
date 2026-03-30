@@ -65,7 +65,7 @@ class PersistentConversationStore:
     def _create_entry(self, role: str, text: str):
         """Create a conversation entry in the database."""
         now = time.time()
-        entry_id = str(uuid.uuid4())
+        entry_id = str(uuid.uuid7())
 
         entry = Entry.objects.create(
             id=entry_id,

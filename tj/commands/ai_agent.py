@@ -146,7 +146,7 @@ def _fetch_guidance(context: Optional[str]) -> str:
 def _create_tracking_entry(prompt: str, context: Optional[str]) -> str:
     """Create a tjai entry to track the agent's work."""
     repository = RepositoryFactory.get_repository()
-    entry_id = str(uuid.uuid4())
+    entry_id = str(uuid.uuid7())
     now = datetime.now(timezone.utc).timestamp()
 
     state = get_state()

@@ -101,7 +101,7 @@ def log_operation(operation: str, result: str, details: dict = None) -> None:
 
         content = summary + "\n" + json.dumps(log_data, indent=2)
 
-        entry_id = str(uuid.uuid4())
+        entry_id = str(uuid.uuid7())
         now = datetime.now(timezone.utc).timestamp()
 
         entry = Entry(

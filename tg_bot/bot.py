@@ -218,7 +218,7 @@ def create_memo(content: str, user_id: int) -> str:
     )
 
     entry = Entry.objects.create(
-        id=str(uuid.uuid4()),
+        id=str(uuid.uuid7()),
         content=content,
         kind='memory',
         context=context,
@@ -408,7 +408,7 @@ def create_journal_entry(args: str, user_id: int) -> tuple[str, str]:
     now = time.time()
 
     entry = Entry.objects.create(
-        id=str(uuid.uuid4()),
+        id=str(uuid.uuid7()),
         content=content.strip(),
         kind='journal',
         data={'event_date': timestamp, 'telegram_user_id': user_id, 'saved_via': 'journal_command'},
@@ -660,7 +660,7 @@ def _save_to_memory(content: str, user_id: int):
     )
 
     entry = Entry.objects.create(
-        id=str(uuid.uuid4()),
+        id=str(uuid.uuid7()),
         content=content,
         kind='memory',
         context=context,
