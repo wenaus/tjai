@@ -494,7 +494,7 @@ def collect_dropbox():
         try:
             subprocess.run(
                 [str(Path.home() / 'bin' / 'dropbox.py'), 'start'],
-                capture_output=True, text=True, timeout=15,
+                capture_output=True, text=True, timeout=120,
             )
             result['restarted'] = True
         except Exception as e:

@@ -18,6 +18,7 @@ import uuid
 import bootstrap  # noqa: F401 - Django setup
 
 from tjai_app.db_log_handler import DbLogHandler
+from tjai_app.action_runner import RESEARCH_MODELS
 from tjai_app.models import Entry, SysConfig, Tag
 
 import logging
@@ -204,10 +205,10 @@ def research_model_complete(model_entry):
         base_data = base.data if isinstance(base.data, dict) else {}
         base_data[f'{model}_status'] = 'done'
 
-        # Check if all 3 are done
+        # Check if all active models are done
         statuses = {
             m: base_data.get(f'{m}_status')
-            for m in ('claude', 'gemini', 'chatgpt')
+            for m in RESEARCH_MODELS
         }
         all_done = all(s == 'done' for s in statuses.values())
 
@@ -275,9 +276,8 @@ def _create_and_dispatch_synthesis(base_entry_id, base_entry, synth_entry_id):
             'base_entry_id': base_entry_id,
             'base_uuid': str(base_entry.id),
             'model': 'synthesis',
-            'source_claude_entry_id': f'{base_entry_id}-claude',
-            'source_gemini_entry_id': f'{base_entry_id}-gemini',
-            'source_chatgpt_entry_id': f'{base_entry_id}-chatgpt',
+            **{f'source_{m}_entry_id': f'{base_entry_id}-{m}'
+               for m in RESEARCH_MODELS},
         },
     )
     Tag.objects.create(tag_name='fromai', entry=synth)

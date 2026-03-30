@@ -18,6 +18,10 @@ from .models import Entry, SysConfig, Tag
 from . import services
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / 'scripts'
+
+# Models included in multi-model research dispatch and completion checks.
+# ChatGPT disabled 2026-03-30 — implementation intact, just not auto-dispatched.
+RESEARCH_MODELS = ('claude', 'gemini')
 TJAI_DIR = SCRIPTS_DIR.parent
 TJ_PY = TJAI_DIR / 'tj.py'
 
@@ -432,7 +436,7 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
 
     # Determine which models to run
     models_to_run = []
-    for model in ('claude', 'gemini', 'chatgpt'):
+    for model in RESEARCH_MODELS:
         model_status = base_data.get(f'{model}_status')
         if model_status == 'rerun' or model_status is None:
             models_to_run.append(model)
