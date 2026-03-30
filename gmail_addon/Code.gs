@@ -660,94 +660,111 @@ function onGmailMessage(e) {
 
     var gmailUrl = thread.getPermalink();
 
+    // Try to extract event info for journal prefill
+    var prefill = null;  // {content, date, time}
+
     // --- ICS path ---
     if (icsTexts.length > 0) {
-      var cards = [];
       for (var i = 0; i < icsTexts.length; i++) {
         var events = parseICS_(icsTexts[i]);
-        diag.push('Events from ICS[' + i + ']: ' + events.length);
-        for (var j = 0; j < events.length; j++) {
-          cards.push(buildEventCard_(events[j], gmailUrl));
+        if (events.length > 0) {
+          prefill = eventToPrefill_(events[0]);
+          diag.push('Prefill from ICS: ' + prefill.content);
+          break;
         }
       }
-      if (cards.length > 0) return cards;
-      diag.push('parseICS returned 0 events');
     }
 
-    // --- Body-parse fallback: try current message, then original ---
-    diag.push('Trying body parse');
-    var tryMsgs = [message];
-    if (messages.length > 1 && messages[0].getId() !== message.getId()) {
-      tryMsgs.push(messages[0]);
+    // --- Body-parse fallback ---
+    if (!prefill) {
+      diag.push('Trying body parse');
+      var tryMsgs = [message];
+      if (messages.length > 1 && messages[0].getId() !== message.getId()) {
+        tryMsgs.push(messages[0]);
+      }
+
+      for (var t = 0; t < tryMsgs.length; t++) {
+        var tryMsg = tryMsgs[t];
+        var subject = tryMsg.getSubject();
+        var body = tryMsg.getPlainBody();
+        var msgYear = tryMsg.getDate().getFullYear();
+        var senderTz = senderTimezone_(tryMsg.getFrom());
+        var bodyNoSig = stripSignature_(body);
+
+        var title = extractMeetingTitle_(subject, bodyNoSig);
+        if (!title) { diag.push('msg[' + t + ']: no title'); continue; }
+
+        var dt = extractDateTime_(subject, bodyNoSig, msgYear, senderTz);
+        if (dt) {
+          var zoomUrl = extractZoomUrl_(bodyNoSig) || extractZoomUrl_(subject);
+          var indicoUrl = extractIndicoUrl_(bodyNoSig) || extractIndicoUrl_(subject);
+          prefill = eventToPrefill_({
+            summary: title, timestamp: dt.timestamp,
+            displayTime: dt.displayTime, zoomUrl: zoomUrl, indicoUrl: indicoUrl
+          });
+          diag.push('Prefill from body: ' + prefill.content);
+          break;
+        }
+
+        // All-day fallback: date only + Indico
+        var indicoUrl2 = extractIndicoUrl_(bodyNoSig) || extractIndicoUrl_(subject);
+        if (indicoUrl2) {
+          var dateOnly = extractDateOnly_(subject, bodyNoSig, msgYear);
+          if (dateOnly) {
+            prefill = eventToPrefill_({
+              summary: title, timestamp: dateOnly.timestamp,
+              displayTime: 'All day', indicoUrl: indicoUrl2
+            });
+            diag.push('Prefill from allday: ' + prefill.content);
+            break;
+          }
+        }
+      }
     }
 
-    for (var t = 0; t < tryMsgs.length; t++) {
-      var tryMsg = tryMsgs[t];
-      var subject = tryMsg.getSubject();
-      var body = tryMsg.getPlainBody();
-      var msgYear = tryMsg.getDate().getFullYear();
-      var senderTz = senderTimezone_(tryMsg.getFrom());
-
-      var bodyNoSig = stripSignature_(body);
-
-      var title = extractMeetingTitle_(subject, bodyNoSig);
-      if (!title) { diag.push('msg[' + t + ']: no title'); continue; }
-
-      var dt = extractDateTime_(subject, bodyNoSig, msgYear, senderTz);
-      if (!dt) { diag.push('msg[' + t + ']: no datetime'); continue; }
-
-      diag.push('msg[' + t + ']: ' + title + ' @ ' + dt.displayDate);
-      var zoomUrl = extractZoomUrl_(bodyNoSig) || extractZoomUrl_(subject);
-      var indicoUrl = extractIndicoUrl_(bodyNoSig) || extractIndicoUrl_(subject);
-
-      var ev = {
-        summary: title,
-        timestamp: dt.timestamp,
-        displayDate: dt.displayDate,
-        displayTime: dt.displayTime,
-        tzInfo: dt.tzInfo,
-        zoomUrl: zoomUrl,
-        indicoUrl: indicoUrl
-      };
-      return [buildEventCard_(ev, gmailUrl)];
+    // Even if full event detection failed, grab any zoom/indico URLs for the journal prefill
+    if (!prefill) {
+      var scanBody = stripSignature_(message.getPlainBody());
+      var scanSubj = message.getSubject() || '';
+      var foundZoom = extractZoomUrl_(scanBody) || extractZoomUrl_(scanSubj);
+      var foundIndico = extractIndicoUrl_(scanBody) || extractIndicoUrl_(scanSubj);
+      if (foundZoom || foundIndico) {
+        var parts = [];
+        if (foundZoom) parts.push('[zoom](' + foundZoom + ')');
+        if (foundIndico) parts.push('[indico](' + foundIndico + ')');
+        prefill = { content: parts.join(' '), date: Utilities.formatDate(new Date(), DEFAULT_TIMEZONE, 'yyyyMMdd'), time: '' };
+      }
     }
 
-    // --- All-day event fallback: Indico link + date (no time) ---
-    diag.push('Trying all-day fallback');
-    for (var a = 0; a < tryMsgs.length; a++) {
-      var aMsg = tryMsgs[a];
-      var aSubject = aMsg.getSubject();
-      var aBody = stripSignature_(aMsg.getPlainBody());
-      var aMsgYear = aMsg.getDate().getFullYear();
-
-      var aIndicoUrl = extractIndicoUrl_(aBody) || extractIndicoUrl_(aSubject);
-      if (!aIndicoUrl) { diag.push('allday msg[' + a + ']: no indico'); continue; }
-
-      var aDateOnly = extractDateOnly_(aSubject, aBody, aMsgYear);
-      if (!aDateOnly) { diag.push('allday msg[' + a + ']: no date'); continue; }
-
-      var aTitle = extractMeetingTitle_(aSubject, aBody);
-      if (!aTitle) { diag.push('allday msg[' + a + ']: no title'); continue; }
-
-      diag.push('allday msg[' + a + ']: ' + aTitle + ' @ ' + aDateOnly.displayDate);
-      var aEv = {
-        summary: aTitle,
-        timestamp: aDateOnly.timestamp,
-        displayDate: aDateOnly.displayDate,
-        displayTime: 'All day',
-        indicoUrl: aIndicoUrl
-      };
-      return [buildEventCard_(aEv, gmailUrl)];
-    }
-
-    // No calendar event found — offer bookmark save
+    // Build the single card with all sections
     var subj = message.getSubject() || '';
     var cleanTitle = subj.replace(/\[\[[^\]]*\]\]\s*/g, '').replace(/^(?:Re|Fwd|Fw)\s*:\s*/gi, '').trim();
-    return [buildBookmarkCard_(cleanTitle || subj, gmailUrl)];
+    return [buildMainCard_(cleanTitle || subj, gmailUrl, prefill)];
   } catch (err) {
     diag.push('ERROR: ' + err.message);
     return [buildDiagCard_(diag)];
   }
+}
+
+
+/**
+ * Convert a detected event object into journal prefill data.
+ */
+function eventToPrefill_(ev) {
+  var parts = [ev.summary];
+  if (ev.location && ev.location !== ev.zoomUrl) parts.push('@ ' + ev.location);
+  if (ev.zoomUrl) parts.push('[zoom](' + ev.zoomUrl + ')');
+  if (ev.indicoUrl) parts.push('[indico](' + ev.indicoUrl + ')');
+
+  // Convert timestamp to YYYYMMDD and HHMM in local timezone
+  var d = new Date(ev.timestamp * 1000);
+  var date = Utilities.formatDate(d, DEFAULT_TIMEZONE, 'yyyyMMdd');
+  var time = '';
+  if (ev.displayTime && ev.displayTime !== 'All day') {
+    time = Utilities.formatDate(d, DEFAULT_TIMEZONE, 'HHmm');
+  }
+
+  return { content: parts.join(' '), date: date, time: time };
 }
 
 
@@ -951,97 +968,82 @@ function pad_(n) {
 /**
  * Build a Card for one event, with memory section at bottom.
  */
-function buildEventCard_(ev, gmailUrl) {
-  var isBodyParse = !ev.location && !ev.description;
+/**
+ * Build the main card with all three sections: journal, bookmark, memory.
+ * journalPrefill is optional {content, date, time} from auto-detected events.
+ */
+function buildMainCard_(emailTitle, gmailUrl, journalPrefill) {
   var header = CardService.newCardHeader()
-    .setTitle(isBodyParse ? 'Email Event' : 'Calendar Invite')
-    .setSubtitle(ev.summary);
-
-  var section = CardService.newCardSection();
-
-  section.addWidget(
-    CardService.newTextInput()
-      .setFieldName('title')
-      .setTitle('Event')
-      .setValue(ev.summary)
-  );
-
-  section.addWidget(
-    CardService.newDecoratedText()
-      .setTopLabel('Date')
-      .setText(ev.displayDate)
-  );
-
-  section.addWidget(
-    CardService.newDecoratedText()
-      .setTopLabel('Time')
-      .setText(ev.displayTime + (ev.tzInfo ? ' ' + ev.tzInfo : ''))
-  );
-
-  if (ev.zoomUrl) {
-    section.addWidget(
-      CardService.newDecoratedText()
-        .setTopLabel('Zoom')
-        .setText(ev.zoomUrl)
-    );
-  }
-
-  if (ev.indicoUrl) {
-    section.addWidget(
-      CardService.newDecoratedText()
-        .setTopLabel('Indico')
-        .setText(ev.indicoUrl)
-    );
-  }
-
-  if (ev.location && ev.location !== ev.zoomUrl) {
-    section.addWidget(
-      CardService.newDecoratedText()
-        .setTopLabel('Location')
-        .setText(ev.location)
-    );
-  }
-
-  if (ev.tzWarning) {
-    section.addWidget(
-      CardService.newDecoratedText()
-        .setTopLabel('Warning')
-        .setText(ev.tzWarning)
-    );
-  }
-
-  var action = CardService.newAction()
-    .setFunctionName('addToTjai')
-    .setParameters({
-      title: ev.summary,
-      event_timestamp: String(ev.timestamp),
-      zoom_url: ev.zoomUrl || '',
-      indico_url: ev.indicoUrl || '',
-      location: (ev.location && ev.location !== ev.zoomUrl) ? ev.location : '',
-      gmail_url: gmailUrl || ''
-    });
-
-  section.addWidget(
-    CardService.newTextButton()
-      .setText('Add to tjai')
-      .setOnClickAction(action)
-  );
+    .setTitle('tjai');
 
   return CardService.newCardBuilder()
     .setHeader(header)
-    .addSection(section)
+    .addSection(buildJournalSection_(gmailUrl, journalPrefill))
+    .addSection(buildBookmarkSection_(emailTitle, gmailUrl))
+    .addSection(buildMemorySection_(gmailUrl))
     .build();
 }
 
 
 /**
- * Build a Card for saving an email as a bookmark (when no calendar event found).
+ * Journal entry section — prefilled from auto-detection or empty with today's date.
  */
-function buildBookmarkCard_(title, gmailUrl) {
-  var header = CardService.newCardHeader()
-    .setTitle('Save to tjai');
+function buildJournalSection_(gmailUrl, prefill) {
+  var section = CardService.newCardSection()
+    .setHeader('JOURNAL ENTRY');
 
-  var section = CardService.newCardSection();
+  section.addWidget(
+    CardService.newTextInput()
+      .setFieldName('jrn_content')
+      .setTitle('Content')
+      .setValue(prefill ? prefill.content : '')
+      .setMultiline(true)
+  );
+
+  var today = Utilities.formatDate(new Date(), DEFAULT_TIMEZONE, 'yyyyMMdd');
+  section.addWidget(
+    CardService.newTextInput()
+      .setFieldName('jrn_date')
+      .setTitle('Date')
+      .setHint('YYYYMMDD')
+      .setValue(prefill ? prefill.date : today)
+  );
+
+  section.addWidget(
+    CardService.newTextInput()
+      .setFieldName('jrn_time')
+      .setTitle('Time (optional)')
+      .setHint('HHMM (e.g. 1430)')
+      .setValue(prefill ? prefill.time : '')
+  );
+
+  section.addWidget(
+    CardService.newTextInput()
+      .setFieldName('jrn_tags')
+      .setTitle('Tags, context')
+      .setHint(':tag =context')
+  );
+
+  var action = CardService.newAction()
+    .setFunctionName('addJournal')
+    .setParameters({ gmail_url: gmailUrl || '' });
+
+  section.addWidget(
+    CardService.newTextButton()
+      .setText('Add journal entry')
+      .setOnClickAction(action)
+  );
+
+  return section;
+}
+
+
+/**
+ * Bookmark section — title prefilled from email subject.
+ */
+function buildBookmarkSection_(title, gmailUrl) {
+  var section = CardService.newCardSection()
+    .setHeader('BOOKMARK');
 
   section.addWidget(
     CardService.newTextInput()
@@ -1054,7 +1056,7 @@ function buildBookmarkCard_(title, gmailUrl) {
     CardService.newTextInput()
       .setFieldName('bm_tags')
       .setTitle('Tags, context')
-      .setHint('e.g. :physics :meeting =epic')
+      .setHint(':tag =context')
   );
 
   var action = CardService.newAction()
@@ -1067,30 +1069,29 @@ function buildBookmarkCard_(title, gmailUrl) {
       .setOnClickAction(action)
   );
 
-  return CardService.newCardBuilder()
-    .setHeader(header)
-    .addSection(section)
-    .addSection(buildMemorySection_())
-    .build();
+  return section;
 }
 
 
 /**
- * Build the always-present memory section for the bottom of every card.
+ * Memory section — free-form note.
  */
-function buildMemorySection_() {
+function buildMemorySection_(gmailUrl) {
   var section = CardService.newCardSection()
-    .setHeader('Quick note');
+    .setHeader('MEMORY');
 
   section.addWidget(
     CardService.newTextInput()
       .setFieldName('mem_content')
-      .setTitle('Memory')
+      .setTitle('Content')
       .setHint('note text :tag =context')
       .setMultiline(true)
   );
 
-  var action = CardService.newAction().setFunctionName('addMemory');
+  var action = CardService.newAction()
+    .setFunctionName('addMemory')
+    .setParameters({ gmail_url: gmailUrl || '' });
+
   section.addWidget(
     CardService.newTextButton()
       .setText('Add memory')
@@ -1118,70 +1119,6 @@ function parseTagsFromText_(text) {
   text = text.replace(/^:(\S+)\s*/g, function(_, t) { tags.push(t); return ''; });
 
   return { content: text.trim(), tags: tags, context: context };
-}
-
-
-/**
- * Action handler: POST event to tjai server.
- */
-function addToTjai(e) {
-  var params = e.commonEventObject.parameters;
-  var apiKey = getApiKey_();
-
-  if (!apiKey) {
-    return CardService.newActionResponseBuilder()
-      .setNotification(
-        CardService.newNotification().setText('API key not set. Run setApiKey first.')
-      )
-      .build();
-  }
-
-  // Read edited title from form input, fall back to action parameter
-  var formInputs = e.commonEventObject.formInputs || {};
-  var title = params.title;
-  if (formInputs.title && formInputs.title.stringInputs && formInputs.title.stringInputs.value) {
-    var formTitle = formInputs.title.stringInputs.value[0];
-    if (formTitle && formTitle.trim()) {
-      title = formTitle;
-    }
-  }
-
-  var payload = {
-    title: title,
-    event_timestamp: parseFloat(params.event_timestamp),
-    zoom_url: params.zoom_url || '',
-    indico_url: params.indico_url || '',
-    location: params.location || '',
-    gmail_url: params.gmail_url || ''
-  };
-
-  var options = {
-    method: 'post',
-    contentType: 'application/json',
-    headers: { 'Authorization': 'Bearer ' + apiKey },
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true
-  };
-
-  var response = UrlFetchApp.fetch(TJAI_API_URL, options);
-  var code = response.getResponseCode();
-  var message;
-  try {
-    var body = JSON.parse(response.getContentText());
-    if (code === 200 && body.status === 'ok') {
-      message = 'Added: ' + body.content;
-    } else {
-      message = 'Error: ' + (body.error || 'HTTP ' + code);
-    }
-  } catch (err) {
-    message = 'Error: HTTP ' + code + ' (non-JSON response)';
-  }
-
-  return CardService.newActionResponseBuilder()
-    .setNotification(
-      CardService.newNotification().setText(message)
-    )
-    .build();
 }
 
 
@@ -1225,9 +1162,70 @@ function addBookmark(e) {
 
 
 /**
- * Action handler: add a quick memory note.
+ * Action handler: create a free-form journal entry.
+ */
+function addJournal(e) {
+  var params = e.commonEventObject.parameters;
+  var formInputs = e.commonEventObject.formInputs || {};
+  var apiKey = getApiKey_();
+  if (!apiKey) {
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText('API key not set. Run setApiKey first.'))
+      .build();
+  }
+
+  var content = (formInputs.jrn_content && formInputs.jrn_content.stringInputs.value[0]) || '';
+  if (!content.trim()) {
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText('Content is required'))
+      .build();
+  }
+
+  var dateStr = (formInputs.jrn_date && formInputs.jrn_date.stringInputs.value[0]) || '';
+  if (!dateStr.match(/^\d{8}$/)) {
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText('Date must be YYYYMMDD'))
+      .build();
+  }
+
+  var timeStr = (formInputs.jrn_time && formInputs.jrn_time.stringInputs.value[0]) || '';
+  timeStr = timeStr.trim();
+  if (timeStr && !timeStr.match(/^\d{4}$/)) {
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText('Time must be HHMM (e.g. 1430)'))
+      .build();
+  }
+
+  var tagsRaw = (formInputs.jrn_tags && formInputs.jrn_tags.stringInputs.value[0]) || '';
+  var gmailUrl = params.gmail_url || '';
+
+  // Append gmail link to content
+  var fullContent = content.trim();
+  if (gmailUrl) {
+    fullContent += ' [gmail](' + gmailUrl + ')';
+  }
+
+  var parsed = parseTagsFromText_(' ' + tagsRaw);
+
+  var payload = {
+    kind: 'journal',
+    content: fullContent,
+    event_date: dateStr,
+    event_time: timeStr,
+    tags: parsed.tags.join(','),
+    context: parsed.context || '',
+    source: 'gmail'
+  };
+
+  return postToTjai_(TJAI_ENTRY_URL, payload);
+}
+
+
+/**
+ * Action handler: add a memory note with gmail link.
  */
 function addMemory(e) {
+  var params = e.commonEventObject.parameters;
   var formInputs = e.commonEventObject.formInputs || {};
   var apiKey = getApiKey_();
   if (!apiKey) {
@@ -1244,10 +1242,17 @@ function addMemory(e) {
   }
 
   var parsed = parseTagsFromText_(raw);
+  var gmailUrl = params.gmail_url || '';
+
+  // Append gmail link to content
+  var fullContent = parsed.content;
+  if (gmailUrl) {
+    fullContent += ' [gmail](' + gmailUrl + ')';
+  }
 
   var payload = {
     kind: 'memory',
-    content: parsed.content,
+    content: fullContent,
     tags: parsed.tags.join(','),
     context: parsed.context || '',
     source: 'gmail'

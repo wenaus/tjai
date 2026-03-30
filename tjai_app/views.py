@@ -2878,6 +2878,8 @@ def api_add_entry(request):
     tags_str = data.get("tags", "").strip()
     context_name = data.get("context", "").strip() or None
     source = data.get("source", "gmail").strip()
+    event_date = data.get("event_date", "").strip() if isinstance(data.get("event_date"), str) else ""
+    event_time = data.get("event_time", "").strip() if isinstance(data.get("event_time"), str) else ""
 
     if not content:
         return JsonResponse({"error": "content is required"}, status=400)
@@ -2886,12 +2888,25 @@ def api_add_entry(request):
     if context_name:
         context_obj = Context.objects.filter(name=context_name).first()
 
+    # For journal entries, convert YYYYMMDD + optional HHMM to timestamp for data.event_date
+    entry_data = {}
+    if kind == 'journal' and event_date:
+        try:
+            from datetime import datetime, timezone
+            dt = datetime.strptime(event_date, '%Y%m%d').replace(hour=12, tzinfo=timezone.utc)
+            if event_time and len(event_time) == 4:
+                dt = dt.replace(hour=int(event_time[:2]), minute=int(event_time[2:]))
+            entry_data['event_date'] = dt.timestamp()
+        except ValueError:
+            return JsonResponse({"error": "event_date must be YYYYMMDD format"}, status=400)
+
     now = time.time()
     entry = Entry.objects.create(
         id=str(uuid.uuid7()),
         content=content,
         kind=kind,
         context=context_obj,
+        data=entry_data,
         timestamp_created=now,
         timestamp_modified=now,
         is_dirty=1,
