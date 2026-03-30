@@ -722,17 +722,26 @@ function onGmailMessage(e) {
       }
     }
 
-    // Even if full event detection failed, grab any zoom/indico URLs for the journal prefill
+    // Even if full event detection failed, best-effort: grab dates, zoom/indico URLs
     if (!prefill) {
       var scanBody = stripSignature_(message.getPlainBody());
       var scanSubj = message.getSubject() || '';
+      var scanYear = message.getDate().getFullYear();
       var foundZoom = extractZoomUrl_(scanBody) || extractZoomUrl_(scanSubj);
       var foundIndico = extractIndicoUrl_(scanBody) || extractIndicoUrl_(scanSubj);
-      if (foundZoom || foundIndico) {
+      var foundDate = extractDateOnly_(scanSubj, scanBody, scanYear);
+      var today = Utilities.formatDate(new Date(), DEFAULT_TIMEZONE, 'yyyyMMdd');
+
+      if (foundZoom || foundIndico || foundDate) {
         var parts = [];
         if (foundZoom) parts.push('[zoom](' + foundZoom + ')');
         if (foundIndico) parts.push('[indico](' + foundIndico + ')');
-        prefill = { content: parts.join(' '), date: Utilities.formatDate(new Date(), DEFAULT_TIMEZONE, 'yyyyMMdd'), time: '' };
+        var prefillDate = today;
+        if (foundDate) {
+          var d = new Date(foundDate.timestamp * 1000);
+          prefillDate = Utilities.formatDate(d, DEFAULT_TIMEZONE, 'yyyyMMdd');
+        }
+        prefill = { content: parts.join(' '), date: prefillDate, time: '' };
       }
     }
 
@@ -980,7 +989,7 @@ function buildMainCard_(emailTitle, gmailUrl, journalPrefill) {
     .setHeader(header)
     .addSection(buildJournalSection_(gmailUrl, journalPrefill))
     .addSection(buildBookmarkSection_(emailTitle, gmailUrl))
-    .addSection(buildMemorySection_(gmailUrl))
+    .addSection(buildMemorySection_(gmailUrl, emailTitle))
     .build();
 }
 
@@ -1076,7 +1085,7 @@ function buildBookmarkSection_(title, gmailUrl) {
 /**
  * Memory section — free-form note.
  */
-function buildMemorySection_(gmailUrl) {
+function buildMemorySection_(gmailUrl, emailSubject) {
   var section = CardService.newCardSection()
     .setHeader('MEMORY');
 
@@ -1084,6 +1093,7 @@ function buildMemorySection_(gmailUrl) {
     CardService.newTextInput()
       .setFieldName('mem_content')
       .setTitle('Content')
+      .setValue(emailSubject || '')
       .setHint('note text :tag =context')
       .setMultiline(true)
   );
