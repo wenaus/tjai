@@ -326,8 +326,8 @@
                         html += `<label style="margin-right:8px;cursor:pointer;color:${clr}"><input type="checkbox" class="model-cb-${esc(item.entry_id)}" value="${m}" style="vertical-align:middle;margin-right:2px">${label}</label>`;
                     }
                     html += '</span>';
-                    html += `<button class="btn-submit" onclick="rerunModels('${esc(item.entry_id)}', this)">Rerun</button>`;
-                    html += `<button class="btn-submit" onclick="rerunItem('${esc(item.entry_id)}', this)">Rerun All</button>`;
+                    html += `<button class="btn-submit" onclick="rerunModels('${esc(item.entry_id)}', this)">Rerun selections</button>`;
+                    html += `<button class="btn-submit" onclick="rerunItem('${esc(item.entry_id)}', this)">Resubmit</button>`;
                     html += `<button class="btn-submit" onclick="submitItem('${esc(item.entry_id)}', this)">Submit</button>`;
                 }
                 html += '</div>';
@@ -398,7 +398,7 @@
                 const data = await resp.json();
                 if (data.error) {
                     btn.textContent = data.error;
-                    setTimeout(() => { btn.textContent = 'Rerun'; btn.disabled = false; }, 3000);
+                    setTimeout(() => { btn.textContent = 'Resubmit'; btn.disabled = false; }, 3000);
                     return;
                 }
                 btn.textContent = data.new_entry_id;
@@ -406,7 +406,7 @@
                 setTimeout(fetchData, 2000);
             } catch (e) {
                 btn.textContent = 'Error';
-                setTimeout(() => { btn.textContent = 'Rerun'; btn.disabled = false; }, 3000);
+                setTimeout(() => { btn.textContent = 'Resubmit'; btn.disabled = false; }, 3000);
             }
         }
 
@@ -425,7 +425,7 @@
                 const data = await resp.json();
                 if (data.error) {
                     btn.textContent = data.error;
-                    setTimeout(() => { btn.textContent = 'Rerun'; btn.disabled = false; }, 3000);
+                    setTimeout(() => { btn.textContent = 'Rerun selections'; btn.disabled = false; }, 3000);
                     return;
                 }
                 btn.textContent = 'Queued ' + models.join('+');
@@ -433,7 +433,7 @@
                 setTimeout(fetchData, 2000);
             } catch (e) {
                 btn.textContent = 'Error';
-                setTimeout(() => { btn.textContent = 'Rerun'; btn.disabled = false; }, 3000);
+                setTimeout(() => { btn.textContent = 'Rerun selections'; btn.disabled = false; }, 3000);
             }
         }
 
