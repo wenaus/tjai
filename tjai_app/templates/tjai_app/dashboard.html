@@ -527,7 +527,15 @@
                     }
                 }
 
-                html += `<div class="entry" id="e-${entry.id}" style="margin-left:0" data-context="${entry.context || ''}" data-machine="${entry.hostname || ''}" data-kind="${entry.kind || ''}" data-tags="${(entry.all_tags || entry.tags || []).join(',')}" data-content="${escapeHtml(entry.content)}" data-entry-kind="${entry.kind || ''}">${line}</div>`;
+                // Build plain-text copy line: matches what's displayed, preserves markdown links
+                let plain = `=== ${tsStr} [${kindAbbr}]`;
+                if (entry.event_date_display) plain += ` ${entry.event_date_display}`;
+                if (entry.context) plain += ` =${entry.context}`;
+                if (entry.name) plain += ` @${entry.name}`;
+                plain += ` ${entry.content}`;
+                if (entry.tags && entry.tags.length) plain += ' ' + entry.tags.map(t => ':' + t).join(' ');
+
+                html += `<div class="entry" id="e-${entry.id}" style="margin-left:0" data-context="${entry.context || ''}" data-machine="${entry.hostname || ''}" data-kind="${entry.kind || ''}" data-tags="${(entry.all_tags || entry.tags || []).join(',')}" data-content="${escapeHtml(entry.content)}" data-plain="${escapeHtml(plain)}" data-entry-kind="${entry.kind || ''}">${line}</div>`;
             }
             return html;
         }
@@ -1277,10 +1285,9 @@
             const plainLines = [];
             const htmlLines = [];
             for (const s of selected) {
-                const tagStr = s.tags ? ' ' + s.tags.split(',').filter(Boolean).map(t => ':' + t).join(' ') : '';
-                const line = s.content + tagStr;
-                plainLines.push('- ' + line);
-                htmlLines.push(`<div data-tjai-entry-id="${s.uuid}" data-tjai-kind="${s.kind}">${escapeHtml(line)}</div>`);
+                const div = document.getElementById('e-' + s.uuid);
+                plainLines.push(div ? div.dataset.plain : s.content);
+                htmlLines.push(`<div data-tjai-entry-id="${s.uuid}" data-tjai-kind="${s.kind}">${escapeHtml(s.content)}</div>`);
             }
 
             e.clipboardData.setData('text/plain', plainLines.join('\n'));

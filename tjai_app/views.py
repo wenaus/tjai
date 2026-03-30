@@ -2889,13 +2889,20 @@ def api_add_entry(request):
         context_obj = Context.objects.filter(name=context_name).first()
 
     # For journal entries, convert YYYYMMDD + optional HHMM to timestamp for data.event_date
+    all_day = data.get("all_day", False)
     entry_data = {}
     if kind == 'journal' and event_date:
         try:
-            from datetime import datetime, timezone
-            dt = datetime.strptime(event_date, '%Y%m%d').replace(hour=12, tzinfo=timezone.utc)
-            if event_time and len(event_time) == 4:
-                dt = dt.replace(hour=int(event_time[:2]), minute=int(event_time[2:]))
+            from datetime import datetime
+            from zoneinfo import ZoneInfo
+            app_tz = ZoneInfo('America/New_York')
+            if all_day:
+                # Midnight Eastern = standard all-day convention
+                dt = datetime.strptime(event_date, '%Y%m%d').replace(tzinfo=app_tz)
+            else:
+                dt = datetime.strptime(event_date, '%Y%m%d').replace(tzinfo=app_tz)
+                if event_time and len(event_time) == 4:
+                    dt = dt.replace(hour=int(event_time[:2]), minute=int(event_time[2:]))
             entry_data['event_date'] = dt.timestamp()
         except ValueError:
             return JsonResponse({"error": "event_date must be YYYYMMDD format"}, status=400)

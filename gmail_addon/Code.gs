@@ -987,7 +987,7 @@ function buildMainCard_(emailTitle, gmailUrl, journalPrefill) {
 
   return CardService.newCardBuilder()
     .setHeader(header)
-    .addSection(buildJournalSection_(gmailUrl, journalPrefill))
+    .addSection(buildJournalSection_(gmailUrl, journalPrefill, emailTitle))
     .addSection(buildBookmarkSection_(emailTitle, gmailUrl))
     .addSection(buildMemorySection_(gmailUrl, emailTitle))
     .build();
@@ -997,15 +997,16 @@ function buildMainCard_(emailTitle, gmailUrl, journalPrefill) {
 /**
  * Journal entry section — prefilled from auto-detection or empty with today's date.
  */
-function buildJournalSection_(gmailUrl, prefill) {
+function buildJournalSection_(gmailUrl, prefill, emailTitle) {
   var section = CardService.newCardSection()
     .setHeader('JOURNAL ENTRY');
 
+  var contentDefault = (prefill && prefill.content) ? prefill.content : (emailTitle || '');
   section.addWidget(
     CardService.newTextInput()
       .setFieldName('jrn_content')
       .setTitle('Content')
-      .setValue(prefill ? prefill.content : '')
+      .setValue(contentDefault)
       .setMultiline(true)
   );
 
@@ -1222,6 +1223,7 @@ function addJournal(e) {
     content: fullContent,
     event_date: dateStr,
     event_time: timeStr,
+    all_day: !timeStr,
     tags: parsed.tags.join(','),
     context: parsed.context || '',
     source: 'gmail'
