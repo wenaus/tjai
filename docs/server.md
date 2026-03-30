@@ -2,13 +2,15 @@
 
 ## Production Environment
 
-- **Server:** etaverse.com (AWS Debian), Apache mod_wsgi
+- **Server:** etaverse.com (AWS Debian), gunicorn behind Apache reverse proxy
 - **Shell:** Bash only
 - **Git repo (dev):** `/home/admin/github/tjrepo/tjai`
 - **Production deployment:** `/var/www/tjai` (not a git repo)
 - **Database:** PostgreSQL. `DJANGO_DATABASE_URL` is in `/var/www/tjai/.env` only.
 - **Django settings:** `tjai_project/settings/base.py` (split settings dir)
 - **Static files:** `tjai_app/static/tjai/` → served via Apache Alias at `/tjai/static/`
+- **Python:** 3.14 (built from source at `/opt/python-3.14`)
+- **Web server:** gunicorn on port 8002, managed by systemd (`deploy/tjai-gunicorn.service`), runs as `www-data`
 - **Action agent:** managed by supervisord (`deploy/supervisord.conf`), runs as `admin`
 
 ## Deploying
@@ -18,7 +20,7 @@ cd /home/admin/github/tjrepo/tjai
 ./deploy/update_from_dev.sh
 ```
 
-This rsyncs code to `/var/www/tjai/` (excludes `data/`), installs requirements, runs migrations, collectstatic, and reloads Apache. Does NOT restart agents — see [action-agent.md](action-agent.md) for that.
+This rsyncs code to `/var/www/tjai/` (excludes `data/`), installs requirements, runs migrations, collectstatic, and restarts gunicorn, tg_bot, and action-agent.
 
 ## Django Commands (Production)
 

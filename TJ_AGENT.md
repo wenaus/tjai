@@ -158,24 +158,20 @@ tjai/
 
 ## Server Deployment (ec2dev)
 
-Django runs on ec2dev via Apache mod_wsgi.
+Django runs on ec2dev via gunicorn (port 8002) behind Apache reverse proxy.
 
 **Key paths:**
 - Git repo: `/home/admin/github/tjrepo/tjai`
-- Deployment: `/var/www/tjai` (not a git repo, Apache serves from here)
+- Deployment: `/var/www/tjai` (not a git repo)
+- Python: 3.14 (built from source at `/opt/python-3.14`)
 - Apache config: `/etc/apache2/sites-enabled/etaverse.conf`
 - Apache logs: `/var/log/apache2/etaverse_ssl_error.log`
+- Gunicorn logs: `journalctl -u tjai-gunicorn`
 
-**Deploy after code changes:**
+**Deploy (preferred):**
 ```bash
-sudo cp /home/admin/github/tjrepo/tjai/tjai_app/views.py /var/www/tjai/tjai_app/
-sudo systemctl reload apache2
-curl -s https://etaverse.com/tjai/api/health  # verify
+cd /home/admin/github/tjrepo/tjai
+./deploy/update_from_dev.sh
 ```
 
-**Full deploy (all files):**
-```bash
-sudo rsync -av --exclude='.git' --exclude='__pycache__' --exclude='*.pyc' \
-    /home/admin/github/tjrepo/tjai/ /var/www/tjai/
-sudo systemctl reload apache2
-```
+This rsyncs code, installs deps, runs migrations, collectstatic, and restarts gunicorn, tg_bot, and action-agent.

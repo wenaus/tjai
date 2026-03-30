@@ -1,0 +1,25 @@
+[Unit]
+Description=tjai gunicorn (Django web server)
+After=network.target postgresql.service
+
+[Service]
+Type=notify
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/tjai
+ExecStart=/var/www/tjai/.venv/bin/gunicorn tjai_project.wsgi_subpath:application \
+    --bind 127.0.0.1:8002 \
+    --workers 3 \
+    --threads 4 \
+    --timeout 120 \
+    --access-logfile - \
+    --error-logfile -
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+KillMode=mixed
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

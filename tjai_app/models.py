@@ -124,7 +124,7 @@ class Relation(models.Model):
                 name='unique_relation_pair'
             ),
             models.CheckConstraint(
-                check=~models.Q(entry1=models.F('entry2')),
+                condition=~models.Q(entry1=models.F('entry2')),
                 name='no_self_relation'
             ),
         ]

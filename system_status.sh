@@ -56,16 +56,10 @@ check_apache() {
         fail "Apache2 service: not running"
     fi
 
-    if dpkg -l libapache2-mod-wsgi-py3 &>/dev/null 2>&1; then
-        ok "mod_wsgi-py3 installed"
+    if systemctl is-active --quiet tjai-gunicorn; then
+        ok "tjai-gunicorn service: running"
     else
-        fail "mod_wsgi-py3 not installed"
-    fi
-
-    if apache2ctl -M 2>/dev/null | grep -q wsgi_module; then
-        ok "mod_wsgi loaded"
-    else
-        warn "mod_wsgi not loaded (may need: sudo a2enmod wsgi)"
+        fail "tjai-gunicorn service: not running"
     fi
 
     # Check sites
