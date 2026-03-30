@@ -9,16 +9,33 @@ from datetime import datetime, timedelta
 logger = logging.getLogger(__name__)
 
 _LIST_RE = re.compile(r'[-*+] |\d+\. ')
+_BLOCK_RE = re.compile(r'^(\s*)([-*+] |\d+\. |#{1,6} |```)')
 
 def _fix_md_list_spacing(text):
-    """Insert blank line before list items that follow a non-list, non-blank line.
+    """Fix two common markdown list issues:
 
-    AI-generated markdown often omits the required blank line before a list,
-    causing the Python markdown library to render bullets as a paragraph blob.
+    1. Insert blank line before list items that follow a non-list, non-blank
+       line (AI-generated markdown often omits this).
+    2. Rejoin broken continuation lines — when a list item's text was
+       hard-wrapped and the continuation starts at column 0 (or below the
+       list content indent), the markdown parser loses nesting context.
     """
     lines = text.split('\n')
     result = []
     for i, line in enumerate(lines):
+        # Rejoin broken list continuations: non-blank, non-block line whose
+        # indent is less than the previous list item's content column.
+        if (i > 0 and line.strip() and result
+                and not _BLOCK_RE.match(line)):
+            prev = result[-1]
+            pm = re.match(r'^(\s*)([-*+] |\d+\. )', prev)
+            if pm:
+                content_col = len(pm.group(1)) + len(pm.group(2))
+                cur_indent = len(line) - len(line.lstrip())
+                if cur_indent < content_col:
+                    result[-1] = prev + ' ' + line.strip()
+                    continue
+
         if (i > 0
                 and _LIST_RE.match(line.lstrip())
                 and lines[i - 1].strip()

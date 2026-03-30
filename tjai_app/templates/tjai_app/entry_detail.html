@@ -457,6 +457,84 @@
 
                 // Intelligent paste: if clipboard HTML contains tjai entry UUIDs,
                 // fetch full entries and paste as markdown with links/tags
+                // Right-click context menu with Cut/Copy/Paste + dedent
+                cm.getWrapperElement().addEventListener('contextmenu', function(e) {
+                    if (!cm.somethingSelected()) return;  // no selection → default menu
+                    e.preventDefault();
+
+                    var old = document.getElementById('cm-context-menu');
+                    if (old) old.remove();
+
+                    var menu = document.createElement('div');
+                    menu.id = 'cm-context-menu';
+                    menu.style.cssText = 'position:fixed;z-index:9999;background:#2d2d2d;border:1px solid #555;border-radius:4px;padding:4px 0;font-size:13px;min-width:240px;box-shadow:0 4px 12px rgba(0,0,0,.5);';
+
+                    function addItem(label, fn) {
+                        var item = document.createElement('div');
+                        item.textContent = label;
+                        item.style.cssText = 'padding:6px 16px;color:#e0e0e0;cursor:pointer;';
+                        item.onmouseenter = function() { this.style.background = '#3a3a3a'; };
+                        item.onmouseleave = function() { this.style.background = 'none'; };
+                        item.onclick = function() { menu.remove(); cleanup(); fn(); };
+                        menu.appendChild(item);
+                    }
+                    function addSep() {
+                        var sep = document.createElement('div');
+                        sep.style.cssText = 'height:1px;background:#444;margin:4px 0;';
+                        menu.appendChild(sep);
+                    }
+
+                    addItem('Cut', function() {
+                        navigator.clipboard.writeText(cm.getSelection());
+                        cm.replaceSelection('');
+                    });
+                    addItem('Copy', function() {
+                        navigator.clipboard.writeText(cm.getSelection());
+                    });
+                    addItem('Paste', function() {
+                        navigator.clipboard.readText().then(function(text) {
+                            cm.replaceSelection(text);
+                        });
+                    });
+                    addSep();
+                    addItem('Remove leading blanks in selection', function() {
+                        var sel = cm.getSelection();
+                        var lines = sel.split('\n');
+                        var minIndent = Infinity;
+                        lines.forEach(function(line) {
+                            if (line.trim() === '') return;
+                            var leading = line.match(/^( *)/)[1].length;
+                            if (leading < minIndent) minIndent = leading;
+                        });
+                        if (minIndent > 0 && minIndent < Infinity) {
+                            var re = new RegExp('^' + ' '.repeat(minIndent));
+                            var dedented = lines.map(function(line) {
+                                return line.replace(re, '');
+                            }).join('\n');
+                            cm.replaceSelection(dedented);
+                        }
+                    });
+
+                    menu.style.left = e.clientX + 'px';
+                    menu.style.top = e.clientY + 'px';
+                    document.body.appendChild(menu);
+
+                    function closeMenu(ev) {
+                        if (!menu.contains(ev.target)) { menu.remove(); cleanup(); }
+                    }
+                    function closeMenuKey(ev) {
+                        if (ev.key === 'Escape') { menu.remove(); cleanup(); }
+                    }
+                    function cleanup() {
+                        document.removeEventListener('mousedown', closeMenu);
+                        document.removeEventListener('keydown', closeMenuKey);
+                    }
+                    setTimeout(function() {
+                        document.addEventListener('mousedown', closeMenu);
+                        document.addEventListener('keydown', closeMenuKey);
+                    }, 0);
+                });
+
                 cm.on('paste', function(cm, e) {
                     const html = e.clipboardData && e.clipboardData.getData('text/html');
                     if (!html || !html.includes('data-tjai-entry-id')) return;
