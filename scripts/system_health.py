@@ -393,8 +393,8 @@ def _collect_agents(now):
 
 
 def collect_backups():
-    """Check tjai backup health in Dropbox."""
-    backup_root = Path.home() / 'Dropbox' / 'tjai-backups' / 'server'
+    """Check tjai backup health."""
+    backup_root = Path.home() / 'tjai-backups' / 'server'
     result = {
         'path': str(backup_root),
         'exists': backup_root.exists(),
@@ -710,8 +710,8 @@ def main():
     logger.info("Collecting CloudWatch metrics...")
     cloudwatch = collect_cloudwatch()
 
-    logger.info("Collecting Dropbox status...")
-    dropbox = collect_dropbox()
+    # Dropbox disabled 2026-03-31 — cache bug consumed 457GB
+    dropbox = None
 
     logger.info("Collecting backup status...")
     backups = collect_backups()
@@ -725,7 +725,7 @@ def main():
         'timestamp': time.time(),
         'status': status,
         'issues': issues,
-        'recheck': dropbox.get('restarted', False),
+        'recheck': False,
         'system': system,
         'postgres': postgres,
         'processes': processes,

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Backup tjai server data to Dropbox.
+"""Backup tjai server data, push to Dropbox via rclone.
 
-Creates a dated directory under ~/Dropbox/tjai-backups/server/YYYY-MM-DD/
+Creates a dated directory under ~/tjai-backups/server/YYYY-MM-DD/
 containing:
   - tjai-db.sql.gz   PostgreSQL database dump (compressed)
   - env-www.env      /var/www/tjai/.env
@@ -20,7 +20,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-DROPBOX_BACKUP_DIR = Path.home() / 'Dropbox' / 'tjai-backups' / 'server'
+LOCAL_BACKUP_DIR = Path.home() / 'tjai-backups' / 'server'
+RCLONE_DEST = 'dropbox:tjai-backups/server'
 TJAI_WWW = Path('/var/www/tjai')
 APACHE_CONF = Path('/etc/apache2/sites-enabled/etaverse.conf')
 
@@ -132,7 +133,7 @@ def main():
         target = datetime.now().date()
 
     date_str = target.strftime('%Y-%m-%d')
-    backup_dir = DROPBOX_BACKUP_DIR / date_str
+    backup_dir = LOCAL_BACKUP_DIR / date_str
 
     if backup_dir.exists():
         print(f"Backup already exists: {backup_dir}")
@@ -149,11 +150,21 @@ def main():
     copy_dir(TJAI_WWW / 'data', backup_dir, 'data')
     copy_apache_conf(backup_dir)
 
-    if ok:
-        print(f"Backup complete: {date_str}")
-    else:
+    if not ok:
         print(f"Backup completed with errors: {date_str}", file=sys.stderr)
         sys.exit(1)
+
+    # Push to Dropbox via rclone
+    rclone_dest = f'{RCLONE_DEST}/{date_str}'
+    print(f"Pushing to {rclone_dest} ...")
+    result = subprocess.run(
+        ['rclone', 'copy', str(backup_dir), rclone_dest],
+        capture_output=True, text=True, timeout=300,
+    )
+    if result.returncode != 0:
+        print(f"ERROR: rclone push failed: {result.stderr}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Backup complete: {date_str} (pushed to Dropbox)")
 
 
 if __name__ == '__main__':
