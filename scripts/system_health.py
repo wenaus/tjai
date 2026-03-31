@@ -467,54 +467,6 @@ def collect_backups():
     return result
 
 
-def collect_dropbox():
-    """Check Dropbox health via dropbox.py, auto-start if down."""
-    import subprocess
-
-    result = {
-        'running': False,
-        'status': 'unknown',
-        'restarted': False,
-    }
-
-    try:
-        proc = subprocess.run(
-            [str(Path.home() / 'bin' / 'dropbox.py'), 'status'],
-            capture_output=True, text=True, timeout=10,
-        )
-        status_text = proc.stdout.strip()
-        result['status'] = status_text or 'unknown'
-        result['running'] = "isn't running" not in status_text
-    except Exception as e:
-        result['status'] = f'status check failed: {e}'
-        return result
-
-    # Auto-start if not running
-    if not result['running']:
-        try:
-            subprocess.run(
-                [str(Path.home() / 'bin' / 'dropbox.py'), 'start'],
-                capture_output=True, text=True, timeout=120,
-            )
-            result['restarted'] = True
-        except Exception as e:
-            logger.error("Dropbox auto-restart failed: %s", e)
-            result['restart_error'] = str(e)
-        return result
-
-    # Backup directory freshness
-    backup_dir = str(Path.home() / 'Dropbox' / 'Current' / 'tjai_backups')
-    try:
-        files = os.listdir(backup_dir)
-        if files:
-            newest = max(os.path.getmtime(os.path.join(backup_dir, f)) for f in files)
-            result['newest_backup_min'] = round((time.time() - newest) / 60, 1)
-            result['backup_count'] = len(files)
-    except Exception as e:
-        logger.error("Backup directory check failed (%s): %s", backup_dir, e)
-
-    return result
-
 
 def collect_tjai():
     """Collect tjai application stats."""
@@ -609,7 +561,7 @@ def collect_tjai():
     return metrics
 
 
-def assess_health(system, postgres, tjai=None, dropbox=None, backups=None):
+def assess_health(system, postgres, tjai=None, backups=None, **_kwargs):
     """Determine health status from metrics."""
     issues = []
     cpu_count = system.get('cpu_count', 1)
@@ -653,14 +605,6 @@ def assess_health(system, postgres, tjai=None, dropbox=None, backups=None):
                 issues.append(('red', f'{name} is down'))
             elif st == 'stale':
                 issues.append(('yellow', f'{name} heartbeat stale'))
-
-    # Dropbox health
-    if dropbox:
-        if not dropbox.get('running'):
-            if dropbox.get('restarted'):
-                issues.append(('yellow', 'Dropbox was down, restart attempted'))
-            else:
-                issues.append(('red', 'Dropbox is down'))
 
     # Backup health
     if backups:
@@ -710,16 +654,13 @@ def main():
     logger.info("Collecting CloudWatch metrics...")
     cloudwatch = collect_cloudwatch()
 
-    # Dropbox disabled 2026-03-31 — cache bug consumed 457GB
-    dropbox = None
-
     logger.info("Collecting backup status...")
     backups = collect_backups()
 
     logger.info("Collecting tjai stats...")
     tjai = collect_tjai()
 
-    status, issues = assess_health(system, postgres, tjai, dropbox, backups)
+    status, issues = assess_health(system, postgres, tjai, backups)
 
     health_data = {
         'timestamp': time.time(),
@@ -730,7 +671,6 @@ def main():
         'postgres': postgres,
         'processes': processes,
         'cloudwatch': cloudwatch,
-        'dropbox': dropbox,
         'backups': backups,
         'tjai': tjai,
     }

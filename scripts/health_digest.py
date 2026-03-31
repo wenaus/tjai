@@ -116,9 +116,9 @@ def collect_database(since_ts):
 
 
 def collect_backups(since_ts):
-    """Backup sizes and status from Dropbox."""
+    """Backup sizes and status."""
     metrics = {}
-    backup_root = Path.home() / 'Dropbox' / 'tjai-backups' / 'server'
+    backup_root = Path.home() / 'tjai-backups' / 'server'
 
     if not backup_root.exists():
         return {'backup_dump_mb': 0, 'backup_gz_mb': 0,

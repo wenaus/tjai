@@ -6,7 +6,7 @@ from pathlib import Path
 import bootstrap  # noqa: F401 - Django setup
 from synopsis_utils import main_section
 
-BACKUP_ROOT = Path.home() / 'Dropbox' / 'tjai-backups' / 'server'
+BACKUP_ROOT = Path.home() / 'tjai-backups' / 'server'
 RECENT_DAYS = 7
 
 logger = logging.getLogger('section_backups')
