@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% if entry.name %}{{ entry.name }}{% elif entry.data.entry_id %}{{ entry.data.entry_id }}{% else %}tjai - Entry{% endif %}</title>
     <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
+    <script src="/tjai/static/tjai/tjai-utils.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/theme/material-darker.min.css">
     <style>
@@ -141,6 +142,7 @@
                 <option value="bookmark"{% if entry.kind == 'bookmark' %} selected{% endif %}>bookmark</option>
                 <option value="profile"{% if entry.kind == 'profile' %} selected{% endif %}>profile</option>
                 <option value="ai"{% if entry.kind == 'ai' %} selected{% endif %}>ai</option>
+                <option value="goal"{% if entry.kind == 'goal' %} selected{% endif %}>goal</option>
             </select>
             <label style="margin-left:16px">priority</label>
             <input id="priorityField" type="number" min="1" value="{{ entry.priority|default:'' }}" placeholder="(none)" style="width:60px">
@@ -341,27 +343,7 @@
             }).catch(function(err) { alert('Save failed: ' + err); });
         });
 
-        function linkifyContent(content) {
-            // [title](entry:uuid) — internal entry links
-            content = content.replace(/\[([^\]]+)\]\(entry:([^\)]+)\)/g,
-                '<a href="/tjai/entry/$2/">$1</a>');
-            // [title](/path) — internal relative links
-            content = content.replace(/\[([^\]]+)\]\((\/[^\)]+)\)/g,
-                '<a href="$2">$1</a>');
-            // [title](url) — external markdown links
-            content = content.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,
-                '<a href="$2" target="_blank">$1</a>');
-            // bare URLs
-            content = content.replace(/(^|[^"'])(https?:\/\/[^\s<]+)/g,
-                '$1<a href="$2" target="_blank">$2</a>');
-            // [[wiki-links]]: [[url]], [[@name]], or [[entry_id]]
-            content = content.replace(/\[\[([^\]]+)\]\]/g, function(m, ref) {
-                if (ref.startsWith('http://') || ref.startsWith('https://')) return '<a href="' + ref + '" target="_blank">' + ref + '</a>';
-                if (ref.startsWith('@')) return '<a href="/tjai/entry/?name=' + encodeURIComponent(ref.slice(1)) + '">' + ref + '</a>';
-                return '<a href="/tjai/entry/?entry_id=' + encodeURIComponent(ref) + '">' + ref + '</a>';
-            });
-            return content;
-        }
+        // linkifyContent provided by tjai-utils.js
         document.getElementById('first-line').innerHTML = linkifyContent("{{ first_line|escapejs }}");
 
         var baseTitle = document.title;

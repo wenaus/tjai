@@ -6,8 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Goals</title>
     <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
+    <script src="/tjai/static/tjai/tjai-utils.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
+        a { color: #90caf9; text-decoration: none; }
+        a:hover { text-decoration: underline; }
         body {
             font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
             font-size: 13px;
@@ -228,12 +231,7 @@
     <div class="detail-panel" id="detail-panel"></div>
 
     <script>
-        function esc(s) {
-            if (!s) return '';
-            const el = document.createElement('span');
-            el.textContent = s;
-            return el.innerHTML;
-        }
+        // escapeHtml and linkifyContent provided by tjai-utils.js
 
         // fmtDate removed — server provides modified_display
 
@@ -262,7 +260,7 @@
                 const data = await resp.json();
                 if (data.error) {
                     document.getElementById('content').innerHTML =
-                        `<div class="error">${esc(data.error)}</div>`;
+                        `<div class="error">${escapeHtml(data.error)}</div>`;
                     return;
                 }
                 goalsData = data.goals || [];
@@ -350,7 +348,7 @@
 
                 html += `<div class="goal-item ${status}${selCls}" onclick="selectGoal('${g.id}')">`;
                 html += '<div class="item-header">';
-                html += `<span class="item-title"><a href="${entryUrl(g.id, data)}" onclick="event.stopPropagation()">${esc(title)}</a></span>`;
+                html += `<span class="item-title"><a href="${entryUrl(g.id, data)}" onclick="event.stopPropagation()">${escapeHtml(title)}</a></span>`;
                 // Only badge non-active statuses
                 if (status !== 'active') {
                     html += `<span class="item-status status-${status}">${status}</span>`;
@@ -363,14 +361,14 @@
                 }
                 html += '</div>';
                 if (body) {
-                    html += `<div class="item-body">${esc(body)}</div>`;
+                    html += `<div class="item-body">${linkifyContent(escapeHtml(body))}</div>`;
                 }
                 let meta = (g.modified_display || '');
                 if (g.context) {
-                    meta += ` <span style="color:#ce93d8">=${esc(g.context)}</span>`;
+                    meta += ` <span style="color:#ce93d8">=${escapeHtml(g.context)}</span>`;
                 }
                 if (g.tags && g.tags.length) {
-                    meta += ' ' + g.tags.map(t => `<span style="color:#9ccc65">${esc(t)}</span>`).join(' ');
+                    meta += ' ' + g.tags.map(t => `<span style="color:#9ccc65">${escapeHtml(t)}</span>`).join(' ');
                 }
                 html += `<div class="item-meta">${meta}</div>`;
                 html += '</div>';
@@ -390,7 +388,7 @@
                 const resp = await fetch('/tjai/api/goals/detail?id=' + encodeURIComponent(goalId));
                 const data = await resp.json();
                 if (data.error) {
-                    panel.innerHTML = `<div class="error">${esc(data.error)}</div>`;
+                    panel.innerHTML = `<div class="error">${escapeHtml(data.error)}</div>`;
                     return;
                 }
                 renderDetail(data);
@@ -401,14 +399,14 @@
 
         function renderRelSection(title, items) {
             if (items.length === 0) return '';
-            let html = `<h4>${esc(title)} (${items.length})</h4>`;
+            let html = `<h4>${escapeHtml(title)} (${items.length})</h4>`;
             for (const r of items) {
                 const other = r.other_entry || {};
                 const otherData = other.data || {};
                 const otherFirstLine = (other.content || '').split('\n')[0];
                 html += '<div class="rel-item">';
-                html += `<span class="rel-type">${esc(r.relation_type)}</span>`;
-                html += `<span class="rel-entry"><a href="${entryUrl(other.id, otherData)}">${esc(otherFirstLine)}</a></span>`;
+                html += `<span class="rel-type">${escapeHtml(r.relation_type)}</span>`;
+                html += `<span class="rel-entry"><a href="${entryUrl(other.id, otherData)}">${escapeHtml(otherFirstLine)}</a></span>`;
                 html += `<button class="btn-unrelate" title="Remove relation" onclick="unrelate('${r.id}')">x</button>`;
                 html += '</div>';
             }
@@ -422,16 +420,16 @@
             const status = goal.status || 'active';
 
             let html = `<div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">`;
-            html += `<span class="detail-title"><a href="${entryUrl(goal.id, data)}" style="color:#d8a070">${esc(title)}</a></span>`;
+            html += `<span class="detail-title"><a href="${entryUrl(goal.id, data)}" style="color:#d8a070">${escapeHtml(title)}</a></span>`;
             if (status !== 'active') {
                 html += `<span class="item-status status-${status}">${status}</span>`;
             }
-            if (goal.context) html += `<span style="color:#ce93d8">=${esc(goal.context)}</span>`;
+            if (goal.context) html += `<span style="color:#ce93d8">=${escapeHtml(goal.context)}</span>`;
             html += `<button class="btn-submit" style="margin-left:auto;font-size:10px" onclick="closeDetail()">Close</button>`;
             html += `</div>`;
             const descLines = goal.content.split('\n').slice(1).join('\n').trim();
             if (descLines) {
-                html += `<div class="detail-content">${esc(descLines)}</div>`;
+                html += `<div class="detail-content">${linkifyContent(escapeHtml(descLines))}</div>`;
             }
 
             // Group relations by kind
@@ -464,7 +462,7 @@
                     const speaker = eData.role === 'assistant' ? 'AI' : 'Human';
                     html += '<div class="rel-item">';
                     html += `<span class="rel-type" style="color:#90caf9;min-width:50px">${speaker}</span>`;
-                    html += `<span class="rel-entry"><a href="${entryUrl(e.id, eData)}">${esc(firstLine)}</a></span>`;
+                    html += `<span class="rel-entry"><a href="${entryUrl(e.id, eData)}">${escapeHtml(firstLine)}</a></span>`;
                     html += `<span style="color:#555;font-size:10px;white-space:nowrap">${(e.modified_display || '')}</span>`;
                     html += '</div>';
                 }

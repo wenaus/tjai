@@ -2343,7 +2343,7 @@ def api_entry_save(request, entry_id):
     for tag_name in existing_tags - desired_tags:
         Tag.objects.filter(entry_id=entry.id, tag_name=tag_name).delete()
     # Kind
-    valid_kinds = ('memory', 'todo', 'journal', 'bookmark', 'profile', 'ai')
+    valid_kinds = ('memory', 'todo', 'journal', 'bookmark', 'profile', 'ai', 'goal', 'list', 'action')
     if 'kind' in data and data['kind'] in valid_kinds:
         entry.kind = data['kind']
     # Priority
