@@ -196,6 +196,9 @@
                 const state = getCollapseState();
                 let html = '';
 
+                // Quick link to edit today's diary
+                html += `<div style="margin-bottom:12px"><a href="/tjai/entry/?entry_id=diary-${todayStr()}&edit=1" style="color:#90caf9">Edit today's diary</a></div>`;
+
                 // @Underway
                 if (data.underway) {
                     const u = data.underway;
