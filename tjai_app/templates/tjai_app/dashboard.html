@@ -850,9 +850,11 @@
                 ['g', 'goal', 'goal'], ['j', 'journal', 'journal'], ['m', 'memory', 'memory'],
                 ['p', 'profile', 'profile']
             ];
+            const kc = data.kind_counts || {};
             const typeLinks = types.map(([abbr, kind, label]) => {
                 const activeClass = activeKind === kind ? ' active' : '';
-                return `<a href="#" class="kind-link${activeClass}" data-kind="${kind}" style="color:#daa520;text-decoration:none">[${abbr}]=${label}</a>`;
+                const count = kc[kind] || 0;
+                return `<a href="#" class="kind-link${activeClass}" data-kind="${kind}" style="color:#daa520;text-decoration:none">[${abbr}]=${label} <span style="color:#8a8a8a;font-size:11px">${count}</span></a>`;
             }).join(' ');
             html += `<div class="status-line">Types: ${typeLinks}</div>`;
 

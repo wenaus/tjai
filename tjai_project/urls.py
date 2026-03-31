@@ -99,6 +99,8 @@ urlpatterns = [
     path("p/context/<str:context_name>/", views.public_context_entries, name="public_context_entries"),
     path("p/<path:entry_id>/json/", views.entry_public_json, name="entry_public_json"),
     path("p/<path:entry_id>/", views.entry_public, name="entry_public"),
+    # Relate-to picker (new tab from entry edit panel)
+    path("relate/<uuid:entry_uuid>/", views.relate_to_view, name="relate_to"),
     # Internal entry pages (auth required)
     path("entry/", views.entry_detail, name="entry_detail_query"),
     path("entry/<path:entry_id>/", views.entry_detail, name="entry_detail"),

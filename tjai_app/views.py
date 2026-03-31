@@ -57,7 +57,7 @@ from django.db.models import Count
 from django.db.models.functions import Lower
 from django.http import Http404
 from django.conf import settings as django_settings
-from .models import AppLog, Context, Entry, KozyChat, RssItem, Tag, TagStats, SubNote, Machine, SysConfig
+from .models import AppLog, Context, Entry, KozyChat, Relation, RssItem, Tag, TagStats, SubNote, Machine, SysConfig
 
 
 AGENT_GRACE_SECONDS = 300  # 5 min — never touch an agent younger than this
@@ -1102,6 +1102,13 @@ def dashboard_status(request):
             oldest_machine = name
     sync_age_min = int((now - oldest_sync) / 60) if oldest_machine else 0
 
+    # Kind counts (non-archived, non-dialog)
+    kind_counts = dict(Entry.objects.filter(
+        deleted_at__isnull=True,
+    ).exclude(status='archive').exclude(
+        context_id='claude-code'
+    ).values('kind').annotate(cnt=Count('id')).values_list('kind', 'cnt'))
+
     return JsonResponse({
         'timestamp': timestamp,
         'context': context,
@@ -1115,6 +1122,7 @@ def dashboard_status(request):
         'contexts': contexts,
         'all_tags': all_tags,
         'tag_counts': tag_counts,
+        'kind_counts': kind_counts,
         'open_todos': open_todos,
         'machines': machines,
         'oldest_sync': {'machine': oldest_machine, 'age_min': sync_age_min} if oldest_machine else None,
@@ -2483,6 +2491,60 @@ def public_context_entries(request, context_name):
         'entries': _entries_for_list(entries),
         'tags': tags,
         'context_name': context_name,
+    })
+
+
+@login_required
+def relate_to_view(request, entry_uuid):
+    """Entry picker for creating relations — entry_list.html with relate mode."""
+    from django.db.models import Q
+
+    source = Entry.objects.filter(id=entry_uuid, deleted_at__isnull=True).first()
+    if not source:
+        raise Http404("Entry not found")
+
+    already_related = set()
+    for r in Relation.objects.filter(Q(entry1_id=entry_uuid) | Q(entry2_id=entry_uuid)):
+        already_related.add(str(r.entry1_id))
+        already_related.add(str(r.entry2_id))
+    already_related.discard(str(entry_uuid))
+
+    # Same pattern as context_entries / tag_entries
+    entries = Entry.objects.filter(
+        deleted_at__isnull=True
+    ).exclude(status='archive').exclude(
+        context_id='claude-code'
+    ).exclude(id=entry_uuid).exclude(
+        id__in=already_related
+    ).order_by('-timestamp_modified')
+
+    tags = _tag_counts_for_entries(entries)
+    contexts = _context_counts_for_entries(entries)
+    # Kind counts — same pattern as _context_counts_for_entries
+    from collections import Counter
+    kind_counter = Counter(e.kind for e in entries if e.kind)
+    kinds = sorted(kind_counter.items(), key=lambda x: x[0].lower())
+
+    relation_types = list(
+        Relation.objects.values_list('relation_type', flat=True)
+        .distinct().order_by('relation_type')
+    )
+
+    source_data = source.data if isinstance(source.data, dict) else None
+    source_name = (source.name
+        or (source_data.get('entry_id') if source_data else None)
+        or source.content.split('\n')[0][:60])
+
+    return render(request, 'tjai_app/entry_list.html', {
+        'title': f'Relate: {source_name}',
+        'entries': _entries_for_list(entries),
+        'tags': tags,
+        'contexts': contexts,
+        'kinds': kinds,
+        'relate_to': str(entry_uuid),
+        'relate_to_name': source_name,
+        'relation_types': relation_types,
+        'already_related_json': json.dumps(list(already_related)),
     })
 
 

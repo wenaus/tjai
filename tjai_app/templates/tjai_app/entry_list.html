@@ -113,12 +113,68 @@
             padding: 2px 8px; border-radius: 3px; cursor: pointer;
             font-family: inherit; font-size: 12px; vertical-align: middle;
         }
+        .kind-chip {
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: #daa520;
+            white-space: nowrap;
+            display: inline-block;
+        }
+        .kind-chip:hover { background: #333; }
+        .kind-chip.active { background: #daa520; color: #1a1a1a; }
+        .kind-chip.available { outline: 1px solid #daa520; }
+        .kind-chip .count { color: #8a8a8a; font-size: 11px; }
+        .kind-chip.active .count { color: #555; }
         .search-btn:hover { background: #444; }
+        .relate-bar {
+            background: #2a2a2a; border-bottom: 2px solid #555;
+            padding: 10px 16px; margin-bottom: 16px;
+            display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+        }
+        .relate-bar .relate-label { color: #d8a070; font-size: 14px; }
+        .relate-bar select, .relate-bar input[type="text"] {
+            background: #111; color: #c0d8f0; border: 1px solid #555;
+            padding: 4px 8px; font-family: inherit; font-size: 13px; border-radius: 3px;
+        }
+        .relate-bar .relate-save {
+            background: #2e5a2e; color: #e0e0e0; border: 1px solid #4a8a4a;
+            padding: 4px 14px; border-radius: 3px; cursor: pointer;
+            font-family: inherit; font-size: 13px;
+        }
+        .relate-bar .relate-save:hover { background: #3a6a3a; }
+        .relate-bar .relate-cancel {
+            background: #333; color: #e0e0e0; border: 1px solid #555;
+            padding: 4px 14px; border-radius: 3px; cursor: pointer;
+            font-family: inherit; font-size: 13px;
+        }
+        .relate-bar .relate-cancel:hover { background: #444; }
+        .relate-check {
+            width: 14px; height: 14px; vertical-align: middle;
+            cursor: pointer; accent-color: #9ccc65; margin-right: 4px;
+        }
+        .relate-bar .relate-count { color: #9ccc65; font-size: 12px; }
+        .relate-bar .relate-status { font-size: 12px; }
     </style>
 </head>
 <body>
     {% if context_name == "recipe" %}{% with current_page="recipes" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% elif context_name == "poetry" %}{% with current_page="poetry" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% else %}{% include "tjai_app/_menu.html" %}{% endif %}
     <div class="page-content">
+    {% if relate_to %}
+    <div class="relate-bar">
+        <span class="relate-label">Relate to: {{ relate_to_name }}</span>
+        <select id="relationType">
+            <option value="">-- relation type --</option>
+            {% for rt in relation_types %}<option value="{{ rt }}">{{ rt }}</option>{% endfor %}
+            <option value="__other__">other...</option>
+        </select>
+        <input type="text" id="relationTypeOther" placeholder="relation type" style="display:none; width:140px;">
+        <button class="relate-save" id="relateSave">Save</button>
+        <button class="relate-cancel" id="relateCancel">Cancel</button>
+        <span class="relate-count" id="relateCount"></span>
+        <span class="relate-status" id="relateStatus"></span>
+    </div>
+    {% endif %}
     <h1>{{ title }} <span id="countDisplay">({{ entries|length }} entries)</span>
         <input type="text" id="entry-search" placeholder="Search..." style="background:#2a2a2a; color:#e0e0e0; border:1px solid #555; padding:2px 6px; font-family:inherit; font-size:13px; width:180px; border-radius:3px; margin-left:12px; vertical-align:middle;">
         <button class="search-btn" id="searchTitle">title</button>
@@ -127,17 +183,26 @@
     </h1>
     {% if contexts %}
     <div class="tag-bar" id="context-bar">
+        <span style="color:#ce93d8;margin-right:4px;">contexts:</span>
         {% for name, count in contexts %}<span class="ctx-chip" data-ctx="{{ name }}">{{ name }} <span class="count">{{ count }}</span></span> {% endfor %}<button class="clear-btn" id="clearCtxBtn">clear</button>
     </div>
     {% endif %}
     {% if tags %}
     <div class="tag-bar">
+        <span style="color:#9ccc65;margin-right:4px;">tags:</span>
         {% for name, count in tags %}<span class="tag-chip" data-tag="{{ name }}">{{ name }} <span class="count">{{ count }}</span></span> {% endfor %}<button class="clear-btn" id="clearBtn">clear</button>
     </div>
     {% endif %}
+    {% if kinds %}
+    <div class="tag-bar" id="kind-bar">
+        <span style="color:#daa520;margin-right:4px;">kinds:</span>
+        {% for name, count in kinds %}<span class="kind-chip" data-kind="{{ name }}">{{ name }} <span class="count">{{ count }}</span></span> {% endfor %}<button class="clear-btn" id="clearKindBtn">clear</button>
+    </div>
+    {% endif %}
     {% for e in entries %}
-    <div class="entry" data-tags="{{ e.all_tags_csv }}" data-ctx="{{ e.context_id|default:'(none)' }}">
-        <a href="{% url 'entry_detail' e.detail_slug %}">
+    <div class="entry" data-tags="{{ e.all_tags_csv }}" data-ctx="{{ e.context_id|default:'(none)' }}" data-kind="{{ e.kind }}" {% if relate_to %}data-entry-uuid="{{ e.id }}"{% endif %}>
+        {% if relate_to %}<input type="checkbox" class="relate-check" data-uuid="{{ e.id }}">{% endif %}
+        <a href="{% url 'entry_detail' e.detail_slug %}" {% if relate_to %}target="_blank"{% endif %}>
             <span class="entry-num">===</span>
             <span class="timestamp">{{ e.date_display }}</span>
         </a>
@@ -155,11 +220,14 @@
         var params = new URLSearchParams(location.search);
         var activeTags = new Set(params.getAll('tag'));
         var activeCtx = new Set(params.getAll('ctx'));
+        var activeKinds = new Set(params.getAll('kind'));
         var allEntries = document.querySelectorAll('.entry[data-tags]');
         var allChips = document.querySelectorAll('.tag-chip[data-tag]');
         var allCtxChips = document.querySelectorAll('.ctx-chip[data-ctx]');
+        var allKindChips = document.querySelectorAll('.kind-chip[data-kind]');
         var clearBtn = document.getElementById('clearBtn');
         var clearCtxBtn = document.getElementById('clearCtxBtn');
+        var clearKindBtn = document.getElementById('clearKindBtn');
         var countDisplay = document.getElementById('countDisplay');
         var totalCount = allEntries.length;
 
@@ -167,6 +235,7 @@
             var p = new URLSearchParams();
             activeCtx.forEach(c => p.append('ctx', c));
             activeTags.forEach(t => p.append('tag', t));
+            activeKinds.forEach(k => p.append('kind', k));
             var qs = p.toString();
             history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
         }
@@ -185,10 +254,17 @@
             applyFilter();
         }
 
+        function toggleKind(kind) {
+            if (activeKinds.has(kind)) activeKinds.delete(kind);
+            else activeKinds.add(kind);
+            updateURL();
+            applyFilter();
+        }
+
         var searchQuery = '';
 
         function applyFilter() {
-            var hasFilters = activeTags.size > 0 || activeCtx.size > 0 || searchQuery;
+            var hasFilters = activeTags.size > 0 || activeCtx.size > 0 || activeKinds.size > 0 || searchQuery;
             // Update tag chips
             allChips.forEach(chip => {
                 chip.classList.toggle('active', activeTags.has(chip.dataset.tag));
@@ -197,14 +273,19 @@
             allCtxChips.forEach(chip => {
                 chip.classList.toggle('active', activeCtx.has(chip.dataset.ctx));
             });
+            // Update kind chips
+            allKindChips.forEach(chip => {
+                chip.classList.toggle('active', activeKinds.has(chip.dataset.kind));
+            });
             // Update inline tags
             document.querySelectorAll('.entry .tag[data-tag]').forEach(t => {
                 t.classList.toggle('active', activeTags.has(t.dataset.tag));
             });
-            // Show/hide entries (context = OR, tags = AND, search = AND)
+            // Show/hide entries (context = OR, kinds = OR, tags = AND, search = AND)
             var shown = 0;
             allEntries.forEach(el => {
                 var ctxMatch = activeCtx.size === 0 || activeCtx.has(el.dataset.ctx);
+                var kindMatch = activeKinds.size === 0 || activeKinds.has(el.dataset.kind);
                 var tagMatch = true;
                 if (activeTags.size > 0) {
                     var entryTags = el.dataset.tags ? el.dataset.tags.split(',') : [];
@@ -215,17 +296,20 @@
                     var text = (el.textContent || '').toLowerCase();
                     searchMatch = text.indexOf(searchQuery) >= 0;
                 }
-                el.style.display = (ctxMatch && tagMatch && searchMatch) ? '' : 'none';
-                if (ctxMatch && tagMatch && searchMatch) shown++;
+                var visible = ctxMatch && kindMatch && tagMatch && searchMatch;
+                el.style.display = visible ? '' : 'none';
+                if (visible) shown++;
             });
-            // Compute available tags/contexts from visible entries
+            // Compute available tags/contexts/kinds from visible entries
             var availableTags = new Set();
             var availableCtx = new Set();
+            var availableKinds = new Set();
             if (hasFilters) {
                 allEntries.forEach(el => {
                     if (el.style.display !== 'none') {
                         (el.dataset.tags || '').split(',').forEach(t => { if (t) availableTags.add(t); });
                         availableCtx.add(el.dataset.ctx);
+                        if (el.dataset.kind) availableKinds.add(el.dataset.kind);
                     }
                 });
             }
@@ -235,11 +319,15 @@
             allCtxChips.forEach(chip => {
                 chip.classList.toggle('available', hasFilters && !activeCtx.has(chip.dataset.ctx) && availableCtx.has(chip.dataset.ctx));
             });
+            allKindChips.forEach(chip => {
+                chip.classList.toggle('available', hasFilters && !activeKinds.has(chip.dataset.kind) && availableKinds.has(chip.dataset.kind));
+            });
             countDisplay.textContent = hasFilters
                 ? '(' + shown + ' of ' + totalCount + ')'
                 : '(' + totalCount + ' entries)';
             if (clearBtn) clearBtn.style.display = activeTags.size > 0 ? 'inline' : 'none';
             if (clearCtxBtn) clearCtxBtn.style.display = activeCtx.size > 0 ? 'inline' : 'none';
+            if (clearKindBtn) clearKindBtn.style.display = activeKinds.size > 0 ? 'inline' : 'none';
         }
 
         // Tag chip clicks
@@ -250,6 +338,10 @@
         allCtxChips.forEach(chip => {
             chip.addEventListener('click', () => toggleCtx(chip.dataset.ctx));
         });
+        // Kind chip clicks
+        allKindChips.forEach(chip => {
+            chip.addEventListener('click', () => toggleKind(chip.dataset.kind));
+        });
         // Inline tag clicks
         document.querySelectorAll('.entry .tag[data-tag]').forEach(t => {
             t.addEventListener('click', e => { e.preventDefault(); toggleTag(t.dataset.tag); });
@@ -257,8 +349,9 @@
         // Clear buttons
         if (clearBtn) clearBtn.addEventListener('click', () => { activeTags.clear(); updateURL(); applyFilter(); });
         if (clearCtxBtn) clearCtxBtn.addEventListener('click', () => { activeCtx.clear(); updateURL(); applyFilter(); });
+        if (clearKindBtn) clearKindBtn.addEventListener('click', () => { activeKinds.clear(); updateURL(); applyFilter(); });
         // Apply on load if URL has filters
-        if (activeTags.size > 0 || activeCtx.size > 0) applyFilter();
+        if (activeTags.size > 0 || activeCtx.size > 0 || activeKinds.size > 0) applyFilter();
 
         // Search — title (client-side) and body (server-side)
         var searchInput = document.getElementById('entry-search');
@@ -285,6 +378,10 @@
             doSearch('body');
         }
 
+        var relateToId = '{{ relate_to|default:"" }}';
+        var alreadyRelated = {% if already_related_json %}JSON.parse('{{ already_related_json|escapejs }}'){% else %}[]{% endif %};
+        var alreadyRelatedSet = new Set(alreadyRelated);
+
         function doSearch(mode) {
             var q = searchInput.value.trim();
             if (!q) return;
@@ -301,11 +398,16 @@
                 var container = document.querySelector('.entry, .back').parentElement;
                 countDisplay.textContent = '(' + entries.length + ' ' + mode + ' results)';
                 entries.forEach(function(e) {
+                    // In relate mode, skip the source entry and already-related
+                    if (relateToId && (e.id === relateToId || alreadyRelatedSet.has(e.id))) return;
                     var div = document.createElement('div');
                     div.className = 'entry body-result';
                     var slug = e.entry_id || e.nickname || e.name || e.id;
                     var tags = (e.all_tags || []).filter(t => ['tjweb','dynalist','chrome','test'].indexOf(t) < 0);
-                    div.innerHTML = '<a href="/tjai/entry/' + slug + '/">'
+                    var checkHtml = relateToId ? '<input type="checkbox" class="relate-check" data-uuid="' + e.id + '"> ' : '';
+                    var target = relateToId ? ' target="_blank"' : '';
+                    div.innerHTML = checkHtml
+                        + '<a href="/tjai/entry/' + slug + '/"' + target + '>'
                         + '<span class="entry-num">===</span> '
                         + '<span class="content">' + (e.content || '').replace(/</g, '&lt;') + '</span>'
                         + '</a> '
@@ -313,6 +415,7 @@
                         + tags.map(t => '<span class="tag">:' + t + '</span>').join(' ');
                     container.appendChild(div);
                 });
+                if (relateToId) _updateRelateCount();
             }).catch(function(err) {
                 countDisplay.textContent = '(search error)';
             });
@@ -346,6 +449,84 @@
                 el.textContent = content;
             }
         });
+
+        // --- Relate mode ---
+        if (relateToId) {
+            var relTypeSelect = document.getElementById('relationType');
+            var relTypeOther = document.getElementById('relationTypeOther');
+            var relateCountEl = document.getElementById('relateCount');
+            var relateStatusEl = document.getElementById('relateStatus');
+
+            // Show/hide "other" text input
+            relTypeSelect.addEventListener('change', function() {
+                relTypeOther.style.display = this.value === '__other__' ? '' : 'none';
+                if (this.value === '__other__') relTypeOther.focus();
+            });
+
+            // Track checked count
+            function _updateRelateCount() {
+                var n = document.querySelectorAll('.relate-check:checked').length;
+                relateCountEl.textContent = n > 0 ? n + ' selected' : '';
+            }
+            document.addEventListener('change', function(ev) {
+                if (ev.target.classList.contains('relate-check')) _updateRelateCount();
+            });
+
+            // Cancel
+            document.getElementById('relateCancel').addEventListener('click', function() {
+                window.close();
+            });
+
+            // Save
+            document.getElementById('relateSave').addEventListener('click', async function() {
+                var relType = relTypeSelect.value;
+                if (relType === '__other__') relType = relTypeOther.value.trim();
+                if (!relType) { alert('Choose a relation type'); return; }
+
+                var checked = document.querySelectorAll('.relate-check:checked');
+                if (checked.length === 0) { alert('Select at least one entry'); return; }
+
+                relateStatusEl.textContent = 'Saving...';
+                relateStatusEl.style.color = '#e0e0e0';
+                var errors = [];
+                var created = 0;
+                for (var cb of checked) {
+                    try {
+                        var resp = await fetch('/tjai/api/goals/relate', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': '{{ csrf_token }}'
+                            },
+                            body: JSON.stringify({
+                                entry1_id: relateToId,
+                                entry2_id: cb.dataset.uuid,
+                                relation_type: relType
+                            })
+                        });
+                        var data = await resp.json();
+                        if (data.error) errors.push(data.error);
+                        else created++;
+                    } catch (err) {
+                        errors.push(err.message);
+                    }
+                }
+
+                if (errors.length > 0) {
+                    relateStatusEl.textContent = created + ' created, ' + errors.length + ' failed';
+                    relateStatusEl.style.color = '#ef5350';
+                    alert('Some relations failed:\n' + errors.join('\n'));
+                } else {
+                    relateStatusEl.textContent = created + ' relations created';
+                    relateStatusEl.style.color = '#9ccc65';
+                    // Reload opener (entry detail page) to show new relations, then close
+                    if (window.opener && !window.opener.closed) {
+                        window.opener.location.reload();
+                    }
+                    setTimeout(function() { window.close(); }, 500);
+                }
+            });
+        }
     </script>
     </div>
 </body>

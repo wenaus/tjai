@@ -158,6 +158,7 @@
         <div class="edit-toolbar" style="display:flex; align-items:center;">
             <button class="toolbar-btn save-btn" id="saveBtn">save</button>
             <button class="toolbar-btn" id="cancelBtn">cancel</button>
+            <button class="toolbar-btn" id="relateBtn" style="margin-left:16px;">relate to</button>
             <span class="status" id="saveStatus" style="display:none">saved</span>
         </div>
     </div>
@@ -658,6 +659,9 @@
         document.getElementById('saveBtn').addEventListener('click', doSave);
         document.getElementById('cancelBtn').addEventListener('click', cancelEdit);
         document.getElementById('deleteBtn').addEventListener('click', doDelete);
+        document.getElementById('relateBtn').addEventListener('click', function() {
+            window.open('/tjai/relate/{{ entry.id }}/', '_blank');
+        });
         if (new URLSearchParams(window.location.search).get('edit') === '1') startEdit();
 
         function _startAutosave() {
