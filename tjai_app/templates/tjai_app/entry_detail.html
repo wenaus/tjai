@@ -520,31 +520,63 @@
 
                 cm.on('paste', function(cm, e) {
                     const html = e.clipboardData && e.clipboardData.getData('text/html');
-                    if (!html || !html.includes('data-tjai-entry-id')) return;
+                    if (!html) return;
 
-                    e.preventDefault();
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(html, 'text/html');
-                    const items = doc.querySelectorAll('[data-tjai-entry-id]');
-                    if (items.length === 0) return;
-
-                    const uuids = [...items].map(el => el.dataset.tjaiEntryId);
-
-                    Promise.all(uuids.map(uuid =>
-                        fetch(`/tjai/api/entry/${uuid}/content`).then(r => r.json())
-                    )).then(entries => {
-                        const lines = entries.map(ent => {
-                            if (ent.error) return '- (entry not found)';
-                            const tags = (ent.tags || []).map(t => ':' + t).join(' ');
-                            const tagStr = tags ? '   ' + tags : '';
-                            return '- ' + ent.content.split('\n')[0] + tagStr;
+                    // tjai entry-aware paste (existing)
+                    if (html.includes('data-tjai-entry-id')) {
+                        e.preventDefault();
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, 'text/html');
+                        const items = doc.querySelectorAll('[data-tjai-entry-id]');
+                        if (items.length === 0) return;
+                        const uuids = [...items].map(el => el.dataset.tjaiEntryId);
+                        Promise.all(uuids.map(uuid =>
+                            fetch(`/tjai/api/entry/${uuid}/content`).then(r => r.json())
+                        )).then(entries => {
+                            const lines = entries.map(ent => {
+                                if (ent.error) return '- (entry not found)';
+                                const tags = (ent.tags || []).map(t => ':' + t).join(' ');
+                                const tagStr = tags ? '   ' + tags : '';
+                                return '- ' + ent.content.split('\n')[0] + tagStr;
+                            });
+                            cm.replaceSelection(lines.join('\n'));
+                            flashNotice(`Pasted ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} (entry-aware)`);
+                        }).catch(() => {
+                            const plain = e.clipboardData.getData('text/plain');
+                            if (plain) cm.replaceSelection(plain);
                         });
-                        cm.replaceSelection(lines.join('\n'));
-                        flashNotice(`Pasted ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} (entry-aware)`);
-                    }).catch(() => {
-                        const plain = e.clipboardData.getData('text/plain');
-                        if (plain) cm.replaceSelection(plain);
-                    });
+                        return;
+                    }
+
+                    // Link-preserving paste: convert HTML <a> tags to markdown links
+                    if (html.includes('<a ')) {
+                        const plain = e.clipboardData.getData('text/plain') || '';
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, 'text/html');
+                        const links = doc.querySelectorAll('a[href]');
+                        if (links.length === 0) return;  // no links — let default paste handle it
+                        // Build a map of link text → href
+                        const linkMap = new Map();
+                        links.forEach(a => {
+                            const text = a.textContent.trim();
+                            const href = a.getAttribute('href');
+                            if (text && href && href.startsWith('http')) linkMap.set(text, href);
+                        });
+                        if (linkMap.size === 0) return;
+                        // Replace link text in plain text with markdown links
+                        let result = plain;
+                        linkMap.forEach((href, text) => {
+                            // Only replace if the plain text doesn't already contain the URL
+                            if (!result.includes(href)) {
+                                result = result.replace(text, `[${text}](${href})`);
+                            }
+                        });
+                        if (result !== plain) {
+                            e.preventDefault();
+                            cm.replaceSelection(result);
+                            flashNotice(`Pasted with ${linkMap.size} link${linkMap.size > 1 ? 's' : ''} preserved`);
+                        }
+                    }
                 });
             }
             var isRestore = !!restoreContent;

@@ -2146,6 +2146,8 @@ def entry_detail(request, entry_id=None):
         r'<a href="\1">\1</a>',
         content_html
     )
+    # External links open in new tab
+    content_html = content_html.replace('<a href="http', '<a target="_blank" href="http')
     first_line = lines[0] if lines else ''
     if entry.context_id == 'poetry':
         content_lines = entry.content.split('\n')
