@@ -13,3 +13,6 @@ PATH=/usr/local/bin:/usr/bin:/bin
 
 # Daily 03:30 — purge entry versions older than 3 days (keep min 2 per entry)
 30 3 * * * /home/admin/github/tjrepo/tjai/scripts/cron/purge_old_versions.py >> /tmp/cron_purge_versions.log 2>&1
+
+# Daily 03:45 — prune applog (info >7d, error >14d) and health-digest files (>7d)
+45 3 * * * /home/admin/github/tjrepo/tjai/scripts/cron/prune_logs_and_digests.py >> /tmp/cron_prune_logs.log 2>&1

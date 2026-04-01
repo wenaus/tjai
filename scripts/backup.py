@@ -159,7 +159,7 @@ def main():
     print(f"Pushing to {rclone_dest} ...")
     result = subprocess.run(
         ['rclone', 'copy', str(backup_dir), rclone_dest],
-        capture_output=True, text=True, timeout=300,
+        capture_output=True, text=True, timeout=1800,
     )
     if result.returncode != 0:
         print(f"ERROR: rclone push failed: {result.stderr}", file=sys.stderr)
