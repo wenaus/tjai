@@ -2686,6 +2686,7 @@ def api_add_bookmark(request):
     title = data.get("title", "").strip()
     url = data.get("url", "").strip()
     text = data.get("text", "").strip()
+    readme = data.get("readme", False)
 
     if not url:
         return JsonResponse({"error": "url is required"}, status=400)
@@ -2708,11 +2709,13 @@ def api_add_bookmark(request):
             duplicate.timestamp_modified = time.time()
             duplicate.is_dirty = 1
             duplicate.save(update_fields=['content', 'timestamp_modified', 'is_dirty'])
+        if readme:
+            Tag.objects.get_or_create(entry_id=duplicate.id, tag_name='readme')
         return JsonResponse({
             "status": "duplicate",
             "entry_id": duplicate.id,
             "content": duplicate.content,
-            "updated": bool(text),
+            "updated": bool(text) or readme,
         })
 
     now = time.time()
@@ -2725,6 +2728,8 @@ def api_add_bookmark(request):
         is_dirty=1,
     )
     Tag.objects.create(tag_name='chrome', entry=entry)
+    if readme:
+        Tag.objects.create(tag_name='readme', entry=entry)
 
     from .tagger import tag_bookmark
     auto_tags = tag_bookmark(entry)
