@@ -18,6 +18,7 @@ REPOS = [
     (Path('/home/admin/github/swf-common-lib'), 'https://github.com/BNLNPPS/swf-common-lib', 'swf-common-lib'),
     (Path('/home/admin/github/swf-remote'), 'https://github.com/BNLNPPS/swf-remote', 'swf-remote'),
     (Path('/home/admin/github/BNLNPPS.github.io'), 'https://github.com/BNLNPPS/BNLNPPS.github.io', 'BNLNPPS.github.io'),
+    (Path('/home/admin/github/lxr-mcp-server'), 'https://github.com/BNLNPPS/lxr-mcp-server', 'lxr-mcp-server'),
 ]
 # Monorepo: attribute commits to top-level subdirectory instead of repo name
 MONOREPO_SUBDIRS = {

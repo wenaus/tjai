@@ -8,6 +8,7 @@ set -uo pipefail
 REPOS=(
     /home/admin/github/tjrepo
     /home/admin/github/BNLNPPS.github.io
+    /home/admin/github/lxr-mcp-server
 )
 
 SWF_REPOS=(
