@@ -2691,9 +2691,17 @@ def api_add_bookmark(request):
     if not url:
         return JsonResponse({"error": "url is required"}, status=400)
 
-    content = f"[{title}]({url})" if title else url
-    if text:
-        content += '   ' + text
+    # Parse :tags, @name, =context from text
+    inline_tags = re.findall(r':(\w[\w-]*)', text)
+    name_match = re.search(r'@(\w[\w-]*)', text)
+    inline_name = name_match.group(1) if name_match else None
+    ctx_match = re.search(r'=(\w[\w-]*)', text)
+    inline_context = ctx_match.group(1) if ctx_match else None
+    # Strip parsed tokens from text for clean content
+    clean_text = re.sub(r'\s*[:@=]\w[\w-]*', '', text).strip()
+
+    base = f"[{title}]({url})" if title else url
+    content = base + ('   ' + clean_text if clean_text else '')
 
     from django.db.models import Q
     duplicate = Entry.objects.filter(
@@ -2704,18 +2712,24 @@ def api_add_bookmark(request):
     ).first()
     if duplicate:
         if text:
-            base = f"[{title}]({url})" if title else url
-            duplicate.content = base + '   ' + text
-            duplicate.timestamp_modified = time.time()
-            duplicate.is_dirty = 1
-            duplicate.save(update_fields=['content', 'timestamp_modified', 'is_dirty'])
+            duplicate.content = content
+        if inline_name:
+            duplicate.name = inline_name
+        if inline_context:
+            duplicate.context_id = inline_context
+        duplicate.timestamp_modified = time.time()
+        duplicate.is_dirty = 1
+        duplicate.save()
+        # Add tags (additive — keep existing)
+        for t in inline_tags:
+            Tag.objects.get_or_create(entry_id=duplicate.id, tag_name=t)
         if readme:
             Tag.objects.get_or_create(entry_id=duplicate.id, tag_name='readme')
         return JsonResponse({
             "status": "duplicate",
             "entry_id": duplicate.id,
             "content": duplicate.content,
-            "updated": bool(text) or readme,
+            "updated": True,
         })
 
     now = time.time()
@@ -2723,11 +2737,15 @@ def api_add_bookmark(request):
         id=str(uuid.uuid7()),
         content=content,
         kind='bookmark',
+        name=inline_name,
+        context_id=inline_context,
         timestamp_created=now,
         timestamp_modified=now,
         is_dirty=1,
     )
     Tag.objects.create(tag_name='chrome', entry=entry)
+    for t in inline_tags:
+        Tag.objects.get_or_create(entry_id=entry.id, tag_name=t)
     if readme:
         Tag.objects.create(tag_name='readme', entry=entry)
 
