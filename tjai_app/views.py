@@ -2711,8 +2711,7 @@ def api_add_bookmark(request):
         Q(content__contains=f'({url})') | Q(content=url) | Q(content__startswith=url + ' ')
     ).first()
     if duplicate:
-        if text:
-            duplicate.content = content
+        duplicate.content = content
         if inline_name:
             duplicate.name = inline_name
         if inline_context:
