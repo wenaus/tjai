@@ -189,7 +189,6 @@ def _run_one_script(script_cmd, timeout=3600):
         return False
 
     cmd = [sys.executable, str(script_path)] + script_args
-    logger.info("Running: %s (timeout=%ds)", ' '.join(cmd), timeout)
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True,
@@ -197,13 +196,14 @@ def _run_one_script(script_cmd, timeout=3600):
     except subprocess.TimeoutExpired:
         logger.error("%s timed out after %ds — killed", script_name, timeout)
         return False
-    if result.stdout:
-        for line in result.stdout.rstrip().split('\n'):
-            logger.info("  %s", line)
     if result.returncode != 0:
-        logger.error("%s exited %d", script_name, result.returncode)
+        logger.error("Mechanical step failed, aborting")
         if result.stderr:
             for line in result.stderr.rstrip().split('\n'):
+                logger.error("  %s", line)
+        elif result.stdout:
+            # Log stdout on failure if no stderr (some scripts report errors to stdout)
+            for line in result.stdout.rstrip().split('\n')[-10:]:
                 logger.error("  %s", line)
         return False
 
@@ -391,10 +391,8 @@ def dispatch_ai(action, entry_id=None, target_date=None):
             stdout, stderr = proc.communicate()
             if stdout:
                 for line in stdout.rstrip().split('\n'):
-                    logger.info("  %s", line)
                     if action_id and line.startswith('TRACKING_ID='):
                         tracking_id = line.split('=', 1)[1].strip()
-                        logger.info("[[tracking:%s]]", tracking_id)
                         SysConfig.objects.update_or_create(
                             key=f'agent_{action_id}_tracking',
                             defaults={'value': tracking_id,
@@ -555,9 +553,7 @@ def execute_action(action, target_date=None):
         last_run_str = datetime.fromtimestamp(float(last_run)).strftime('%b %-d %H:%M')
     else:
         last_run_str = 'never'
-    logger.info("Action: %s", action.content[:80])
-    logger.info("  Trigger: %s, Last run: %s, Target date: %s",
-                data.get('trigger', '?'), last_run_str, target_date)
+    logger.info("Action: %s (last: %s)", action.content[:80], last_run_str)
 
     action_id = data.get('entry_id')
     _log_context.action_id = action_id
@@ -651,7 +647,6 @@ def execute_action(action, target_date=None):
                 return False
 
         update_last_run(action)
-        logger.info("Done.")
         return True
     finally:
         _log_context.action_id = None

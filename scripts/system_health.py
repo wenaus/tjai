@@ -642,22 +642,11 @@ def assess_health(system, postgres, tjai=None, backups=None, **_kwargs):
 
 
 def main():
-    logger.info("Collecting system metrics...")
     system = collect_system()
-
-    logger.info("Collecting PostgreSQL metrics...")
     postgres = collect_postgres()
-
-    logger.info("Collecting process info...")
     processes = collect_processes()
-
-    logger.info("Collecting CloudWatch metrics...")
     cloudwatch = collect_cloudwatch()
-
-    logger.info("Collecting backup status...")
     backups = collect_backups()
-
-    logger.info("Collecting tjai stats...")
     tjai = collect_tjai()
 
     status, issues = assess_health(system, postgres, tjai, backups)
@@ -685,11 +674,10 @@ def main():
         defaults={'value': json.dumps(health_data), 'timestamp_modified': now},
     )
 
-    logger.info("Health: %s", status.upper())
     if issues:
-        for issue in issues:
-            logger.info("  - %s", issue)
-    logger.info("Written to sysconfig.")
+        logger.info("Health: %s (%s)", status.upper(), '; '.join(issues))
+    else:
+        logger.info("Health: %s", status.upper())
 
 
 if __name__ == '__main__':
