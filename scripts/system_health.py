@@ -677,7 +677,7 @@ def main():
     if issues:
         logger.info("Health: %s (%s)", status.upper(), '; '.join(issues))
     else:
-        logger.info("Health: %s", status.upper())
+        logger.debug("Health: %s", status.upper())
 
 
 if __name__ == '__main__':

@@ -413,19 +413,6 @@
                 html += '</div>';
             }
 
-            // Dropbox section
-            const db = data.dropbox || {};
-            html += '<div class="section"><div class="section-title">Dropbox</div>';
-            const dbDotColor = db.running ? '#9ccc65' : '#ef5350';
-            const dbStatusCls = db.running ? 'metric-value' : 'metric-crit';
-            const dbNote = db.restarted ? ' (restart attempted)' : '';
-            html += `<div class="process-row" style="max-width:500px"><span class="process-name"><span style="color:${dbDotColor}">&#9679;</span> Status</span><span class="${dbStatusCls}">${db.status}${dbNote}</span></div>`;
-            if (db.newest_backup_min !== undefined) {
-                const bkCls = db.newest_backup_min > 1440 ? 'metric-warn' : 'metric-value';
-                html += `<div class="process-row" style="max-width:500px"><span class="process-name">Backups</span><span class="${bkCls}">${db.backup_count} files, newest ${fmtMin(db.newest_backup_min)} ago</span></div>`;
-            }
-            html += '</div>';
-
             // Backups section
             const bk = data.backups || {};
             html += '<div class="section"><div class="section-title">Backups</div>';

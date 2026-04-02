@@ -553,7 +553,11 @@ def execute_action(action, target_date=None):
         last_run_str = datetime.fromtimestamp(float(last_run)).strftime('%b %-d %H:%M')
     else:
         last_run_str = 'never'
-    logger.info("Action: %s (last: %s)", action.content[:80], last_run_str)
+    # Watchdog runs every 10 min and reports its own anomalies — keep log quiet
+    entry_id = data.get('entry_id', '')
+    quiet_actions = ('watchdog', 'system-health')
+    log_level = logging.DEBUG if entry_id in quiet_actions else logging.INFO
+    logger.log(log_level, "Action: %s (last: %s)", action.content[:80], last_run_str)
 
     action_id = data.get('entry_id')
     _log_context.action_id = action_id
