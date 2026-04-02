@@ -13,6 +13,7 @@ from synopsis_utils import main_section
 GIT_DAILY_DIR = Path(settings.BASE_DIR) / 'data' / 'git_daily'
 REPOS = [
     (Path('/home/admin/github/tjrepo'), 'https://github.com/wenaus/tjrepo', 'tjrepo'),
+    (Path('/home/admin/github/tjdev'), 'https://github.com/wenaus/tjdev', 'tjdev'),
     (Path('/home/admin/github/swf-testbed'), 'https://github.com/BNLNPPS/swf-testbed', 'swf-testbed'),
     (Path('/home/admin/github/swf-monitor'), 'https://github.com/BNLNPPS/swf-monitor', 'swf-monitor'),
     (Path('/home/admin/github/swf-common-lib'), 'https://github.com/BNLNPPS/swf-common-lib', 'swf-common-lib'),

@@ -1636,6 +1636,7 @@ def git_activity(request):
 # Keep in sync with scripts/section_git.py REPOS
 _GIT_REPOS = [
     ('/home/admin/github/tjrepo', 'https://github.com/wenaus/tjrepo', 'tjrepo'),
+    ('/home/admin/github/tjdev', 'https://github.com/wenaus/tjdev', 'tjdev'),
     ('/home/admin/github/swf-testbed', 'https://github.com/BNLNPPS/swf-testbed', 'swf-testbed'),
     ('/home/admin/github/swf-monitor', 'https://github.com/BNLNPPS/swf-monitor', 'swf-monitor'),
     ('/home/admin/github/swf-common-lib', 'https://github.com/BNLNPPS/swf-common-lib', 'swf-common-lib'),
