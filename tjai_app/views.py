@@ -1642,6 +1642,7 @@ _GIT_REPOS = [
     ('/home/admin/github/swf-remote', 'https://github.com/BNLNPPS/swf-remote', 'swf-remote'),
     ('/home/admin/github/BNLNPPS.github.io', 'https://github.com/BNLNPPS/BNLNPPS.github.io', 'BNLNPPS.github.io'),
     ('/home/admin/github/lxr-mcp-server', 'https://github.com/BNLNPPS/lxr-mcp-server', 'lxr-mcp-server'),
+    ('/home/admin/github/corun-ai', 'https://github.com/BNLNPPS/corun-ai', 'corun-ai'),
 ]
 
 
