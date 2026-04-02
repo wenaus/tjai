@@ -446,7 +446,8 @@ def collect_backups():
 
     # Keep 'latest' for backward compat with health assessment
     latest_dir = day_dirs[0]
-    expected_files = ['tjai-db.sql.gz', 'env-www.env', 'env-home.env', 'etaverse.conf']
+    expected_files = ['tjai-db.sql.gz', 'corun-db.sql.gz', 'swf-remote-db.sql.gz',
+                      'env-www.env', 'env-home.env', 'etaverse.conf']
     found = {}
     for name in expected_files:
         p = latest_dir / name
@@ -466,6 +467,30 @@ def collect_backups():
 
     return result
 
+
+
+def collect_web_apps():
+    """Check epic-devcloud web apps are responding."""
+    import urllib.request
+    apps = {
+        '/prod/': 'https://epic-devcloud.org/prod/',
+        '/doc/': 'https://epic-devcloud.org/doc/',
+    }
+    results = {}
+    for label, url in apps.items():
+        try:
+            req = urllib.request.Request(url, method='GET')
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                results[label] = {
+                    'status': resp.status,
+                    'ok': 200 <= resp.status < 400,
+                }
+        except Exception as e:
+            results[label] = {
+                'status': str(e)[:80],
+                'ok': False,
+            }
+    return results
 
 
 def collect_tjai():
@@ -561,7 +586,7 @@ def collect_tjai():
     return metrics
 
 
-def assess_health(system, postgres, tjai=None, backups=None, **_kwargs):
+def assess_health(system, postgres, tjai=None, backups=None, web_apps=None, **_kwargs):
     """Determine health status from metrics."""
     issues = []
     cpu_count = system.get('cpu_count', 1)
@@ -631,6 +656,12 @@ def assess_health(system, postgres, tjai=None, backups=None, **_kwargs):
             if db_mb is not None and db_mb < 1:
                 issues.append(('red', f'Backup DB dump too small ({db_mb} MB)'))
 
+    # Web app health
+    if web_apps:
+        for label, info in web_apps.items():
+            if not info.get('ok'):
+                issues.append(('red', f'{label} down: {info.get("status", "?")}'))
+
     if any(level == 'red' for level, _ in issues):
         status = 'red'
     elif any(level == 'yellow' for level, _ in issues):
@@ -648,8 +679,9 @@ def main():
     cloudwatch = collect_cloudwatch()
     backups = collect_backups()
     tjai = collect_tjai()
+    web_apps = collect_web_apps()
 
-    status, issues = assess_health(system, postgres, tjai, backups)
+    status, issues = assess_health(system, postgres, tjai, backups, web_apps=web_apps)
 
     health_data = {
         'timestamp': time.time(),
@@ -662,6 +694,7 @@ def main():
         'cloudwatch': cloudwatch,
         'backups': backups,
         'tjai': tjai,
+        'web_apps': web_apps,
     }
 
     now = time.time()

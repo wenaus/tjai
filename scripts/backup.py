@@ -81,6 +81,33 @@ def backup_postgres(backup_dir):
         return False
 
 
+def backup_local_db(backup_dir, dbname, dbuser, dbpass, label):
+    """pg_dump a local database, gzipped."""
+    dest = backup_dir / f'{label}-db.sql.gz'
+    env = os.environ.copy()
+    env['PGPASSWORD'] = dbpass
+
+    try:
+        dump = subprocess.run(
+            ['pg_dump', '-U', dbuser, '-h', 'localhost', dbname],
+            capture_output=True, env=env, timeout=120,
+        )
+        if dump.returncode != 0:
+            print(f"ERROR: pg_dump {label} failed: {dump.stderr.decode()}", file=sys.stderr)
+            return False
+
+        import gzip
+        with gzip.open(dest, 'wb') as f:
+            f.write(dump.stdout)
+
+        size_mb = dest.stat().st_size / (1024 * 1024)
+        print(f"  {label} dump: {dest.name} ({size_mb:.1f} MB)")
+        return True
+    except subprocess.TimeoutExpired:
+        print(f"ERROR: pg_dump {label} timed out after 120s", file=sys.stderr)
+        return False
+
+
 def copy_file(src, backup_dir, dest_name):
     """Copy a single file to the backup directory."""
     src = Path(src)
@@ -145,6 +172,24 @@ def main():
 
     ok = True
     ok = backup_postgres(backup_dir) and ok
+    # Backup corun-ai and swf-remote databases (read passwords from their .env)
+    for label, env_path, prefix in [
+        ('corun', Path('/var/www/corun-ai/src/.env'), 'CORUN_DB_'),
+        ('swf-remote', Path('/var/www/swf-remote/src/.env'), 'SWF_REMOTE_DB_'),
+    ]:
+        env_vars = {}
+        if env_path.exists():
+            for line in env_path.read_text().splitlines():
+                if '=' in line and not line.startswith('#'):
+                    k, v = line.split('=', 1)
+                    env_vars[k.strip()] = v.strip().strip("'\"")
+        dbname = env_vars.get(f'{prefix}NAME', label.replace('-', '_'))
+        dbuser = env_vars.get(f'{prefix}USER', dbname)
+        dbpass = env_vars.get(f'{prefix}PASSWORD', '')
+        if dbpass:
+            ok = backup_local_db(backup_dir, dbname, dbuser, dbpass, label) and ok
+        else:
+            print(f"  Skipping {label}: no password found in {env_path}", file=sys.stderr)
     copy_file(TJAI_WWW / '.env', backup_dir, 'env-www.env')
     copy_file(Path.home() / '.env', backup_dir, 'env-home.env')
     copy_dir(TJAI_WWW / 'data', backup_dir, 'data')

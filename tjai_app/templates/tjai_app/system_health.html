@@ -413,6 +413,19 @@
                 html += '</div>';
             }
 
+            // Web Apps section
+            const wa = data.web_apps || {};
+            html += '<div class="section"><div class="section-title">Web Apps (epic-devcloud)</div>';
+            for (const [label, info] of Object.entries(wa)) {
+                const ok = info.ok;
+                const dotColor = ok ? '#9ccc65' : '#ef5350';
+                const statusText = ok ? 'OK (' + info.status + ')' : info.status;
+                const cls = ok ? 'metric-value' : 'metric-crit';
+                html += `<div class="process-row" style="max-width:500px"><span class="process-name"><span style="color:${dotColor}">&#9679;</span> ${label}</span><span class="${cls}">${statusText}</span></div>`;
+            }
+            if (Object.keys(wa).length === 0) html += '<div style="color:#999">No data</div>';
+            html += '</div>';
+
             // Backups section
             const bk = data.backups || {};
             html += '<div class="section"><div class="section-title">Backups</div>';

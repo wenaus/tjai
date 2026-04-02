@@ -16,3 +16,6 @@ PATH=/usr/local/bin:/usr/bin:/bin
 
 # Daily 03:45 — prune applog (info >7d, error >14d) and health-digest files (>7d)
 45 3 * * * /home/admin/github/tjrepo/tjai/scripts/cron/prune_logs_and_digests.py >> /tmp/cron_prune_logs.log 2>&1
+
+# Every 10 min — sync user accounts from swf-remote to corun-ai
+*/10 * * * * /var/www/corun-ai/scripts/sync_users.sh >> /tmp/cron_sync_users.log 2>&1
