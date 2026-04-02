@@ -497,6 +497,29 @@
                             cm.replaceSelection(dedented);
                         }
                     });
+                    addItem('Bulletize selection', function() {
+                        var from = cm.getCursor('from');
+                        // Detect indent + bullet from line above selection
+                        var prefix = '- ';
+                        if (from.line > 0) {
+                            var above = cm.getLine(from.line - 1);
+                            var m = above.match(/^(\s*)([-*+]\s+)/);
+                            if (m) {
+                                prefix = m[1] + m[2];
+                            } else {
+                                // No bullet above — use indent of line above + '- '
+                                var indent = above.match(/^(\s*)/)[1];
+                                prefix = indent + '- ';
+                            }
+                        }
+                        var sel = cm.getSelection();
+                        var lines = sel.split('\n');
+                        var result = lines.map(function(line) {
+                            var trimmed = line.trim();
+                            return trimmed ? prefix + trimmed : '';
+                        }).join('\n');
+                        cm.replaceSelection(result);
+                    });
 
                     menu.style.left = e.clientX + 'px';
                     menu.style.top = e.clientY + 'px';
