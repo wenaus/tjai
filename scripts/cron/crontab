@@ -8,6 +8,9 @@ PATH=/usr/local/bin:/usr/bin:/bin
 # Every 10 min — pull all repos (swf-* tracks highest infra/baseline-vNN)
 */10 * * * * /home/admin/github/tjrepo/tjai/scripts/cron/git_pull_repos.sh >> /tmp/cron_git_pull.log 2>&1
 
+# Daily 03:00 — generate dev activity (upstream repo commits)
+0 3 * * * /var/www/tjai/.venv/bin/python /home/admin/github/tjrepo/tjai/scripts/section_dev.py >> /tmp/cron_section_dev.log 2>&1
+
 # Daily 04:00 — purge Claude Code session detritus older than 2 days
 0 4 * * * /home/admin/github/tjrepo/tjai/scripts/cron/cleanup_claude_sessions.sh >> /tmp/cron_cleanup_claude.log 2>&1
 

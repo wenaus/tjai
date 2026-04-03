@@ -6,6 +6,7 @@
     {% if current_page == "synopsis" %}<span style="color:#e0e0e0">Daily</span>{% else %}<a href="{% url 'daily_synopsis' %}">Daily</a>{% endif %}
     {% if current_page == "assessment" %}<span style="color:#e0e0e0">AI</span>{% else %}<a href="{% url 'assessment' %}">AI</a>{% endif %}
     {% if current_page == "git" %}<span style="color:#e0e0e0">Git</span>{% else %}<a href="{% url 'git_activity' %}">Git</a>{% endif %}
+    {% if current_page == "dev" %}<span style="color:#e0e0e0">Dev</span>{% else %}<a href="{% url 'dev_activity' %}">Dev</a>{% endif %}
     {% if current_page == "picks" %}<span style="color:#e0e0e0">Picks</span>{% else %}<a href="{% url 'picks' %}">Picks</a>{% endif %}
     {% if current_page == "rss" %}<span style="color:#e0e0e0">RSS</span>{% else %}<a href="{% url 'rss' %}">RSS</a>{% endif %}
     {% if current_page == "readme" %}<span style="color:#e0e0e0">ReadMe</span>{% else %}<a href="{% url 'readme' %}">ReadMe</a>{% endif %}

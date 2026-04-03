@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/tjai/static/tjai/favicon.svg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>tjai Dev Activity</title>
+    <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 13px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 32px;
+        }
+        .day-content h2 {
+            margin: 32px 0 10px 0;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #ff9800;
+            font-size: 1.2em;
+        }
+        .day-content h2:first-child { margin-top: 0; }
+        .day-content h2 a { color: #ff9800; text-decoration: none; }
+        .day-content h2 a:hover { text-decoration: underline; }
+        .day-content a { color: #81d4fa; text-decoration: none; }
+        .day-content a:hover { text-decoration: underline; }
+        .day-content .event { margin: 10px 0; line-height: 1.6; }
+        .day-content .event-line { }
+        .day-content .files { color: #888; font-size: 11px; margin: 2px 0 2px 16px; }
+        .day-content .files code { color: #aaa; font-size: 11px; }
+        .day-content .body-oneline { color: #bbb; font-size: 12px; margin: 2px 0 2px 16px; white-space: pre-wrap; }
+        .day-content details { margin: 2px 0 2px 16px; }
+        .day-content summary {
+            cursor: pointer;
+            list-style: none;
+            color: #bbb;
+            font-size: 12px;
+        }
+        .day-content summary::before {
+            content: '▶ ';
+            font-size: 9px;
+            display: inline-block;
+            transition: transform 0.15s;
+            margin-right: 3px;
+        }
+        .day-content details[open] > summary::before {
+            transform: rotate(90deg);
+        }
+        .day-content .body-text {
+            margin: 4px 0 4px 16px;
+            color: #999;
+            white-space: pre-wrap;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        .day-content .empty { color: #666; font-style: italic; margin: 4px 0 16px 0; }
+        .loading { color: #888; padding: 20px 0; }
+    </style>
+</head>
+<body>
+{% with current_page="dev" %}{% include "tjai_app/_menu.html" %}{% endwith %}
+<div class="content" id="content">
+    <div class="loading">Loading dev activity...</div>
+</div>
+<script>
+(async function() {
+    const el = document.getElementById('content');
+    try {
+        const resp = await fetch('/tjai/api/dev/data?_=' + Date.now());
+        if (!resp.ok) {
+            el.innerHTML = `<div class="loading" style="color:#ef5350;">HTTP ${resp.status}</div>`;
+            return;
+        }
+        const data = await resp.json();
+        if (!data.days || data.days.length === 0) {
+            el.innerHTML = '<div class="loading">No dev activity found.</div>';
+            return;
+        }
+        let html = '';
+        for (const day of data.days) {
+            html += `<div class="day-content">${day.html}</div>`;
+        }
+        el.innerHTML = html;
+    } catch (e) {
+        el.innerHTML = `<div class="loading" style="color:#ef5350;">Error: ${e.message}</div>`;
+    }
+})();
+</script>
+</body>
+</html>

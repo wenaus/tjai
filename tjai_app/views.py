@@ -1901,6 +1901,45 @@ def git_activity_data(request):
 
 
 @login_required
+def dev_activity(request):
+    """Dev activity page — upstream repo commits."""
+    return render(request, 'tjai_app/dev_activity.html')
+
+
+@login_required
+def dev_activity_data(request):
+    """Return dev activity from daily files (raw HTML)."""
+    from pathlib import Path
+
+    dev_dir = Path(django_settings.BASE_DIR) / 'data' / 'dev_daily'
+    if not dev_dir.exists():
+        return JsonResponse({'days': []})
+
+    files = sorted(dev_dir.glob('*'), reverse=True)
+    show = int(request.GET.get('days', 1))
+    days = []
+    for f in files[:show]:
+        date_str = f.stem
+        try:
+            dt = datetime.strptime(date_str, '%Y-%m-%d')
+            date_display = dt.strftime('%a %b %-d %Y')
+        except ValueError:
+            date_display = date_str
+        html = f.read_text(encoding='utf-8')
+        if not html.strip():
+            continue
+        days.append({
+            'date': date_str,
+            'date_display': date_display,
+            'html': html,
+        })
+
+    response = JsonResponse({'days': days})
+    response['Cache-Control'] = 'no-store'
+    return response
+
+
+@login_required
 def agent_log(request):
     """Agent log page — shows recent log entries from the AppLog table."""
     return render(request, 'tjai_app/agent_log.html')
