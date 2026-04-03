@@ -473,7 +473,7 @@ async def get_entry_by_entry_id(entry_id: str) -> dict:
 @mcp.tool()
 async def edit_entry(
     entry_id: str,
-    content: str,
+    content: str = None,
     context: str = None,
     clear_context: bool = False,
     tags: list[str] = None,
@@ -497,7 +497,8 @@ async def edit_entry(
 
     Args:
         entry_id: The UUID of the entry to edit (required).
-        content: The new content text (required). Shows user the final result.
+        content: The new content text. If omitted, content is unchanged — use this
+              for metadata-only edits (tags, status, priority, etc.).
         context: Set the entry's context to this value. Must be an existing context.
         clear_context: If True, removes the entry's context.
         tags: Replace all tags with this list. Pass [] to remove all tags.
@@ -848,4 +849,30 @@ async def get_entry_versions(
     return await sync_to_async(services.get_entry_versions)(
         entry_id=entry_id, version=version, age=age,
         max_content_length=max_content_length,
+    )
+
+
+@mcp.tool()
+async def restore_version(
+    entry_id: str,
+    version: int = -1,
+) -> dict:
+    """
+    Restore an entry's content from a previous version. Server-side operation.
+
+    This is a mechanical restore — the server copies content directly from the
+    version table to the entry. No need to pass content through the AI.
+
+    Args:
+        entry_id: UUID of the entry to restore.
+        version: Version number (positive, e.g. 3) or relative offset
+                 (negative, e.g. -1 for previous version, -2 for two versions back).
+                 Default: -1 (restore to the version before the most recent change).
+
+    Returns:
+        The restored entry with all fields.
+        Returns {"error": "..."} if entry or version not found.
+    """
+    return await sync_to_async(services.restore_version)(
+        entry_id=entry_id, version=version,
     )

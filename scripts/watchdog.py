@@ -168,6 +168,8 @@ def check_entry_flood(window=1800, threshold=5):
     """
     now = time.time()
     cutoff = now - window
+    # DO NOT exclude dialog (ccdialog) entries. They are a key signal for
+    # runaway AI dispatch. Filter by length instead to skip trivial "y"/"ok".
     recent = Entry.objects.filter(
         timestamp_created__gte=cutoff,
         deleted_at__isnull=True,
@@ -175,7 +177,7 @@ def check_entry_flood(window=1800, threshold=5):
 
     word_sets = []
     for content in recent:
-        if content:
+        if content and len(content) >= 10:
             word_sets.append(set(content[:200].lower().split()))
 
     if len(word_sets) < threshold:

@@ -2348,7 +2348,7 @@ def api_entry_save(request, entry_id):
     # Sync tags: explicit field takes precedence, then extract from content
     if 'tags' in data:
         raw_tags = data['tags'] or ''
-        desired_tags = set(t.strip().lstrip(':') for t in raw_tags.split(',') if t.strip())
+        desired_tags = set(t.lstrip(':') for t in re.split(r'[,\s]+', raw_tags) if t.strip())
     else:
         tag_pattern = re.compile(r'(?:^|\s):([a-zA-Z][a-zA-Z0-9_-]*)')
         desired_tags = set(tag_pattern.findall(content))

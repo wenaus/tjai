@@ -745,7 +745,7 @@ def get_entry_by_entry_id(entry_id):
     return _format_entry(entry)
 
 
-def edit_entry(entry_id, content, context=None, clear_context=False,
+def edit_entry(entry_id, content=None, context=None, clear_context=False,
                tags=None, event_date=None, event_time=None, clear_event_date=False,
                priority=None, clear_priority=False, status=None, clear_status=False,
                name=None, clear_name=False, keep_time=False, data=None):
@@ -753,9 +753,7 @@ def edit_entry(entry_id, content, context=None, clear_context=False,
     set_changed_by('api')
     if not entry_id:
         return {"error": "entry_id is required"}
-    if not content:
-        return {"error": "content is required - must provide the new content"}
-    if len(content) < 10:
+    if content is not None and len(content) < 10:
         return {"error": "content too short - must be at least 10 characters"}
 
     if event_date:
@@ -778,12 +776,17 @@ def edit_entry(entry_id, content, context=None, clear_context=False,
     if not entry:
         return {"error": f"Entry '{entry_id}' not found or already deleted"}
 
-    actual_content = content
-    hour, minute = None, None
-    if event_date and not event_time:
-        actual_content, hour, minute = _extract_time_from_content(content)
-    old_content = entry.content
-    entry.content = actual_content
+    if content is not None:
+        actual_content = content
+        hour, minute = None, None
+        if event_date and not event_time:
+            actual_content, hour, minute = _extract_time_from_content(content)
+        old_content = entry.content
+        entry.content = actual_content
+    else:
+        actual_content = entry.content
+        old_content = entry.content
+        hour, minute = None, None
 
     if context is not None:
         try:
@@ -1217,3 +1220,46 @@ def _parse_duration(s):
     val, unit = int(m.group(1)), m.group(2)
     multipliers = {'h': 3600, 'd': 86400, 'w': 604800, 'm': 2592000}
     return val * multipliers.get(unit, 86400)
+
+
+def restore_version(entry_id, version=None):
+    """Restore an entry's content from a previous version. Server-side copy.
+
+    Args:
+        entry_id: UUID of the entry.
+        version: Version number (positive) or relative offset (-1 = previous,
+                 -2 = two back). Default: -1 (previous version).
+
+    Returns the updated entry.
+    """
+    from .models import EntryVersion, Entry
+    from .signals import set_changed_by
+
+    if version is None:
+        version = -1
+
+    try:
+        entry = Entry.objects.get(id=entry_id, deleted_at__isnull=True)
+    except Entry.DoesNotExist:
+        return {"error": "Entry not found"}
+
+    versions = EntryVersion.objects.filter(entry_id=entry.pk).order_by('-version_num')
+
+    if version < 0:
+        idx = abs(version) - 1
+        vlist = list(versions.values('version_num', 'content', 'data'))
+        if idx >= len(vlist):
+            return {"error": f"Only {len(vlist)} versions exist, cannot go back {abs(version)}"}
+        v = vlist[idx]
+    else:
+        v = versions.filter(version_num=version).values('version_num', 'content', 'data').first()
+        if not v:
+            return {"error": f"Version {version} not found"}
+
+    set_changed_by('api')
+    entry.content = v['content']
+    if v['data'] is not None:
+        entry.data = v['data']
+    entry.save()
+
+    return _entry_to_dict(entry)
