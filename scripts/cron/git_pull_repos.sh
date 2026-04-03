@@ -9,6 +9,8 @@ REPOS=(
     /home/admin/github/tjrepo
     /home/admin/github/BNLNPPS.github.io
     /home/admin/github/lxr-mcp-server
+    /home/admin/github/rucio-eic-mcp-server
+    /home/admin/github/xrootd-mcp-server
 )
 
 SWF_REPOS=(

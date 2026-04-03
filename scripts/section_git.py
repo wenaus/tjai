@@ -21,6 +21,8 @@ REPOS = [
     (Path('/home/admin/github/BNLNPPS.github.io'), 'https://github.com/BNLNPPS/BNLNPPS.github.io', 'BNLNPPS.github.io'),
     (Path('/home/admin/github/lxr-mcp-server'), 'https://github.com/BNLNPPS/lxr-mcp-server', 'lxr-mcp-server'),
     (Path('/home/admin/github/corun-ai'), 'https://github.com/BNLNPPS/corun-ai', 'corun-ai'),
+    (Path('/home/admin/github/rucio-eic-mcp-server'), 'https://github.com/BNLNPPS/rucio-eic-mcp-server', 'rucio-eic-mcp-server'),
+    (Path('/home/admin/github/xrootd-mcp-server'), 'https://github.com/eic/xrootd-mcp-server', 'xrootd-mcp-server'),
 ]
 # Monorepo: attribute commits to top-level subdirectory instead of repo name
 MONOREPO_SUBDIRS = {
