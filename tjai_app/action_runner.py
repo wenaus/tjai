@@ -338,8 +338,10 @@ def dispatch_ai(action, entry_id=None, target_date=None):
             data__entry_id=system_prompt_entry_id_id, deleted_at__isnull=True
         ).first()
         if sp_entry:
+            timeout_val = data.get('timeout', 7200)
+            extra = {'timeout_minutes': str(timeout_val // 60)}
             env['TJAI_SYSTEM_PROMPT'] = resolve_prompt_template(
-                sp_entry.content, target_date=target_date)
+                sp_entry.content, extra_vars=extra, target_date=target_date)
         else:
             logger.error("System prompt entry '%s' not found — agent will run without it",
                          system_prompt_entry_id_id)
