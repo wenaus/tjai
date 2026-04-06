@@ -257,8 +257,19 @@ def main():
             logger.error("%s: failed to read stderr file %s: %s",
                          action_id, stderr_file, e)
 
+    # Scan output for error indicators even on exit_code=0.
+    # An agent that exits 0 but says "authentication failed" is not a success.
+    ERROR_PHRASES = ('authentication failed', 'mcp tools aren\'t available',
+                     'failed to connect', 'connection refused')
+    output_has_error = any(p in stderr_content.lower() for p in ERROR_PHRASES)
+    if output_has_error and exit_code == 0:
+        status = 'failed'
+        ref_extra['run_status'] = status
+        logger.error("%s: exit_code=0 but output contains errors, marking failed",
+                     action_id, extra=ref_extra)
+
     stderr_summary = f"\n{stderr_content}" if stderr_content else ''
-    log_fn = logger.error if exit_code not in (0, 124) else logger.info
+    log_fn = logger.error if status == 'failed' else logger.info
     log_fn("%s: exit_code=%d, status=%s%s", action_id, exit_code, status,
            stderr_summary, extra=ref_extra)
 
@@ -291,8 +302,10 @@ def main():
                           'timestamp_modified': now})
 
     # Structured error reporting and retry scheduling
-    if exit_code not in (0, 124):
+    if status == 'failed':
         error_msg = f"Agent exited {exit_code}"
+        if output_has_error:
+            error_msg = f"Agent output contains errors (exit {exit_code})"
         if stderr_content:
             error_msg += f": {stderr_content[-200:]}"
         SysConfig.objects.update_or_create(
@@ -397,6 +410,43 @@ def main():
                     SysConfig.objects.filter(key='daily_history_postcheck_retries').delete()
         except Exception as e:
             logger.error("daily-history: extract_history failed: %s", e)
+
+    # Post-process picks: verify picks were actually created.
+    # Agent can exit 0 while producing nothing (e.g. MCP auth failure).
+    if action_id == 'picks-agent' and status == 'completed':
+        try:
+            from datetime import datetime, timedelta
+            from tjai_app.services import get_timezone
+            tz = get_timezone()
+            # Count picks created in the last 2 hours (covers the run window)
+            cutoff = (datetime.now(tz) - timedelta(hours=2)).timestamp()
+            picks_count = Entry.objects.filter(
+                kind='bookmark', context__name='picks',
+                deleted_at__isnull=True,
+                timestamp_created__gte=cutoff,
+            ).count()
+            if picks_count == 0:
+                logger.error("picks-agent: completed but 0 picks created — treating as failure",
+                             extra=ref_extra)
+                status = 'failed'
+                ref_extra['run_status'] = status
+                SysConfig.objects.update_or_create(
+                    key=f'agent_{action_id}_status',
+                    defaults={'value': status, 'timestamp_modified': time.time()})
+                SysConfig.objects.update_or_create(
+                    key=f'agent_{action_id}_last_error',
+                    defaults={'value': 'Completed with 0 picks created',
+                              'timestamp_modified': time.time()})
+                SysConfig.objects.update_or_create(
+                    key=f'agent_{action_id}_last_error_time',
+                    defaults={'value': str(time.time()),
+                              'timestamp_modified': time.time()})
+                _schedule_retry(action_id, ref_extra)
+            else:
+                logger.info("picks-agent: %d picks created", picks_count,
+                            extra=ref_extra)
+        except Exception as e:
+            logger.error("picks-agent: post-check failed: %s", e)
 
     # Post-process ideation: set entry_id on log, append link to synopsis
     if action_id == 'ideation-agent' and exit_code in (0, 124):
