@@ -2368,6 +2368,29 @@ def api_entry_save(request, entry_id):
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
     # Strip trailing whitespace from each line (common paste artifact)
     content = '\n'.join(line.rstrip() for line in content.split('\n'))
+    # For journal entries: parse leading YYYYMMDD/time spec from content
+    # (e.g. "20260407/9am ePIC streaming..." → event_date + stripped content)
+    if entry.kind == 'journal':
+        import re
+        m = re.match(r'^(\d{8})(?:/(\S+))?\s+(.*)', content, re.DOTALL)
+        if m:
+            date_str, time_str, rest = m.group(1), m.group(2), m.group(3)
+            try:
+                from . import services
+                from datetime import datetime as _dt
+                parsed_date = _dt.strptime(date_str, '%Y%m%d')
+                hour, minute = 12, 0  # default noon
+                if time_str:
+                    from tj.commands.journal import parse_time
+                    hour, minute = parse_time(time_str)
+                tz = services.get_timezone()
+                dt = parsed_date.replace(hour=hour, minute=minute, tzinfo=tz)
+                if not isinstance(entry.data, dict):
+                    entry.data = {}
+                entry.data['event_date'] = dt.timestamp()
+                content = rest
+            except (ValueError, TypeError):
+                pass  # Not a valid date spec — leave content as-is
     old_content = entry.content
     entry.content = content
     if 'name' in data:
