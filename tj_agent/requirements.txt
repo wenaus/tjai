@@ -10,7 +10,13 @@
 # MCP client SDK — talks to lxr-mcp-server, github-mcp-server, etc.
 mcp>=1.27.0
 
-# HTTP client for the bundled lxr-mcp-server (and any other Python MCP
-# servers we wire in-process)
+# Official first-party URL fetcher MCP server (mcp-server-fetch).
+# Wraps httpx + readabilipy + markdownify + protego (robots.txt) and
+# is run as a stdio subprocess by the worker via `python -m mcp_server_fetch`.
+mcp-server-fetch>=2025.4
+
+# HTTP client for the bundled lxr-mcp-server, the local google_cse MCP
+# server in tj_agent/mcp_servers/, and any other Python MCP servers we
+# wire in-process.
 httpx>=0.28
 beautifulsoup4>=4.14

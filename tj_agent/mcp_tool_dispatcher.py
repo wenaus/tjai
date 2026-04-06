@@ -228,6 +228,14 @@ def default_server_specs() -> list[ServerSpec]:
         GITHUB_MCP_SERVER_BIN  — path to the github-mcp-server binary
                                  (default: looks in PATH and ~/bin/)
         GITHUB_PERSONAL_ACCESS_TOKEN — required for github-mcp-server
+        GOOGLE_CSE_API_KEY     — required for npp_search (Google Cloud
+                                 console API key with Custom Search API
+                                 enabled)
+        GOOGLE_CSE_CX          — required for npp_search (Programmable
+                                 Search Engine ID from
+                                 programmablesearchengine.google.com,
+                                 configured with the NPP-software site
+                                 list)
     """
     import shutil
     import sys
@@ -284,5 +292,52 @@ def default_server_specs() -> list[ServerSpec]:
         elif not gh_token:
             logger.warning(
                 "mcp_agent: GITHUB_PERSONAL_ACCESS_TOKEN not set; skipping github")
+
+    # ── mcp-server-fetch (Python, stdio) — official URL fetcher ─────────
+    # First-party from modelcontextprotocol/servers. Installed via
+    # `pip install mcp-server-fetch` into the tj_agent venv. No env vars,
+    # no credentials, no third-party service — just retrieves a URL and
+    # returns cleaned markdown. Honors robots.txt by default.
+    specs.append(ServerSpec(
+        name="fetch",
+        command=sys.executable,
+        args=["-m", "mcp_server_fetch"],
+    ))
+
+    # ── npp_search (custom Python, stdio) — NPP-software corpus search ──
+    # Wraps Google's Custom Search JSON API as a stdio MCP server, with
+    # the engine ID configured to a CSE restricted to a curated list of
+    # nuclear & particle physics software sites (LXR, ePIC S&C, EICrecon,
+    # PanDA, iDDS, ...). Skipped silently if either credential is missing
+    # — set both in ~/.tjai/env to enable.
+    cse_key = os.environ.get("GOOGLE_CSE_API_KEY")
+    cse_cx = os.environ.get("GOOGLE_CSE_CX")
+    if cse_key and cse_cx:
+        npp_path = (Path(__file__).parent / "mcp_servers" / "npp_search.py")
+        if npp_path.exists():
+            specs.append(ServerSpec(
+                name="npp_search",
+                command=sys.executable,
+                args=[str(npp_path)],
+                env={
+                    "GOOGLE_CSE_API_KEY": cse_key,
+                    "GOOGLE_CSE_CX": cse_cx,
+                    "PATH": os.environ.get("PATH", ""),
+                    "HOME": os.environ.get("HOME", ""),
+                },
+            ))
+        else:
+            logger.warning(
+                "mcp_agent: npp_search.py not found at %s; skipping",
+                npp_path)
+    else:
+        missing = []
+        if not cse_key:
+            missing.append("GOOGLE_CSE_API_KEY")
+        if not cse_cx:
+            missing.append("GOOGLE_CSE_CX")
+        logger.warning(
+            "mcp_agent: %s not set; skipping npp_search",
+            " and ".join(missing))
 
     return specs
