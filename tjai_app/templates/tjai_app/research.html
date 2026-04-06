@@ -344,7 +344,7 @@
                         const capTag = w.busy_on_cap ? ` (${esc(w.busy_on_cap)})` : '';
                         const since = w.busy_since_ago ? `, claimed ${w.busy_since_ago}` : '';
                         const lastPoll = w.last_poll_ago ? `, last poll ${w.last_poll_ago}` : '';
-                        phrase = `zombie claim${target}${capTag}${since}${lastPoll} — auto-reclaim within 30m`;
+                        phrase = `zombie claim${target}${capTag}${since}${lastPoll} — auto-reclaim within 2h`;
                     } else if (w.state === 'idle') {
                         color = '#9ccc65';
                         const lastPoll = w.last_poll_ago ? ` (last poll ${w.last_poll_ago})` : '';

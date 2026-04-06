@@ -466,7 +466,16 @@ def sync_pull(request):
 
 WORKER_POLL_HOLD_SECONDS = 50   # must stay under gunicorn --timeout (120)
 WORKER_POLL_INTERVAL = 2        # DB check frequency during hold
-WORKER_CLAIM_STALE_SECONDS = 30 * 60  # unclaim if no result after 30min
+# The stale-claim threshold governs both server-side auto-reclaim AND the
+# display "zombie" rendering on the research page. It must comfortably
+# exceed the longest legitimate single work-item runtime, not the longest
+# single ollama call. With the Mac-side agent loop (multi-turn tool-use
+# runs with lxr/github MCPs), a single codoc gemma4 work item can
+# legitimately run ~1h. Margin on top of that → 2h.
+# The earlier 30-min value dated from the assumption "1 work item = 1
+# ollama call ≤ 30 min" and was junkifying the dashboard (healthy
+# long-running agent runs showing as zombie/red).
+WORKER_CLAIM_STALE_SECONDS = 2 * 60 * 60  # 2h — see note above
 # Capability names a worker is allowed to advertise. Anything else is
 # rejected at the worker_poll endpoint to prevent sysconfig pollution from
 # typos or ad-hoc curl tests.

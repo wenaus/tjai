@@ -151,7 +151,7 @@ Soft-delete the entry. Callers should issue this **after** successfully retrievi
 |---|---|---|---|
 | `WORKER_POLL_HOLD_SECONDS` | 50 | `tjai_app/views.py` | Server holds the long-poll for up to this long. Must stay under gunicorn's `--timeout` (120s). |
 | `WORKER_POLL_INTERVAL` | 2 | `tjai_app/views.py` | DB recheck frequency inside the hold loop. |
-| `WORKER_CLAIM_STALE_SECONDS` | 1800 | `tjai_app/views.py` | A claim older than this can be auto-reclaimed by any poll. |
+| `WORKER_CLAIM_STALE_SECONDS` | 7200 (2h) | `tjai_app/views.py` | A claim older than this can be auto-reclaimed by any poll. Must comfortably exceed the longest legitimate single work-item runtime (not the longest single ollama call) — with the Mac-side agent loop, one work item can be many ollama turns. |
 | `WORKER_CAPABILITIES` | `{'gemma4', 'gemma4-fast'}` | `tjai_app/views.py` | Capability whitelist. Edit this to add a new capability. |
 | `POLL_CLIENT_TIMEOUT` | 70 | `tj_agent/worker.py` | Worker socket timeout. Must exceed `WORKER_POLL_HOLD_SECONDS` (the 20s margin covers round-trip + safety). |
 | `POLL_BACKOFF_INITIAL` / `MAX` | 1.0 / 60.0 | `tj_agent/worker.py` | Exponential backoff between failed polls. |
@@ -234,7 +234,7 @@ The diagram below traces a single research topic where gemma is one of the dispa
      - For each candidate, in transaction.atomic():
          * select_for_update the row
          * Re-check it isn't already claimed (or that the prior claim
-           is older than WORKER_CLAIM_STALE_SECONDS = 30 min)
+           is older than WORKER_CLAIM_STALE_SECONDS = 2h)
          * Set worker_claimed_by = machine_id           ← L4
                 worker_claimed_at = now
          * Save the sub-entry
@@ -315,11 +315,11 @@ The same poll then proceeds into the long-poll loop and may immediately re-claim
 
 **Scope**: the reset filters by `worker_claimed_by=machine_id` only — it clears **every** claim held by the polling machine regardless of which capability the poll is for. This is correct under the current "one worker, one capability per process" assumption (a polling worker has free capacity full stop, not just for the polled cap). If a single worker ever advertises multiple capabilities, this is still likely the right semantics, but it's a place to recheck.
 
-## Stale claim auto-reclaim (the 30-minute safety net)
+## Stale claim auto-reclaim (the 2-hour safety net)
 
-A claim held by a worker that **never comes back** would otherwise hang the topic forever. `_claim_worker_entry` treats a claim as stale if `worker_claimed_at` is older than `WORKER_CLAIM_STALE_SECONDS = 30 * 60`. After that age, any other poll (or the same machine after a long absence) is allowed to re-claim it.
+A claim held by a worker that **never comes back** would otherwise hang the topic forever. `_claim_worker_entry` treats a claim as stale if `worker_claimed_at` is older than `WORKER_CLAIM_STALE_SECONDS = 2 * 60 * 60`. After that age, any other poll (or the same machine after a long absence) is allowed to re-claim it.
 
-30 minutes was chosen to exceed the maximum reasonable inference time (`DEFAULT_INFERENCE_TIMEOUT = 1800` in `tj_agent/worker.py`). Long inferences that legitimately take 10–25 minutes are not disturbed.
+The threshold is tied to the longest legitimate *work-item* runtime, not the longest single ollama call. With the Mac-side agent loop (multi-turn tool-use runs with `lxr` and `github` MCPs), one codoc gemma work item can legitimately run ~1h; 2h gives comfortable headroom without letting a truly dead claim hang for longer than necessary. The earlier 30-minute value dated from the single-ollama-call era and was junkifying the research page's display (healthy long-running agent runs rendering as zombie/red).
 
 ## Capability whitelist
 
@@ -353,15 +353,17 @@ This is the *local research-agent process* — the orchestrator. It being idle w
 
 One line per known capability. The state is **derived**, not just `last_poll_age`:
 
-| Derived state | Rule | Display |
-|---|---|---|
-| `busy`   | A sub-entry is claimed by the same machine_id that last polled this cap | `gemma4: busy on <topic> (claimed 49s ago) ed8e0e3a` |
-| `idle`   | Last poll within `WORKER_DISCONNECTED_SECONDS` (180s), no claim held | `gemma4: idle (last poll 12s ago) ed8e0e3a` |
-| `disconnected` | No poll for longer than 180s, no claim held | `gemma4: disconnected (last poll 7m ago) ed8e0e3a` |
-| `zombie` | A claim is held by a machine **other than** the last poller | `gemma4: zombie claim on <topic> (claimed 22m ago) — auto-reclaim within 30m` |
-| `unknown` | No poll history at all | `gemma4: never polled` |
+Derived **per machine** — not per capability. Aliveness is a property of the machine; every capability the machine advertises inherits the same state. The per-cap `worker_capability_{cap}_lastpoll` rows are a denormalized view of a per-machine fact (`worker_poll` writes them in lockstep during a single request), so deriving state per-cap from them treats correlated data as independent and produces contradictions the moment one cap has a claim and the other does not.
 
-The key insight: workers can't poll while running ollama (`_process_work` blocks the poll loop), so **a held claim by the polling machine is unambiguous evidence of inference in progress**. This disambiguates "long inference" from "disconnected" — both have stale poll timestamps, only one has a held claim.
+| Derived state | Rule | Display (one line per machine) |
+|---|---|---|
+| `busy`   | Machine holds at least one active claim (any cap) whose age is within `WORKER_CLAIM_STALE_SECONDS` | `ed8e0e3a [gemma4, gemma4-fast] busy on <topic> (gemma4) claimed 49s` |
+| `idle`   | No claim held, last poll within `WORKER_DISCONNECTED_SECONDS` (180s) | `ed8e0e3a [gemma4, gemma4-fast] idle (last poll 12s ago)` |
+| `disconnected` | No claim held, no poll for longer than 180s | `ed8e0e3a [gemma4, gemma4-fast] disconnected (last poll 7m ago)` |
+| `zombie` | A claim's age exceeds `WORKER_CLAIM_STALE_SECONDS` (2h) | `ed8e0e3a [gemma4] zombie claim on <topic> (gemma4), claimed 2h3m, last poll 2h3m ago — auto-reclaim within 2h` |
+| `unknown` | No poll history recorded for this machine | `ed8e0e3a [gemma4] unknown` |
+
+The key insight: workers are single-threaded on the poll loop — they can't poll while running ollama — so **any held claim is unambiguous evidence that the machine is alive and working**, regardless of how stale its poll timestamp looks. The busy/zombie split is by *claim age*, not by *poll age*. Per-cap disagreement within one machine is structurally impossible under this shape.
 
 ### Fact 3 — Topics with work in flight (drives L2 + L3)
 
@@ -567,7 +569,7 @@ Things that can go wrong and what the system does about them.
 | **`research_model_complete` raises** | `worker_result` catches the exception, logs it, but still returns `200` to the worker. The base entry's status is silently broken. | Read the gunicorn log for `worker_result: research_model_complete failed:`. No automated recovery. |
 | **Worker POSTs result for a claim it doesn't hold** | A warning is logged; the result is accepted anyway (the work was done — refusing it would just throw away real output). | None needed in normal operation. Two workers fighting over the same claim shouldn't happen in production. |
 | **Worker dies mid-inference** | Claim stays held. The next time *that same machine* polls, the free-capacity reset clears the claim and the same poll re-claims (or another worker can claim once `WORKER_CLAIM_STALE_SECONDS` elapses). | Automatic. |
-| **Worker process gone permanently** | Claim stays held until `WORKER_CLAIM_STALE_SECONDS` (30 min), then any poll can re-claim it. | Automatic, with a 30-minute worst-case delay. The display calls this `zombie` if a different worker is polling, otherwise just `busy`. |
+| **Worker process gone permanently** | Claim stays held until `WORKER_CLAIM_STALE_SECONDS` (2h), then any poll can re-claim it. | Automatic, with a 2-hour worst-case delay. The display calls this `zombie` once the claim age crosses the threshold, otherwise just `busy`. |
 | **Server restarts mid-claim** | The worker's HTTP request gets a connection-reset; its retry loop backs off and eventually polls again, hitting the free-capacity reset path. | Automatic. |
 | **Result POST fails (network)** | Worker logs the failure; the work is lost; the claim remains until the worker's next poll triggers the free-capacity reset, which re-stages the work for re-claim. | Automatic. The work runs again. |
 | **Worker advertises an unknown capability** | `400` from `worker_poll`; sysconfig is not polluted. Worker logs the rejection and backs off. | Edit `WORKER_CAPABILITIES` on the server, or fix the worker config. |
@@ -640,7 +642,7 @@ PY
 
 ### Stuck claim from a dead worker
 
-A claim held by a worker that never returned will auto-clear after `WORKER_CLAIM_STALE_SECONDS = 30 min` — the next poll for that capability re-claims the work. Until then, the banner will show it as `zombie` (red dot, "auto-reclaim within 30m").
+A claim held by a worker that never returned will auto-clear after `WORKER_CLAIM_STALE_SECONDS = 2h` — the next poll for that capability re-claims the work. Until then, the banner will show it as `zombie` (red dot, "auto-reclaim within 2h").
 
 To clear a stuck claim immediately:
 ```bash
