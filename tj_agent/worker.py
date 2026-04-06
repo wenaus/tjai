@@ -68,8 +68,14 @@ logger = logging.getLogger(__name__)
 POLL_CLIENT_TIMEOUT = 70          # must exceed server hold (50s)
 POLL_BACKOFF_INITIAL = 1.0
 POLL_BACKOFF_MAX = 60.0
-DEFAULT_INFERENCE_TIMEOUT = 1800  # 30 min — overridden by work.timeout_sec
-MAX_AGENT_TURNS = 12              # cap on tool-calling iterations per work item
+DEFAULT_INFERENCE_TIMEOUT = 3600  # 60 min per ollama call — overridden by work.timeout_sec
+
+# Agent loop has no turn cap. The natural termination is "model emits no
+# tool_calls". The per-call ollama timeout above is the only wall-clock
+# guard. A runaway loop is observable in the agent log (one tool_call line
+# per turn) and can be killed manually; that is strictly better than
+# aborting a legitimate long exploration just because it crossed an
+# arbitrary integer.
 
 # Source label used when this worker writes to tjai's central AppLog via
 # /api/log. Lets ec2dev distinguish per-prompt events emitted from this
@@ -208,8 +214,9 @@ async def _process_work_async(work: dict, machine_id: str, cfg: dict,
     When dispatcher is None or has zero tools, this collapses to a single
     /api/chat call (the old single-shot behavior). When tools are
     advertised and the model emits tool_calls, the loop dispatches each,
-    appends the results to the message history, and re-prompts. Capped
-    at MAX_AGENT_TURNS to prevent runaway loops.
+    appends the results to the message history, and re-prompts until
+    the model stops emitting tool_calls. The only wall-clock guard is
+    the per-call ollama timeout.
 
     Always reports a result (success or failure) so the server can
     unclaim the entry and update base tracking.
@@ -284,8 +291,8 @@ async def _process_work_async(work: dict, machine_id: str, cfg: dict,
     tool_calls_total = 0
 
     try:
-        for turn in range(MAX_AGENT_TURNS):
-            turns_used = turn + 1
+        while True:
+            turns_used += 1
             response = await asyncio.to_thread(
                 _ollama_chat_sync,
                 ollama_url=cfg["ollama_url"],
@@ -329,15 +336,6 @@ async def _process_work_async(work: dict, machine_id: str, cfg: dict,
                     "name": name,
                     "content": tool_text,
                 })
-        else:
-            # Loop exhausted without a final answer
-            final_text = (
-                f"ERROR: agent loop hit MAX_AGENT_TURNS={MAX_AGENT_TURNS} "
-                f"without producing a final response. "
-                f"Last assistant message: "
-                f"{json.dumps(messages[-1])[:500]}"
-            )
-            logger.warning("%s: %s", entry_id, final_text[:200])
     except Exception as e:
         duration = int(time.time() - start)
         err = f"{type(e).__name__}: {e}"
@@ -345,8 +343,7 @@ async def _process_work_async(work: dict, machine_id: str, cfg: dict,
                      entry_id, duration, turns_used, err)
         await _log_to_tjai(
             f"failed {entry_id} after {duration}s "
-            f"(turn {turns_used}/{MAX_AGENT_TURNS}, "
-            f"{tool_calls_total} tool call(s)): {err}",
+            f"(turn {turns_used}, {tool_calls_total} tool call(s)): {err}",
             level="error",
             extra_data={
                 "event": "failed",

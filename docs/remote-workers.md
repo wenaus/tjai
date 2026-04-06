@@ -155,8 +155,7 @@ Soft-delete the entry. Callers should issue this **after** successfully retrievi
 | `WORKER_CAPABILITIES` | `{'gemma4', 'gemma4-fast'}` | `tjai_app/views.py` | Capability whitelist. Edit this to add a new capability. |
 | `POLL_CLIENT_TIMEOUT` | 70 | `tj_agent/worker.py` | Worker socket timeout. Must exceed `WORKER_POLL_HOLD_SECONDS` (the 20s margin covers round-trip + safety). |
 | `POLL_BACKOFF_INITIAL` / `MAX` | 1.0 / 60.0 | `tj_agent/worker.py` | Exponential backoff between failed polls. |
-| `DEFAULT_INFERENCE_TIMEOUT` | 1800 | `tj_agent/worker.py` | Worker's local timeout on the ollama call, overridden by `work.timeout_sec`. |
-| `MAX_AGENT_TURNS` | 12 | `tj_agent/worker.py` | Hard cap on agent-loop iterations per work item. Prevents runaway tool-calling. Typical research/codoc prompts terminate after 1–4 turns. |
+| `DEFAULT_INFERENCE_TIMEOUT` | 3600 | `tj_agent/worker.py` | Worker's local per-call timeout on each ollama request (60 min), overridden by `work.timeout_sec`. The agent loop has no separate wall-clock cap — it terminates naturally when the model emits no further tool_calls. |
 | `TJAI_LOG_SOURCE` | `'worker-mac'` | `tj_agent/worker.py` | `source` field used when the worker POSTs `received`/`completed`/`failed` events to `/api/log`. Distinct from the server-side `'worker'` events. |
 
 The "no poll for longer than 180s" disconnected threshold is a function-local value inside `api_research_data`, not a top-level constant.
@@ -250,7 +249,7 @@ The diagram below traces a single research topic where gemma is one of the dispa
    - POST `received` event to /api/log (source 'worker-mac')
    - Run an agentic chat loop against local ollama:
        messages = [{role: user, content: prompt}]
-       for turn in range(MAX_AGENT_TURNS = 12):
+       while True:
          response = ollama /api/chat(messages, tools=dispatcher.tools_for_ollama())
          messages.append(response.message)
          if not response.message.tool_calls:
@@ -259,11 +258,14 @@ The diagram below traces a single research topic where gemma is one of the dispa
          for each tool_call:
             result = dispatcher.call_tool(name, args)  # routed to the owning MCP server
             messages.append({role: tool, name, content: result})
-   - For research-style single-shot prompts and any other prompt the model
-     answers without invoking tools, the loop terminates after turn 1 with
-     the assistant's content — same observable result as the pre-agent
-     single-shot path. When tools are invoked, the loop continues until
-     the model stops emitting tool_calls or the cap is hit.
+   - The loop has no turn cap. For research-style single-shot prompts
+     and any other prompt the model answers without invoking tools, it
+     terminates after turn 1 with the assistant's content — same
+     observable result as the pre-agent single-shot path. When tools
+     are invoked, the loop continues until the model stops emitting
+     tool_calls. The per-call ollama timeout is the only wall-clock
+     guard; a runaway loop is observable in the agent log (one
+     `tool_call` line per turn) and can be killed manually.
    - POST `completed`/`failed` event to /api/log (source 'worker-mac')
    - POST result to /api/worker/result {machine_id, entry_id, status,
                                          result, error, duration_sec}
@@ -423,7 +425,7 @@ The thread wraps an asyncio loop (`run_worker_forever()` calls `asyncio.run(_run
 3. If `work` is null, reconnect immediately.
 4. If `work` is present, run it through `_process_work_async`:
    - POST `received` event to /api/log (source `worker-mac`) with capability, ollama_model, prompt_chars, tools_advertised, hostname.
-   - Run the agent loop: send messages + tools to ollama, dispatch any tool_calls via the dispatcher, append results, repeat until ollama returns no further tool_calls or `MAX_AGENT_TURNS = 12` is hit. With zero tools (no dispatcher) the loop terminates after turn 1, equivalent to the old single-shot path.
+   - Run the agent loop: send messages + tools to ollama, dispatch any tool_calls via the dispatcher, append results, repeat until ollama returns no further tool_calls. There is no turn cap. With zero tools (no dispatcher) the loop terminates after turn 1, equivalent to the old single-shot path.
    - POST `completed` (or `failed`) event to /api/log with duration, turns_used, tool_calls count, output_chars (or error).
    - POST result to /api/worker/result.
    - Errors here are caught and logged but don't crash the loop.
@@ -480,7 +482,7 @@ Each MCP server is **optional**: if a server fails to launch (binary missing, to
 
 ```
 1. messages = [{role: user, content: <prompt>}]
-2. for turn in range(MAX_AGENT_TURNS = 12):
+2. while True:
        response = ollama /api/chat(messages, tools=dispatcher.tools_for_ollama())
        messages.append(response.message)         # always — model sees its prior tool_calls
        if not response.message.tool_calls:
@@ -489,12 +491,12 @@ Each MCP server is **optional**: if a server fails to launch (binary missing, to
        for tc in response.message.tool_calls:
            result = await dispatcher.call_tool(tc.function.name, tc.function.arguments)
            messages.append({role: tool, name: tc.function.name, content: result})
-   else:                                          # loop exhausted
-       final_text = "ERROR: agent loop hit MAX_AGENT_TURNS=12 without producing a final response"
 3. POST final_text to /api/worker/result
 ```
 
-`MAX_AGENT_TURNS = 12` is a soft cap. Typical research/codoc prompts terminate after 1–4 turns; the cap exists only to prevent runaway loops. Tool calls within a single turn are executed sequentially in the order ollama emitted them, results are appended in order as separate `role:tool` messages, and then the next ollama turn is sent.
+**There is no turn cap.** The loop terminates the moment the model stops emitting `tool_calls`. The only wall-clock guard is the per-call ollama timeout (`work.timeout_sec`, default 3600s).
+
+Tool calls within a single turn are executed sequentially in the order ollama emitted them, results are appended in order as separate `role:tool` messages, and then the next ollama turn is sent.
 
 The dispatcher's `call_tool` is async (`mcp.ClientSession` is async-native), and the worker drives it from inside an asyncio loop in the worker thread. The blocking ollama HTTP call is wrapped in `asyncio.to_thread()` so a long inference doesn't block the event loop.
 
@@ -575,7 +577,6 @@ Things that can go wrong and what the system does about them.
 | **Worker advertises an unknown capability** | `400` from `worker_poll`; sysconfig is not polluted. Worker logs the rejection and backs off. | Edit `WORKER_CAPABILITIES` on the server, or fix the worker config. |
 | **MCP server fails to launch** (binary missing, token missing, subprocess error) | The dispatcher logs `WARNING ...mcp_tool_dispatcher: <server> ...; skipping`. Worker keeps running with whatever subset of MCP servers came up. If all fail, the worker proceeds with `tools=[]` — agent loop collapses to single-shot inference. No work is rejected. | Fix the server-specific cause (install binary, set env var, etc.) and bootout/bootstrap the launchd job. |
 | **MCP `call_tool` raises during the agent loop** | The exception is caught per-tool, the error text is fed back to the model as the tool result (`TOOL ERROR: <ExceptionType>: <message>`). The model can choose to retry, try a different tool, or give up and answer in text. The work item completes normally. | None — this is by design. The model gets to see and react to tool failures. |
-| **Agent loop hits `MAX_AGENT_TURNS=12`** | `final_text` is set to `ERROR: agent loop hit MAX_AGENT_TURNS=12 ...`, posted to `/api/worker/result` with `status=done` (the loop completed, just unsuccessfully). The error message is also POSTed to `/api/log` as a `failed` event. | Increase the cap if the work legitimately needs more turns; otherwise investigate why the model isn't converging. |
 | **Worker posts to `/api/log` and the call fails** | Logged locally as a warning; work processing continues unaffected. No retry. | None — central logging is best-effort by design; the local agent.log line is the source of truth. |
 | **`TJAI_API_KEY` not set in `~/.tjai/env`** | `_post_log_sync` silently no-ops on every event. No central logging happens. The worker still works normally. | Add the key to `~/.tjai/env` and bootout/bootstrap. |
 
