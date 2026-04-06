@@ -132,6 +132,35 @@ def _heal_stale_agent(status_key, launched_key, agent_name):
         key=f'agent_{action_id}_entry'
     ).values_list('value', flat=True).first()
 
+    # Rule 3: don't mark failed if the current entry is waiting on a remote
+    # worker (e.g. gemma on the Mac Studio). Remote workers have no local
+    # process — process_alive=='0' is normal, not a failure condition.
+    # Also check if any model sub-entries of the base topic have
+    # worker_target set (gemma running while claude is done).
+    if current_entry:
+        cur = Entry.objects.filter(
+            id=current_entry, deleted_at__isnull=True,
+        ).first()
+        if cur:
+            cur_data = cur.data if isinstance(cur.data, dict) else {}
+            # Direct: the current entry is itself a remote-worker entry
+            if cur_data.get('worker_target'):
+                return status_val, launched_val
+            # Indirect: base entry with active or staged remote-worker sub-entries
+            base_eid = cur_data.get('entry_id')
+            if base_eid:
+                from .action_runner import RESEARCH_MODELS
+                for m in RESEARCH_MODELS:
+                    sub = Entry.objects.filter(
+                        data__entry_id=f'{base_eid}-{m}',
+                        deleted_at__isnull=True,
+                    ).first()
+                    if sub:
+                        sub_data = sub.data if isinstance(sub.data, dict) else {}
+                        if sub_data.get('worker_target') and sub.status in (
+                                'active', None):
+                            return status_val, launched_val
+
     elapsed_str = f' after {int(launch_age)}s' if launched_val else ''
     error_msg = f"Agent process died{elapsed_str} without completing"
 
@@ -438,6 +467,10 @@ def sync_pull(request):
 WORKER_POLL_HOLD_SECONDS = 50   # must stay under gunicorn --timeout (120)
 WORKER_POLL_INTERVAL = 2        # DB check frequency during hold
 WORKER_CLAIM_STALE_SECONDS = 30 * 60  # unclaim if no result after 30min
+# Capability names a worker is allowed to advertise. Anything else is
+# rejected at the worker_poll endpoint to prevent sysconfig pollution from
+# typos or ad-hoc curl tests.
+WORKER_CAPABILITIES = {'gemma4'}
 
 
 def _claim_worker_entry(machine_id, capabilities):
@@ -495,6 +528,21 @@ def _claim_worker_entry(machine_id, capabilities):
                     locked.data = ldata
                     locked.timestamp_modified = now
                     locked.save(update_fields=['data', 'timestamp_modified'])
+                    # Upgrade base entry's {model}_status from 'staged' to 'active'
+                    # so the UI knows a worker is actually processing.
+                    base_eid = ldata.get('base_entry_id')
+                    model = ldata.get('model')
+                    if base_eid and model:
+                        base = Entry.objects.filter(
+                            data__entry_id=base_eid, deleted_at__isnull=True,
+                        ).first()
+                        if base:
+                            bd = base.data if isinstance(base.data, dict) else {}
+                            if bd.get(f'{model}_status') == 'staged':
+                                bd[f'{model}_status'] = 'active'
+                                base.data = bd
+                                base.timestamp_modified = now
+                                base.save(update_fields=['data', 'timestamp_modified'])
                     return locked
             except Exception as e:
                 logger.warning("worker claim failed for %s: %s", entry.id, e)
@@ -521,6 +569,7 @@ def worker_poll(request):
     Response (no work within hold window):
         {"status": "ok", "work": null}
     """
+    from django.utils import timezone as tz
     machine_id = request.GET.get("machine_id")
     if not machine_id:
         return JsonResponse({"error": "machine_id required"}, status=400)
@@ -529,6 +578,15 @@ def worker_poll(request):
     capabilities = [c.strip() for c in capabilities_str.split(",") if c.strip()]
     if not capabilities:
         return JsonResponse({"error": "capabilities required"}, status=400)
+    # Whitelist: reject unknown capability names so a typo or stray curl
+    # cannot pollute worker_capability_*_lastpoll sysconfig with garbage
+    # that future page renders would faithfully display as fake workers.
+    unknown = [c for c in capabilities if c not in WORKER_CAPABILITIES]
+    if unknown:
+        return JsonResponse(
+            {"error": f"unknown capabilities: {unknown}. "
+                      f"known: {sorted(WORKER_CAPABILITIES)}"},
+            status=400)
 
     # Update machine tracking on every poll (serves as heartbeat)
     now = time.time()
@@ -540,6 +598,51 @@ def worker_poll(request):
             "is_active": 1,
         },
     )
+
+    # Per-capability heartbeat — answers "is anyone listening for X?"
+    # Key: worker_capability_{cap}_lastpoll → JSON {machine_id, ts}
+    for cap in capabilities:
+        SysConfig.objects.update_or_create(
+            key=f'worker_capability_{cap}_lastpoll',
+            defaults={'value': json.dumps({'machine_id': machine_id, 'ts': now}),
+                      'timestamp_modified': now},
+        )
+
+    # Free-capacity signal: a worker can't poll AND process at the same time
+    # (_process_work blocks the loop). So a poll from machine X means X has
+    # no in-flight work — any of X's prior claims are stale (lost work,
+    # crashed result POST, etc.). Unclaim them and reset to 'staged' so
+    # they can be picked up again (possibly by this same worker on next poll).
+    stale_claims = Entry.objects.filter(
+        data__worker_claimed_by=machine_id,
+        deleted_at__isnull=True,
+    )
+    for stale in stale_claims:
+        sdata = stale.data if isinstance(stale.data, dict) else {}
+        # Don't reclaim entries already done/blocked — only in-flight ones
+        if stale.status not in ('active', None):
+            continue
+        sdata.pop('worker_claimed_by', None)
+        sdata.pop('worker_claimed_at', None)
+        stale.data = sdata
+        stale.timestamp_modified = now
+        stale.save(update_fields=['data', 'timestamp_modified'])
+        # Reset base entry's {model}_status from 'active' back to 'staged'
+        base_eid = sdata.get('base_entry_id')
+        model = sdata.get('model')
+        if base_eid and model:
+            base = Entry.objects.filter(
+                data__entry_id=base_eid, deleted_at__isnull=True,
+            ).first()
+            if base:
+                bd = base.data if isinstance(base.data, dict) else {}
+                if bd.get(f'{model}_status') == 'active':
+                    bd[f'{model}_status'] = 'staged'
+                    base.data = bd
+                    base.timestamp_modified = now
+                    base.save(update_fields=['data', 'timestamp_modified'])
+        logger.info("worker_poll: reclaimed stale claim on %s by %s "
+                    "(worker has free capacity)", stale.id, machine_id)
 
     deadline = now + WORKER_POLL_HOLD_SECONDS
     while True:
@@ -558,8 +661,9 @@ def worker_poll(request):
             }
             AppLog.objects.create(
                 source='worker',
-                timestamp=time.time(),
-                level='INFO',
+                timestamp=tz.now(),
+                level=logging.INFO,
+                levelname='INFO',
                 message=f"Dispatched {work_type} work to {machine_id}: "
                         f"entry={entry.id} model={work['model']}",
                 extra_data={'entry_id': str(entry.id), 'machine_id': machine_id,
@@ -649,10 +753,13 @@ def worker_result(request):
     entry.save(update_fields=['content', 'status', 'data',
                                'timestamp_modified', 'is_dirty'])
 
+    from django.utils import timezone as tz
+    log_level = logging.INFO if status == 'done' else logging.ERROR
     AppLog.objects.create(
         source='worker',
-        timestamp=time.time(),
-        level='INFO' if status == 'done' else 'ERROR',
+        timestamp=tz.now(),
+        level=log_level,
+        levelname=logging.getLevelName(log_level),
         message=f"Worker {machine_id} {status} entry {entry_id} in {duration_sec}s"
                 + (f": {error[:200]}" if status == 'failed' else ''),
         extra_data={'entry_id': entry_id, 'machine_id': machine_id,
@@ -3796,6 +3903,43 @@ def api_research_data(request):
         deleted_at__isnull=True,
     ).order_by('-timestamp_modified')
 
+    # Fetch all model sub-entries that have worker_target — these are
+    # the remote-worker entries we need diagnostics for. Build three indexes:
+    # one by base_entry_id (for per-topic display), one by
+    # (machine_id, capability) (busy detection for the polling worker), and
+    # one by capability (so we can flag zombie claims held by a worker that
+    # is no longer the one polling — would otherwise be invisible).
+    worker_entries_by_base = {}
+    claims_by_machine_cap = {}
+    claims_by_cap = {}
+    for sub in Entry.objects.filter(
+        data__source='multimodel',
+        data__worker_target__isnull=False,
+        deleted_at__isnull=True,
+    ):
+        sd = sub.data if isinstance(sub.data, dict) else {}
+        beid = sd.get('base_entry_id')
+        cap = sd.get('worker_target')
+        staged_at = sd.get('worker_staged_at')
+        claimed_at = sd.get('worker_claimed_at')
+        claimed_by = sd.get('worker_claimed_by')
+        info = {
+            'model': sd.get('model'),
+            'worker_target': cap,
+            'worker_staged_at': staged_at,
+            'worker_staged_ago': fmt_ago(float(staged_at)) if staged_at else None,
+            'worker_claimed_at': claimed_at,
+            'worker_claimed_ago': fmt_ago(float(claimed_at)) if claimed_at else None,
+            'worker_claimed_by': claimed_by,
+            'base_entry_id': beid,
+            'sub_status': sub.status,
+        }
+        if beid:
+            worker_entries_by_base.setdefault(beid, []).append(info)
+        if claimed_by and claimed_at and cap:
+            claims_by_machine_cap.setdefault((claimed_by, cap), []).append(info)
+            claims_by_cap.setdefault(cap, []).append(info)
+
     items = []
     for e in entries:
         data = e.data if isinstance(e.data, dict) else {}
@@ -3816,7 +3960,81 @@ def api_research_data(request):
         # RESEARCH_MODELS so adding a model doesn't require UI edits.
         for m in RESEARCH_MODELS:
             item[f'{m}_status'] = data.get(f'{m}_status')
+        # Attach remote-worker sub-entry info if any
+        beid = data.get('entry_id')
+        if beid and beid in worker_entries_by_base:
+            item['workers'] = worker_entries_by_base[beid]
         items.append(item)
+
+    # Worker health — derived per capability. The display states are:
+    #   busy        — a sub-entry is claimed by the same machine that last
+    #                 polled this cap. Workers can't poll while running
+    #                 ollama (the loop blocks), so a held claim by the
+    #                 polling machine = active inference in progress.
+    #   zombie      — a claim is held by a machine OTHER than the last
+    #                 poller. The original holder is presumed dead; the
+    #                 server's 30-min auto-reclaim will eventually fix it.
+    #   idle        — recent poll, no claim held. Worker is connected and
+    #                 waiting for work.
+    #   disconnected — no poll in WORKER_DISCONNECTED_SECONDS AND no claim
+    #                  held by anyone.
+    #   unknown     — no poll history at all (cap not yet seen).
+    # The old boolean "stale" conflated "busy on a long inference" with
+    # "disconnected" — both have stale poll timestamps. The claim index
+    # disambiguates them.
+    WORKER_DISCONNECTED_SECONDS = 180    # no poll for longer = disconnected
+    worker_health = {}
+    now_ts = time.time()
+    sc_rows = list(SysConfig.objects.filter(
+        key__startswith='worker_capability_', key__endswith='_lastpoll'))
+    # Also synthesize entries for any cap that has a claim but no poll record
+    # (otherwise a zombie claim with no recent poller would be invisible).
+    poll_caps = {sc.key[len('worker_capability_'):-len('_lastpoll')] for sc in sc_rows}
+    extra_caps = set(claims_by_cap.keys()) - poll_caps
+
+    def _build_state(cap, last_ts, machine_id):
+        age_sec = (now_ts - float(last_ts)) if last_ts else None
+        held_by_poller = (
+            claims_by_machine_cap.get((machine_id, cap), []) if machine_id else [])
+        all_held = claims_by_cap.get(cap, [])
+        busy_on = None
+        busy_since_ago = None
+        if held_by_poller:
+            top = max(held_by_poller, key=lambda c: c.get('worker_claimed_at') or 0)
+            state = 'busy'
+            busy_on = top.get('base_entry_id')
+            busy_since_ago = top.get('worker_claimed_ago')
+        elif all_held:
+            top = max(all_held, key=lambda c: c.get('worker_claimed_at') or 0)
+            state = 'zombie'
+            busy_on = top.get('base_entry_id')
+            busy_since_ago = top.get('worker_claimed_ago')
+        elif last_ts is None:
+            state = 'unknown'
+        elif age_sec is not None and age_sec <= WORKER_DISCONNECTED_SECONDS:
+            state = 'idle'
+        else:
+            state = 'disconnected'
+        return {
+            'machine_id': machine_id,
+            'last_poll_ts': last_ts,
+            'last_poll_ago': fmt_ago(float(last_ts)) if last_ts else None,
+            'age_sec': age_sec,
+            'state': state,
+            'busy_on': busy_on,
+            'busy_since_ago': busy_since_ago,
+        }
+
+    for sc in sc_rows:
+        cap = sc.key[len('worker_capability_'):-len('_lastpoll')]
+        try:
+            info = json.loads(sc.value) if sc.value else {}
+        except (ValueError, TypeError):
+            info = {}
+        worker_health[cap] = _build_state(
+            cap, info.get('ts'), info.get('machine_id'))
+    for cap in extra_caps:
+        worker_health[cap] = _build_state(cap, None, None)
 
     # System prompt and ideation prompt entry UUIDs
     sysprompt = Entry.objects.filter(
@@ -3890,9 +4108,18 @@ def api_research_data(request):
         'last_error_time_ago': _epoch_ago(last_error_time_epoch),
     }
 
+    # One-bit "is something legitimately progressing in the system" flag.
+    # Zombie claims are NOT busy — they are leftovers from a dead worker.
+    system_busy = (
+        status_val == 'running'
+        or any(wh.get('state') == 'busy' for wh in worker_health.values())
+    )
+
     return JsonResponse({
         'items': items,
         'models': list(RESEARCH_MODELS),
+        'worker_health': worker_health,
+        'system_busy': system_busy,
         'sysprompt_id': str(sysprompt) if sysprompt else None,
         'ideation_prompt_id': str(ideation_prompt) if ideation_prompt else None,
         'agent': agent_status,

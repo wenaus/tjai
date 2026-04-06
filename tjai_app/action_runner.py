@@ -686,6 +686,10 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
 
     Dispatch mechanisms differ per model (Claude via tj agent, others via
     research_multimodel.py subprocess) but the control flow is uniform.
+
+    Returns True if a local claude subprocess was launched (action status
+    will be cleared by agent_complete.py). Returns False if only remote/
+    subprocess-free dispatches happened (caller must clear status itself).
     """
     import uuid as _uuid
 
@@ -735,6 +739,7 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
             Tag.objects.create(tag_name='research_topic', entry=entry)
 
         base_data[f'{model}_entry_id'] = model_entry_id
+        # Default 'active' — overridden below for remote workers (gemma → staged)
         base_data[f'{model}_status'] = 'active'
 
         # Dispatch — mechanism differs per model, control flow is uniform
@@ -753,6 +758,8 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
             # Remote worker: stage prompt on entry and mark as claimable.
             # tj_agent on the Mac polls /api/worker/poll, grabs this, runs
             # ollama locally, POSTs result back to /api/worker/result.
+            # Status starts as 'staged' (no worker has claimed yet) and is
+            # upgraded to 'active' atomically by _claim_worker_entry.
             try:
                 prompt = build_research_prompt(topic_text)
                 edata = entry.data if isinstance(entry.data, dict) else {}
@@ -763,6 +770,7 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
                 edata.pop('worker_claimed_at', None)
                 entry.data = edata
                 entry.save(update_fields=['data'])
+                base_data[f'{model}_status'] = 'staged'
                 logger.info("Staged gemma work for %s (prompt %d chars)",
                             model_entry_id, len(prompt))
             except Exception as e:
@@ -786,6 +794,10 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
     # Save base entry tracking (model entries track their own status)
     base_entry.data = base_data
     base_entry.save(update_fields=['data'])
+
+    # True iff a local claude subprocess was launched — the only case where
+    # agent_complete.py will later clear research-agent sysconfig status.
+    return 'claude' in models_to_run
 
 
 def update_last_run(action):
@@ -857,6 +869,10 @@ def execute_action(action, target_date=None):
         SysConfig.objects.filter(key=f'agent_{action_id}_last_error_time').update(
             value='', timestamp_modified=now)
 
+    # Flags visible to the finally block (set later inside try)
+    research_3way_handled = False
+    research_3way_local_proc = False
+
     try:
         # Journal entry must exist before mechanical scripts (they may append to it)
         entry_id = create_journal_entry(action, target_date=target_date)
@@ -905,7 +921,6 @@ def execute_action(action, target_date=None):
         # For research-agent on primary topics: create all 3 model entries
         # and dispatch in parallel.  _dispatch_research_3way handles everything
         # including Claude dispatch — no separate dispatch_ai needed.
-        research_3way_handled = False
         if action_id == 'research-agent':
             multimodel_target_uuid = data.get('next_target_entry_id')
             if multimodel_target_uuid:
@@ -917,7 +932,7 @@ def execute_action(action, target_date=None):
                     base_entry_id = target_data.get('entry_id')
                     topic_text = target_entry.content.split('\n')[0].strip()
                     if base_entry_id and topic_text and target_data.get('source') != 'multimodel':
-                        _dispatch_research_3way(
+                        research_3way_local_proc = _dispatch_research_3way(
                             action, data, target_entry, base_entry_id,
                             topic_text, multimodel_target_uuid,
                         )
@@ -938,7 +953,13 @@ def execute_action(action, target_date=None):
         # Clear running status for mechanical-only actions (no AI dispatch).
         # Actions with ai_prompt are cleared by agent_complete.py when the
         # detached tj agent finishes.
-        if action_id and not (data or {}).get('ai_prompt'):
+        # Also clear for research-agent 3way dispatch that launched no local
+        # subprocess (e.g. gemma-only) — agent_complete will never fire.
+        no_pending_local = (
+            (action_id and not (data or {}).get('ai_prompt')) or
+            (research_3way_handled and not research_3way_local_proc)
+        )
+        if no_pending_local and action_id:
             now = time.time()
             SysConfig.objects.update_or_create(
                 key=f'agent_{action_id}_status',

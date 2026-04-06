@@ -75,10 +75,12 @@
         .status-pending { background: #1a3a5c; color: #90caf9; }
         .status-active { background: rgba(255, 213, 79, 0.15); color: #ffd54f; }
         .status-running { background: rgba(255, 213, 79, 0.15); color: #ffd54f; }
+        .status-staged { background: rgba(144, 202, 249, 0.15); color: #90caf9; }
         .status-done { background: #1a3c1a; color: #4caf50; }
         .status-blocked { background: rgba(239, 83, 80, 0.15); color: #ef5350; }
         .research-item.active { border-left-color: #ffd54f; }
         .research-item.running { border-left-color: #ffd54f; }
+        .research-item.staged { border-left-color: #90caf9; }
         .research-item.blocked { border-left-color: #ef5350; }
         .item-content {
             color: #bbb;
@@ -224,46 +226,166 @@
                 spEl.innerHTML = '<span style="color:#666">No research prompt</span>';
             }
 
-            // Agent status banner with activity dot
+            // Banner: three named, non-overlapping facts. Nothing here is
+            // allowed to read as contradictory because each line names its
+            // own subject ("Local agent", "Remote workers", "Topics in flight")
+            // and the subjects do not overlap.
             const items = data.items || [];
             const agent = data.agent || {};
+            const workerHealth = data.worker_health || {};
+            const systemBusy = !!data.system_busy;
             const banner = document.getElementById('agent-banner');
             const errorDiv = document.getElementById('error-section');
-            if (agent.status === 'running') {
-                const dur = agent.launched_dur ? ' for ' + agent.launched_dur : '';
-                const logLink = agent.current_entry ? ` <a href="/tjai/agent-log?ref=${agent.current_entry}" style="color:#ffd54f">log</a>` : '';
-                // Look up what entry the agent is working on
-                const currentItem = items.find(i => i.id === agent.current_entry);
-                const entryName = currentItem ? (currentItem.entry_id || currentItem.id.substring(0, 8)) : (agent.current_entry || '?').substring(0, 8);
-                const entryStatus = currentItem ? currentItem.status : '';
-                const entryDone = entryStatus === 'done';
-                // Activity dot based on health/last_activity
-                let dotClass = 'dot-idle';
-                let activityInfo = '';
-                if (agent.last_activity) {
-                    const actAge = agent.last_activity_age;
-                    if (actAge < 30) { dotClass = 'dot-active'; }
-                    else if (actAge < 300) { dotClass = 'dot-idle'; }
-                    else { dotClass = 'dot-stale'; }
-                    activityInfo = ` · activity ${agent.last_activity_ago}`;
-                } else if (agent.health === 'active') { dotClass = 'dot-active'; }
-                else if (agent.health === 'stale') { dotClass = 'dot-stale'; }
-                const procInfo = agent.process_alive === '0' ? ' · <span style="color:#ef5350">no process</span>' : '';
-                if (entryDone) {
-                    banner.className = 'agent-banner agent-running';
-                    banner.innerHTML = `<span class="activity-dot ${dotClass}"></span>Agent: process running on <strong>${esc(entryName)}</strong> (entry done)${dur}${activityInfo}${procInfo} <button class="btn-submit" style="color:#ef5350;border-color:#ef5350;margin-left:8px" onclick="abortAgent(this)">Abort</button>${logLink}`;
-                } else {
-                    banner.className = 'agent-banner agent-running';
-                    banner.innerHTML = `<span class="activity-dot ${dotClass}"></span>Agent: <strong>running</strong> ${esc(entryName)}${dur}${activityInfo}${procInfo}${logLink}`;
+            const activeItems = items.filter(i =>
+                (i.status === 'active' || i.status === 'staged') &&
+                i.source !== 'multimodel');
+            const agentRunning_ = agent.status === 'running';
+
+            // Activity dot reflects the SYSTEM, not just the local orchestrator.
+            //   green pulse = something is actively working (local or remote)
+            //   red         = something is wrong: a worker is disconnected with
+            //                 staged work, or a zombie claim is held
+            //   orange      = staged work waiting for a worker to claim it
+            //   grey        = nothing in flight
+            const stagedWaiting = items.some(i =>
+                (data.models || []).some(m => i[m + '_status'] === 'staged'));
+            const anyDisconnected = Object.values(workerHealth).some(
+                wh => wh.state === 'disconnected');
+            const anyZombie = Object.values(workerHealth).some(
+                wh => wh.state === 'zombie');
+            let dotClass = 'dot-off';
+            if (systemBusy) dotClass = 'dot-active';
+            else if (anyZombie || (anyDisconnected && stagedWaiting)) dotClass = 'dot-stale';
+            else if (stagedWaiting) dotClass = 'dot-idle';
+
+            // Per-cap state lookup so the topic-level phase rendering can
+            // mark "gemma in-progress" as bogus when the worker holding the
+            // claim is actually a zombie.
+            const capStateByModel = {};
+            for (const [cap, wh] of Object.entries(workerHealth)) {
+                // best-effort: capability names like "gemma4" map to model "gemma"
+                for (const m of (data.models || [])) {
+                    if (cap.startsWith(m)) capStateByModel[m] = wh.state;
                 }
-            } else {
-                banner.className = 'agent-banner agent-idle';
-                let text = '<span class="activity-dot dot-off"></span>Agent: idle';
-                if (agent.completed) {
-                    text += ' — last completed ' + agent.completed_ago;
-                }
-                banner.innerHTML = text;
             }
+
+            const lines = [];
+
+            // --- Fact 1: Local agent (the research-agent orchestrator process) ---
+            let localLine = '';
+            if (agentRunning_) {
+                const dur = agent.launched_dur ? ' for ' + agent.launched_dur : '';
+                const currentItem = items.find(i => i.id === agent.current_entry);
+                const entryName = currentItem
+                    ? (currentItem.entry_id || currentItem.id.substring(0, 8))
+                    : (agent.current_entry || '?').substring(0, 8);
+                const logLink = agent.current_entry
+                    ? ` <a href="/tjai/agent-log?ref=${agent.current_entry}" style="color:#ffd54f">log</a>`
+                    : '';
+                const procInfo = agent.process_alive === '0'
+                    ? ' · <span style="color:#ef5350">no process</span>' : '';
+                const activityInfo = agent.last_activity
+                    ? ` · activity ${agent.last_activity_ago}` : '';
+                const entryDone = currentItem && currentItem.status === 'done';
+                if (entryDone) {
+                    localLine = `<strong>Local agent:</strong> running on ${esc(entryName)} (entry already done)${dur}${activityInfo}${procInfo} <button class="btn-submit" style="color:#ef5350;border-color:#ef5350;margin-left:8px" onclick="abortAgent(this)">Abort</button>${logLink}`;
+                } else {
+                    localLine = `<strong>Local agent:</strong> running on ${esc(entryName)}${dur}${activityInfo}${procInfo}${logLink}`;
+                }
+            } else if (agent.status === 'failed') {
+                const errTime = agent.last_error_time_ago ? ' ' + agent.last_error_time_ago : '';
+                localLine = `<strong>Local agent:</strong> <span style="color:#ef5350">failed${errTime}</span>`;
+            } else {
+                const lastDone = agent.completed_ago ? ` — last run completed ${agent.completed_ago}` : '';
+                localLine = `<strong>Local agent:</strong> idle${lastDone}`;
+            }
+            lines.push(localLine);
+
+            // --- Fact 2: Remote workers (one entry per capability) ---
+            // The state field comes from the server and disambiguates
+            // "busy on a long inference" from "disconnected" — both have
+            // stale poll timestamps, only one has a held claim.
+            const capKeys = Object.keys(workerHealth);
+            if (capKeys.length > 0) {
+                const wbits = [];
+                for (const cap of capKeys) {
+                    const wh = workerHealth[cap];
+                    const mid = (wh.machine_id || '').substring(0,8);
+                    const midStr = mid ? ` ${mid}` : '';
+                    if (wh.state === 'busy') {
+                        const onWhat = wh.busy_on ? ` on ${esc(wh.busy_on)}` : '';
+                        const since = wh.busy_since_ago ? ` (claimed ${wh.busy_since_ago})` : '';
+                        wbits.push(`<span style="color:#ffd54f">${cap}: busy${onWhat}${since}${midStr}</span>`);
+                    } else if (wh.state === 'zombie') {
+                        const onWhat = wh.busy_on ? ` on ${esc(wh.busy_on)}` : '';
+                        const since = wh.busy_since_ago ? ` (claimed ${wh.busy_since_ago})` : '';
+                        const lastPoll = wh.last_poll_ago ? `, last poll ${wh.last_poll_ago}${midStr}` : '';
+                        wbits.push(`<span style="color:#ef5350">${cap}: zombie claim${onWhat}${since}${lastPoll} — auto-reclaim within 30m</span>`);
+                    } else if (wh.state === 'idle') {
+                        const lastPoll = wh.last_poll_ago ? ` (last poll ${wh.last_poll_ago})` : '';
+                        wbits.push(`<span style="color:#9ccc65">${cap}: idle${lastPoll}${midStr}</span>`);
+                    } else if (wh.state === 'disconnected') {
+                        const lastPoll = wh.last_poll_ago ? ` (last poll ${wh.last_poll_ago})` : '';
+                        wbits.push(`<span style="color:#ef5350">${cap}: disconnected${lastPoll}${midStr}</span>`);
+                    } else {
+                        wbits.push(`<span style="color:#888">${cap}: never polled</span>`);
+                    }
+                }
+                lines.push(`<strong>Remote workers:</strong> ${wbits.join(' · ')}`);
+            }
+
+            // --- Fact 3: Topics with work in flight (active or staged) ---
+            // Per-model phases use server-formatted ago strings (no client-clock math).
+            if (activeItems.length > 0) {
+                const tbits = [];
+                for (const it of activeItems) {
+                    const name = it.entry_id || it.id.substring(0, 8);
+                    const url = entryUrl(it.id, it.entry_id);
+                    const workersByModel = {};
+                    for (const w of (it.workers || [])) {
+                        if (w.model) workersByModel[w.model] = w;
+                    }
+                    const phaseBits = [];
+                    for (const m of (data.models || [])) {
+                        const st = it[m + '_status'];
+                        if (!st) continue;
+                        const w = workersByModel[m];
+                        let phrase = '';
+                        let clr = '#b0bec5';
+                        if (st === 'done') { phrase = `${m} done`; clr = '#9ccc65'; }
+                        else if (st === 'blocked' || st === 'failed') { phrase = `${m} ${st}`; clr = '#ef5350'; }
+                        else if (st === 'active' && w && w.worker_claimed_ago) {
+                            const mid = (w.worker_claimed_by || '').substring(0,8);
+                            // If the worker holding this claim is a zombie at
+                            // the cap level, surface that — the "in-progress"
+                            // is a stale leftover, not real work.
+                            if (capStateByModel[m] === 'zombie') {
+                                phrase = `${m} stale claim by ${mid} (${w.worker_claimed_ago})`;
+                                clr = '#ef5350';
+                            } else {
+                                phrase = `${m} in-progress on ${mid} (${w.worker_claimed_ago})`;
+                                clr = '#ffd54f';
+                            }
+                        }
+                        else if (st === 'active') { phrase = `${m} in-progress`; clr = '#ffd54f'; }
+                        else if (st === 'staged' && w && w.worker_staged_ago) {
+                            phrase = `${m} awaiting worker (staged ${w.worker_staged_ago})`;
+                            clr = '#90caf9';
+                        }
+                        else if (st === 'staged') { phrase = `${m} staged`; clr = '#90caf9'; }
+                        else { phrase = `${m} ${st}`; }
+                        phaseBits.push(`<span style="color:${clr}">${phrase}</span>`);
+                    }
+                    const phases = phaseBits.length ? ' — ' + phaseBits.join(' · ') : '';
+                    tbits.push(`<div style="padding-left:14px">• <a href="${url}" style="color:#ffd54f">${esc(name)}</a>${phases}</div>`);
+                }
+                const label = activeItems.length === 1 ? 'topic' : 'topics';
+                lines.push(`<strong>${activeItems.length} ${label} in flight:</strong>${tbits.join('')}`);
+            }
+
+            banner.className = systemBusy ? 'agent-banner agent-running' : 'agent-banner agent-idle';
+            banner.innerHTML = `<span class="activity-dot ${dotClass}"></span>` +
+                lines.map((l, i) => i === 0 ? l : `<div style="margin-top:4px">${l}</div>`).join('');
             // Error section
             if (agent.last_error && agent.last_error.trim()) {
                 const errTime = agent.last_error_time_ago || '';
@@ -296,9 +418,9 @@
             for (const item of items) {
                 const isRunning = agentRunning && item.id === currentEntry && item.status !== 'done';
                 const st = item.status;
-                const cls = st === 'done' ? 'done' : st === 'blocked' ? 'blocked' : isRunning ? 'running' : st === 'active' ? 'active' : 'pending';
+                const cls = st === 'done' ? 'done' : st === 'blocked' ? 'blocked' : isRunning ? 'running' : st === 'active' ? 'active' : st === 'staged' ? 'staged' : 'pending';
                 const statusCls = 'status-' + cls;
-                const label = st === 'done' ? 'done' : st === 'blocked' ? 'blocked' : isRunning ? 'running' : st === 'active' ? 'active' : 'pending';
+                const label = st === 'done' ? 'done' : st === 'blocked' ? 'blocked' : isRunning ? 'running' : st === 'active' ? 'active' : st === 'staged' ? 'staged' : 'pending';
 
                 html += `<div class="research-item ${cls}">`;
                 html += '<div class="item-header">';
@@ -319,7 +441,7 @@
                 if (!isRunning && item.source !== 'multimodel') {
                     // Models list comes from the API (derived from RESEARCH_MODELS on server)
                     const models = data.models || [];
-                    const mColors = {done: '#9ccc65', active: '#ffd54f', blocked: '#ef5350'};
+                    const mColors = {done: '#9ccc65', active: '#ffd54f', staged: '#90caf9', blocked: '#ef5350'};
                     html += '<span style="margin-left:8px;font-size:11px">';
                     for (const m of models) {
                         const label = m.charAt(0).toUpperCase() + m.slice(1);
