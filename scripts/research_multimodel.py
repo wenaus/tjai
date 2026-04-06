@@ -292,8 +292,16 @@ def _create_and_dispatch_synthesis(base_entry_id, base_entry, synth_entry_id):
         logger.error("research-synthesis-prompt entry not found — cannot dispatch synthesis")
         return
 
-    # Substitute {research_entry_id} in the prompt
-    synthesis_prompt = sp_entry.content.replace('{research_entry_id}', base_entry_id)
+    # Build template vars from RESEARCH_MODELS
+    model_names = ', '.join(m.capitalize() for m in RESEARCH_MODELS)
+    source_links = '\n'.join(
+        f'- {m.capitalize()}: [{base_entry_id}-{m}](/tjai/entry/?entry_id={base_entry_id}-{m})'
+        for m in RESEARCH_MODELS
+    )
+    synthesis_prompt = sp_entry.content
+    synthesis_prompt = synthesis_prompt.replace('{research_entry_id}', base_entry_id)
+    synthesis_prompt = synthesis_prompt.replace('{active_models}', model_names)
+    synthesis_prompt = synthesis_prompt.replace('{source_reports}', source_links)
 
     # Dispatch via research-agent action (reuse existing mechanism)
     research_action = Entry.objects.filter(
