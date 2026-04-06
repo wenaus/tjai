@@ -98,6 +98,45 @@ def worker_poll(machine_id: str, capabilities: list[str],
         raise Exception(f"Connection error: {e.reason}")
 
 
+def api_log(token: str, source: str, message: str,
+            level: str = "info",
+            extra_data: dict | None = None) -> dict[str, Any]:
+    """POST a log line to tjai's central AppLog via /api/log.
+
+    Used by the remote inference worker to surface per-prompt events
+    (received / completed / failed) in the same log stream as
+    server-side events. Bearer-authenticated against SysConfig
+    'gmail_addon_api_key' (same key the gmail addon uses).
+
+    level: 'debug' | 'info' | 'warning' | 'error'
+    """
+    url = f"{get_sync_server()}/api/log"
+    payload: dict[str, Any] = {
+        "source": source,
+        "message": message,
+        "level": level,
+    }
+    if extra_data is not None:
+        payload["extra_data"] = extra_data
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url, data=data,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8")
+        raise Exception(f"Server error {e.code}: {error_body}")
+    except urllib.error.URLError as e:
+        raise Exception(f"Connection error: {e.reason}")
+
+
 def worker_result(machine_id: str, entry_id: str, status: str,
                   result: str = "", error: str = "",
                   duration_sec: int = 0) -> dict[str, Any]:

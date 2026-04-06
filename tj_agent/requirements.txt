@@ -1,0 +1,16 @@
+# tj_agent dependencies
+#
+# The base sync daemon (push/pull/sysconfig) uses only the Python stdlib
+# (urllib + sqlite3). Install these only if you intend to run the optional
+# remote inference worker (worker_enabled=true in config), which acts as
+# an MCP client and runs an agentic loop against local ollama:
+#
+#     pip install -r tj_agent/requirements.txt
+
+# MCP client SDK — talks to lxr-mcp-server, github-mcp-server, etc.
+mcp>=1.27.0
+
+# HTTP client for the bundled lxr-mcp-server (and any other Python MCP
+# servers we wire in-process)
+httpx>=0.28
+beautifulsoup4>=4.14

@@ -28,8 +28,9 @@ There is no inbound connection to the worker, no fixed worker registry, and no a
 | Endpoint (poll) | `tjai_app/views.py` `worker_poll`, `_claim_worker_entry` | Long-polls for matching work, atomically claims under transaction, returns prompt |
 | Endpoint (result) | `tjai_app/views.py` `worker_result` | Receives result, finalizes the sub-entry, calls `research_model_complete` |
 | Per-completion hook | `tjai_app/action_runner.py` `research_model_complete` | Updates base entry's `{model}_status`, triggers synthesis once all dispatched models are done |
-| Worker (Mac) | `tj_agent/worker.py` | Loop that polls, calls local ollama, POSTs result |
-| Worker thread starter | `tj_agent/daemon.py` `run_forever` | Spawns the worker thread alongside the sync loop on `tj_agent` startup |
+| Worker (Mac) | `tj_agent/worker.py` | Async loop that polls, runs an agentic chat loop against local ollama (with tools when MCP dispatcher is up), POSTs result, also POSTs `received`/`completed` events to `/api/log` (source `worker-mac`) |
+| MCP tool dispatcher (Mac, R&D) | `tj_agent/mcp_tool_dispatcher.py` `McpToolDispatcher` | Spawns local MCP servers as stdio subprocesses (lxr-mcp-server, github-mcp-server), holds long-lived `mcp.ClientSession`s, advertises the union of their tools to ollama, routes `call_tool` dispatch back to the owning server. Optional — failures degrade to tool-less single-shot inference. |
+| Worker thread starter | `tj_agent/daemon.py` `run_forever` | Spawns the worker thread (which itself wraps an asyncio loop) alongside the sync loop on `tj_agent` startup |
 | Display | `tjai_app/views.py` `api_research_data` + `tjai_app/templates/tjai_app/research.html` banner block | Shows the system state on `/tjai/research/` with three named, non-overlapping facts |
 
 ## Wire protocol
@@ -155,6 +156,8 @@ Soft-delete the entry. Callers should issue this **after** successfully retrievi
 | `POLL_CLIENT_TIMEOUT` | 70 | `tj_agent/worker.py` | Worker socket timeout. Must exceed `WORKER_POLL_HOLD_SECONDS` (the 20s margin covers round-trip + safety). |
 | `POLL_BACKOFF_INITIAL` / `MAX` | 1.0 / 60.0 | `tj_agent/worker.py` | Exponential backoff between failed polls. |
 | `DEFAULT_INFERENCE_TIMEOUT` | 1800 | `tj_agent/worker.py` | Worker's local timeout on the ollama call, overridden by `work.timeout_sec`. |
+| `MAX_AGENT_TURNS` | 12 | `tj_agent/worker.py` | Hard cap on agent-loop iterations per work item. Prevents runaway tool-calling. Typical research/codoc prompts terminate after 1–4 turns. |
+| `TJAI_LOG_SOURCE` | `'worker-mac'` | `tj_agent/worker.py` | `source` field used when the worker POSTs `received`/`completed`/`failed` events to `/api/log`. Distinct from the server-side `'worker'` events. |
 
 The "no poll for longer than 180s" disconnected threshold is a function-local value inside `api_research_data`, not a top-level constant.
 
@@ -243,9 +246,25 @@ The diagram below traces a single research topic where gemma is one of the dispa
 5. worker_poll returns the work payload (see Wire protocol § GET
    /api/worker/poll for the exact shape) and writes an AppLog row.
 
-6. Mac worker (`tj_agent/worker.py` `_process_work`)
-   - POST to local ollama /api/chat with the prompt and configured model
-   - Block until ollama returns (or timeout / error)
+6. Mac worker (`tj_agent/worker.py` `_process_work_async`)
+   - POST `received` event to /api/log (source 'worker-mac')
+   - Run an agentic chat loop against local ollama:
+       messages = [{role: user, content: prompt}]
+       for turn in range(MAX_AGENT_TURNS = 12):
+         response = ollama /api/chat(messages, tools=dispatcher.tools_for_ollama())
+         messages.append(response.message)
+         if not response.message.tool_calls:
+            final_text = response.message.content
+            break
+         for each tool_call:
+            result = dispatcher.call_tool(name, args)  # routed to the owning MCP server
+            messages.append({role: tool, name, content: result})
+   - For research-style single-shot prompts and any other prompt the model
+     answers without invoking tools, the loop terminates after turn 1 with
+     the assistant's content — same observable result as the pre-agent
+     single-shot path. When tools are invoked, the loop continues until
+     the model stops emitting tool_calls or the cap is hit.
+   - POST `completed`/`failed` event to /api/log (source 'worker-mac')
    - POST result to /api/worker/result {machine_id, entry_id, status,
                                          result, error, duration_sec}
 
@@ -395,15 +414,148 @@ The legacy schema (`worker_capabilities` list + `ollama_model` + `worker_max_tok
 
 How `tj_agent` itself is started (login item, launchd plist, manual) is a per-machine operational detail outside this doc's scope.
 
-The thread loops forever:
+The thread wraps an asyncio loop (`run_worker_forever()` calls `asyncio.run(_run_worker_forever_async())`) so the worker can drive async MCP client sessions naturally. On entry it tries to start an `McpToolDispatcher` (see § MCP tools and agent loop); if startup fails or is disabled, the worker proceeds with `dispatcher=None` and tools = `[]`. The loop:
+
 1. Read config (re-read each iteration, so toggling `worker_enabled` takes effect on the next cycle).
 2. Long-poll `/api/worker/poll` with a client timeout of `POLL_CLIENT_TIMEOUT = 70s` (must exceed the server's 50s hold).
 3. If `work` is null, reconnect immediately.
-4. If `work` is present, run it through `_process_work`:
-   - POST the prompt to ollama.
-   - On success or failure, POST a result back.
+4. If `work` is present, run it through `_process_work_async`:
+   - POST `received` event to /api/log (source `worker-mac`) with capability, ollama_model, prompt_chars, tools_advertised, hostname.
+   - Run the agent loop: send messages + tools to ollama, dispatch any tool_calls via the dispatcher, append results, repeat until ollama returns no further tool_calls or `MAX_AGENT_TURNS = 12` is hit. With zero tools (no dispatcher) the loop terminates after turn 1, equivalent to the old single-shot path.
+   - POST `completed` (or `failed`) event to /api/log with duration, turns_used, tool_calls count, output_chars (or error).
+   - POST result to /api/worker/result.
    - Errors here are caught and logged but don't crash the loop.
 5. Backoff exponentially (1s → 60s) on transient poll failures (network, 5xx).
+
+## MCP tools and agent loop (Mac side)
+
+The Mac worker can additionally run as an **MCP client** for the model — advertising tools from one or more local MCP servers on every ollama call and dispatching the resulting `tool_calls` back to those servers in a multi-turn loop. This is **R&D**, **Mac-side only**: the server doesn't know whether the worker has tools, the wire protocol is unchanged, and the work item shape is unchanged. From the server's perspective the worker is still a black box that takes a prompt and returns a string.
+
+The default deployment on the Mac Studio bundles two MCP servers, both spawned as stdio subprocesses by the worker on startup:
+
+| Server | Type | Tools | Auth |
+|---|---|---|---|
+| `lxr-mcp-server` | Python (`mcp` SDK FastMCP) | `lxr_ident`, `lxr_search`, `lxr_source`, `lxr_list` — EIC code browser cross-references via the LXR HTTP backend at `eic-code-browser.sdcc.bnl.gov` | none (public LXR instance) |
+| `github-mcp-server` | Go binary v0.32.0, `stdio` mode | 41 tools across the GitHub REST surface (`get_me`, `get_file_contents`, `search_code`, `list_pull_requests`, `add_issue_comment`, etc.) | `GITHUB_PERSONAL_ACCESS_TOKEN` env var |
+
+Each MCP server is **optional**: if a server fails to launch (binary missing, token missing, subprocess error), the dispatcher logs the failure loudly (`WARNING ...mcp_tool_dispatcher: github-mcp-server binary not found; skipping`) and the worker keeps running with whatever subset of tools is available — **including zero**, in which case the agent loop collapses to single-shot inference, identical to the pre-MCP behavior.
+
+### Architecture
+
+```
+                                ┌──────────────────────────────┐
+                                │ tj_agent (Mac, asyncio loop) │
+                                │                              │
+  /api/worker/poll  ────────►  │  worker.py                   │
+                                │   _process_work_async         │
+                                │                              │
+                                │     ┌──────────────────┐     │
+                                │     │ for turn in 1..N │     │
+                                │     │                  │     │       gemma4:31b
+                                │     │  ollama /api/chat│─────┼────►  gemma4:e4b
+                                │     │   tools=[...]    │     │       (local ollama)
+                                │     │                  │     │
+                                │     │  if tool_calls:  │     │
+                                │     │   for each call: │     │       lxr-mcp-server
+                                │     │    dispatcher    │─────┼────►  (python stdio)
+                                │     │     .call_tool   │     │
+                                │     │    append result │     │       github-mcp-server
+                                │     │                  │     │       (go stdio)
+                                │     │  else: break     │     │
+                                │     └──────────────────┘     │
+                                │                              │
+  /api/worker/result  ◄───────  │   POST final assistant text  │
+                                │                              │
+  /api/log  ◄─────────────────  │   _log_to_tjai("received"    │
+                                │                "completed")  │
+                                │   source='worker-mac'         │
+                                └──────────────────────────────┘
+```
+
+`McpToolDispatcher` (in `tj_agent/mcp_tool_dispatcher.py`) holds one long-lived `mcp.ClientSession` per spawned server, discovers each server's tools at startup via `session.list_tools()`, and maintains a `tool_owner: dict[str, str]` map for routing. The dispatcher lives for the lifetime of the worker thread; subprocesses are torn down via `AsyncExitStack.aclose()` when the thread exits (which only happens on cancellation).
+
+### Agent loop
+
+```
+1. messages = [{role: user, content: <prompt>}]
+2. for turn in range(MAX_AGENT_TURNS = 12):
+       response = ollama /api/chat(messages, tools=dispatcher.tools_for_ollama())
+       messages.append(response.message)         # always — model sees its prior tool_calls
+       if not response.message.tool_calls:
+           final_text = response.message.content
+           break
+       for tc in response.message.tool_calls:
+           result = await dispatcher.call_tool(tc.function.name, tc.function.arguments)
+           messages.append({role: tool, name: tc.function.name, content: result})
+   else:                                          # loop exhausted
+       final_text = "ERROR: agent loop hit MAX_AGENT_TURNS=12 without producing a final response"
+3. POST final_text to /api/worker/result
+```
+
+`MAX_AGENT_TURNS = 12` is a soft cap. Typical research/codoc prompts terminate after 1–4 turns; the cap exists only to prevent runaway loops. Tool calls within a single turn are executed sequentially in the order ollama emitted them, results are appended in order as separate `role:tool` messages, and then the next ollama turn is sent.
+
+The dispatcher's `call_tool` is async (`mcp.ClientSession` is async-native), and the worker drives it from inside an asyncio loop in the worker thread. The blocking ollama HTTP call is wrapped in `asyncio.to_thread()` so a long inference doesn't block the event loop.
+
+**Tools are always advertised** when the dispatcher is up. There is no `work_type` gating — the model decides whether to use them. This is intentional R&D: we want to observe how `gemma4:31b` and `gemma4:e4b` actually behave when given tools on a research prompt vs a codoc prompt vs an agentic prompt.
+
+### Local secrets and the wrapper script
+
+The worker reads two secrets from environment variables on startup:
+
+| Env var | Purpose | Required for |
+|---|---|---|
+| `GITHUB_PERSONAL_ACCESS_TOKEN` | Passed to `github-mcp-server` (which reads it from its own env) so it can authenticate to api.github.com | github MCP tools — server is skipped if missing |
+| `TJAI_API_KEY` | Bearer token for the worker's POSTs to `/api/log`. Same value as the server's SysConfig `gmail_addon_api_key`. | Per-prompt central logging — silently no-ops if missing |
+
+These are loaded from `~/.tjai/env` (a chmod-600 file outside the repo, outside Dropbox) by `~/.tjai/run_agent.sh` (a wrapper script that sources the env file and execs the venv python). The launchd plist `~/Library/LaunchAgents/com.tj_agent.plist` invokes the wrapper rather than python directly. None of these three files (env, wrapper, plist) is in the repo — they are per-machine local state.
+
+Two paths are also configurable via env, with sensible defaults so most setups need not set them:
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `LXR_MCP_SERVER_PATH` | `~/github/lxr-mcp-server/lxr_mcp_server.py` | Where the lxr server lives |
+| `GITHUB_MCP_SERVER_BIN` | `shutil.which('github-mcp-server')` then `~/bin/github-mcp-server` | Where the github server binary lives |
+
+To rotate any of these values, edit `~/.tjai/env` and restart `tj_agent` via:
+
+```bash
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.tj_agent.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tj_agent.plist
+```
+
+`launchctl kickstart -k gui/$(id -u)/com.tjai.agent` is **not** sufficient — it only restarts the running job, it does not re-read the plist or re-source the env file. New env vars added to `~/.tjai/env` will not be visible to the worker until the bootout/bootstrap pair is run.
+
+### Per-prompt logging to `/api/log`
+
+The worker posts events to tjai's central `AppLog` via `POST /api/log` (Bearer-authenticated with `TJAI_API_KEY`), source `worker-mac`. Three event types per work item:
+
+| Event | Level | Message format | extra_data fields |
+|---|---|---|---|
+| received | info | `received <work_type> prompt <entry_id> via <cap>=<ollama_model> (N chars, M tools available) on <hostname>` | `event, entry_id, machine_id, hostname, capability, ollama_model, work_type, prompt_chars, tools_advertised` |
+| completed | info | `completed <entry_id> in Ns (N turn(s), N tool call(s), N output chars) via <cap>=<ollama_model>` | `event, entry_id, machine_id, hostname, capability, ollama_model, duration_sec, turns_used, tool_calls, output_chars` |
+| failed | error | `failed <entry_id> after Ns (turn N/12, M tool call(s)): <error>` | `event, entry_id, machine_id, hostname, capability, ollama_model, duration_sec, turns_used, tool_calls, error` |
+
+These complement the existing server-side `worker_poll` and `worker_result` log lines (source `worker`) which fire on dispatch and result-receipt. The `worker-mac` lines surface the **worker's** view and include details only the worker knows: actual ollama model used (vs the capability name), prompt char count, tools advertised, turns used in the agent loop, hostname, and the per-loop tool-call total.
+
+Logging failures never disrupt work processing — `_log_to_tjai` swallows all exceptions and continues.
+
+### Worker dependencies
+
+Beyond the stdlib-only base sync daemon, the optional remote worker pulls in three Python packages, listed in `tj_agent/requirements.txt`:
+
+```
+mcp>=1.27.0          # client SDK for MCP servers
+httpx>=0.28          # used by lxr-mcp-server (transitive)
+beautifulsoup4>=4.14 # used by lxr-mcp-server (transitive)
+```
+
+Install them into the same venv that runs `tj_agent`:
+
+```bash
+~/.tjai/venv/bin/python3 -m pip install -r tj_agent/requirements.txt
+```
+
+The `mcp` package is **lazy-imported** inside `_run_worker_forever_async`, not at module top, so `tj_agent.worker` and `tj_agent.daemon` import cleanly on machines that don't have it installed (every machine with `worker_enabled=false`, which is every machine except the Mac Studio today).
 
 ## Failure modes
 
@@ -419,6 +571,11 @@ Things that can go wrong and what the system does about them.
 | **Server restarts mid-claim** | The worker's HTTP request gets a connection-reset; its retry loop backs off and eventually polls again, hitting the free-capacity reset path. | Automatic. |
 | **Result POST fails (network)** | Worker logs the failure; the work is lost; the claim remains until the worker's next poll triggers the free-capacity reset, which re-stages the work for re-claim. | Automatic. The work runs again. |
 | **Worker advertises an unknown capability** | `400` from `worker_poll`; sysconfig is not polluted. Worker logs the rejection and backs off. | Edit `WORKER_CAPABILITIES` on the server, or fix the worker config. |
+| **MCP server fails to launch** (binary missing, token missing, subprocess error) | The dispatcher logs `WARNING ...mcp_tool_dispatcher: <server> ...; skipping`. Worker keeps running with whatever subset of MCP servers came up. If all fail, the worker proceeds with `tools=[]` — agent loop collapses to single-shot inference. No work is rejected. | Fix the server-specific cause (install binary, set env var, etc.) and bootout/bootstrap the launchd job. |
+| **MCP `call_tool` raises during the agent loop** | The exception is caught per-tool, the error text is fed back to the model as the tool result (`TOOL ERROR: <ExceptionType>: <message>`). The model can choose to retry, try a different tool, or give up and answer in text. The work item completes normally. | None — this is by design. The model gets to see and react to tool failures. |
+| **Agent loop hits `MAX_AGENT_TURNS=12`** | `final_text` is set to `ERROR: agent loop hit MAX_AGENT_TURNS=12 ...`, posted to `/api/worker/result` with `status=done` (the loop completed, just unsuccessfully). The error message is also POSTed to `/api/log` as a `failed` event. | Increase the cap if the work legitimately needs more turns; otherwise investigate why the model isn't converging. |
+| **Worker posts to `/api/log` and the call fails** | Logged locally as a warning; work processing continues unaffected. No retry. | None — central logging is best-effort by design; the local agent.log line is the source of truth. |
+| **`TJAI_API_KEY` not set in `~/.tjai/env`** | `_post_log_sync` silently no-ops on every event. No central logging happens. The worker still works normally. | Add the key to `~/.tjai/env` and bootout/bootstrap. |
 
 ## Troubleshooting
 
