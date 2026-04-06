@@ -677,7 +677,7 @@ def worker_poll(request):
                 "work_type": work_type,
                 "model": edata.get('worker_target'),
                 "prompt": edata.get('worker_prompt', ''),
-                "timeout_sec": int(edata.get('worker_timeout_sec', 1800)),
+                "timeout_sec": int(edata.get('worker_timeout_sec', 3600)),
                 "base_entry_id": edata.get('base_entry_id'),
             }
             AppLog.objects.create(
@@ -835,7 +835,7 @@ def api_work_submit(request):
         {
             "capability": "gemma4" | "gemma4-fast" | ...,
             "prompt": "<text>",
-            "timeout_sec": <int, optional, default 1800>,
+            "timeout_sec": <int, optional, default 3600>,
             "source": "<string, optional>",      # caller identifier
             "label":  "<string, optional>"        # caller's job label
         }
@@ -861,7 +861,7 @@ def api_work_submit(request):
             status=400)
 
     try:
-        timeout_sec = int(body.get('timeout_sec') or 1800)
+        timeout_sec = int(body.get('timeout_sec') or 3600)
     except (TypeError, ValueError):
         return JsonResponse({"error": "timeout_sec must be int"}, status=400)
 

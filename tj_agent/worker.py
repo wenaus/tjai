@@ -533,13 +533,13 @@ async def _process_work_async(work: dict, machine_id: str, cfg: dict,
         return
 
     # The server passes a per-call timeout in work.timeout_sec (default
-    # 1800 in views.py:worker_poll). We treat DEFAULT_INFERENCE_TIMEOUT
+    # 3600 in views.py:worker_poll). We treat DEFAULT_INFERENCE_TIMEOUT
     # as a FLOOR rather than a fallback — gemma always gets at least
     # this long per ollama call regardless of what the server requested.
     # The server can still ASK for more by passing a larger value, but
     # cannot make the per-call window shorter than the worker's floor.
     # Rationale: thinking-mode gemma generating a long agent-loop turn
-    # can legitimately take many minutes; capping at the server's 30min
+    # can legitimately take many minutes; capping at the server's
     # default would abort real work.
     server_timeout = int(work.get("timeout_sec") or 0)
     timeout_sec = max(server_timeout, DEFAULT_INFERENCE_TIMEOUT)
