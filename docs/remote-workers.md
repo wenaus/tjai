@@ -90,7 +90,7 @@ Responses: `200 {"status": "ok"}` on success; `400` on missing/invalid fields; `
 | `WORKER_POLL_HOLD_SECONDS` | 50 | `tjai_app/views.py` | Server holds the long-poll for up to this long. Must stay under gunicorn's `--timeout` (120s). |
 | `WORKER_POLL_INTERVAL` | 2 | `tjai_app/views.py` | DB recheck frequency inside the hold loop. |
 | `WORKER_CLAIM_STALE_SECONDS` | 1800 | `tjai_app/views.py` | A claim older than this can be auto-reclaimed by any poll. |
-| `WORKER_CAPABILITIES` | `{'gemma4'}` | `tjai_app/views.py` | Capability whitelist. Edit this to add a new capability. |
+| `WORKER_CAPABILITIES` | `{'gemma4', 'gemma4-fast'}` | `tjai_app/views.py` | Capability whitelist. Edit this to add a new capability. |
 | `POLL_CLIENT_TIMEOUT` | 70 | `tj_agent/worker.py` | Worker socket timeout. Must exceed `WORKER_POLL_HOLD_SECONDS` (the 20s margin covers round-trip + safety). |
 | `POLL_BACKOFF_INITIAL` / `MAX` | 1.0 / 60.0 | `tj_agent/worker.py` | Exponential backoff between failed polls. |
 | `DEFAULT_INFERENCE_TIMEOUT` | 1800 | `tj_agent/worker.py` | Worker's local timeout on the ollama call, overridden by `work.timeout_sec`. |
@@ -305,17 +305,32 @@ Per-model phases use **server-formatted ago strings** (`fmt_ago`), not client-cl
 
 ## Worker configuration (the Mac side)
 
-`tj_agent/worker.py` reads from `tj` config (`~/.tjai/config.json` on the Mac):
+`tj_agent/worker.py` reads from `tj` config (`~/.tjai/config.json` on the Mac). One worker process can serve multiple capabilities, each mapped to its own ollama model:
 
 | Key | Default | Purpose |
 |---|---|---|
 | `worker_enabled` | `false` | Master switch. Must be true for the worker thread to start. |
-| `worker_capabilities` | `[]` | List of capability names to advertise. Must be a subset of the server's `WORKER_CAPABILITIES`. |
 | `ollama_url` | `http://localhost:11434` | Local ollama endpoint. |
-| `ollama_model` | `gemma4:e4b` | The actual ollama model tag passed to `/api/chat`. The capability name on the server side is decoupled — the server sends `model: gemma4` and the worker substitutes its locally configured tag. |
-| `worker_max_tokens` | unset | If set, passed to ollama as `options.num_predict`. |
+| `worker_models` | `{}` | Dict mapping each advertised capability name to its local ollama model. Each value is either a bare ollama model name (string) or `{"ollama_name": "...", "max_tokens": <int>}` for a per-capability token cap. The capability names must each be in the server's `WORKER_CAPABILITIES`. |
 
-`start_worker_thread()` is called from `tj_agent.daemon.run_forever()` alongside the sync loop. If `worker_enabled=false` or `worker_capabilities=[]`, the thread doesn't start. Reconfiguring requires restarting `tj_agent` on the Mac.
+Example covering both today's capabilities:
+
+```json
+{
+  "worker_enabled": true,
+  "ollama_url": "http://localhost:11434",
+  "worker_models": {
+    "gemma4":      "gemma3:27b",
+    "gemma4-fast": {"ollama_name": "gemma3:e4b", "max_tokens": 8000}
+  }
+}
+```
+
+The capability name on the server side and the local ollama model tag are decoupled — the server sends `model: gemma4` and the worker substitutes its locally configured tag. The same physical machine can serve a slow-but-thorough capability and a fast-and-light capability against the same hardware.
+
+`start_worker_thread()` is called from `tj_agent.daemon.run_forever()` alongside the sync loop. If `worker_enabled=false` or `worker_models={}`, the thread doesn't start. Reconfiguring requires restarting `tj_agent` on the Mac.
+
+The legacy schema (`worker_capabilities` list + `ollama_model` + `worker_max_tokens`) is still accepted with a deprecation warning. New configs should use `worker_models`.
 
 How `tj_agent` itself is started (login item, launchd plist, manual) is a per-machine operational detail outside this doc's scope.
 
