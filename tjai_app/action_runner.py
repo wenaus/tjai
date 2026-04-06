@@ -21,7 +21,9 @@ SCRIPTS_DIR = Path(__file__).resolve().parent.parent / 'scripts'
 
 # Models included in multi-model research dispatch and completion checks.
 # ChatGPT disabled 2026-03-30 — implementation intact, just not auto-dispatched.
-RESEARCH_MODELS = ('claude', 'gemini')
+# gemma runs on a remote Mac Studio worker via the long-polling /api/worker/poll
+# endpoint (see views.worker_poll); dispatch just stages the prompt on the entry.
+RESEARCH_MODELS = ('claude', 'gemini', 'gemma')
 TJAI_DIR = SCRIPTS_DIR.parent
 TJ_PY = TJAI_DIR / 'tj.py'
 
@@ -413,6 +415,263 @@ def dispatch_ai(action, entry_id=None, target_date=None):
     return True
 
 
+def load_reader_context():
+    """Load reader profile and AI guidance from DB, return as inline text.
+
+    Used to build research prompts for models that can't call MCP (gemini,
+    chatgpt, gemma). Claude gets this via the tjai MCP interface directly.
+    """
+    parts = []
+
+    profiles = Entry.objects.filter(
+        kind='profile', deleted_at__isnull=True,
+    ).order_by('-timestamp_modified')
+    if profiles:
+        parts.append("## Reader Profile")
+        for p in profiles:
+            parts.append(p.content)
+
+    guidance = Entry.objects.filter(
+        kind='ai', deleted_at__isnull=True, context__isnull=True,
+    ).order_by('-timestamp_modified')
+    if guidance:
+        parts.append("\n## AI Guidance")
+        for g in guidance:
+            parts.append(g.content)
+
+    return '\n\n'.join(parts)
+
+
+def build_research_prompt(topic, reader_context=None):
+    """Build the research prompt from research-system-prompt-v2.
+
+    Strips MCP-specific sections so the prompt works for API-only / remote
+    worker models. If reader_context is None, loads it fresh.
+    """
+    if reader_context is None:
+        reader_context = load_reader_context()
+
+    sp_entry = Entry.objects.filter(
+        data__entry_id='research-system-prompt-v2',
+        deleted_at__isnull=True,
+    ).first()
+    if not sp_entry:
+        raise RuntimeError("research-system-prompt-v2 entry not found in DB")
+
+    prompt = sp_entry.content
+
+    # Remove MCP-specific sections that don't apply to API-only models
+    remove_sections = [
+        '## Operational',
+        '## Entry Provenance',
+        '## ALL Content Must Be in tjai Entries',
+    ]
+    for section in remove_sections:
+        idx = prompt.find(section)
+        if idx == -1:
+            continue
+        next_heading = prompt.find('\n## ', idx + len(section))
+        if next_heading == -1:
+            prompt = prompt[:idx].rstrip()
+        else:
+            prompt = prompt[:idx] + prompt[next_heading:]
+
+    # Remove individual MCP references
+    for phrase in [
+        'Call get_profile() and get_ai_guidance() first.',
+        'You can see the MCP interface\nyou have available to further educate and equip yourself for this task.',
+        'You can see the MCP interface you have available to further educate and equip yourself for this task.',
+        '- Use MCP tools for tjai data access (search_entries, edit_entry).\n',
+        '- Write the completed report directly into the research entry via edit_entry,\n  setting status to "done".\n',
+    ]:
+        prompt = prompt.replace(phrase, '')
+
+    full_prompt = f"""{reader_context}
+
+{prompt}
+
+## Research Topic
+
+{topic}
+
+## Output Instructions
+
+Return your complete research report as your response. Use web search
+extensively to find current, authoritative information. Structure the report
+exactly as specified in the Output Format section above."""
+
+    return full_prompt
+
+
+def research_model_complete(model_entry):
+    """Called when any research model finishes (claude/gemini/chatgpt/gemma).
+
+    Updates the base entry's tracking, checks if all active models are done,
+    and triggers synthesis if this is the last to finish. Shared code path —
+    no model is special. Called from:
+      - scripts/research_multimodel.py (gemini/chatgpt subprocess completion)
+      - scripts/agent_complete.py (claude subprocess completion)
+      - tjai_app.views.worker_result (gemma remote worker completion)
+    """
+    import uuid as _uuid
+    from django.db import transaction
+
+    data = model_entry.data if isinstance(model_entry.data, dict) else {}
+    base_entry_id = data.get('base_entry_id')
+    model = data.get('model')
+    if not base_entry_id or not model:
+        logger.warning("Missing base_entry_id or model in entry data")
+        return
+
+    with transaction.atomic():
+        base = Entry.objects.select_for_update().filter(
+            data__entry_id=base_entry_id, deleted_at__isnull=True,
+        ).first()
+        if not base:
+            logger.error("Base entry %s not found", base_entry_id)
+            return
+
+        base_data = base.data if isinstance(base.data, dict) else {}
+        base_data[f'{model}_status'] = 'done'
+
+        # Only check models that were actually dispatched for THIS topic.
+        # A model was dispatched iff its entry_id was recorded on the base.
+        # This lets us add new models (e.g. gemma) without breaking in-flight
+        # research that was dispatched before the new model existed.
+        dispatched = [m for m in RESEARCH_MODELS
+                      if base_data.get(f'{m}_entry_id')]
+        statuses = {
+            m: base_data.get(f'{m}_status')
+            for m in dispatched
+        }
+        all_done = bool(dispatched) and all(
+            s == 'done' for s in statuses.values())
+
+        if all_done:
+            base.status = 'done'
+
+        base.data = base_data
+        update_fields = ['data']
+        if all_done:
+            update_fields.append('status')
+        base.save(update_fields=update_fields)
+
+    logger.info("Updated base %s: %s_status=done", base_entry_id, model)
+
+    if not all_done:
+        logger.info("Not all models done: %s", statuses)
+        return
+
+    logger.info("Base %s: all models done, status=done", base_entry_id)
+
+    synth_entry_id = f'{base_entry_id}-synthesis'
+    if base_data.get('synthesis_triggered'):
+        logger.info("Synthesis %s already triggered", synth_entry_id)
+        return
+    with transaction.atomic():
+        base = Entry.objects.select_for_update().filter(
+            data__entry_id=base_entry_id, deleted_at__isnull=True,
+        ).first()
+        base_data = base.data if isinstance(base.data, dict) else {}
+        if base_data.get('synthesis_triggered'):
+            logger.info("Synthesis %s already triggered (race)", synth_entry_id)
+            return
+        base_data['synthesis_triggered'] = True
+        base.data = base_data
+        base.save(update_fields=['data'])
+
+    existing = Entry.objects.filter(
+        data__entry_id=synth_entry_id, deleted_at__isnull=True,
+    ).first()
+    if existing:
+        logger.info("Synthesis %s already exists", synth_entry_id)
+        return
+
+    logger.info("All models done for %s — triggering synthesis", base_entry_id)
+    _create_and_dispatch_synthesis(base_entry_id, base, synth_entry_id)
+
+
+def _create_and_dispatch_synthesis(base_entry_id, base_entry, synth_entry_id):
+    """Create synthesis entry and dispatch Claude to run it."""
+    import uuid as _uuid
+
+    now = time.time()
+
+    # Only reference models that were actually dispatched for this topic
+    base_data_ro = base_entry.data if isinstance(base_entry.data, dict) else {}
+    dispatched = [m for m in RESEARCH_MODELS
+                  if base_data_ro.get(f'{m}_entry_id')]
+    if not dispatched:
+        logger.error("No dispatched models found for %s — cannot synthesize",
+                     base_entry_id)
+        return
+
+    synth = Entry.objects.create(
+        id=str(_uuid.uuid7()),
+        content=f"Synthesis: {base_entry.content.split(chr(10))[0][:200]}",
+        kind='memory',
+        context=base_entry.context,
+        timestamp_created=now,
+        timestamp_modified=now,
+        is_dirty=1,
+        data={
+            'entry_id': synth_entry_id,
+            'source': 'multimodel',
+            'base_entry_id': base_entry_id,
+            'base_uuid': str(base_entry.id),
+            'model': 'synthesis',
+            **{f'source_{m}_entry_id': f'{base_entry_id}-{m}'
+               for m in dispatched},
+        },
+    )
+    Tag.objects.create(tag_name='fromai', entry=synth)
+    Tag.objects.create(tag_name='research_topic', entry=synth)
+
+    sp_entry = Entry.objects.filter(
+        data__entry_id='research-synthesis-prompt',
+        deleted_at__isnull=True,
+    ).first()
+    if not sp_entry:
+        logger.error("research-synthesis-prompt entry not found — cannot dispatch synthesis")
+        return
+
+    model_names = ', '.join(m.capitalize() for m in dispatched)
+    source_links = '\n'.join(
+        f'- {m.capitalize()}: [{base_entry_id}-{m}](/tjai/entry/?entry_id={base_entry_id}-{m})'
+        for m in dispatched
+    )
+    synthesis_prompt = sp_entry.content
+    synthesis_prompt = synthesis_prompt.replace('{research_entry_id}', base_entry_id)
+    synthesis_prompt = synthesis_prompt.replace('{active_models}', model_names)
+    synthesis_prompt = synthesis_prompt.replace('{source_reports}', source_links)
+
+    research_action = Entry.objects.filter(
+        kind='action', deleted_at__isnull=True,
+        data__entry_id='research-agent',
+    ).first()
+    if not research_action:
+        logger.error("research-agent action entry not found — cannot dispatch synthesis")
+        return
+
+    data = research_action.data or {}
+    data['last_run'] = 0
+    data['next_target'] = (
+        f"SPECIFIC TARGET:\nEntry UUID: {synth.id}\n"
+        f"SYNTHESIS TASK — use the following prompt instead of normal research:\n\n"
+        f"{synthesis_prompt}"
+    )
+    data['next_target_entry_id'] = str(synth.id)
+    research_action.data = data
+    research_action.timestamp_modified = now
+    research_action.save(update_fields=['data', 'timestamp_modified'])
+
+    SysConfig.objects.update_or_create(
+        key='action_agent_wake_requested',
+        defaults={'value': '1', 'timestamp_modified': now})
+
+    logger.info("Synthesis dispatched: %s (entry %s)", synth_entry_id, synth.id)
+
+
 def _dispatch_research_3way(action, data, base_entry, base_entry_id,
                             topic_text, base_uuid):
     """Create and dispatch all model entries for research.
@@ -490,6 +749,26 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
             action.data = data
             action.save(update_fields=['data'])
             dispatch_ai(action, target_date=None)
+        elif model == 'gemma':
+            # Remote worker: stage prompt on entry and mark as claimable.
+            # tj_agent on the Mac polls /api/worker/poll, grabs this, runs
+            # ollama locally, POSTs result back to /api/worker/result.
+            try:
+                prompt = build_research_prompt(topic_text)
+                edata = entry.data if isinstance(entry.data, dict) else {}
+                edata['worker_target'] = 'gemma4'
+                edata['worker_prompt'] = prompt
+                edata['worker_staged_at'] = now_ts
+                edata.pop('worker_claimed_by', None)
+                edata.pop('worker_claimed_at', None)
+                entry.data = edata
+                entry.save(update_fields=['data'])
+                logger.info("Staged gemma work for %s (prompt %d chars)",
+                            model_entry_id, len(prompt))
+            except Exception as e:
+                logger.error("Failed to stage gemma work for %s: %s",
+                             model_entry_id, e)
+                base_data[f'{model}_status'] = 'blocked'
         else:
             proc = subprocess.Popen(
                 [sys.executable, str(script_path), model, str(entry.id)],

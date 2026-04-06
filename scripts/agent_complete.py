@@ -510,7 +510,7 @@ def main():
                     and entry_data.get('model')
                     and entry_data.get('model') != 'synthesis'):
                 try:
-                    from research_multimodel import research_model_complete
+                    from tjai_app.action_runner import research_model_complete
                     research_model_complete(entry)
                 except Exception as e:
                     logger.error("research_model_complete failed: %s", e,

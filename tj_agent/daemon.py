@@ -228,12 +228,20 @@ def run_forever() -> None:
     """
     # Lazy import: requires 'requests' which is only in venv on macOS
     from tj_agent.sync import sync_cycle, write_status
+    from tj_agent import worker
 
     # Default interval, will be updated from server sysconfig
     interval = 30
 
     logger.info(f"tj_agent starting, initial sync interval: {interval}s")
     write_status(last_error=None)
+
+    # Optional remote inference worker (runs on daemon thread if
+    # worker_enabled=true in config). No-op when disabled.
+    try:
+        worker.start_worker_thread()
+    except Exception as e:
+        logger.exception(f"Failed to start worker thread: {e}")
 
     while True:
         try:

@@ -424,6 +424,266 @@ def sync_pull(request):
     })
 
 
+# Remote inference worker — long-polling work dispatch
+#
+# A remote worker (e.g. tj_agent on a Mac Studio running ollama) long-polls
+# /api/worker/poll with its machine_id and capabilities. The server holds the
+# request up to WORKER_POLL_HOLD_SECONDS waiting for an unclaimed entry whose
+# data.worker_target is in the requested capabilities. When found, the server
+# atomically claims the entry (records worker_claimed_by, worker_claimed_at)
+# and returns the prompt. The worker runs inference locally and POSTs the
+# result to /api/worker/result. Stale claims (worker died mid-run) are
+# automatically reclaimed after WORKER_CLAIM_STALE_SECONDS.
+
+WORKER_POLL_HOLD_SECONDS = 50   # must stay under gunicorn --timeout (120)
+WORKER_POLL_INTERVAL = 2        # DB check frequency during hold
+WORKER_CLAIM_STALE_SECONDS = 30 * 60  # unclaim if no result after 30min
+
+
+def _claim_worker_entry(machine_id, capabilities):
+    """Atomically claim one unclaimed entry matching the capabilities.
+
+    Returns the claimed Entry or None. Also reclaims stale entries whose
+    previous worker didn't report a result within WORKER_CLAIM_STALE_SECONDS.
+    """
+    from django.db import transaction
+    now = time.time()
+    stale_cutoff = now - WORKER_CLAIM_STALE_SECONDS
+
+    for capability in capabilities:
+        # Candidates: entries targeting this capability with active status.
+        # JSONField equality filter ensures we only match entries with the key.
+        candidates = Entry.objects.filter(
+            data__worker_target=capability,
+            status='active',
+            deleted_at__isnull=True,
+        ).order_by('timestamp_modified')
+
+        for entry in candidates:
+            data = entry.data if isinstance(entry.data, dict) else {}
+            claimed_by = data.get('worker_claimed_by')
+            claimed_at = data.get('worker_claimed_at')
+
+            # Skip if currently claimed and not stale
+            if claimed_by and claimed_at:
+                try:
+                    if float(claimed_at) > stale_cutoff:
+                        continue  # still fresh, leave alone
+                except (TypeError, ValueError):
+                    pass  # malformed — treat as stale
+
+            # Claim atomically
+            try:
+                with transaction.atomic():
+                    locked = Entry.objects.select_for_update().filter(
+                        id=entry.id, deleted_at__isnull=True,
+                    ).first()
+                    if not locked:
+                        continue
+                    ldata = locked.data if isinstance(locked.data, dict) else {}
+                    # Re-check claim under lock
+                    lclaimed = ldata.get('worker_claimed_by')
+                    lclaimed_at = ldata.get('worker_claimed_at')
+                    if lclaimed and lclaimed_at:
+                        try:
+                            if float(lclaimed_at) > stale_cutoff:
+                                continue
+                        except (TypeError, ValueError):
+                            pass
+                    ldata['worker_claimed_by'] = machine_id
+                    ldata['worker_claimed_at'] = now
+                    locked.data = ldata
+                    locked.timestamp_modified = now
+                    locked.save(update_fields=['data', 'timestamp_modified'])
+                    return locked
+            except Exception as e:
+                logger.warning("worker claim failed for %s: %s", entry.id, e)
+                continue
+    return None
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def worker_poll(request):
+    """Long-polling work dispatch for remote inference workers.
+
+    Query params:
+        machine_id: stable worker ID (required)
+        capabilities: comma-separated list (e.g. "gemma4")
+
+    Response (work available):
+        {"status": "ok", "work": {
+            "entry_id": "<uuid>", "work_type": "research|codoc",
+            "model": "<capability>", "prompt": "<text>",
+            "timeout_sec": <int>, "base_entry_id": "<id or null>"
+        }}
+
+    Response (no work within hold window):
+        {"status": "ok", "work": null}
+    """
+    machine_id = request.GET.get("machine_id")
+    if not machine_id:
+        return JsonResponse({"error": "machine_id required"}, status=400)
+
+    capabilities_str = request.GET.get("capabilities", "")
+    capabilities = [c.strip() for c in capabilities_str.split(",") if c.strip()]
+    if not capabilities:
+        return JsonResponse({"error": "capabilities required"}, status=400)
+
+    # Update machine tracking on every poll (serves as heartbeat)
+    now = time.time()
+    Machine.objects.update_or_create(
+        machine_id=machine_id,
+        defaults={
+            "last_sync": now,
+            "timestamp_created": now,
+            "is_active": 1,
+        },
+    )
+
+    deadline = now + WORKER_POLL_HOLD_SECONDS
+    while True:
+        entry = _claim_worker_entry(machine_id, capabilities)
+        if entry:
+            edata = entry.data if isinstance(entry.data, dict) else {}
+            # For research entries the first line is the topic
+            work_type = 'research' if edata.get('source') == 'multimodel' else 'generic'
+            work = {
+                "entry_id": str(entry.id),
+                "work_type": work_type,
+                "model": edata.get('worker_target'),
+                "prompt": edata.get('worker_prompt', ''),
+                "timeout_sec": int(edata.get('worker_timeout_sec', 1800)),
+                "base_entry_id": edata.get('base_entry_id'),
+            }
+            AppLog.objects.create(
+                source='worker',
+                timestamp=time.time(),
+                level='INFO',
+                message=f"Dispatched {work_type} work to {machine_id}: "
+                        f"entry={entry.id} model={work['model']}",
+                extra_data={'entry_id': str(entry.id), 'machine_id': machine_id,
+                            'model': work['model']},
+            )
+            return JsonResponse({"status": "ok", "work": work})
+
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            return JsonResponse({"status": "ok", "work": None})
+        time.sleep(min(WORKER_POLL_INTERVAL, remaining))
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def worker_result(request):
+    """Receive result from a remote worker and finalize the entry.
+
+    Request body:
+        {
+            "machine_id": "<uuid>",
+            "entry_id": "<uuid>",
+            "status": "done" | "failed",
+            "result": "<inference output>",
+            "error": "<error text if failed>",
+            "duration_sec": <int>
+        }
+
+    For research entries, triggers research_model_complete which updates the
+    base entry's per-model status and dispatches synthesis if all models are
+    done. For other work types, just updates the entry.
+    """
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    machine_id = body.get('machine_id')
+    entry_id = body.get('entry_id')
+    status = body.get('status')
+    result = body.get('result', '') or ''
+    error = body.get('error') or ''
+    duration_sec = int(body.get('duration_sec', 0) or 0)
+
+    if not (machine_id and entry_id and status):
+        return JsonResponse(
+            {"error": "machine_id, entry_id, status required"}, status=400)
+    if status not in ('done', 'failed'):
+        return JsonResponse(
+            {"error": "status must be 'done' or 'failed'"}, status=400)
+
+    entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
+    if not entry:
+        return JsonResponse({"error": "entry not found"}, status=404)
+
+    edata = entry.data if isinstance(entry.data, dict) else {}
+
+    # Verify this worker holds the claim (optional but helps catch bugs)
+    claimed_by = edata.get('worker_claimed_by')
+    if claimed_by and claimed_by != machine_id:
+        logger.warning(
+            "worker_result: %s reported by %s but claimed by %s",
+            entry_id, machine_id, claimed_by)
+        # Don't hard-fail — the worker did the work, accept the result anyway
+
+    # Preserve the topic line (entry content at dispatch time).
+    # For research entries content == topic; for other work types it's whatever
+    # the dispatcher set. Rewrite as topic + result on success.
+    topic = entry.content or ''
+
+    if status == 'done':
+        entry.content = f"{topic}\n\n{result}" if result else topic
+        entry.status = 'done'
+    else:
+        entry.content = f"{topic}\n\nERROR: {error}"
+        entry.status = 'blocked'
+
+    # Clear worker tracking — prompt is no longer needed
+    for k in ('worker_prompt', 'worker_claimed_by', 'worker_claimed_at',
+              'worker_target', 'worker_staged_at', 'worker_timeout_sec'):
+        edata.pop(k, None)
+    edata['worker_duration_sec'] = duration_sec
+    edata['worker_machine_id'] = machine_id
+    entry.data = edata
+    entry.timestamp_modified = time.time()
+    entry.is_dirty = 1
+    entry.save(update_fields=['content', 'status', 'data',
+                               'timestamp_modified', 'is_dirty'])
+
+    AppLog.objects.create(
+        source='worker',
+        timestamp=time.time(),
+        level='INFO' if status == 'done' else 'ERROR',
+        message=f"Worker {machine_id} {status} entry {entry_id} in {duration_sec}s"
+                + (f": {error[:200]}" if status == 'failed' else ''),
+        extra_data={'entry_id': entry_id, 'machine_id': machine_id,
+                    'status': status, 'duration_sec': duration_sec},
+    )
+
+    # Research entries: update base tracking and check for synthesis trigger
+    if edata.get('source') == 'multimodel' and edata.get('model'):
+        try:
+            from tjai_app.action_runner import research_model_complete
+            if status == 'done':
+                research_model_complete(entry)
+            else:
+                # Mark base entry's model status as blocked
+                base_eid = edata.get('base_entry_id')
+                model = edata.get('model')
+                if base_eid and model:
+                    base = Entry.objects.filter(
+                        data__entry_id=base_eid, deleted_at__isnull=True,
+                    ).first()
+                    if base:
+                        bd = base.data if isinstance(base.data, dict) else {}
+                        bd[f'{model}_status'] = 'blocked'
+                        base.data = bd
+                        base.save(update_fields=['data'])
+        except Exception as e:
+            logger.error("worker_result: research_model_complete failed: %s", e)
+
+    return JsonResponse({"status": "ok"})
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_command(request):
