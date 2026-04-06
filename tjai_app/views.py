@@ -570,10 +570,12 @@ def worker_poll(request):
 
     Response (work available):
         {"status": "ok", "work": {
-            "entry_id": "<uuid>", "work_type": "research|codoc",
+            "entry_id": "<uuid>", "work_type": "research|codoc|generic",
             "model": "<capability>", "prompt": "<text>",
             "timeout_sec": <int>, "base_entry_id": "<id or null>"
         }}
+        work_type is derived from the entry's data.source:
+            'multimodel' → 'research', 'corun-ai' → 'codoc', else 'generic'.
 
     Response (no work within hold window):
         {"status": "ok", "work": null}
@@ -658,8 +660,18 @@ def worker_poll(request):
         entry = _claim_worker_entry(machine_id, capabilities)
         if entry:
             edata = entry.data if isinstance(entry.data, dict) else {}
-            # For research entries the first line is the topic
-            work_type = 'research' if edata.get('source') == 'multimodel' else 'generic'
+            # work_type is informational on the wire — the Mac worker uses
+            # it for log labels and the server uses it for AppLog. Derive
+            # from data.source so codoc/external jobs arrive labelled as
+            # something more useful than 'generic'. Keep 'generic' as the
+            # fallback for any future external source we don't recognise.
+            _src = edata.get('source')
+            if _src == 'multimodel':
+                work_type = 'research'
+            elif _src == 'corun-ai':
+                work_type = 'codoc'
+            else:
+                work_type = 'generic'
             work = {
                 "entry_id": str(entry.id),
                 "work_type": work_type,

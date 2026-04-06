@@ -50,12 +50,18 @@ Responses:
 // 200 — work available
 {"status": "ok", "work": {
   "entry_id":      "<sub-entry uuid>",
-  "work_type":     "research" | "generic",
+  "work_type":     "research" | "codoc" | "generic",
   "model":         "<capability name, e.g. gemma4>",
   "prompt":        "<full prompt text>",
   "timeout_sec":   <int>,
   "base_entry_id": "<base research entry_id, or null>"
 }}
+// work_type is derived server-side from the staged entry's data.source:
+//   'multimodel' → 'research'   (research dispatcher sub-entries)
+//   'corun-ai'   → 'codoc'      (api/work/submit from corun-ai)
+//   anything else → 'generic'   (other external submitters)
+// It is informational on the wire — the Mac worker labels logs with it
+// but the agent loop runs identically regardless.
 
 // 200 — hold expired with no matching work
 {"status": "ok", "work": null}
