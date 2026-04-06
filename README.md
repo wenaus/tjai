@@ -33,6 +33,7 @@ Built on an offline-first, distributed architecture: the `tj` client works local
 | [Server & Deployment](docs/server.md) | Production environment, deploy, endpoints, logging, health, backups |
 | [Action Agent](docs/action-agent.md) | Scheduled task daemon, execution pipeline, action entry schema |
 | [Agents](docs/agents.md) | Daily synopsis, AI news curation (Picks), autonomous research, RSS reader |
+| [Remote Worker Pipeline](docs/remote-workers.md) | Long-poll protocol for offloading inference (e.g. gemma) to a worker on another machine — capability whitelist, claim lifecycle, display contract, troubleshooting |
 | [Claude Integration](docs/claude-integration.md) | MCP setup, Claude Code settings, dialog memory, Claude.ai, OAuth |
 | [Telegram Bot](docs/telegram.md) | Voice/text assistant, setup, voice commands, Mini App |
 | [Add-ons: Gmail & Chrome](docs/addons.md) | Gmail calendar add-on, Chrome bookmark extension |

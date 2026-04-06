@@ -129,26 +129,35 @@ Entry(
 
 ## Research Queue
 
-"Computer, perform an analysis." Deep autonomous research — the system dispatches a Claude agent that searches broadly, reads primary sources, cross-references claims, and writes a structured analyst's brief.
+"Computer, perform an analysis." Deep autonomous research — the system dispatches **three models in parallel** (Claude, Gemini, and a local-hardware Gemma running on Torre's Mac Studio via the [Remote Worker Pipeline](remote-workers.md)). Each model produces an independent analyst's brief, then a final synthesis pass merges them into a single report.
 
 ### How It Works
 
-1. Create a memory entry tagged `:research` with topic description
+1. Create a memory entry tagged `:research_topic` with topic description
 2. Research page (`/tjai/research/`) shows the queue with status
-3. Click **Submit** (or **Submit All**). Action agent launches a detached Claude instance with research-optimized system prompt
-4. Agent spawns parallel subagents (typically 4-5), each tackling a different facet
-5. Subagents search the web, read articles, write findings to tjai entries tagged `research-subagent` with provenance
-6. Main agent synthesizes all findings into a 3000-6000 word structured report (Executive Summary, Detailed Findings, Contradictions, Implications, Sources), writes into the research entry, marks `done`
-7. Automatically chains to next pending item (priority order, then FIFO)
+3. Click **Submit** (or **Submit All**). The research-agent action runs `_dispatch_research_3way` (`tjai_app/action_runner.py`), which dispatches each model in `RESEARCH_MODELS = ('claude','gemini','gemma')` via its own mechanism:
+   - **Claude** — detached Claude instance with research-optimized system prompt, spawning parallel subagents that search the web and write findings tagged `research-subagent`
+   - **Gemini** — `scripts/research_multimodel.py gemini` subprocess via the Gemini API
+   - **Gemma** — staged for the [remote worker pipeline](remote-workers.md): the prompt is written to a sub-entry with `worker_target='gemma4'`, the local research-agent then exits, and `tj_agent` running on the Mac Studio long-polls `/api/worker/poll`, claims the work, runs `gemma3` via ollama, and POSTs the result back
+4. As each model finishes, `research_model_complete` updates the base entry's `{model}_status`. When **all dispatched models** are `done`, the base entry transitions to `done` and synthesis is dispatched
+5. **Synthesis** — Claude is dispatched again with the synthesis prompt and links to all per-model reports, producing the final merged analyst's brief
+6. Automatically chains to next pending item (priority order, then FIFO)
 
 ### Research Page (`/tjai/research/`)
 
-- Queue with status badges (pending / running / done)
-- Real-time agent status banner (green=active, yellow=idle, red=stale)
+The page banner displays **three named, non-overlapping facts** so nothing reads as contradictory (this rule was learned the hard way — see `docs/remote-workers.md` § Display contract):
+
+1. **Local agent** — the research-agent process state (`idle`/`running`/`failed`). Idle while remote workers are doing inference is correct and intentional.
+2. **Remote workers** — one line per known capability (e.g. `gemma4`) with derived state `busy`/`idle`/`disconnected`/`zombie`/`unknown`. State is derived from the combination of last poll and held claims, not just poll age — a worker doing a 5-minute inference is `busy`, not `disconnected`.
+3. **N topics in flight** — per-base-entry breakdown with per-model phases (`claude done · gemini done · gemma in-progress on ed8e0e3a (49s ago)`).
+
+The activity dot reflects the system as a whole: green = something is actively working anywhere, red = a worker is disconnected or holding a zombie claim, orange = work staged waiting for a worker, grey = idle.
+
 - **Submit** / **Submit All** — trigger research
+- **Rerun selections** — selectively rerun specific models on a topic (e.g., just gemini)
 - **Stop** — soft stop (finish current, don't chain)
-- **Abort** — hard stop (kill agent)
-- **Studies** link per item — subagent reports
+- **Abort** — hard stop (kill local agent)
+- **Studies** link per item — subagent reports (Claude only)
 - Agent log link for debugging
 
 ### Studies Page (`/tjai/research/studies/`)
@@ -166,15 +175,45 @@ System prompt (`research-system-prompt` entry) enforces:
 
 ### Data Models
 
-**Research entry:**
+**Base research entry** (the topic):
 ```python
-Entry(kind='memory', status='pending',  # pending → done
-    content='Topic... → replaced with full report',
-    data={'entry_id': 'research-mcp', 'started_at': 1771962258.67})
+Entry(kind='memory', status='pending',  # pending → active → done
+    content='Topic title\n\nDescription...',
+    data={
+        'entry_id': 'research-mcp',
+        'started_at': 1771962258.67,
+        # Per-model tracking, populated by _dispatch_research_3way
+        'claude_status': 'done',         # None|staged|active|done|blocked|rerun
+        'gemini_status': 'done',
+        'gemma_status':  'active',
+        'claude_entry_id': 'research-mcp-claude',
+        'gemini_entry_id': 'research-mcp-gemini',
+        'gemma_entry_id':  'research-mcp-gemma',
+        'synthesis_triggered': False,    # set True once all models done
+    })
 # Tags: 'research_topic'
 ```
 
-**Study/subagent entry:**
+**Per-model sub-entry** (one per dispatched model):
+```python
+Entry(kind='memory', status='active',     # active → done|blocked
+    content='Topic + result',
+    data={
+        'entry_id': 'research-mcp-gemma',
+        'source': 'multimodel',
+        'base_entry_id': 'research-mcp',
+        'model': 'gemma',
+        # Remote-worker fields (gemma only, cleared on completion)
+        'worker_target': 'gemma4',
+        'worker_prompt': '...',
+        'worker_staged_at': 1771962258.67,
+        'worker_claimed_at': 1771962261.42,
+        'worker_claimed_by': 'ed8e0e3a-...',
+    })
+# Tags: 'research_topic'
+```
+
+**Study/subagent entry** (Claude-only — its parallel subagents):
 ```python
 Entry(kind='memory',
     content='<task-notification>...findings...</task-notification>',
@@ -185,13 +224,18 @@ Entry(kind='memory',
 
 ### Infrastructure
 
-Uses Action Agent pipeline. Research agent action (`research-agent`) defines AI prompt template, model (Opus), timeout (2h), references system prompt entry. Lifecycle via SysConfig keys, monitored by watchdog, finalized by `agent_complete.py`.
+Uses the Action Agent pipeline. The `research-agent` action entry defines the Claude prompt template, model (Opus), timeout (2h), and references the system prompt entry. Lifecycle via SysConfig keys, monitored by watchdog, finalized by `agent_complete.py`.
+
+The remote-worker side has its own protocol — see [remote-workers.md](remote-workers.md) for the long-poll endpoint, capability whitelist, claim lifecycle, free-capacity reset, stale-claim auto-reclaim, and display contract.
 
 ### Files
 
-- `tjai_app/views.py` — `research_page`, `api_research_data/run/stop/abort`, `research_studies`, `api_research_studies`
+- `tjai_app/views.py` — `research_page`, `api_research_data/run/stop/abort`, `research_studies`, `api_research_studies`, `worker_poll`, `worker_result`, `_claim_worker_entry`
+- `tjai_app/action_runner.py` — `_dispatch_research_3way` (per-model dispatch), `research_model_complete` (per-model completion + synthesis trigger), `_create_and_dispatch_synthesis`
 - `tjai_app/templates/tjai_app/research.html`, `research_studies.html`
-- `scripts/agent_complete.py` — Post-completion + queue drain
+- `scripts/research_multimodel.py` — Gemini subprocess dispatcher
+- `scripts/agent_complete.py` — Claude post-completion + queue drain
+- `tj_agent/worker.py` — Remote worker loop (Mac side)
 
 ---
 
