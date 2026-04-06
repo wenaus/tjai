@@ -4073,15 +4073,25 @@ def api_research_data(request):
         deleted_at__isnull=True,
     ).order_by('-timestamp_modified')
 
-    # Fetch all model sub-entries that have worker_target — these are
-    # the remote-worker entries we need diagnostics for. Build three indexes:
-    # one by base_entry_id (for per-topic display), one by
-    # (machine_id, capability) (busy detection for the polling worker), and
-    # one by capability (so we can flag zombie claims held by a worker that
-    # is no longer the one polling — would otherwise be invisible).
+    # Build two logically independent indexes off two separate queries.
+    # Mixing them into one query bit us twice: once with conflated L1/L4
+    # state this morning, and again when external (non-research) work
+    # started flowing through the same worker pipeline — the worker
+    # claim index was scoped to source='multimodel' and went blind to
+    # codoc jobs, so a busy worker rendered as 'idle'.
+    #
+    # Index A — worker_entries_by_base: per-research-topic display. Only
+    # research sub-entries have base_entry_id + model on their data, so
+    # this is correctly scoped to source='multimodel'.
+    #
+    # Index B — claims_by_machine_cap / claims_by_cap: WORKER health.
+    # A remote worker is busy iff it holds ANY active claim, regardless
+    # of which subsystem staged the work. This query must be scoped
+    # ONLY by worker_target (and not-deleted), never by source.
     worker_entries_by_base = {}
-    claims_by_machine_cap = {}
-    claims_by_cap = {}
+    claims_by_machine = {}  # machine_id -> all claims it holds (any cap)
+
+    # Index A: research-only, for per-topic breakdown.
     for sub in Entry.objects.filter(
         data__source='multimodel',
         data__worker_target__isnull=False,
@@ -4089,6 +4099,8 @@ def api_research_data(request):
     ):
         sd = sub.data if isinstance(sub.data, dict) else {}
         beid = sd.get('base_entry_id')
+        if not beid:
+            continue
         cap = sd.get('worker_target')
         staged_at = sd.get('worker_staged_at')
         claimed_at = sd.get('worker_claimed_at')
@@ -4104,11 +4116,44 @@ def api_research_data(request):
             'base_entry_id': beid,
             'sub_status': sub.status,
         }
-        if beid:
-            worker_entries_by_base.setdefault(beid, []).append(info)
-        if claimed_by and claimed_at and cap:
-            claims_by_machine_cap.setdefault((claimed_by, cap), []).append(info)
-            claims_by_cap.setdefault(cap, []).append(info)
+        worker_entries_by_base.setdefault(beid, []).append(info)
+
+    # Index B: ALL active remote-worker entries, source-agnostic. This
+    # must include codoc/external submissions or the worker-health
+    # derivation will lie about idle workers that are actually busy.
+    external_work_in_flight = []
+    for sub in Entry.objects.filter(
+        data__worker_target__isnull=False,
+        deleted_at__isnull=True,
+    ):
+        sd = sub.data if isinstance(sub.data, dict) else {}
+        cap = sd.get('worker_target')
+        claimed_at = sd.get('worker_claimed_at')
+        claimed_by = sd.get('worker_claimed_by')
+        staged_at = sd.get('worker_staged_at')
+        if not (claimed_by and claimed_at and cap):
+            continue
+        info = {
+            'worker_target': cap,
+            'worker_claimed_at': claimed_at,
+            'worker_claimed_ago': fmt_ago(float(claimed_at)) if claimed_at else None,
+            'worker_claimed_by': claimed_by,
+            'base_entry_id': sd.get('base_entry_id'),
+            'source': sd.get('source'),
+            'external_label': sd.get('external_label'),
+        }
+        claims_by_machine.setdefault(claimed_by, []).append(info)
+        # Surface non-research work on the page so a busy worker has
+        # a visible explanation alongside the state dot.
+        if sd.get('source') != 'multimodel':
+            external_work_in_flight.append({
+                'source': sd.get('source') or '(unknown)',
+                'label': sd.get('external_label') or '',
+                'capability': cap,
+                'claimed_by': claimed_by,
+                'claimed_at_ago': fmt_ago(float(claimed_at)) if claimed_at else None,
+                'staged_at_ago': fmt_ago(float(staged_at)) if staged_at else None,
+            })
 
     items = []
     for e in entries:
@@ -4136,48 +4181,126 @@ def api_research_data(request):
             item['workers'] = worker_entries_by_base[beid]
         items.append(item)
 
-    # Worker health — derived per capability. The display states are:
-    #   busy        — a sub-entry is claimed by the same machine that last
-    #                 polled this cap. Workers can't poll while running
-    #                 ollama (the loop blocks), so a held claim by the
-    #                 polling machine = active inference in progress.
-    #   zombie      — a claim is held by a machine OTHER than the last
-    #                 poller. The original holder is presumed dead; the
-    #                 server's 30-min auto-reclaim will eventually fix it.
-    #   idle        — recent poll, no claim held. Worker is connected and
-    #                 waiting for work.
-    #   disconnected — no poll in WORKER_DISCONNECTED_SECONDS AND no claim
-    #                  held by anyone.
-    #   unknown     — no poll history at all (cap not yet seen).
-    # The old boolean "stale" conflated "busy on a long inference" with
-    # "disconnected" — both have stale poll timestamps. The claim index
-    # disambiguates them.
-    WORKER_DISCONNECTED_SECONDS = 180    # no poll for longer = disconnected
-    worker_health = {}
+    # Worker health — derived PER MACHINE, not per capability.
+    #
+    # Why per-machine: the `worker_capability_{cap}_lastpoll` sysconfig rows
+    # are a denormalized view of a per-machine fact. `worker_poll` writes
+    # one row per advertised cap in a single request's loop, all with the
+    # SAME timestamp. A worker advertising caps {A, B} always has
+    # identical lastpoll rows for A and B. Deriving "disconnected" per cap
+    # from per-cap timestamps treats correlated data as independent and
+    # produces contradictions the moment the machine holds a claim on one
+    # cap (which blocks its poll loop, making BOTH caps' timestamps go
+    # stale together) — cap A reads "busy" via its claim while cap B
+    # reads "disconnected" via its (identical) stale timestamp.
+    #
+    # Aliveness is a property of the MACHINE. A capability is alive iff
+    # at least one machine advertising it is alive. So we group by
+    # machine, derive one liveness state per machine, and list its
+    # advertised caps alongside.
+    #
+    # States (per machine):
+    #   busy         — machine holds at least one active claim (any cap)
+    #                  whose age is within WORKER_CLAIM_STALE_SECONDS.
+    #   zombie       — machine holds a claim whose age exceeds
+    #                  WORKER_CLAIM_STALE_SECONDS. Server's auto-reclaim
+    #                  on the next poll will fix it.
+    #   idle         — no claim held AND last poll within
+    #                  WORKER_DISCONNECTED_SECONDS.
+    #   disconnected — no claim held AND last poll older than that.
+    #   unknown      — never polled (should not happen for a machine that
+    #                  has a claim on record; included for completeness).
+    WORKER_DISCONNECTED_SECONDS = 180
     now_ts = time.time()
+
+    # machines: machine_id -> {advertised_caps set, last_poll_ts, claims list}
+    machines = {}
     sc_rows = list(SysConfig.objects.filter(
         key__startswith='worker_capability_', key__endswith='_lastpoll'))
-    # Also synthesize entries for any cap that has a claim but no poll record
-    # (otherwise a zombie claim with no recent poller would be invisible).
-    poll_caps = {sc.key[len('worker_capability_'):-len('_lastpoll')] for sc in sc_rows}
-    extra_caps = set(claims_by_cap.keys()) - poll_caps
+    for sc in sc_rows:
+        cap = sc.key[len('worker_capability_'):-len('_lastpoll')]
+        try:
+            info = json.loads(sc.value) if sc.value else {}
+        except (ValueError, TypeError):
+            info = {}
+        mid = info.get('machine_id')
+        ts = info.get('ts')
+        if not mid:
+            continue
+        m = machines.setdefault(mid, {
+            'machine_id': mid,
+            'caps': set(),
+            'last_poll_ts': None,
+            'claims': [],
+        })
+        m['caps'].add(cap)
+        # All this machine's per-cap rows have the same ts (see comment),
+        # but tolerate skew if the invariant ever breaks: take the newest.
+        if ts is not None:
+            try:
+                ts_f = float(ts)
+                if m['last_poll_ts'] is None or ts_f > m['last_poll_ts']:
+                    m['last_poll_ts'] = ts_f
+            except (TypeError, ValueError):
+                pass
 
-    def _build_state(cap, last_ts, machine_id):
-        age_sec = (now_ts - float(last_ts)) if last_ts else None
-        held_by_poller = (
-            claims_by_machine_cap.get((machine_id, cap), []) if machine_id else [])
-        all_held = claims_by_cap.get(cap, [])
-        busy_on = None
+    # Fold claims in — both attach to the machine row and expose the cap
+    # the claim is against (which may differ from the "busy on which cap"
+    # display when a machine advertises multiple).
+    for mid, claim_list in claims_by_machine.items():
+        m = machines.setdefault(mid, {
+            'machine_id': mid,
+            'caps': set(),
+            'last_poll_ts': None,
+            'claims': [],
+        })
+        m['claims'].extend(claim_list)
+        # If a claim exists on a cap this machine is not (currently)
+        # advertising via sysconfig — e.g. the machine stopped offering
+        # the cap mid-inference — still include the cap so the display
+        # can say "busy on <cap>".
+        for c in claim_list:
+            if c.get('worker_target'):
+                m['caps'].add(c['worker_target'])
+
+    workers = []
+    for mid in sorted(machines):
+        m = machines[mid]
+        last_ts = m['last_poll_ts']
+        age_sec = (now_ts - last_ts) if last_ts else None
+        fresh_claims = []
+        zombie_claims = []
+        for c in m['claims']:
+            cat = c.get('worker_claimed_at')
+            try:
+                cat_f = float(cat) if cat else 0
+            except (TypeError, ValueError):
+                cat_f = 0
+            if cat_f and (now_ts - cat_f) <= WORKER_CLAIM_STALE_SECONDS:
+                fresh_claims.append(c)
+            else:
+                zombie_claims.append(c)
+
+        busy_on_cap = None
+        busy_on_entry = None
+        busy_on_source = None
+        busy_on_label = None
         busy_since_ago = None
-        if held_by_poller:
-            top = max(held_by_poller, key=lambda c: c.get('worker_claimed_at') or 0)
+        if fresh_claims:
             state = 'busy'
-            busy_on = top.get('base_entry_id')
+            top = max(fresh_claims, key=lambda c: c.get('worker_claimed_at') or 0)
+            busy_on_cap = top.get('worker_target')
+            busy_on_entry = top.get('base_entry_id')
+            busy_on_source = top.get('source')
+            busy_on_label = top.get('external_label')
             busy_since_ago = top.get('worker_claimed_ago')
-        elif all_held:
-            top = max(all_held, key=lambda c: c.get('worker_claimed_at') or 0)
+        elif zombie_claims:
             state = 'zombie'
-            busy_on = top.get('base_entry_id')
+            top = max(zombie_claims, key=lambda c: c.get('worker_claimed_at') or 0)
+            busy_on_cap = top.get('worker_target')
+            busy_on_entry = top.get('base_entry_id')
+            busy_on_source = top.get('source')
+            busy_on_label = top.get('external_label')
             busy_since_ago = top.get('worker_claimed_ago')
         elif last_ts is None:
             state = 'unknown'
@@ -4185,26 +4308,20 @@ def api_research_data(request):
             state = 'idle'
         else:
             state = 'disconnected'
-        return {
-            'machine_id': machine_id,
+
+        workers.append({
+            'machine_id': mid,
+            'caps': sorted(m['caps']),
             'last_poll_ts': last_ts,
-            'last_poll_ago': fmt_ago(float(last_ts)) if last_ts else None,
+            'last_poll_ago': fmt_ago(last_ts) if last_ts else None,
             'age_sec': age_sec,
             'state': state,
-            'busy_on': busy_on,
+            'busy_on_cap': busy_on_cap,
+            'busy_on_entry': busy_on_entry,
+            'busy_on_source': busy_on_source,
+            'busy_on_label': busy_on_label,
             'busy_since_ago': busy_since_ago,
-        }
-
-    for sc in sc_rows:
-        cap = sc.key[len('worker_capability_'):-len('_lastpoll')]
-        try:
-            info = json.loads(sc.value) if sc.value else {}
-        except (ValueError, TypeError):
-            info = {}
-        worker_health[cap] = _build_state(
-            cap, info.get('ts'), info.get('machine_id'))
-    for cap in extra_caps:
-        worker_health[cap] = _build_state(cap, None, None)
+        })
 
     # System prompt and ideation prompt entry UUIDs
     sysprompt = Entry.objects.filter(
@@ -4282,13 +4399,14 @@ def api_research_data(request):
     # Zombie claims are NOT busy — they are leftovers from a dead worker.
     system_busy = (
         status_val == 'running'
-        or any(wh.get('state') == 'busy' for wh in worker_health.values())
+        or any(w.get('state') == 'busy' for w in workers)
     )
 
     return JsonResponse({
         'items': items,
         'models': list(RESEARCH_MODELS),
-        'worker_health': worker_health,
+        'workers': workers,
+        'external_work_in_flight': external_work_in_flight,
         'system_busy': system_busy,
         'sysprompt_id': str(sysprompt) if sysprompt else None,
         'ideation_prompt_id': str(ideation_prompt) if ideation_prompt else None,

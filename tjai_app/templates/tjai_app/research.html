@@ -232,7 +232,7 @@
             // and the subjects do not overlap.
             const items = data.items || [];
             const agent = data.agent || {};
-            const workerHealth = data.worker_health || {};
+            const workers = data.workers || [];
             const systemBusy = !!data.system_busy;
             const banner = document.getElementById('agent-banner');
             const errorDiv = document.getElementById('error-section');
@@ -249,23 +249,32 @@
             //   grey        = nothing in flight
             const stagedWaiting = items.some(i =>
                 (data.models || []).some(m => i[m + '_status'] === 'staged'));
-            const anyDisconnected = Object.values(workerHealth).some(
-                wh => wh.state === 'disconnected');
-            const anyZombie = Object.values(workerHealth).some(
-                wh => wh.state === 'zombie');
+            const anyDisconnected = workers.some(w => w.state === 'disconnected');
+            const anyZombie = workers.some(w => w.state === 'zombie');
             let dotClass = 'dot-off';
             if (systemBusy) dotClass = 'dot-active';
             else if (anyZombie || (anyDisconnected && stagedWaiting)) dotClass = 'dot-stale';
             else if (stagedWaiting) dotClass = 'dot-idle';
 
-            // Per-cap state lookup so the topic-level phase rendering can
-            // mark "gemma in-progress" as bogus when the worker holding the
-            // claim is actually a zombie.
+            // Per-model state lookup so the topic-level phase rendering can
+            // mark "gemma in-progress" as bogus when the machine holding
+            // the claim is a zombie. Derived from the per-machine workers
+            // list: a model M is marked busy/zombie if any machine
+            // advertising a cap starting with M is in that state.
             const capStateByModel = {};
-            for (const [cap, wh] of Object.entries(workerHealth)) {
-                // best-effort: capability names like "gemma4" map to model "gemma"
-                for (const m of (data.models || [])) {
-                    if (cap.startsWith(m)) capStateByModel[m] = wh.state;
+            for (const w of workers) {
+                for (const cap of (w.caps || [])) {
+                    for (const m of (data.models || [])) {
+                        if (cap.startsWith(m)) {
+                            // Prefer "busy" over "idle" if multiple workers
+                            // advertise the same cap family — the model is
+                            // whatever any of them is actively doing.
+                            const prior = capStateByModel[m];
+                            if (!prior || (prior === 'idle' && w.state !== 'idle')) {
+                                capStateByModel[m] = w.state;
+                            }
+                        }
+                    }
                 }
             }
 
@@ -301,37 +310,58 @@
             }
             lines.push(localLine);
 
-            // --- Fact 2: Remote workers (one entry per capability) ---
-            // The state field comes from the server and disambiguates
-            // "busy on a long inference" from "disconnected" — both have
-            // stale poll timestamps, only one has a held claim.
-            const capKeys = Object.keys(workerHealth);
-            if (capKeys.length > 0) {
+            // --- Fact 2: Remote workers (one entry per MACHINE) ---
+            // Aliveness is a property of the machine, not of the cap it
+            // advertises. A machine holds ONE state — busy / idle /
+            // zombie / disconnected — and that state covers every cap
+            // the machine advertises. Per-cap display contradictions
+            // (cap A busy, cap B disconnected on the same machine) are
+            // impossible by construction under this shape.
+            if (workers.length > 0) {
                 const wbits = [];
-                for (const cap of capKeys) {
-                    const wh = workerHealth[cap];
-                    const mid = (wh.machine_id || '').substring(0,8);
-                    const midStr = mid ? ` ${mid}` : '';
-                    if (wh.state === 'busy') {
-                        const onWhat = wh.busy_on ? ` on ${esc(wh.busy_on)}` : '';
-                        const since = wh.busy_since_ago ? ` (claimed ${wh.busy_since_ago})` : '';
-                        wbits.push(`<span style="color:#ffd54f">${cap}: busy${onWhat}${since}${midStr}</span>`);
-                    } else if (wh.state === 'zombie') {
-                        const onWhat = wh.busy_on ? ` on ${esc(wh.busy_on)}` : '';
-                        const since = wh.busy_since_ago ? ` (claimed ${wh.busy_since_ago})` : '';
-                        const lastPoll = wh.last_poll_ago ? `, last poll ${wh.last_poll_ago}${midStr}` : '';
-                        wbits.push(`<span style="color:#ef5350">${cap}: zombie claim${onWhat}${since}${lastPoll} — auto-reclaim within 30m</span>`);
-                    } else if (wh.state === 'idle') {
-                        const lastPoll = wh.last_poll_ago ? ` (last poll ${wh.last_poll_ago})` : '';
-                        wbits.push(`<span style="color:#9ccc65">${cap}: idle${lastPoll}${midStr}</span>`);
-                    } else if (wh.state === 'disconnected') {
-                        const lastPoll = wh.last_poll_ago ? ` (last poll ${wh.last_poll_ago})` : '';
-                        wbits.push(`<span style="color:#ef5350">${cap}: disconnected${lastPoll}${midStr}</span>`);
+                for (const w of workers) {
+                    const mid = (w.machine_id || '').substring(0,8);
+                    const capList = (w.caps || []).join(', ');
+                    const caps = capList ? ` [${esc(capList)}]` : '';
+                    let phrase;
+                    let color;
+                    if (w.state === 'busy') {
+                        color = '#ffd54f';
+                        let target = '';
+                        if (w.busy_on_entry) {
+                            target = ` on ${esc(w.busy_on_entry)}`;
+                        } else if (w.busy_on_label) {
+                            target = ` on ${esc(w.busy_on_label)}`;
+                        } else if (w.busy_on_source) {
+                            target = ` on ${esc(w.busy_on_source)}`;
+                        }
+                        const capTag = w.busy_on_cap ? ` (${esc(w.busy_on_cap)})` : '';
+                        const since = w.busy_since_ago ? ` claimed ${w.busy_since_ago}` : '';
+                        phrase = `busy${target}${capTag}${since}`;
+                    } else if (w.state === 'zombie') {
+                        color = '#ef5350';
+                        const target = w.busy_on_entry ? ` on ${esc(w.busy_on_entry)}` : '';
+                        const capTag = w.busy_on_cap ? ` (${esc(w.busy_on_cap)})` : '';
+                        const since = w.busy_since_ago ? `, claimed ${w.busy_since_ago}` : '';
+                        const lastPoll = w.last_poll_ago ? `, last poll ${w.last_poll_ago}` : '';
+                        phrase = `zombie claim${target}${capTag}${since}${lastPoll} — auto-reclaim within 30m`;
+                    } else if (w.state === 'idle') {
+                        color = '#9ccc65';
+                        const lastPoll = w.last_poll_ago ? ` (last poll ${w.last_poll_ago})` : '';
+                        phrase = `idle${lastPoll}`;
+                    } else if (w.state === 'disconnected') {
+                        color = '#ef5350';
+                        const lastPoll = w.last_poll_ago ? ` (last poll ${w.last_poll_ago})` : '';
+                        phrase = `disconnected${lastPoll}`;
                     } else {
-                        wbits.push(`<span style="color:#888">${cap}: never polled</span>`);
+                        color = '#888';
+                        phrase = 'unknown';
                     }
+                    wbits.push(
+                        `<div style="padding-left:14px">• <span style="color:#b0bec5">${esc(mid)}</span>${caps} <span style="color:${color}">${phrase}</span></div>`
+                    );
                 }
-                lines.push(`<strong>Remote workers:</strong> ${wbits.join(' · ')}`);
+                lines.push(`<strong>Remote workers (${workers.length}):</strong>${wbits.join('')}`);
             }
 
             // --- Fact 3: Topics with work in flight (active or staged) ---
@@ -381,6 +411,27 @@
                 }
                 const label = activeItems.length === 1 ? 'topic' : 'topics';
                 lines.push(`<strong>${activeItems.length} ${label} in flight:</strong>${tbits.join('')}`);
+            }
+
+            // --- Fact 4: External (non-research) work in flight ---
+            // Without this, a codoc/corun-ai job holding a worker claim
+            // would show up only as "busy" in the Remote workers line
+            // with no visible topic — the human wouldn't know WHY the
+            // worker is busy.
+            const extWork = data.external_work_in_flight || [];
+            if (extWork.length > 0) {
+                const ebits = [];
+                for (const w of extWork) {
+                    const mid = (w.claimed_by || '').substring(0,8);
+                    const src = esc(w.source || '');
+                    const lbl = w.label ? ` — ${esc(w.label)}` : '';
+                    const since = w.claimed_at_ago ? ` (claimed ${w.claimed_at_ago})` : '';
+                    ebits.push(
+                        `<div style="padding-left:14px">• <span style="color:#90caf9">${src}</span>${lbl} · ${esc(w.capability)} on ${mid}${since}</div>`
+                    );
+                }
+                const label2 = extWork.length === 1 ? 'external job' : 'external jobs';
+                lines.push(`<strong>${extWork.length} ${label2} in flight:</strong>${ebits.join('')}`);
             }
 
             banner.className = systemBusy ? 'agent-banner agent-running' : 'agent-banner agent-idle';
