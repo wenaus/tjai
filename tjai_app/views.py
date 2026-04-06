@@ -747,6 +747,15 @@ def worker_result(request):
         edata.pop(k, None)
     edata['worker_duration_sec'] = duration_sec
     edata['worker_machine_id'] = machine_id
+    # Save raw result/error on the entry data so external callers (e.g.
+    # api_work_result) can return it cleanly without parsing entry.content,
+    # which embeds the topic prefix.
+    if status == 'done':
+        edata['worker_result'] = result
+        edata.pop('worker_error', None)
+    else:
+        edata['worker_error'] = error
+        edata.pop('worker_result', None)
     entry.data = edata
     entry.timestamp_modified = time.time()
     entry.is_dirty = 1
@@ -789,6 +798,168 @@ def worker_result(request):
             logger.error("worker_result: research_model_complete failed: %s", e)
 
     return JsonResponse({"status": "ok"})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_work_submit(request):
+    """External job submission for the remote-worker pipeline.
+
+    Allows external apps (e.g. corun-ai) to submit a unit of work that will
+    be picked up by an existing remote worker via the same long-poll path
+    as research jobs. The dispatcher and worker side are unchanged — this
+    endpoint just stages an Entry that matches a worker capability.
+
+    Request body:
+        {
+            "capability": "gemma4" | "gemma4-fast" | ...,
+            "prompt": "<text>",
+            "timeout_sec": <int, optional, default 1800>,
+            "source": "<string, optional>",      # caller identifier
+            "label":  "<string, optional>"        # caller's job label
+        }
+
+    Response:
+        {"status": "ok", "entry_id": "<uuid>"}
+    """
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    capability = (body.get('capability') or '').strip()
+    prompt = body.get('prompt') or ''
+    if not capability:
+        return JsonResponse({"error": "capability required"}, status=400)
+    if not prompt:
+        return JsonResponse({"error": "prompt required"}, status=400)
+    if capability not in WORKER_CAPABILITIES:
+        return JsonResponse(
+            {"error": f"unknown capability: {capability!r}. "
+                      f"known: {sorted(WORKER_CAPABILITIES)}"},
+            status=400)
+
+    try:
+        timeout_sec = int(body.get('timeout_sec') or 1800)
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "timeout_sec must be int"}, status=400)
+
+    source = (body.get('source') or '').strip() or None
+    label = (body.get('label') or '').strip() or None
+
+    now = time.time()
+    edata = {
+        'worker_target': capability,
+        'worker_prompt': prompt,
+        'worker_staged_at': now,
+        'worker_timeout_sec': timeout_sec,
+    }
+    if source:
+        edata['source'] = source
+    if label:
+        edata['external_label'] = label
+
+    entry = Entry.objects.create(
+        id=str(uuid.uuid7()),
+        content=label or f'{capability} work from {source or "external"}',
+        kind='memory',
+        context_id='tjai',
+        status='active',
+        data=edata,
+        timestamp_created=now,
+        timestamp_modified=now,
+        is_dirty=1,
+    )
+
+    from django.utils import timezone as tz
+    AppLog.objects.create(
+        source='worker',
+        timestamp=tz.now(),
+        level=logging.INFO,
+        levelname='INFO',
+        message=f"Staged {capability} work entry={entry.id} "
+                f"source={source} label={label}",
+        extra_data={'entry_id': str(entry.id), 'capability': capability,
+                    'source': source, 'label': label},
+    )
+
+    return JsonResponse({"status": "ok", "entry_id": str(entry.id)})
+
+
+@csrf_exempt
+@require_http_methods(["GET", "DELETE"])
+def api_work_result(request, entry_uuid):
+    """Poll for / dispose of an externally-submitted work entry.
+
+    GET: returns the current state of the entry.
+        {
+          "status": "queued" | "running" | "done" | "failed",
+          "result": "<text>",          # if done
+          "error":  "<text>",          # if failed
+          "duration_sec": <int>,
+          "claimed_by": "<machine_id>",
+          "claimed_at_ago": <seconds>,
+          "staged_at_ago": <seconds>,
+          "label": "<external_label>"
+        }
+        Status mapping:
+            entry.status='active' + no claim → queued
+            entry.status='active' + claim    → running
+            entry.status='done'              → done
+            entry.status='blocked'           → failed
+
+    DELETE: soft-deletes the entry. Callers should issue this after
+    successfully retrieving a done/failed result so external work entries
+    do not accumulate.
+    """
+    entry = Entry.objects.filter(id=str(entry_uuid),
+                                 deleted_at__isnull=True).first()
+    if not entry:
+        return JsonResponse({"error": "entry not found"}, status=404)
+
+    if request.method == 'DELETE':
+        entry.deleted_at = time.time()
+        entry.is_dirty = 1
+        entry.save(update_fields=['deleted_at', 'is_dirty'])
+        return JsonResponse({"status": "ok"})
+
+    edata = entry.data if isinstance(entry.data, dict) else {}
+    now = time.time()
+
+    if entry.status == 'done':
+        state = 'done'
+    elif entry.status == 'blocked':
+        state = 'failed'
+    elif edata.get('worker_claimed_by'):
+        state = 'running'
+    else:
+        state = 'queued'
+
+    resp = {
+        'status': state,
+        'label': edata.get('external_label'),
+        'duration_sec': int(edata.get('worker_duration_sec') or 0),
+    }
+    if state == 'done':
+        resp['result'] = edata.get('worker_result', '')
+    elif state == 'failed':
+        resp['error'] = edata.get('worker_error', '')
+
+    claimed_at = edata.get('worker_claimed_at')
+    if claimed_at:
+        try:
+            resp['claimed_by'] = edata.get('worker_claimed_by')
+            resp['claimed_at_ago'] = int(now - float(claimed_at))
+        except (TypeError, ValueError):
+            pass
+    staged_at = edata.get('worker_staged_at')
+    if staged_at:
+        try:
+            resp['staged_at_ago'] = int(now - float(staged_at))
+        except (TypeError, ValueError):
+            pass
+
+    return JsonResponse(resp)
 
 
 @csrf_exempt
@@ -2738,7 +2909,6 @@ def api_entry_save(request, entry_id):
     # For journal entries: parse leading YYYYMMDD/time spec from content
     # (e.g. "20260407/9am ePIC streaming..." → event_date + stripped content)
     if entry.kind == 'journal':
-        import re
         m = re.match(r'^(\d{8})(?:/(\S+))?\s+(.*)', content, re.DOTALL)
         if m:
             date_str, time_str, rest = m.group(1), m.group(2), m.group(3)

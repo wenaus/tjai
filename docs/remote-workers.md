@@ -83,6 +83,67 @@ Report the outcome of a previously claimed work item.
 
 Responses: `200 {"status": "ok"}` on success; `400` on missing/invalid fields; `404` if the entry no longer exists. The endpoint **accepts the result even if the worker isn't the recorded claim holder** — only a warning is logged. Rationale: the work was done; refusing it would just discard real output. (See Failure modes for when this matters.)
 
+### External submission API
+
+The same staging/poll/result pipeline can also be driven by **external apps** that just want to offload a single inference call to a remote worker. Today this is used by `corun-ai` to send `gemma4`/`gemma4-fast` jobs from codoc; tomorrow anything else with a prompt and a string result can use it. The dispatcher and worker side are unchanged — the new endpoints just create and inspect entries that look identical to the ones the research dispatcher stages.
+
+#### `POST /api/work/submit`
+
+Stage a unit of work for the next worker that polls for the matching capability.
+
+```json
+// request
+{
+  "capability":   "gemma4" | "gemma4-fast",
+  "prompt":       "<full prompt text>",
+  "timeout_sec":  1800,                   // optional, default 1800
+  "source":       "corun-ai",             // optional caller identifier
+  "label":        "codoc:job-42:p3"       // optional caller's job label
+}
+
+// 200 — staged
+{"status": "ok", "entry_id": "<uuid>"}
+
+// 400 — bad capability or missing field
+{"error": "unknown capability: 'gemmax'. known: ['gemma4', 'gemma4-fast']"}
+```
+
+The endpoint creates an `Entry(kind='memory', context='tjai', status='active')` with `data.worker_target`, `data.worker_prompt`, `data.worker_staged_at`, `data.worker_timeout_sec`, and the optional `source`/`external_label` fields. Because the Entry has the same `worker_target` shape that the research dispatcher uses, it is picked up by `_claim_worker_entry` on the very next matching poll — there is no separate scheduler.
+
+#### `GET /api/work/result/<entry_uuid>`
+
+Poll for the current state of an entry created via `/api/work/submit`. Callers should poll on a short cadence (1–2s) until `status` is `done` or `failed`.
+
+```json
+{
+  "status":         "queued" | "running" | "done" | "failed",
+  "result":         "<inference output>",   // present when status=done
+  "error":          "<error text>",         // present when status=failed
+  "duration_sec":   <int>,
+  "claimed_by":     "<machine_id>",         // present once claimed
+  "claimed_at_ago": <seconds>,              // present once claimed
+  "staged_at_ago":  <seconds>,
+  "label":          "<external_label>"
+}
+```
+
+Status mapping:
+
+| Entry state | Returned status |
+|---|---|
+| `entry.status='active'` and no `worker_claimed_by` | `queued` |
+| `entry.status='active'` and `worker_claimed_by` set | `running` |
+| `entry.status='done'` | `done` |
+| `entry.status='blocked'` | `failed` |
+
+Returns `404` if the entry does not exist (or has already been soft-deleted via `DELETE`).
+
+The `result`/`error` fields read from `data.worker_result` / `data.worker_error`, which `worker_result` writes alongside the existing `entry.content` rewrite. This avoids the need for callers to parse `content`, which for research entries is prefixed with the topic line.
+
+#### `DELETE /api/work/result/<entry_uuid>`
+
+Soft-delete the entry. Callers should issue this **after** successfully retrieving a `done` or `failed` result, so external work entries do not accumulate in the tjai context. Sets `Entry.deleted_at` — leaves the row in place for audit. Returns `200 {"status": "ok"}` or `404`.
+
 ### Constants
 
 | Symbol | Value | Defined in | Meaning |
