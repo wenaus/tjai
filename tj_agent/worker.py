@@ -6,18 +6,34 @@ started from tj_agent.daemon.run_forever(). Protocol:
 
   1. GET /api/worker/poll (long-polled, server holds up to 50s)
   2. Receive {"work": {entry_id, work_type, model, prompt, timeout_sec, ...}}
-  3. POST to ollama /api/chat with the model and prompt
+     The "model" field is the *capability name* (e.g. "gemma4"), which the
+     worker maps to a local ollama model via worker_models config.
+  3. POST to ollama /api/chat with the resolved model and prompt
   4. POST the result (or error) to /api/worker/result
 
 Reconnection: transient failures (network, server 5xx) backoff exponentially
 from 1s to 60s max. A successful poll resets the backoff.
 
 Config keys (tj config.json):
-  worker_enabled      bool   — master switch (default False)
-  worker_capabilities list   — e.g. ["gemma4"]
-  ollama_url          str    — default "http://localhost:11434"
-  ollama_model        str    — default "gemma4:e4b"
-  worker_max_tokens   int    — optional, passed to ollama options.num_predict
+  worker_enabled  bool   — master switch (default False)
+  ollama_url      str    — default "http://localhost:11434"
+  worker_models   dict   — maps capability name → ollama model. Each value is
+                           either a string (the ollama model name) or a dict
+                           {"ollama_name": "...", "max_tokens": <int|null>}.
+
+Example multi-model config:
+  "worker_enabled": true,
+  "ollama_url": "http://localhost:11434",
+  "worker_models": {
+      "gemma4":      "gemma4:e4b",
+      "llama3.1":    {"ollama_name": "llama3.1:8b"},
+      "deepseek-r1": {"ollama_name": "deepseek-r1:14b", "max_tokens": 8000}
+  }
+
+Legacy schema (still accepted, deprecated — single model only):
+  "worker_capabilities": ["gemma4"],
+  "ollama_model":        "gemma4:e4b",
+  "worker_max_tokens":   <int>          # optional
 """
 
 import json
@@ -40,14 +56,61 @@ DEFAULT_INFERENCE_TIMEOUT = 1800  # 30 min — overridden by work.timeout_sec
 
 
 def _get_worker_config() -> dict:
-    """Load worker config with sensible defaults."""
+    """Load worker config and normalize to a single internal shape.
+
+    Returns:
+        {
+            "enabled":    bool,
+            "ollama_url": str,
+            "models":     {capability: {"ollama_name": str,
+                                        "max_tokens": int | None}},
+        }
+
+    Accepts both the new `worker_models` dict and the legacy
+    `worker_capabilities` + `ollama_model` + `worker_max_tokens` keys.
+    The new schema wins if both are present.
+    """
     config = get_config()
+    enabled = bool(config.get("worker_enabled", False))
+    ollama_url = config.get("ollama_url", "http://localhost:11434")
+
+    models: dict[str, dict] = {}
+    raw_models = config.get("worker_models")
+
+    if isinstance(raw_models, dict) and raw_models:
+        for cap, val in raw_models.items():
+            if isinstance(val, str) and val:
+                models[cap] = {"ollama_name": val, "max_tokens": None}
+            elif isinstance(val, dict) and val.get("ollama_name"):
+                mt = val.get("max_tokens")
+                models[cap] = {
+                    "ollama_name": str(val["ollama_name"]),
+                    "max_tokens": int(mt) if mt is not None else None,
+                }
+            else:
+                logger.warning(
+                    "worker: ignoring malformed worker_models[%r] = %r",
+                    cap, val)
+    else:
+        # Legacy single-model schema
+        legacy_caps = list(config.get("worker_capabilities", []))
+        legacy_model = config.get("ollama_model")
+        legacy_max = config.get("worker_max_tokens")
+        if legacy_caps and legacy_model:
+            if len(legacy_caps) > 1:
+                logger.warning(
+                    "worker: legacy config has %d capabilities but a single "
+                    "ollama_model=%r — ALL will run that model. Switch to "
+                    "worker_models for true multi-model support.",
+                    len(legacy_caps), legacy_model)
+            mt = int(legacy_max) if legacy_max is not None else None
+            for cap in legacy_caps:
+                models[cap] = {"ollama_name": legacy_model, "max_tokens": mt}
+
     return {
-        "enabled": bool(config.get("worker_enabled", False)),
-        "capabilities": list(config.get("worker_capabilities", [])),
-        "ollama_url": config.get("ollama_url", "http://localhost:11434"),
-        "ollama_model": config.get("ollama_model", "gemma4:e4b"),
-        "max_tokens": config.get("worker_max_tokens"),
+        "enabled": enabled,
+        "ollama_url": ollama_url,
+        "models": models,
     }
 
 
@@ -93,6 +156,20 @@ def _process_work(work: dict, machine_id: str, cfg: dict) -> None:
         logger.error("work item missing entry_id: %s", work)
         return
 
+    capability = work.get("model") or ""
+    model_cfg = cfg["models"].get(capability)
+    if not model_cfg:
+        err = (f"unknown capability {capability!r} — worker has "
+               f"{sorted(cfg['models'].keys())}")
+        logger.error("%s: %s", entry_id, err)
+        try:
+            client.worker_result(
+                machine_id=machine_id, entry_id=entry_id,
+                status="failed", error=err, duration_sec=0)
+        except Exception as e:
+            logger.exception("failed to post failure result: %s", e)
+        return
+
     prompt = work.get("prompt") or ""
     if not prompt:
         err = "work item has empty prompt"
@@ -106,19 +183,22 @@ def _process_work(work: dict, machine_id: str, cfg: dict) -> None:
         return
 
     timeout_sec = int(work.get("timeout_sec") or DEFAULT_INFERENCE_TIMEOUT)
-    model = cfg["ollama_model"]  # local override — server passes capability name
+    ollama_model = model_cfg["ollama_name"]
+    max_tokens = model_cfg.get("max_tokens")
     work_type = work.get("work_type", "generic")
 
-    logger.info("Running %s work for %s via %s (timeout %ds, %d prompt chars)",
-                work_type, entry_id, model, timeout_sec, len(prompt))
+    logger.info("Running %s work for %s via %s [cap=%s] "
+                "(timeout %ds, %d prompt chars)",
+                work_type, entry_id, ollama_model, capability,
+                timeout_sec, len(prompt))
     start = time.time()
     try:
         result = _call_ollama(
             ollama_url=cfg["ollama_url"],
-            model=model,
+            model=ollama_model,
             prompt=prompt,
             timeout_sec=timeout_sec,
-            max_tokens=cfg.get("max_tokens"),
+            max_tokens=max_tokens,
         )
     except Exception as e:
         duration = int(time.time() - start)
@@ -157,14 +237,15 @@ def run_worker_forever() -> None:
 
     while True:
         cfg = _get_worker_config()
-        if not cfg["enabled"] or not cfg["capabilities"]:
+        if not cfg["enabled"] or not cfg["models"]:
             time.sleep(30)  # config disabled — idle check every 30s
             continue
+        capabilities = sorted(cfg["models"].keys())
 
         try:
             response = client.worker_poll(
                 machine_id=machine_id,
-                capabilities=cfg["capabilities"],
+                capabilities=capabilities,
                 timeout=POLL_CLIENT_TIMEOUT,
             )
             backoff = POLL_BACKOFF_INITIAL  # reset on successful poll
@@ -202,13 +283,16 @@ def start_worker_thread() -> threading.Thread | None:
     if not cfg["enabled"]:
         logger.info("worker: disabled (worker_enabled=false)")
         return None
-    if not cfg["capabilities"]:
-        logger.warning("worker: enabled but no capabilities configured")
+    if not cfg["models"]:
+        logger.warning("worker: enabled but no models configured "
+                       "(set worker_models in config.json)")
         return None
 
     thread = threading.Thread(
         target=run_worker_forever, name="tj_agent-worker", daemon=True)
     thread.start()
-    logger.info("worker: thread started (capabilities=%s, model=%s)",
-                cfg["capabilities"], cfg["ollama_model"])
+    summary = ", ".join(
+        f"{cap}={mc['ollama_name']}"
+        for cap, mc in sorted(cfg["models"].items()))
+    logger.info("worker: thread started (%s)", summary)
     return thread

@@ -141,25 +141,26 @@ def import_bookmarks(filepath, server_url, api_key, source_tag=None,
 
     for i, chunk in enumerate(chunks):
         chunk_num = i + 1
-        progress = (chunk_num / total_chunks) * 100
-
-        print(f"\r[{progress:5.1f}%] Chunk {chunk_num}/{total_chunks}...", end='', flush=True)
 
         result = post_chunk(server_url, api_key, chunk, source_tag, skip_existing)
 
         if "error" in result:
             summary["errors"].append(f"Chunk {chunk_num}: {result['error']}")
             summary["failed_chunks"] += 1
+            print(f"Chunk {chunk_num}/{total_chunks}: ERROR - {result['error']}")
         else:
-            summary["imported"] += result.get("imported", 0)
-            summary["skipped"] += result.get("skipped", 0)
+            imported = result.get("imported", 0)
+            skipped = result.get("skipped", 0)
+            summary["imported"] += imported
+            summary["skipped"] += skipped
             for err in result.get("errors", []):
                 summary["errors"].append(f"Chunk {chunk_num}: {err}")
             for tag, count in result.get("auto_tags", {}).items():
                 summary["auto_tags"][tag] = summary["auto_tags"].get(tag, 0) + count
+            print(f"Chunk {chunk_num}/{total_chunks}: +{imported} imported, {skipped} skipped")
 
     elapsed = time.time() - start_time
-    print(f"\r[100.0%] Complete in {elapsed:.1f}s" + " " * 20)
+    print(f"\nComplete in {elapsed:.1f}s")
 
     return summary
 
