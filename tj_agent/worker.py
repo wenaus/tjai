@@ -68,7 +68,7 @@ logger = logging.getLogger(__name__)
 POLL_CLIENT_TIMEOUT = 70          # must exceed server hold (50s)
 POLL_BACKOFF_INITIAL = 1.0
 POLL_BACKOFF_MAX = 60.0
-DEFAULT_INFERENCE_TIMEOUT = 3600  # 60 min per ollama call — overridden by work.timeout_sec
+DEFAULT_INFERENCE_TIMEOUT = 5400  # 90 min per ollama call — used as a FLOOR (see _process_work_async)
 
 # Agent loop has no turn cap. The natural termination is "model emits no
 # tool_calls". The per-call ollama timeout above is the only wall-clock
@@ -455,12 +455,18 @@ def _ollama_chat_sync(ollama_url: str, model: str, messages: list[dict],
 
     Called via asyncio.to_thread() from the async loop so the event loop
     isn't blocked while ollama generates. Raises on network/HTTP errors.
+
+    Always sends `think: true` so models with the 'thinking' capability
+    (gemma4:31b and gemma4:e4b both report it) emit chain-of-thought
+    reasoning before their final answer. Models without the capability
+    silently ignore this parameter in current ollama (>=0.20).
     """
     url = f"{ollama_url.rstrip('/')}/api/chat"
     payload: dict[str, Any] = {
         "model": model,
         "messages": messages,
         "stream": False,
+        "think": True,
     }
     if tools:
         payload["tools"] = tools
@@ -526,7 +532,17 @@ async def _process_work_async(work: dict, machine_id: str, cfg: dict,
             logger.exception("failed to post failure result: %s", e)
         return
 
-    timeout_sec = int(work.get("timeout_sec") or DEFAULT_INFERENCE_TIMEOUT)
+    # The server passes a per-call timeout in work.timeout_sec (default
+    # 1800 in views.py:worker_poll). We treat DEFAULT_INFERENCE_TIMEOUT
+    # as a FLOOR rather than a fallback — gemma always gets at least
+    # this long per ollama call regardless of what the server requested.
+    # The server can still ASK for more by passing a larger value, but
+    # cannot make the per-call window shorter than the worker's floor.
+    # Rationale: thinking-mode gemma generating a long agent-loop turn
+    # can legitimately take many minutes; capping at the server's 30min
+    # default would abort real work.
+    server_timeout = int(work.get("timeout_sec") or 0)
+    timeout_sec = max(server_timeout, DEFAULT_INFERENCE_TIMEOUT)
     ollama_model = model_cfg["ollama_name"]
     max_tokens = model_cfg.get("max_tokens")
     work_type = work.get("work_type", "generic")
