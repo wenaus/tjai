@@ -236,6 +236,8 @@ def default_server_specs() -> list[ServerSpec]:
                                  programmablesearchengine.google.com,
                                  configured with the NPP-software site
                                  list)
+        SERPAPI_API_KEY        — required for web_search (64-char hex
+                                 key from https://serpapi.com)
     """
     import shutil
     import sys
@@ -339,5 +341,32 @@ def default_server_specs() -> list[ServerSpec]:
         logger.warning(
             "mcp_agent: %s not set; skipping npp_search",
             " and ".join(missing))
+
+    # ── web_search (custom Python, stdio) — SerpAPI general web search ──
+    # Wraps SerpAPI's REST API as a stdio MCP server. Custom rather than
+    # the upstream serpapi/serpapi-mcp because that package only supports
+    # HTTP transport (uvicorn-served) and our dispatcher only speaks
+    # stdio. Skipped silently if SERPAPI_API_KEY is not set.
+    serpapi_key = os.environ.get("SERPAPI_API_KEY")
+    if serpapi_key:
+        web_path = (Path(__file__).parent / "mcp_servers" / "web_search.py")
+        if web_path.exists():
+            specs.append(ServerSpec(
+                name="web_search",
+                command=sys.executable,
+                args=[str(web_path)],
+                env={
+                    "SERPAPI_API_KEY": serpapi_key,
+                    "PATH": os.environ.get("PATH", ""),
+                    "HOME": os.environ.get("HOME", ""),
+                },
+            ))
+        else:
+            logger.warning(
+                "mcp_agent: web_search.py not found at %s; skipping",
+                web_path)
+    else:
+        logger.warning(
+            "mcp_agent: SERPAPI_API_KEY not set; skipping web_search")
 
     return specs
