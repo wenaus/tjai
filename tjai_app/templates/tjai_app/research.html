@@ -317,10 +317,12 @@
                 }
                 // Always show model checkboxes + rerun for base entries (not model sub-entries)
                 if (!isRunning && item.source !== 'multimodel') {
-                    const mNames = {claude: 'Claude', gemini: 'Gemini', chatgpt: 'ChatGPT'};
+                    // Models list comes from the API (derived from RESEARCH_MODELS on server)
+                    const models = data.models || [];
                     const mColors = {done: '#9ccc65', active: '#ffd54f', blocked: '#ef5350'};
                     html += '<span style="margin-left:8px;font-size:11px">';
-                    for (const [m, label] of Object.entries(mNames)) {
+                    for (const m of models) {
+                        const label = m.charAt(0).toUpperCase() + m.slice(1);
                         const st = item[m + '_status'];
                         const clr = mColors[st] || '#b0bec5';
                         html += `<label style="margin-right:8px;cursor:pointer;color:${clr}"><input type="checkbox" class="model-cb-${esc(item.entry_id)}" value="${m}" style="vertical-align:middle;margin-right:2px">${label}</label>`;

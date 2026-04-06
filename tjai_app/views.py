@@ -3786,6 +3786,7 @@ def research_page(request):
 @login_required
 def api_research_data(request):
     """Return research queue entries and agent status as JSON."""
+    from .action_runner import RESEARCH_MODELS
     research_ids = Tag.objects.filter(
         tag_name='research_topic'
     ).values_list('entry_id', flat=True)
@@ -3798,7 +3799,7 @@ def api_research_data(request):
     items = []
     for e in entries:
         data = e.data if isinstance(e.data, dict) else {}
-        items.append({
+        item = {
             'id': str(e.id),
             'entry_id': data.get('entry_id', ''),
             'content': e.content,
@@ -3810,10 +3811,12 @@ def api_research_data(request):
             'modified_ago': fmt_ago(e.timestamp_modified),
             'started_at': data.get('started_at'),
             'source': data.get('source'),
-            'claude_status': data.get('claude_status'),
-            'gemini_status': data.get('gemini_status'),
-            'chatgpt_status': data.get('chatgpt_status'),
-        })
+        }
+        # Per-model status for all active research models — driven by
+        # RESEARCH_MODELS so adding a model doesn't require UI edits.
+        for m in RESEARCH_MODELS:
+            item[f'{m}_status'] = data.get(f'{m}_status')
+        items.append(item)
 
     # System prompt and ideation prompt entry UUIDs
     sysprompt = Entry.objects.filter(
@@ -3889,6 +3892,7 @@ def api_research_data(request):
 
     return JsonResponse({
         'items': items,
+        'models': list(RESEARCH_MODELS),
         'sysprompt_id': str(sysprompt) if sysprompt else None,
         'ideation_prompt_id': str(ideation_prompt) if ideation_prompt else None,
         'agent': agent_status,
@@ -4197,7 +4201,8 @@ def api_research_rerun_models(request):
     if status_val == 'running':
         return JsonResponse({'error': 'Research agent already running'}, status=409)
 
-    valid_models = {'claude', 'gemini', 'chatgpt'}
+    from .action_runner import RESEARCH_MODELS
+    valid_models = set(RESEARCH_MODELS)
     models = [m for m in models if m in valid_models]
     if not models:
         return JsonResponse({'error': 'No valid models selected'}, status=400)
