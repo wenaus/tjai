@@ -7,8 +7,13 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("mcp/", include("mcp_server.urls")),
     path("mcp", include("mcp_server.urls")),  # Also handle without trailing slash
-    # OAuth 2.0 well-known endpoints
-    path(".well-known/oauth-protected-resource", views.oauth_protected_resource, name="oauth_protected_resource"),
+    # NOTE: /.well-known/oauth-protected-resource intentionally NOT served.
+    # tjai's MCP middleware allows requests through without a token, so the
+    # server is effectively unauthenticated. Advertising RFC 9728 OAuth metadata
+    # caused headless `claude -p` agents to attempt Auth0 OAuth and refuse to
+    # call any tools, breaking picks-agent and ideation-agent. The view function
+    # is removed; Django returns the standard 404, which the MCP client treats
+    # as "no OAuth required" and proceeds to JSON-RPC tool calls.
     path("api/health", views.api_health, name="api_health"),
     path("api/sync/push", views.sync_push, name="sync_push"),
     path("api/sync/pull", views.sync_pull, name="sync_pull"),
