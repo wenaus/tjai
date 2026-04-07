@@ -42,7 +42,11 @@ API_TIMEOUT = 600  # 10 minutes
 
 
 def _call_gemini(prompt):
-    """Call Gemini API with search grounding."""
+    """Call Gemini API with search grounding.
+
+    Uses the Flex service tier — nightly research is a background,
+    latency-tolerant workload, so the 50% cost saving is free money.
+    """
     from google import genai
     from google.genai import types
 
@@ -53,10 +57,15 @@ def _call_gemini(prompt):
     client = genai.Client(api_key=api_key)
 
     grounding_tool = types.Tool(google_search=types.GoogleSearch())
-    config = types.GenerateContentConfig(tools=[grounding_tool])
+    # Dict form so 'service_tier' lands as a request field even if the
+    # installed google-genai SDK predates the typed accessor.
+    config = {
+        'tools': [grounding_tool],
+        'service_tier': 'SERVICE_TIER_FLEX',
+        'http_options': {'timeout': API_TIMEOUT * 1000},  # milliseconds
+    }
 
-    logger.info("Calling Gemini API (gemini-2.5-pro)...")
-    config.http_options = {'timeout': API_TIMEOUT * 1000}  # milliseconds
+    logger.info("Calling Gemini API (gemini-2.5-pro, flex tier)...")
     response = client.models.generate_content(
         model='gemini-2.5-pro',
         contents=prompt,
