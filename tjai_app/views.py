@@ -188,6 +188,30 @@ def api_health(request):
     return JsonResponse({"status": "ok", "timezone": str(get_app_tz())})
 
 
+def oauth_protected_resource(request):
+    """
+    OAuth 2.0 Protected Resource Metadata (RFC 9728).
+
+    Returns metadata about this protected resource, including
+    the authorization server URL for OAuth discovery.
+    """
+    if not django_settings.AUTH0_DOMAIN:
+        return JsonResponse({"error": "OAuth not configured"}, status=503)
+
+    scheme = "https" if request.is_secure() else "http"
+    host = request.get_host()
+    script_name = django_settings.FORCE_SCRIPT_NAME or ""
+    resource = f"{scheme}://{host}{script_name}/mcp"
+
+    metadata = {
+        "resource": resource,
+        "authorization_servers": [f"https://{django_settings.AUTH0_DOMAIN}/"],
+        "scopes_supported": ["openid", "profile", "email"],
+        "bearer_methods_supported": ["header"],
+    }
+    return JsonResponse(metadata)
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def sync_push(request):
