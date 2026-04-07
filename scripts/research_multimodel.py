@@ -65,9 +65,9 @@ def _call_gemini(prompt):
         'http_options': {'timeout': API_TIMEOUT * 1000},  # milliseconds
     }
 
-    logger.info("Calling Gemini API (gemini-2.5-pro, flex tier)...")
+    logger.info("Calling Gemini API (gemini-3.1-pro-preview, flex tier)...")
     response = client.models.generate_content(
-        model='gemini-2.5-pro',
+        model='gemini-3.1-pro-preview',
         contents=prompt,
         config=config,
     )
