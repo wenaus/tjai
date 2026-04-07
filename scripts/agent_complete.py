@@ -482,6 +482,48 @@ def main():
                 logger.info("ideation-agent: appended ideation link to daily-%s", date_str)
             else:
                 logger.warning("ideation-agent: daily-%s not found, skipping synopsis link", date_str)
+
+            # Extract ## Workday section from log and create workday_<yyyymmdd> entry.
+            # Ideation prompt is required to emit a `## Workday` section with bulleted
+            # day summary; we lift it into its own entry for the weekly assembler.
+            if log_entry and log_entry.content:
+                import re
+                m = re.search(
+                    r'^## Workday\s*\n(.*?)(?=\n## |\Z)',
+                    log_entry.content,
+                    re.MULTILINE | re.DOTALL,
+                )
+                if m:
+                    workday_body = m.group(1).strip()
+                    workday_eid = f'workday_{yyyymmdd}'
+                    workday_full = f'## {yyyymmdd}\n\n{workday_body}'
+                    existing_workday = Entry.objects.filter(
+                        data__entry_id=workday_eid, deleted_at__isnull=True,
+                    ).first()
+                    if existing_workday:
+                        existing_workday.content = workday_full
+                        existing_workday.timestamp_modified = time.time()
+                        existing_workday.save(
+                            update_fields=['content', 'timestamp_modified'])
+                        logger.info("ideation-agent: updated %s (%d chars)",
+                                    workday_eid, len(workday_full))
+                    else:
+                        from tjai_app import services
+                        result = services.create_entry(
+                            content=workday_full,
+                            kind='memory',
+                            tags='workday-log,fromai',
+                            data={'entry_id': workday_eid},
+                        )
+                        if 'error' in result:
+                            logger.error("ideation-agent: failed to create %s: %s",
+                                         workday_eid, result['error'])
+                        else:
+                            logger.info("ideation-agent: created %s (%d chars)",
+                                        workday_eid, len(workday_full))
+                else:
+                    logger.warning("ideation-agent: no '## Workday' section in log; "
+                                   "workday entry not created")
         except Exception as e:
             logger.error("ideation-agent: failed to post-process ideation: %s", e)
 

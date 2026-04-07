@@ -27,6 +27,9 @@ RESEARCH_MODELS = ('claude', 'gemini', 'gemma')
 TJAI_DIR = SCRIPTS_DIR.parent
 TJ_PY = TJAI_DIR / 'tj.py'
 
+# Day-of-week strings for scheduled_dow gating in get_next_scheduled_time
+DOW_MAP = {'mon': 0, 'tue': 1, 'wed': 2, 'thu': 3, 'fri': 4, 'sat': 5, 'sun': 6}
+
 # Thread-local for auto-tagging log lines with the current action's entry_id
 _log_context = threading.local()
 
@@ -63,6 +66,9 @@ def get_next_scheduled_time(action):
         If last_run >= that moment, returns tomorrow's scheduled moment.
         Otherwise returns today's (due now or overdue).
 
+        If data.scheduled_dow is also set ('mon'..'sun'), the action only
+        runs on that weekday — returns the next occurrence at HH:MM.
+
     For actions without scheduled_time:
         Falls back to last_run + interval_hours * 3600.
 
@@ -76,12 +82,30 @@ def get_next_scheduled_time(action):
         return retry_after
 
     scheduled_time = data.get('scheduled_time')
+    scheduled_dow = data.get('scheduled_dow')
 
     if scheduled_time:
         tz = services.get_timezone()
         now_local = datetime.now(tz)
         hour = int(scheduled_time[:2])
         minute = int(scheduled_time[2:])
+
+        if scheduled_dow:
+            target_weekday = DOW_MAP.get(str(scheduled_dow).lower())
+            if target_weekday is not None:
+                today_weekday = now_local.weekday()
+                days_ahead = (target_weekday - today_weekday) % 7
+                scheduled_target = now_local.replace(
+                    hour=hour, minute=minute, second=0, microsecond=0
+                ) + timedelta(days=days_ahead)
+                last_run = data.get('last_run', 0)
+                # If today is the target day and we already ran (or moment
+                # passed and was consumed), advance one full week.
+                if scheduled_target.timestamp() <= last_run:
+                    scheduled_target += timedelta(days=7)
+                return scheduled_target.timestamp()
+            # Unknown dow string — fall through to daily behavior
+
         scheduled_today = now_local.replace(
             hour=hour, minute=minute, second=0, microsecond=0)
         scheduled_moment = scheduled_today.timestamp()

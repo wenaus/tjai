@@ -191,7 +191,7 @@
                 <div id="calendar-content">Loading calendar...</div>
             </div>
             <div id="named-section">
-                <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">Named Entries <button id="create-entry-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px">Create Entry</button></div>
+                <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">Named Entries <span><button id="workday-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px;margin-right:4px" title="Today's workday entry">Workday</button><button id="workweek-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px;margin-right:4px" title="This week's workweek entry">Workweek</button><button id="create-entry-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px">Create Entry</button></span></div>
                 <div id="named-content">Loading named...</div>
             </div>
         </div>
@@ -288,6 +288,25 @@
             } catch (e) {
                 alert('Failed to create entry: ' + e.message);
             }
+        });
+
+        // Workday: today's workday_<yyyymmdd>. Workweek: this week's workweek_<Mon-yyyymmdd>.
+        // Pure programmatic — if the entry doesn't exist, that's an agent bug to fix, not a UI fallback.
+        function _yyyymmdd(d) {
+            return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+        }
+        const workdayBtn = document.getElementById('workday-btn');
+        if (workdayBtn) workdayBtn.addEventListener('click', () => {
+            window.location.href = '/tjai/entry/?entry_id=workday_' + _yyyymmdd(new Date());
+        });
+        const workweekBtn = document.getElementById('workweek-btn');
+        if (workweekBtn) workweekBtn.addEventListener('click', () => {
+            const d = new Date();
+            const dow = d.getDay();  // Sun=0..Sat=6
+            const daysToMonday = dow === 0 ? 6 : dow - 1;
+            const mon = new Date(d);
+            mon.setDate(d.getDate() - daysToMonday);
+            window.location.href = '/tjai/entry/?entry_id=workweek_' + _yyyymmdd(mon);
         });
 
         function renderNamed(data) {
