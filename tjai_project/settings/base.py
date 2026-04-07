@@ -15,10 +15,6 @@ env = environ.Env(
     DJANGO_LOG_LEVEL=(str, "INFO"),
     DJANGO_CSRF_COOKIE_PATH=(str, ""),
     DJANGO_SESSION_COOKIE_PATH=(str, ""),
-    AUTH0_DOMAIN=(str, ""),
-    AUTH0_CLIENT_ID=(str, ""),
-    AUTH0_CLIENT_SECRET=(str, ""),
-    AUTH0_API_IDENTIFIER=(str, ""),
 )
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -207,13 +203,6 @@ Always check for "error" key in response before processing results.""",
 
 # MCP endpoint path (empty string since we mount at /mcp/ in urls.py)
 DJANGO_MCP_ENDPOINT = ""
-
-# Auth0 OAuth 2.1 Configuration (for Claude.ai MCP integration)
-AUTH0_DOMAIN = env("AUTH0_DOMAIN")
-AUTH0_CLIENT_ID = env("AUTH0_CLIENT_ID")
-AUTH0_CLIENT_SECRET = env("AUTH0_CLIENT_SECRET")
-AUTH0_API_IDENTIFIER = env("AUTH0_API_IDENTIFIER")
-AUTH0_ALGORITHMS = ["RS256"]
 
 # Telegram Mini App
 TELEGRAM_BOT_TOKEN = env("TELEGRAM_BOT_TOKEN", default="")

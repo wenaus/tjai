@@ -2,7 +2,10 @@
   "mcpServers": {
     "tjai": {
       "type": "http",
-      "url": "https://etaverse.com/tjai/mcp/"
+      "url": "https://etaverse.com/tjai/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${TJAI_MCP_TOKEN}"
+      }
     }
   }
 }

@@ -4,34 +4,63 @@
 
 The tjai MCP server endpoint is `https://etaverse.com/tjai/mcp/` (HTTP transport).
 
+Authentication: bearer token. The server checks `Authorization: Bearer <token>`
+against the value in `SysConfig` row `mcp_bearer_token`. Same shared-secret
+pattern used by tjai's other API endpoints (gmail addon, dialog hooks, etc.).
+Requests without a valid token get HTTP 401/403 — `/tjai/mcp/` is not open.
+
+claude.ai connectors are NOT supported. The endpoint is for personal MCP
+clients (Claude Code, custom tools) only.
+
+### Token rotation
+
+Generate or rotate the token from a Django shell on the server:
+
+```bash
+cd /var/www/tjai
+.venv/bin/python manage.py shell -c "
+import secrets, time
+from tjai_app.models import SysConfig
+tok = 'tjai_' + secrets.token_urlsafe(32)
+SysConfig.objects.update_or_create(
+    key='mcp_bearer_token',
+    defaults={'value': tok, 'timestamp_modified': time.time()},
+)
+print(tok)
+"
+```
+
+Save the printed value into your local environment as `TJAI_MCP_TOKEN`. The
+plaintext is recoverable from the `SysConfig` row at any time (it's a shared
+secret, not a hash) — rotate by re-running the snippet.
+
 ### Claude Code (CLI)
 
-**Project-level config:** `.mcp.json` in the repo root auto-configures tjai when Claude Code launches:
+**Project-level config:** `.mcp.json` in the repo root, using env var expansion
+so the secret is not committed:
 
 ```json
 {
   "mcpServers": {
     "tjai": {
       "type": "http",
-      "url": "https://etaverse.com/tjai/mcp/"
+      "url": "https://etaverse.com/tjai/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${TJAI_MCP_TOKEN}"
+      }
     }
   }
 }
 ```
 
+`TJAI_MCP_TOKEN` must be set in the shell environment that launches Claude Code.
+
 **Global config (CLI):**
 
 ```bash
-claude mcp add --transport http tjai https://etaverse.com/tjai/mcp/
+claude mcp add --transport http tjai https://etaverse.com/tjai/mcp/ \
+  --header "Authorization: Bearer $TJAI_MCP_TOKEN"
 ```
-
-### Claude.ai (Web, Desktop, Mobile)
-
-Full support across all platforms — desktop app, browser, mobile, and voice (create memories hands-free).
-
-**Setup:** Settings → Connectors → Add custom connector → `https://etaverse.com/tjai/mcp`
-
-Authenticates via OAuth 2.1 (Auth0). Once connected, Claude can read calendar, todos, memories, and create entries. AI-created entries auto-tagged `fromai`.
 
 ## Claude Code Settings
 
@@ -42,7 +71,10 @@ Full `~/.claude/settings.json` with tjai MCP, permissions, and status line:
   "mcpServers": {
     "tjai": {
       "type": "http",
-      "url": "https://etaverse.com/tjai/mcp/"
+      "url": "https://etaverse.com/tjai/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${TJAI_MCP_TOKEN}"
+      }
     }
   },
   "statusLine": {
@@ -136,19 +168,3 @@ ln -s ~/github/tjrepo/computers/laptop/config-files/.env ~/.env
 
 All errors print to stderr (`claude --verbose`). Hooks always exit 0. HTTP calls have 5s timeout. Assistant responses truncated at 4000 chars on record, 2000 on display.
 
-## OAuth 2.1 (Technical Details)
-
-For Claude.ai third-party connector integration via Auth0.
-
-| Setting | Value |
-|---------|-------|
-| Domain | `dev-yjnmn4q2uqphuam2.us.auth0.com` |
-| Client ID | `KDoHUD5L0xydOVJywP5f9DoByTpkeOg9` |
-| API Identifier | `https://etaverse.com/tjai/mcp` |
-| Callback URL | `https://claude.ai/api/mcp/auth_callback` |
-
-**Auth modes:**
-- Claude.ai (web): OAuth 2.1 with PKCE via Auth0
-- Claude Code (CLI): Direct HTTP, no auth
-
-**Server env vars:** `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET`, `AUTH0_API_IDENTIFIER` (in `/var/www/tjai/.env`)

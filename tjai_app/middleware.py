@@ -1,90 +1,47 @@
-"""Authentication middleware for MCP OAuth 2.1 integration."""
+"""Bearer-token authentication middleware for the MCP endpoint.
 
-import json
+Checks the Authorization: Bearer <token> header against the value stored in
+SysConfig under key 'mcp_bearer_token'. Same shared-secret pattern used by
+the rest of tjai's API endpoints (e.g. gmail_addon_api_key in views.py).
+
+Single-user system, single token. Rotate by overwriting the SysConfig row.
+"""
+
+import hmac
 import logging
 
 from django.conf import settings
-from django.http import JsonResponse, HttpResponse
-
-from .auth0 import get_bearer_token, validate_token
+from django.http import JsonResponse
 
 logger = logging.getLogger(__name__)
 
 
 class MCPAuthMiddleware:
-    """
-    Middleware for MCP endpoint authentication.
-
-    Authentication modes:
-    1. Bearer token present: Validate via Auth0, allow if valid
-    2. No token + MCP path: Return 401 with OAuth metadata for discovery
-    3. No token + other paths: Pass through (existing behavior)
-
-    This allows:
-    - Claude.ai: OAuth flow via Auth0
-    - Claude Code: Direct access without auth (local config)
-    """
+    """Require a valid bearer token on /mcp paths. Pass everything else through."""
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        # Build the MCP path prefix accounting for FORCE_SCRIPT_NAME
         script_name = settings.FORCE_SCRIPT_NAME or ""
         mcp_path = f"{script_name}/mcp"
-
-        # Only apply to MCP endpoints (with or without trailing slash)
         if not (request.path == mcp_path or request.path.startswith(mcp_path + "/")):
             return self.get_response(request)
 
-        # Check for Bearer token
-        token = get_bearer_token(request)
+        auth_header = request.META.get("HTTP_AUTHORIZATION", "")
+        if not auth_header.startswith("Bearer "):
+            return JsonResponse({"error": "Authorization required"}, status=401)
+        token = auth_header[7:]
 
-        if token:
-            # Validate the token
-            payload = validate_token(token)
-            if payload:
-                # Token valid - attach user info to request and proceed
-                request.auth0_payload = payload
-                request.auth0_user = payload.get("sub")
-                return self.get_response(request)
-            else:
-                # Invalid token - return 401
-                return self._unauthorized_response(request, "Invalid or expired token")
+        # Deferred import to avoid AppRegistryNotReady at module import time.
+        from .models import SysConfig
+        try:
+            expected = SysConfig.objects.get(key="mcp_bearer_token").value
+        except SysConfig.DoesNotExist:
+            logger.error("MCP bearer token not configured in SysConfig")
+            return JsonResponse({"error": "MCP token not configured"}, status=503)
 
-        # No token present — allow through. Claude Code needs both POST
-        # (tool calls) and GET (SSE/streamable HTTP) without auth.
-        # Claude.ai sends bearer tokens once authenticated; invalid tokens
-        # still get 401 above.
+        if not hmac.compare_digest(token, expected):
+            return JsonResponse({"error": "Invalid token"}, status=403)
+
         return self.get_response(request)
-
-    def _unauthorized_response(self, request, message: str):
-        """Return 401 for invalid token."""
-        response = JsonResponse({"error": "unauthorized", "message": message}, status=401)
-        response["WWW-Authenticate"] = self._www_authenticate_header(request)
-        return response
-
-    def _oauth_required_response(self, request):
-        """Return 401 with OAuth metadata for discovery."""
-        response = JsonResponse(
-            {
-                "error": "authorization_required",
-                "message": "OAuth 2.1 authentication required",
-            },
-            status=401,
-        )
-        response["WWW-Authenticate"] = self._www_authenticate_header(request)
-        return response
-
-    def _www_authenticate_header(self, request) -> str:
-        """Build WWW-Authenticate header for OAuth discovery."""
-        # Get the base URL for resource metadata
-        scheme = "https" if request.is_secure() else "http"
-        host = request.get_host()
-        script_name = settings.FORCE_SCRIPT_NAME or ""
-        resource_metadata_url = f"{scheme}://{host}{script_name}/.well-known/oauth-protected-resource"
-
-        return (
-            f'Bearer realm="{settings.AUTH0_API_IDENTIFIER}", '
-            f'resource_metadata="{resource_metadata_url}"'
-        )

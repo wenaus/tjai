@@ -7,8 +7,6 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("mcp/", include("mcp_server.urls")),
     path("mcp", include("mcp_server.urls")),  # Also handle without trailing slash
-    # OAuth 2.0 well-known endpoints
-    path(".well-known/oauth-protected-resource", views.oauth_protected_resource, name="oauth_protected_resource"),
     path("api/health", views.api_health, name="api_health"),
     path("api/sync/push", views.sync_push, name="sync_push"),
     path("api/sync/pull", views.sync_pull, name="sync_pull"),
