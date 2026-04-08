@@ -4172,6 +4172,9 @@ def api_research_data(request):
         # RESEARCH_MODELS so adding a model doesn't require UI edits.
         for m in RESEARCH_MODELS:
             item[f'{m}_status'] = data.get(f'{m}_status')
+            sa = data.get(f'{m}_started_at')
+            item[f'{m}_started_at'] = sa
+            item[f'{m}_started_at_ago'] = fmt_ago(float(sa)) if sa else None
         # Attach remote-worker sub-entry info if any
         beid = data.get('entry_id')
         if beid and beid in worker_entries_by_base:

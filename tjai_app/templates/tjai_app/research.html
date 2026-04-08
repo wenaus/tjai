@@ -228,7 +228,7 @@
 
             // Banner: three named, non-overlapping facts. Nothing here is
             // allowed to read as contradictory because each line names its
-            // own subject ("Local agent", "Remote workers", "Topics in flight")
+            // own subject ("Local orchestrator", "Remote workers", "Topics in flight")
             // and the subjects do not overlap.
             const items = data.items || [];
             const agent = data.agent || {};
@@ -280,7 +280,7 @@
 
             const lines = [];
 
-            // --- Fact 1: Local agent (the research-agent orchestrator process) ---
+            // --- Fact 1: Local orchestrator (the research-agent process) ---
             let localLine = '';
             if (agentRunning_) {
                 const dur = agent.launched_dur ? ' for ' + agent.launched_dur : '';
@@ -297,16 +297,16 @@
                     ? ` · activity ${agent.last_activity_ago}` : '';
                 const entryDone = currentItem && currentItem.status === 'done';
                 if (entryDone) {
-                    localLine = `<strong>Local agent:</strong> running on ${esc(entryName)} (entry already done)${dur}${activityInfo}${procInfo} <button class="btn-submit" style="color:#ef5350;border-color:#ef5350;margin-left:8px" onclick="abortAgent(this)">Abort</button>${logLink}`;
+                    localLine = `<strong>Local orchestrator:</strong> running on ${esc(entryName)} (entry already done)${dur}${activityInfo}${procInfo} <button class="btn-submit" style="color:#ef5350;border-color:#ef5350;margin-left:8px" onclick="abortAgent(this)">Abort</button>${logLink}`;
                 } else {
-                    localLine = `<strong>Local agent:</strong> running on ${esc(entryName)}${dur}${activityInfo}${procInfo}${logLink}`;
+                    localLine = `<strong>Local orchestrator:</strong> running on ${esc(entryName)}${dur}${activityInfo}${procInfo}${logLink}`;
                 }
             } else if (agent.status === 'failed') {
                 const errTime = agent.last_error_time_ago ? ' ' + agent.last_error_time_ago : '';
-                localLine = `<strong>Local agent:</strong> <span style="color:#ef5350">failed${errTime}</span>`;
+                localLine = `<strong>Local orchestrator:</strong> <span style="color:#ef5350">failed${errTime}</span>`;
             } else {
                 const lastDone = agent.completed_ago ? ` — last run completed ${agent.completed_ago}` : '';
-                localLine = `<strong>Local agent:</strong> idle${lastDone}`;
+                localLine = `<strong>Local orchestrator:</strong> ready${lastDone}`;
             }
             lines.push(localLine);
 
@@ -397,7 +397,11 @@
                                 clr = '#ffd54f';
                             }
                         }
-                        else if (st === 'active') { phrase = `${m} in-progress`; clr = '#ffd54f'; }
+                        else if (st === 'active') {
+                            const ago = it[m + '_started_at_ago'];
+                            phrase = ago ? `${m} in-progress (${ago})` : `${m} in-progress`;
+                            clr = '#ffd54f';
+                        }
                         else if (st === 'staged' && w && w.worker_staged_ago) {
                             phrase = `${m} awaiting worker (staged ${w.worker_staged_ago})`;
                             clr = '#90caf9';

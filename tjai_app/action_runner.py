@@ -765,6 +765,7 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
         base_data[f'{model}_entry_id'] = model_entry_id
         # Default 'active' — overridden below for remote workers (gemma → staged)
         base_data[f'{model}_status'] = 'active'
+        base_data[f'{model}_started_at'] = now_ts
 
         # Dispatch — mechanism differs per model, control flow is uniform
         if model == 'claude':
