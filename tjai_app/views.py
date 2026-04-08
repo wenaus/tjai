@@ -2704,13 +2704,13 @@ def workweek_open(request, yyyymmdd=None):
 
 @login_required
 def this_week(request):
-    """Show the current Sat-Fri week's diary entries plus a workweek link.
+    """Show the current Sat-Fri week's workday entries plus a workweek link.
 
-    Pulls existing diary-yyyy-mm-dd entries for the current Sat-Fri range
-    and renders them in order. Days with no entry are still listed (empty)
-    so the structure of the week is visible. The workweek_<sat-yyyymmdd>
-    entry is linked at the top via the get-or-create endpoint, so clicking
-    it lands in an editable stub even before the agent has run.
+    Pulls existing workday_<yyyymmdd> entries for the current Sat-Fri range
+    and renders them in order. Each day's header links to the workday entry
+    via the get-or-create endpoint, so clicking a missing day creates an
+    empty editable stub. The workweek_<sat-yyyymmdd> entry is linked at the
+    top via the same get-or-create flow.
     """
     import markdown as md_lib
     tz = get_app_tz()
@@ -2722,25 +2722,26 @@ def this_week(request):
     week_start = today - timedelta(days=days_back)
     week_dates = [week_start + timedelta(days=i) for i in range(7)]
 
-    # One query for all seven possible diary entries
-    entry_ids = [f'diary-{d.isoformat()}' for d in week_dates]
-    diary_qs = Entry.objects.filter(
+    # One query for all seven possible workday entries
+    entry_ids = [f'workday_{d.strftime("%Y%m%d")}' for d in week_dates]
+    workday_qs = Entry.objects.filter(
         data__entry_id__in=entry_ids, deleted_at__isnull=True,
     )
     by_eid = {}
-    for e in diary_qs:
+    for e in workday_qs:
         if isinstance(e.data, dict):
             by_eid[e.data.get('entry_id')] = e
 
     days = []
     for d in week_dates:
-        eid = f'diary-{d.isoformat()}'
+        yyyymmdd = d.strftime('%Y%m%d')
+        eid = f'workday_{yyyymmdd}'
         e = by_eid.get(eid)
         body_html = ''
-        first_line = ''
         if e:
+            # Workday entries start with "## Workday <yyyymmdd>" header line.
+            # Strip the header for the body render.
             body_lines = e.content.split('\n')
-            first_line = body_lines[0] if body_lines else ''
             body_text = '\n'.join(body_lines[1:]).strip() if len(body_lines) > 1 else ''
             if body_text:
                 body_html = md_lib.markdown(
@@ -2752,7 +2753,7 @@ def this_week(request):
             'date': d,
             'day_label': d.strftime('%a %b ') + str(d.day),
             'entry_id': eid,
-            'first_line': first_line,
+            'workday_url': f'/tjai/workday/{yyyymmdd}/',
             'body_html': body_html,
             'has_entry': e is not None,
             'is_today': d == today,

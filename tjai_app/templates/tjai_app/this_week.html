@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <link rel="icon" type="image/svg+xml" href="/tjai/static/tjai/favicon.svg">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>This Week</title>
+    <title>This Workweek</title>
     <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -35,12 +35,10 @@
         }
         .day-item.no-entry .day-header { border-radius: 4px; }
         .day-header .day-label {
-            color: #e0e0e0; font-size: 14px; font-weight: bold; min-width: 110px;
+            color: #90caf9; font-size: 14px; font-weight: bold; min-width: 110px;
+            text-decoration: none;
         }
-        .day-header a {
-            color: #90caf9; text-decoration: none; font-size: 13px;
-        }
-        .day-header a:hover { text-decoration: underline; }
+        .day-header .day-label:hover { text-decoration: underline; }
         .day-header .empty-marker {
             color: #666; font-size: 12px; font-style: italic;
         }
@@ -64,17 +62,15 @@
     {% with current_page="diary" %}{% include "tjai_app/_menu.html" %}{% endwith %}
     <div class="page-content">
         <div class="week-header">
-            <span class="week-title">This Week ({{ week_start|date:"M j" }} – {{ week_end|date:"M j, Y" }})</span>
+            <span class="week-title">This Workweek ({{ week_start|date:"M j" }} – {{ week_end|date:"M j, Y" }})</span>
             <span class="workweek-link"><a href="{{ workweek_url }}">Workweek entry &rarr;</a></span>
         </div>
         {% for day in days %}
             <div class="day-item{% if day.is_today %} is-today{% endif %}{% if not day.has_entry %} no-entry{% endif %}">
                 <div class="day-header">
-                    <span class="day-label">{{ day.day_label }}</span>
-                    {% if day.has_entry %}
-                        <a href="/tjai/entry/?entry_id={{ day.entry_id }}&edit=1">{{ day.first_line|default:day.entry_id }}</a>
-                    {% else %}
-                        <span class="empty-marker">no diary entry</span>
+                    <a class="day-label" href="{{ day.workday_url }}">{{ day.day_label }}</a>
+                    {% if not day.has_entry %}
+                        <span class="empty-marker">no workday entry</span>
                     {% endif %}
                 </div>
                 {% if day.has_entry and day.body_html %}
