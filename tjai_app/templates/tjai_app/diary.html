@@ -155,13 +155,16 @@
 
         function renderMissingDay(dateStr) {
             const label = formatDateLabel(dateStr);
+            const yyyymmdd = dateStr.replace(/-/g, '');
             const synopsisLink = `/tjai/synopsis/?date=daily-${dateStr}`;
+            const workdayLink = `/tjai/workday/${yyyymmdd}/`;
+            const ideationEid = 'ideation_' + yyyymmdd;
             let html = `<div class="diary-item">`;
             html += `<div class="diary-header collapsed" style="cursor:default">`;
             html += `<span class="toggle" style="visibility:hidden">\u25B6</span>`;
             html += `<a href="#" onclick="event.preventDefault();event.stopPropagation();createDiaryEntry('${dateStr}')" style="color:#bbb">${escHtml(label)}</a>`;
-            const ideationEid = 'ideation_' + dateStr.replace(/-/g, '');
-            html += `<a href="${synopsisLink}" onclick="event.stopPropagation()" style="margin-left:auto;font-size:11px;color:#90caf9">Synopsis</a>`;
+            html += `<a href="${workdayLink}" onclick="event.stopPropagation()" style="margin-left:auto;font-size:11px;color:#90caf9">Workday</a>`;
+            html += `<a href="${synopsisLink}" onclick="event.stopPropagation()" style="font-size:11px;color:#90caf9">Synopsis</a>`;
             html += `<a href="/tjai/entry/?entry_id=${ideationEid}" onclick="event.stopPropagation()" style="font-size:11px;color:#90caf9">Ideation</a>`;
             html += `</div></div>`;
             return html;
@@ -175,12 +178,15 @@
                 : `/tjai/entry/?uuid=${e.id}&edit=1`;
             let html = `<div class="diary-item" data-key="${escHtml(key)}">`;
             const dateMatch = (e.entry_id || '').match(/^diary-(\d{4}-\d{2}-\d{2})$/);
+            const yyyymmdd = dateMatch ? dateMatch[1].replace(/-/g, '') : '';
+            const workdayLink = dateMatch ? `/tjai/workday/${yyyymmdd}/` : '';
             const synopsisLink = dateMatch ? `/tjai/synopsis/?date=daily-${dateMatch[1]}` : '';
-            const ideationLink = dateMatch ? `/tjai/entry/?entry_id=ideation_${dateMatch[1].replace(/-/g, '')}` : '';
+            const ideationLink = dateMatch ? `/tjai/entry/?entry_id=ideation_${yyyymmdd}` : '';
             html += `<div class="diary-header${collapsed ? ' collapsed' : ''}" onclick="toggleItem('${escHtml(key)}')">`;
             html += `<span class="toggle">${collapsed ? '\u25B6' : '\u25BC'}</span>`;
             html += `<a href="${url}" onclick="event.stopPropagation()">${escHtml(e.first_line)}</a>`;
-            if (synopsisLink) html += `<a href="${synopsisLink}" onclick="event.stopPropagation()" style="margin-left:auto;font-size:11px;color:#90caf9">Synopsis</a>`;
+            if (workdayLink) html += `<a href="${workdayLink}" onclick="event.stopPropagation()" style="margin-left:auto;font-size:11px;color:#90caf9">Workday</a>`;
+            if (synopsisLink) html += `<a href="${synopsisLink}" onclick="event.stopPropagation()" style="font-size:11px;color:#90caf9">Synopsis</a>`;
             if (ideationLink) html += `<a href="${ideationLink}" onclick="event.stopPropagation()" style="font-size:11px;color:#90caf9">Ideation</a>`;
             html += `</div>`;
             html += `<div class="diary-body${collapsed ? ' hidden' : ''}">${e.content_html || '<em>empty</em>'}</div>`;

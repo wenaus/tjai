@@ -2656,6 +2656,48 @@ def entry_public_json(request, entry_id=None):
     })
 
 
+def _open_dated_log(yyyymmdd, prefix, tag):
+    """Shared get-or-create for workday/workweek dated log entries.
+
+    Idempotent: hitting twice returns the same entry. The created stub has
+    just the date header so the user can start typing immediately. For
+    workday, the ideation agent's append-not-replace logic will later add
+    AI-extracted bullets below user content.
+    """
+    if not yyyymmdd or not re.match(r'^\d{8}$', yyyymmdd):
+        raise Http404("Bad date")
+    try:
+        datetime.strptime(yyyymmdd, '%Y%m%d')
+    except ValueError:
+        raise Http404("Bad date")
+    eid = f'{prefix}_{yyyymmdd}'
+    existing = Entry.objects.filter(
+        data__entry_id=eid, deleted_at__isnull=True,
+    ).first()
+    if not existing:
+        result = services.create_entry(
+            content=f'## {yyyymmdd}\n\n',
+            kind='memory',
+            tags=tag,
+            data={'entry_id': eid},
+        )
+        if isinstance(result, dict) and 'error' in result:
+            raise Http404(f"create failed: {result['error']}")
+    return redirect(f'/tjai/entry/?entry_id={eid}&edit=1')
+
+
+@login_required
+def workday_open(request, yyyymmdd=None):
+    """Get-or-create workday_<yyyymmdd> and redirect to entry detail."""
+    return _open_dated_log(yyyymmdd, prefix='workday', tag='workday-log')
+
+
+@login_required
+def workweek_open(request, yyyymmdd=None):
+    """Get-or-create workweek_<yyyymmdd> and redirect to entry detail."""
+    return _open_dated_log(yyyymmdd, prefix='workweek', tag='workweek-log')
+
+
 @login_required
 def entry_detail(request, entry_id=None):
     """Show single entry detail page.

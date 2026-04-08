@@ -291,13 +291,15 @@
         });
 
         // Workday: today's workday_<yyyymmdd>. Workweek: this week's workweek_<Mon-yyyymmdd>.
-        // Pure programmatic — if the entry doesn't exist, that's an agent bug to fix, not a UI fallback.
+        // Both navigate to /tjai/{workday,workweek}/<date>/ which is idempotent
+        // get-or-create — the server creates an empty stub if the entry doesn't
+        // exist, then redirects to the entry detail in edit mode.
         function _yyyymmdd(d) {
             return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
         }
         const workdayBtn = document.getElementById('workday-btn');
         if (workdayBtn) workdayBtn.addEventListener('click', () => {
-            window.location.href = '/tjai/entry/?entry_id=workday_' + _yyyymmdd(new Date());
+            window.location.href = '/tjai/workday/' + _yyyymmdd(new Date()) + '/';
         });
         const workweekBtn = document.getElementById('workweek-btn');
         if (workweekBtn) workweekBtn.addEventListener('click', () => {
@@ -306,7 +308,7 @@
             const daysToMonday = dow === 0 ? 6 : dow - 1;
             const mon = new Date(d);
             mon.setDate(d.getDate() - daysToMonday);
-            window.location.href = '/tjai/entry/?entry_id=workweek_' + _yyyymmdd(mon);
+            window.location.href = '/tjai/workweek/' + _yyyymmdd(mon) + '/';
         });
 
         function renderNamed(data) {
