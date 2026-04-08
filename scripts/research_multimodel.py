@@ -38,7 +38,7 @@ if not logger.handlers:
     _sh.setFormatter(_fmt)
     logger.addHandler(_sh)
 
-API_TIMEOUT = 600  # 10 minutes
+API_TIMEOUT = 1800  # 30 minutes
 
 
 def _call_gemini(prompt):
@@ -61,7 +61,7 @@ def _call_gemini(prompt):
     # installed google-genai SDK predates the typed accessor.
     config = {
         'tools': [grounding_tool],
-        'service_tier': 'SERVICE_TIER_FLEX',
+        'service_tier': 'flex',
         'http_options': {'timeout': API_TIMEOUT * 1000},  # milliseconds
     }
 
