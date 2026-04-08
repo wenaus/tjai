@@ -1702,6 +1702,10 @@ def dashboard_search(request):
         qs = qs.filter(context_id=filter_context)
 
     exclude_contexts = [c for c in request.GET.get('exclude_context', '').split(',') if c]
+    # Mirror dashboard_status: exclude claude-code (dialog) from search
+    # results unless the user explicitly filters to that context.
+    if not filter_context and 'claude-code' not in exclude_contexts:
+        exclude_contexts.append('claude-code')
     if exclude_contexts:
         qs = qs.exclude(context_id__in=exclude_contexts)
     if request.GET.get('public') == '1':
