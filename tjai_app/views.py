@@ -1120,7 +1120,7 @@ def dashboard(request):
 def versions_page(request):
     """Flat reverse-chron list of all entry versions."""
     from .models import EntryVersion
-    versions = EntryVersion.objects.select_related('entry').order_by('-timestamp')[:200]
+    versions = EntryVersion.objects.select_related('entry').order_by('-timestamp')[:1000]
     items = []
     for v in versions:
         entry = v.entry
@@ -1191,7 +1191,7 @@ def api_diary_entries(request):
     diary_qs = Entry.objects.filter(
         context_id='diary', kind='journal', deleted_at__isnull=True,
         data__entry_id__startswith='diary-',
-    ).order_by('-timestamp_modified')[:60]
+    ).order_by('-timestamp_modified')[:1000]
     result['diary_entries'] = [render_entry(e) for e in diary_qs]
 
     return JsonResponse(result)
@@ -1745,8 +1745,12 @@ def dashboard_search(request):
     # Pagination, not a cap. The DB query is unbounded — what gets paged
     # in to the list view is one SEARCH_PAGE at a time, and the client
     # asks for more (offset=N) when the user scrolls past the bottom.
-    SEARCH_PAGE = 200
+    SEARCH_PAGE = 1000
     offset = int(request.GET.get('offset', 0))
+    # Total match count — only compute on the first page so the label can
+    # show "N of TOTAL". Subsequent paginated fetches reuse the value the
+    # client already has.
+    total_count = qs.count() if offset == 0 else None
     if sort == 'rank':
         entries = list(qs.order_by('-rank', '-timestamp_modified')[offset:offset + SEARCH_PAGE])
     elif sort == 'size':
@@ -1790,6 +1794,7 @@ def dashboard_search(request):
         'entries': result,
         'has_more': has_more,
         'offset': offset,
+        'total_count': total_count,
     })
 
 
@@ -4120,7 +4125,7 @@ def api_context_entries(request, context_name):
     entries = Entry.objects.filter(
         context_id=context_name,
         deleted_at__isnull=True,
-    ).exclude(status='archive').order_by('-timestamp_modified')[:200]
+    ).exclude(status='archive').order_by('-timestamp_modified')[:1000]
 
     entry_ids = [e.id for e in entries]
     tags_by_entry = {}
@@ -5535,7 +5540,7 @@ def api_system_data(request):
     wd_logs = list(AppLog.objects.filter(
         source='watchdog',
         timestamp__gte=wd_cutoff,
-    ).order_by('-timestamp')[:50].values_list(
+    ).order_by('-timestamp')[:1000].values_list(
         'timestamp', 'levelname', 'message'
     ))
     app_tz = get_app_tz()

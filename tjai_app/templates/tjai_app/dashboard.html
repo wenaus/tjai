@@ -725,7 +725,9 @@
                 if (isSearchActive) {
                     const q = document.getElementById('entry-search').value.trim();
                     const filterNote = buildFilterParams().length > 0 ? ' + filters' : '';
-                    const countStr = hasMoreEntries ? `${loadedEntryCount}+ results` : `${loadedEntryCount} results`;
+                    const countStr = hasMoreEntries
+                        ? `${loadedEntryCount} of ${totalEntryCount} results`
+                        : `${totalEntryCount} results`;
                     document.getElementById('entries-label').innerHTML = `Search: "${escapeHtml(q)}"${filterNote} <span style="color:#8a8a8a">(${countStr})</span>`;
                 } else {
                     document.getElementById('entries-label').innerHTML = entriesLabel();
@@ -824,8 +826,11 @@
                 const items = data.entries || [];
                 loadedEntryCount = items.length;
                 hasMoreEntries = !!data.has_more;
+                totalEntryCount = (data.total_count != null) ? data.total_count : items.length;
                 const filterNote = buildFilterParams().length > 0 ? ' + filters' : '';
-                const countStr = hasMoreEntries ? `${loadedEntryCount}+ results` : `${loadedEntryCount} results`;
+                const countStr = hasMoreEntries
+                    ? `${loadedEntryCount} of ${totalEntryCount} results`
+                    : `${totalEntryCount} results`;
                 document.getElementById('entries-label').innerHTML = `Search: "${escapeHtml(query)}"${filterNote} <span style="color:#8a8a8a">(${countStr})</span>`;
                 document.getElementById('entries-list').innerHTML = renderEntries(items, dashboardTimezone);
             } catch (err) {
