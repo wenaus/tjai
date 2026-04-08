@@ -486,8 +486,16 @@ def main():
             # Extract ## Workday section from log and create workday_<yyyymmdd> entry.
             # Ideation prompt is required to emit a `## Workday` section with bulleted
             # day summary; we lift it into its own entry for the weekly assembler.
+            #
+            # The workday entry's date is yesterday relative to the run, not today:
+            # the ideation cron runs in the early hours reviewing the day that just
+            # ended. If the user already created and annotated the workday entry
+            # during the day, append the AI-extracted body to it rather than
+            # replacing — and skip the append if the body is already there
+            # (idempotent against manual reruns).
             if log_entry and log_entry.content:
                 import re
+                from datetime import timedelta
                 m = re.search(
                     r'^## Workday\s*\n(.*?)(?=\n## |\Z)',
                     log_entry.content,
@@ -495,20 +503,28 @@ def main():
                 )
                 if m:
                     workday_body = m.group(1).strip()
-                    workday_eid = f'workday_{yyyymmdd}'
-                    workday_full = f'## {yyyymmdd}\n\n{workday_body}'
+                    workday_date = today - timedelta(days=1)
+                    workday_yyyymmdd = workday_date.strftime('%Y%m%d')
+                    workday_eid = f'workday_{workday_yyyymmdd}'
                     existing_workday = Entry.objects.filter(
                         data__entry_id=workday_eid, deleted_at__isnull=True,
                     ).first()
                     if existing_workday:
-                        existing_workday.content = workday_full
-                        existing_workday.timestamp_modified = time.time()
-                        existing_workday.save(
-                            update_fields=['content', 'timestamp_modified'])
-                        logger.info("ideation-agent: updated %s (%d chars)",
-                                    workday_eid, len(workday_full))
+                        existing_content = existing_workday.content or ''
+                        if workday_body in existing_content:
+                            logger.info("ideation-agent: %s already contains body, "
+                                        "no append", workday_eid)
+                        else:
+                            new_content = existing_content.rstrip() + '\n\n' + workday_body
+                            existing_workday.content = new_content
+                            existing_workday.timestamp_modified = time.time()
+                            existing_workday.save(
+                                update_fields=['content', 'timestamp_modified'])
+                            logger.info("ideation-agent: appended to %s (now %d chars)",
+                                        workday_eid, len(new_content))
                     else:
                         from tjai_app import services
+                        workday_full = f'## {workday_yyyymmdd}\n\n{workday_body}'
                         result = services.create_entry(
                             content=workday_full,
                             kind='memory',
