@@ -529,6 +529,9 @@
                         line += ` <span style="color:#9ccc65">:${t}</span><span class="tag-del" data-eid="${entry.id}" data-tag="${t}" style="color:#ef5350;cursor:pointer;margin-left:1px">-</span>`;
                     }
                 }
+                if (isArchiveMode) {
+                    line += ` <button class="restore-btn" data-eid="${entry.id}" style="background:#2a6e3f;color:#fff;border:none;border-radius:3px;padding:1px 8px;margin-left:8px;cursor:pointer;font-size:11px;font-family:inherit">Restore</button>`;
+                }
 
                 // Build plain-text copy line: matches what's displayed, preserves markdown links
                 let plain = `=== ${tsStr} [${kindAbbr}]`;
@@ -751,6 +754,35 @@
                     if (prev) prev.remove();
                     tagDel.remove();
                 });
+                return;
+            }
+            const restoreBtn = e.target.closest('.restore-btn');
+            if (restoreBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                const eid = restoreBtn.dataset.eid;
+                restoreBtn.disabled = true;
+                restoreBtn.textContent = '...';
+                fetch('/tjai/api/picks/update', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+                    body: JSON.stringify({entry_id: eid, field: 'archived', value: false}),
+                }).then(r => r.json()).then(data => {
+                    if (data.ok) {
+                        // Remove the row from the archive view immediately
+                        const row = document.getElementById('e-' + eid);
+                        if (row) row.remove();
+                    } else {
+                        restoreBtn.disabled = false;
+                        restoreBtn.textContent = 'Restore';
+                        alert('Restore failed: ' + (data.error || 'unknown'));
+                    }
+                }).catch(err => {
+                    restoreBtn.disabled = false;
+                    restoreBtn.textContent = 'Restore';
+                    alert('Restore failed: ' + err.message);
+                });
+                return;
             }
         });
         document.getElementById('recent-entries').addEventListener('scroll', function() {

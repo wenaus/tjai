@@ -367,6 +367,35 @@ def create_entry(content, kind="memory", context=None, name=None, tags=None,
     if duplicate:
         return {"error": "Duplicate entry - same content was just created"}
 
+    # Bookmark URL dedup: if a bookmark with this URL already exists in any
+    # state (including archived), refuse the new one. The picks agent's
+    # in-prompt dedup is unreliable; this enforces it server-side so the
+    # archive isn't repeatedly polluted with the same URL across daily runs.
+    if kind == 'bookmark':
+        import re as _re
+        from django.db.models import Q
+        url = None
+        m = _re.search(r'\(\s*(https?://[^\s\)]+)\s*\)', content)
+        if m:
+            url = m.group(1).strip()
+        else:
+            m = _re.search(r'(https?://\S+)', content)
+            if m:
+                url = m.group(1).strip()
+        if url:
+            existing_bm = Entry.objects.filter(
+                kind='bookmark',
+                deleted_at__isnull=True,
+            ).filter(
+                Q(content__contains=f'({url})') | Q(content=url) | Q(content__startswith=url + ' ')
+            ).order_by('-timestamp_modified').first()
+            if existing_bm:
+                return {
+                    "error": f"Bookmark with URL already exists",
+                    "existing_id": str(existing_bm.id),
+                    "url": url,
+                }
+
     context_obj = None
     if context:
         try:

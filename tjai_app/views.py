@@ -1685,12 +1685,13 @@ def dashboard_search(request):
         rank=SearchRank('search_vector', search_query, normalization=1, cover_density=True),
     )
 
-    # Apply same filters as dashboard_status
+    # Apply same filters as dashboard_status. Search includes archived
+    # entries by default (unlike the entry list) — when you're searching
+    # for something specific, you want to find it whether or not it was
+    # archived during a picks-curation pass.
     filter_status = request.GET.get('status')
     if filter_status:
         qs = qs.filter(status=filter_status)
-    else:
-        qs = qs.exclude(status='archive')
 
     filter_kind = request.GET.get('kind')
     if filter_kind:
@@ -3421,13 +3422,18 @@ def api_add_bookmark(request):
         deleted_at__isnull=True,
     ).filter(
         Q(content__contains=f'({url})') | Q(content=url) | Q(content__startswith=url + ' ')
-    ).first()
+    ).order_by('-timestamp_modified').first()
     if duplicate:
         duplicate.content = content
         if inline_name:
             duplicate.name = inline_name
         if inline_context:
             duplicate.context_id = inline_context
+        # User explicitly saved via chrome extension — they want this
+        # bookmark visible. Clear archived status if set so it reappears
+        # in default dashboard views.
+        if duplicate.status == 'archive':
+            duplicate.status = None
         duplicate.timestamp_modified = time.time()
         duplicate.is_dirty = 1
         duplicate.save()
@@ -5152,12 +5158,23 @@ def api_picks_update(request):
     if not entry:
         return JsonResponse({'error': 'Entry not found'}, status=404)
 
+    # Idempotent archive: if user clicks archive on something already in
+    # the archive, do nothing — don't bump timestamp_modified, don't create
+    # a version snapshot. Archiving the already-archived is a no-op.
+    if field == 'archived' and value and entry.status == 'archive':
+        return JsonResponse({'ok': True, 'noop': 'already archived'})
+
     data = entry.data if isinstance(entry.data, dict) else {}
     data[field] = value
     entry.data = data
 
-    if field == 'archived' and value:
-        entry.status = 'archive'
+    if field == 'archived':
+        if value:
+            entry.status = 'archive'
+        elif entry.status == 'archive':
+            # Restore from archive: clear the status so the entry reappears
+            # in default dashboard views.
+            entry.status = None
     if field == 'kept' and value:
         entry.status = None  # kept items should not be archived
     if field == 'readme':
