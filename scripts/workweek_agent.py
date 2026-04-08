@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Build the weekly workweek_<yyyymmdd> entry from the prior Mon-Sun workdays.
+"""Build the weekly workweek_<yyyymmdd> entry from the prior Sat-Fri workdays.
 
-Invoked Mon 05:00 EDT as the workweek-agent action's mechanical_script.
+Invoked Sat 05:00 EDT as the workweek-agent action's mechanical_script.
 Steps:
-  1. Compute the prior Mon-Sun (relative to today, in user TZ).
+  1. Compute the prior Sat-Fri (relative to today, in user TZ).
   2. Load each workday_<yyyymmdd> entry for that range.
-  3. Concatenate the dailies into a single workweek_input_<lastMon> entry
+  3. Concatenate the dailies into a single workweek_input_<lastSat> entry
      (provenance: shows exactly what the AI was given).
   4. Call Claude with the concatenation + an instruction to produce a
      topically organized weekly summary.
-  5. Save the result as workweek_<lastMon> entry.
+  5. Save the result as workweek_<lastSat> entry.
 """
 import os
 import sys
@@ -42,7 +42,7 @@ if not logger.handlers:
 
 SUMMARY_INSTRUCTION = """You are summarizing a week of activity for the user.
 
-Below are seven daily activity reports (Monday through Sunday). Produce a
+Below are seven daily activity reports (Saturday through Friday). Produce a
 TOPICAL summary of the week organized by project / area / theme — NOT day by
 day. Each topic gets a `## <Topic>` section with bulleted points covering what
 was done across the week in that area.
@@ -58,18 +58,26 @@ first topic header on the first line.
 
 
 def _compute_prior_week(today):
-    """Return (last_monday_date, [date for each of Mon..Sun]).
+    """Return (last_saturday_date, [date for each of Sat..Fri]).
 
-    last_monday is the Monday of the most recently completed Mon-Sun week.
-    On a Monday run, that is today minus 7 days.
+    last_saturday is the Saturday of the most recently completed Sat-Fri week.
+    On a Saturday run, that is today minus 7 days (the prior Sat-Fri week
+    ended yesterday Friday).
     """
-    # Mon-Sun week. last_sunday = today - (weekday + 1)
-    #   today=Mon (wd=0): last_sun = today-1, last_mon = today-7   ✓
-    #   today=Tue (wd=1): last_sun = today-2, last_mon = today-8   ✓
-    #   today=Sun (wd=6): last_sun = today-7, last_mon = today-13  ✓
-    last_sun = today - timedelta(days=today.weekday() + 1)
-    last_mon = last_sun - timedelta(days=6)
-    return last_mon, [last_mon + timedelta(days=i) for i in range(7)]
+    # Sat-Fri week. Find the most recent past Friday, then back up 6 days
+    # to its Saturday. On the cron's Sat run, the most recent past Friday
+    # is yesterday, so last_sat = today - 7. Other days handled the same:
+    #   Sat (wd=5): last_fri = today - 1,  last_sat = today - 7  ✓
+    #   Sun (wd=6): last_fri = today - 2,  last_sat = today - 8  ✓
+    #   Mon (wd=0): last_fri = today - 3,  last_sat = today - 9  ✓
+    #   Fri (wd=4): we treat today's week as not yet complete and
+    #               return the week before that — last_fri = today - 7.
+    days_since_fri = (today.weekday() - 4) % 7
+    if days_since_fri == 0:  # today is Friday — use the prior week
+        days_since_fri = 7
+    last_fri = today - timedelta(days=days_since_fri)
+    last_sat = last_fri - timedelta(days=6)
+    return last_sat, [last_sat + timedelta(days=i) for i in range(7)]
 
 
 def _load_workdays(week_days):
@@ -142,11 +150,11 @@ def _call_claude(prompt):
 def main():
     tz = get_timezone()
     today = datetime.now(tz).date()
-    last_mon, week_days = _compute_prior_week(today)
-    last_mon_str = last_mon.strftime('%Y%m%d')
+    last_sat, week_days = _compute_prior_week(today)
+    last_sat_str = last_sat.strftime('%Y%m%d')
 
-    logger.info("workweek: building for %s..%s (last_mon=%s)",
-                week_days[0].isoformat(), week_days[-1].isoformat(), last_mon_str)
+    logger.info("workweek: building for %s..%s (last_sat=%s)",
+                week_days[0].isoformat(), week_days[-1].isoformat(), last_sat_str)
 
     workdays = _load_workdays(week_days)
     if not workdays:
@@ -155,13 +163,13 @@ def main():
     logger.info("workweek: loaded %d/7 workday entries", len(workdays))
 
     concat = _build_concat(workdays)
-    input_eid = f'workweek_input_{last_mon_str}'
+    input_eid = f'workweek_input_{last_sat_str}'
     _upsert_entry(input_eid, concat, tags='workweek-input,fromai')
 
     prompt = f"{SUMMARY_INSTRUCTION}\n\n--- DAILY REPORTS ---\n\n{concat}"
     summary = _call_claude(prompt)
 
-    workweek_eid = f'workweek_{last_mon_str}'
+    workweek_eid = f'workweek_{last_sat_str}'
     _upsert_entry(workweek_eid, summary, tags='workweek-log,fromai')
     logger.info("workweek: done")
 

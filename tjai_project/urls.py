@@ -112,6 +112,8 @@ urlpatterns = [
     # Workday/workweek get-or-create — idempotent, redirects to entry detail
     path("workday/<str:yyyymmdd>/", views.workday_open, name="workday_open"),
     path("workweek/<str:yyyymmdd>/", views.workweek_open, name="workweek_open"),
+    # This week — Sat-Fri current-week diary digest
+    path("this-week/", views.this_week, name="this_week"),
     path("context/<str:context_name>/", views.context_entries, name="context_entries"),
     path("poetry/author/<path:author_name>/", views.poetry_author_entries, name="poetry_author_entries"),
     path("tag/<str:tag_name>/", views.tag_entries, name="tag_entries"),

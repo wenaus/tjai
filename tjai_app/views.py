@@ -2703,6 +2703,72 @@ def workweek_open(request, yyyymmdd=None):
 
 
 @login_required
+def this_week(request):
+    """Show the current Sat-Fri week's diary entries plus a workweek link.
+
+    Pulls existing diary-yyyy-mm-dd entries for the current Sat-Fri range
+    and renders them in order. Days with no entry are still listed (empty)
+    so the structure of the week is visible. The workweek_<sat-yyyymmdd>
+    entry is linked at the top via the get-or-create endpoint, so clicking
+    it lands in an editable stub even before the agent has run.
+    """
+    import markdown as md_lib
+    tz = get_app_tz()
+    today = datetime.now(tz).date()
+    # Sat-Fri week. Python weekday: Mon=0..Sun=6, Sat=5.
+    # Days back to most recent Sat (or 0 if today is Sat):
+    #   Sat(5)=0, Sun(6)=1, Mon(0)=2, Tue(1)=3, Wed(2)=4, Thu(3)=5, Fri(4)=6
+    days_back = (today.weekday() + 2) % 7
+    week_start = today - timedelta(days=days_back)
+    week_dates = [week_start + timedelta(days=i) for i in range(7)]
+
+    # One query for all seven possible diary entries
+    entry_ids = [f'diary-{d.isoformat()}' for d in week_dates]
+    diary_qs = Entry.objects.filter(
+        data__entry_id__in=entry_ids, deleted_at__isnull=True,
+    )
+    by_eid = {}
+    for e in diary_qs:
+        if isinstance(e.data, dict):
+            by_eid[e.data.get('entry_id')] = e
+
+    days = []
+    for d in week_dates:
+        eid = f'diary-{d.isoformat()}'
+        e = by_eid.get(eid)
+        body_html = ''
+        first_line = ''
+        if e:
+            body_lines = e.content.split('\n')
+            first_line = body_lines[0] if body_lines else ''
+            body_text = '\n'.join(body_lines[1:]).strip() if len(body_lines) > 1 else ''
+            if body_text:
+                body_html = md_lib.markdown(
+                    _fix_md_list_spacing(body_text),
+                    extensions=['tables', 'fenced_code'],
+                    tab_length=2,
+                )
+        days.append({
+            'date': d,
+            'day_label': d.strftime('%a %b ') + str(d.day),
+            'entry_id': eid,
+            'first_line': first_line,
+            'body_html': body_html,
+            'has_entry': e is not None,
+            'is_today': d == today,
+        })
+
+    workweek_yyyymmdd = week_start.strftime('%Y%m%d')
+    return render(request, 'tjai_app/this_week.html', {
+        'days': days,
+        'week_start': week_start,
+        'week_end': week_dates[-1],
+        'workweek_url': f'/tjai/workweek/{workweek_yyyymmdd}/',
+        'workweek_yyyymmdd': workweek_yyyymmdd,
+    })
+
+
+@login_required
 def entry_detail(request, entry_id=None):
     """Show single entry detail page.
 

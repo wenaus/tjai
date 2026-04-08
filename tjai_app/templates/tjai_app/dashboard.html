@@ -304,11 +304,12 @@
         const workweekBtn = document.getElementById('workweek-btn');
         if (workweekBtn) workweekBtn.addEventListener('click', () => {
             const d = new Date();
-            const dow = d.getDay();  // Sun=0..Sat=6
-            const daysToMonday = dow === 0 ? 6 : dow - 1;
-            const mon = new Date(d);
-            mon.setDate(d.getDate() - daysToMonday);
-            window.location.href = '/tjai/workweek/' + _yyyymmdd(mon) + '/';
+            const dow = d.getDay();  // JS getDay: Sun=0..Sat=6
+            // Days back to most recent Saturday (or 0 if today is Sat).
+            const daysToSaturday = (dow + 1) % 7;
+            const sat = new Date(d);
+            sat.setDate(d.getDate() - daysToSaturday);
+            window.location.href = '/tjai/workweek/' + _yyyymmdd(sat) + '/';
         });
 
         function renderNamed(data) {

@@ -202,8 +202,11 @@
                 const state = getCollapseState();
                 let html = '';
 
-                // Quick link to edit today's diary
-                html += `<div style="margin-bottom:12px"><a href="#" onclick="event.preventDefault();createDiaryEntry(todayStr())" style="color:#90caf9">Edit today's diary</a></div>`;
+                // Quick links: edit today's diary, view current week
+                html += `<div style="margin-bottom:12px;display:flex;gap:18px">`;
+                html += `<a href="#" onclick="event.preventDefault();createDiaryEntry(todayStr())" style="color:#90caf9">Edit today's diary</a>`;
+                html += `<a href="/tjai/this-week/" style="color:#90caf9">This Week</a>`;
+                html += `</div>`;
 
                 // @Underway
                 if (data.underway) {
