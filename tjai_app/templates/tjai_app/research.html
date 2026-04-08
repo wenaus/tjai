@@ -312,7 +312,7 @@
 
             // --- Fact 2: Remote workers (one entry per MACHINE) ---
             // Aliveness is a property of the machine, not of the cap it
-            // advertises. A machine holds ONE state — busy / idle /
+            // advertises. A machine holds ONE state — busy / ready /
             // zombie / disconnected — and that state covers every cap
             // the machine advertises. Per-cap display contradictions
             // (cap A busy, cap B disconnected on the same machine) are
@@ -348,7 +348,7 @@
                     } else if (w.state === 'idle') {
                         color = '#9ccc65';
                         const lastPoll = w.last_poll_ago ? ` (last poll ${w.last_poll_ago})` : '';
-                        phrase = `idle${lastPoll}`;
+                        phrase = `ready${lastPoll}`;
                     } else if (w.state === 'disconnected') {
                         color = '#ef5350';
                         const lastPoll = w.last_poll_ago ? ` (last poll ${w.last_poll_ago})` : '';
