@@ -2675,6 +2675,7 @@ def _open_dated_log(yyyymmdd, prefix, tag):
         data__entry_id=eid, deleted_at__isnull=True,
     ).first()
     if not existing:
+        from . import services
         result = services.create_entry(
             content=f'## {yyyymmdd}\n\n',
             kind='memory',
