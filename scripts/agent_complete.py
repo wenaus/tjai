@@ -524,7 +524,7 @@ def main():
                                         workday_eid, len(new_content))
                     else:
                         from tjai_app import services
-                        workday_full = f'## {workday_yyyymmdd}\n\n{workday_body}'
+                        workday_full = f'## Workday {workday_yyyymmdd}\n\n{workday_body}'
                         result = services.create_entry(
                             content=workday_full,
                             kind='memory',

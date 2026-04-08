@@ -2656,11 +2656,11 @@ def entry_public_json(request, entry_id=None):
     })
 
 
-def _open_dated_log(yyyymmdd, prefix, tag):
+def _open_dated_log(yyyymmdd, prefix, tag, header_label=None):
     """Shared get-or-create for workday/workweek dated log entries.
 
     Idempotent: hitting twice returns the same entry. The created stub has
-    just the date header so the user can start typing immediately. For
+    just a header line so the user can start typing immediately. For
     workday, the ideation agent's append-not-replace logic will later add
     AI-extracted bullets below user content.
     """
@@ -2675,9 +2675,10 @@ def _open_dated_log(yyyymmdd, prefix, tag):
         data__entry_id=eid, deleted_at__isnull=True,
     ).first()
     if not existing:
+        header = f'## {header_label} {yyyymmdd}' if header_label else f'## {yyyymmdd}'
         from . import services
         result = services.create_entry(
-            content=f'## {yyyymmdd}\n\n',
+            content=f'{header}\n\n',
             kind='memory',
             tags=tag,
             data={'entry_id': eid},
@@ -2690,13 +2691,15 @@ def _open_dated_log(yyyymmdd, prefix, tag):
 @login_required
 def workday_open(request, yyyymmdd=None):
     """Get-or-create workday_<yyyymmdd> and redirect to entry detail."""
-    return _open_dated_log(yyyymmdd, prefix='workday', tag='workday-log')
+    return _open_dated_log(yyyymmdd, prefix='workday', tag='workday-log',
+                           header_label='Workday')
 
 
 @login_required
 def workweek_open(request, yyyymmdd=None):
     """Get-or-create workweek_<yyyymmdd> and redirect to entry detail."""
-    return _open_dated_log(yyyymmdd, prefix='workweek', tag='workweek-log')
+    return _open_dated_log(yyyymmdd, prefix='workweek', tag='workweek-log',
+                           header_label='Workweek')
 
 
 @login_required
