@@ -1742,12 +1742,18 @@ def dashboard_search(request):
 
     from django.db.models.functions import Length
     sort = request.GET.get('sort', 'time')
+    # Pagination, not a cap. The DB query is unbounded — what gets paged
+    # in to the list view is one SEARCH_PAGE at a time, and the client
+    # asks for more (offset=N) when the user scrolls past the bottom.
+    SEARCH_PAGE = 200
+    offset = int(request.GET.get('offset', 0))
     if sort == 'rank':
-        entries = qs.order_by('-rank', '-timestamp_modified')[:200]
+        entries = list(qs.order_by('-rank', '-timestamp_modified')[offset:offset + SEARCH_PAGE])
     elif sort == 'size':
-        entries = qs.annotate(content_len=Length('content')).order_by('-content_len')[:200]
+        entries = list(qs.annotate(content_len=Length('content')).order_by('-content_len')[offset:offset + SEARCH_PAGE])
     else:
-        entries = qs.order_by('-timestamp_modified')[:200]
+        entries = list(qs.order_by('-timestamp_modified')[offset:offset + SEARCH_PAGE])
+    has_more = len(entries) == SEARCH_PAGE
 
     # Batch fetch tags
     entry_ids = [e.id for e in entries]
@@ -1780,7 +1786,11 @@ def dashboard_search(request):
             'all_tags': entry_tags,
         })
 
-    return JsonResponse({'entries': result})
+    return JsonResponse({
+        'entries': result,
+        'has_more': has_more,
+        'offset': offset,
+    })
 
 
 @login_required

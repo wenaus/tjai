@@ -687,9 +687,10 @@
         }
 
         async function loadMoreEntries() {
-            if (loadingMore || isSearchActive) return;
+            if (loadingMore) return;
             // If no more entries and from_time is set, extend backward by 1 hour
-            if (!hasMoreEntries && activeFromTime) {
+            // (only meaningful in normal entry-list mode, not in search).
+            if (!hasMoreEntries && !isSearchActive && activeFromTime) {
                 activeFromTime = shiftIsoTime(activeFromTime, -3600000);
                 syncStateToUrl();
                 updateTimeRangeDisplay();
@@ -701,15 +702,34 @@
             const indicator = document.getElementById('load-more-indicator');
             if (indicator) indicator.style.display = 'block';
             try {
-                const params = [`offset=${loadedEntryCount}`, ...buildFilterParams()];
-                const resp = await fetch(`/tjai/api/dashboard/status?${params.join('&')}`);
+                let url;
+                if (isSearchActive) {
+                    const q = document.getElementById('entry-search').value.trim();
+                    if (!q) { return; }
+                    const sort = document.querySelector('input[name="search-sort"]:checked').value;
+                    const params = [`q=${encodeURIComponent(q)}`, `sort=${sort}`, `offset=${loadedEntryCount}`, ...buildFilterParams()];
+                    url = `/tjai/api/dashboard/search?${params.join('&')}`;
+                } else {
+                    const params = [`offset=${loadedEntryCount}`, ...buildFilterParams()];
+                    url = `/tjai/api/dashboard/status?${params.join('&')}`;
+                }
+                const resp = await fetch(url);
                 const data = await resp.json();
-                const newHtml = renderEntries(data.recent_entries || [], dashboardTimezone);
+                // search returns 'entries', status returns 'recent_entries'
+                const items = data.entries || data.recent_entries || [];
+                const newHtml = renderEntries(items, dashboardTimezone);
                 document.getElementById('entries-list').insertAdjacentHTML('beforeend', newHtml);
-                loadedEntryCount += (data.recent_entries || []).length;
+                loadedEntryCount += items.length;
                 hasMoreEntries = data.has_more;
                 if (data.total_count) totalEntryCount = data.total_count;
-                document.getElementById('entries-label').innerHTML = entriesLabel();
+                if (isSearchActive) {
+                    const q = document.getElementById('entry-search').value.trim();
+                    const filterNote = buildFilterParams().length > 0 ? ' + filters' : '';
+                    const countStr = hasMoreEntries ? `${loadedEntryCount}+ results` : `${loadedEntryCount} results`;
+                    document.getElementById('entries-label').innerHTML = `Search: "${escapeHtml(q)}"${filterNote} <span style="color:#8a8a8a">(${countStr})</span>`;
+                } else {
+                    document.getElementById('entries-label').innerHTML = entriesLabel();
+                }
             } catch (err) {
                 console.error('Load more failed:', err);
             } finally {
@@ -798,13 +818,16 @@
             isSearchActive = true;
             try {
                 const sort = document.querySelector('input[name="search-sort"]:checked').value;
-                const params = [`q=${encodeURIComponent(query)}`, `sort=${sort}`, ...buildFilterParams()];
+                const params = [`q=${encodeURIComponent(query)}`, `sort=${sort}`, `offset=0`, ...buildFilterParams()];
                 const resp = await fetch(`/tjai/api/dashboard/search?${params.join('&')}`);
                 const data = await resp.json();
-                const count = data.entries ? data.entries.length : 0;
+                const items = data.entries || [];
+                loadedEntryCount = items.length;
+                hasMoreEntries = !!data.has_more;
                 const filterNote = buildFilterParams().length > 0 ? ' + filters' : '';
-                document.getElementById('entries-label').innerHTML = `Search: "${escapeHtml(query)}"${filterNote} <span style="color:#8a8a8a">(${count} results)</span>`;
-                document.getElementById('entries-list').innerHTML = renderEntries(data.entries || [], dashboardTimezone);
+                const countStr = hasMoreEntries ? `${loadedEntryCount}+ results` : `${loadedEntryCount} results`;
+                document.getElementById('entries-label').innerHTML = `Search: "${escapeHtml(query)}"${filterNote} <span style="color:#8a8a8a">(${countStr})</span>`;
+                document.getElementById('entries-list').innerHTML = renderEntries(items, dashboardTimezone);
             } catch (err) {
                 document.getElementById('entries-list').innerHTML = `<div style="color:#f44">Search error: ${escapeHtml(err.message)}</div>`;
             }
