@@ -5431,7 +5431,7 @@ def api_system_status(request):
         recent_errors = AppLog.objects.filter(
             source='agent_complete',
             level__gte=40,
-            timestamp__gte=_tz.now() - timedelta(hours=1),
+            timestamp__gte=_tz.now() - timedelta(hours=24),
         ).exists()
         if recent_errors:
             agents_status = 'red'
