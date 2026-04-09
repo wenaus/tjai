@@ -6163,11 +6163,17 @@ def api_agent_queue_data(request):
     ).order_by('-timestamp')[:100]
 
     seen_from_applog = set()  # action_ids that have AppLog history
+    seen_tracking = set()  # deduplicate multiple logs for same run
     for log_entry in completion_logs:
         ed = log_entry.extra_data or {}
         aid = ed.get('action_id', '')
         if not aid:
             continue
+        tracking = ed.get('tracking', '')
+        dedup_key = f'{aid}:{tracking}' if tracking else f'{aid}:{log_entry.id}'
+        if dedup_key in seen_tracking:
+            continue
+        seen_tracking.add(dedup_key)
         seen_from_applog.add(aid)
         entry_uuid = ed.get('entry_id', '')
         completed_at = log_entry.timestamp.timestamp()
