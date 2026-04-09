@@ -191,7 +191,7 @@
                 <div id="calendar-content">Loading calendar...</div>
             </div>
             <div id="named-section">
-                <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">Named Entries <span><button id="underway-btn" onclick="window.location.href='/tjai/entry/underway/?edit=1'" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px;margin-right:4px" title="Edit @Underway">Underway</button><button id="workday-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px;margin-right:4px" title="Today's workday entry">Workday</button><button id="workweek-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px;margin-right:4px" title="This week's workweek entry">Workweek</button><button id="create-entry-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px">Create Entry</button></span></div>
+                <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">Named Entries <span><button id="workday-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px;margin-right:4px" title="Today's workday entry">Workday</button><button onclick="window.location.href='/tjai/this-week/'" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px;margin-right:4px" title="This week's summary">Workweek</button><button id="create-entry-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px">Create Entry</button></span></div>
                 <div id="named-content">Loading named...</div>
             </div>
         </div>
@@ -300,16 +300,6 @@
         const workdayBtn = document.getElementById('workday-btn');
         if (workdayBtn) workdayBtn.addEventListener('click', () => {
             window.location.href = '/tjai/workday/' + _yyyymmdd(new Date()) + '/';
-        });
-        const workweekBtn = document.getElementById('workweek-btn');
-        if (workweekBtn) workweekBtn.addEventListener('click', () => {
-            const d = new Date();
-            const dow = d.getDay();  // JS getDay: Sun=0..Sat=6
-            // Days back to most recent Saturday (or 0 if today is Sat).
-            const daysToSaturday = (dow + 1) % 7;
-            const sat = new Date(d);
-            sat.setDate(d.getDate() - daysToSaturday);
-            window.location.href = '/tjai/workweek/' + _yyyymmdd(sat) + '/';
         });
 
         function renderNamed(data) {
