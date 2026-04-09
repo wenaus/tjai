@@ -182,7 +182,7 @@
     </style>
 </head>
 <body>
-    {% if is_archive %}{% with current_page="archive" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% elif is_dialog %}{% with current_page="dialog" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% else %}{% with current_page="dashboard" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% endif %}
+    {% if is_trash %}{% with current_page="trash" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% elif is_archive %}{% with current_page="archive" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% elif is_dialog %}{% with current_page="dialog" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% else %}{% with current_page="dashboard" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% endif %}
     <div class="container">
         {% if not is_archive and not is_dialog %}
         <div class="panel panel-left" id="calendar-panel">
@@ -197,7 +197,7 @@
         </div>
         {% endif %}
         <div class="panel panel-right" id="status-panel">
-            <div class="panel-header" style="display:flex; align-items:center;">{% if is_archive %}Archive <a href="{% url 'versions_page' %}" style="color:#90caf9;font-size:12px;font-weight:normal;margin-left:12px">Item Versions</a>{% elif is_dialog %}Dialog{% else %}Status{% endif %}<span class="refresh-indicator"><span id="refresh-indicator"></span> <a href="{% url 'logout' %}" style="color:#999;margin-left:12px">Logout</a></span></div>
+            <div class="panel-header" style="display:flex; align-items:center;">{% if is_trash %}Trash{% elif is_archive %}Archive <a href="{% url 'versions_page' %}" style="color:#90caf9;font-size:12px;font-weight:normal;margin-left:12px">Item Versions</a>{% elif is_dialog %}Dialog{% else %}Status{% endif %}<span class="refresh-indicator"><span id="refresh-indicator"></span> <a href="{% url 'logout' %}" style="color:#999;margin-left:12px">Logout</a></span></div>
             <div id="status-fixed">Loading status...</div>
             <div id="entries-header" style="display:flex; align-items:center; gap:12px; margin-top:16px; margin-bottom:8px; border-top:1px solid #333; padding-top:12px; flex-shrink:0;">
                 <span id="entries-label" style="color: #d8a070;">Entries <span style="color:#8a8a8a">with modified time</span></span>
@@ -635,6 +635,7 @@
             if (activeFromTime) params.push(`from_time=${encodeURIComponent(activeFromTime)}`);
             if (activeToTime) params.push(`to_time=${encodeURIComponent(activeToTime)}`);
             if (expandDialog) params.push('expand_dialog=1');
+            if (isTrashMode) params.push('deleted=1');
             return params;
         }
 
@@ -1136,7 +1137,8 @@
 
         const isArchiveMode = {{ is_archive|yesno:"true,false" }};
         const isDialogMode = {{ is_dialog|yesno:"true,false" }};
-        const isSimplifiedMode = isArchiveMode || isDialogMode;
+        const isTrashMode = {{ is_trash|yesno:"true,false" }};
+        const isSimplifiedMode = isArchiveMode || isDialogMode || isTrashMode;
 
         async function refresh() {
             const start = performance.now();

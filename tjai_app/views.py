@@ -1122,6 +1122,7 @@ def dashboard(request):
     return render(request, 'tjai_app/dashboard.html', {
         'is_archive': request.GET.get('status') == 'archive',
         'is_dialog': request.GET.get('context') == 'claude-code',
+        'is_trash': request.GET.get('deleted') == '1',
     })
 
 
@@ -1436,13 +1437,15 @@ def dashboard_status(request):
     if not filter_context and 'claude-code' not in exclude_contexts:
         exclude_contexts.append('claude-code')
 
-    base_qs = Entry.objects.filter(
-        deleted_at__isnull=True,
-    )
-    if filter_status:
-        base_qs = base_qs.filter(status=filter_status)
+    show_deleted = request.GET.get('deleted') == '1'
+    if show_deleted:
+        base_qs = Entry.objects.filter(deleted_at__isnull=False)
     else:
-        base_qs = base_qs.exclude(status='archive')
+        base_qs = Entry.objects.filter(deleted_at__isnull=True)
+        if filter_status:
+            base_qs = base_qs.filter(status=filter_status)
+        else:
+            base_qs = base_qs.exclude(status='archive')
 
     if filter_kind:
         base_qs = base_qs.filter(kind=filter_kind)
