@@ -522,15 +522,8 @@
             picksAgentRunning = agent.status === 'running';
             if (picksAgentRunning) {
                 let runText = '';
-                // Activity dot
-                let dotClass = 'dot-idle';
-                if (agent.last_activity) {
-                    const actAge = Date.now() / 1000 - parseFloat(agent.last_activity);
-                    if (actAge < 30) dotClass = 'dot-active';
-                    else if (actAge < 300) dotClass = 'dot-idle';
-                    else dotClass = 'dot-stale';
-                } else if (agent.health === 'active') dotClass = 'dot-active';
-                else if (agent.health === 'stale') dotClass = 'dot-stale';
+                // Activity dot — green while running
+                let dotClass = 'dot-active';
                 runText += `<span class="activity-dot ${dotClass}"></span>`;
                 if (agent.launched) {
                     const elapsed = Math.floor(Date.now() / 1000 - agent.launched);
