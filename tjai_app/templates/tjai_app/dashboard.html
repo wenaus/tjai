@@ -532,6 +532,9 @@
                 if (isArchiveMode) {
                     line += ` <button class="restore-btn" data-eid="${entry.id}" style="background:#2a6e3f;color:#fff;border:none;border-radius:3px;padding:1px 8px;margin-left:8px;cursor:pointer;font-size:11px;font-family:inherit">Restore</button>`;
                 }
+                if (isSearchActive) {
+                    line += ` <button class="search-del-btn" data-eid="${entry.id}" style="background:#8b0000;color:#fff;border:none;border-radius:3px;padding:1px 8px;margin-left:8px;cursor:pointer;font-size:11px;font-family:inherit" title="Delete">delete</button>`;
+                }
 
                 // Build plain-text copy line: matches what's displayed, preserves markdown links
                 let plain = `=== ${tsStr} [${kindAbbr}]`;
@@ -803,6 +806,30 @@
                     restoreBtn.disabled = false;
                     restoreBtn.textContent = 'Restore';
                     alert('Restore failed: ' + err.message);
+                });
+                return;
+            }
+            const delBtn = e.target.closest('.search-del-btn');
+            if (delBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                const eid = delBtn.dataset.eid;
+                delBtn.disabled = true;
+                delBtn.textContent = '...';
+                fetch(`/tjai/api/entry/${eid}`, {method: 'DELETE'})
+                .then(r => r.json()).then(data => {
+                    if (data.status === 'ok') {
+                        const row = document.getElementById('e-' + eid);
+                        if (row) row.remove();
+                    } else {
+                        delBtn.disabled = false;
+                        delBtn.textContent = 'delete';
+                        alert('Delete failed: ' + (data.error || 'unknown'));
+                    }
+                }).catch(err => {
+                    delBtn.disabled = false;
+                    delBtn.textContent = 'delete';
+                    alert('Delete failed: ' + err.message);
                 });
                 return;
             }
