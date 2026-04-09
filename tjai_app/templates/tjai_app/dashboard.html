@@ -941,6 +941,16 @@
                 html += `<div class="status-line">Contexts: ${ctxChips}</div>`;
             }
 
+            // Special tags (always shown, suppress in dialog mode)
+            if (!isDialogMode) {
+                const specialTags = ['fave', 'my', 'cool', 'daily'];
+                const specialLinks = specialTags.map(t => {
+                    const activeClass = activeTags.has(t) ? ' active' : '';
+                    return `<a href="#" class="tag-link${activeClass}" data-tag="${t}" style="color:#9ccc65;text-decoration:none">${t}</a>`;
+                }).join(', ');
+                html += `<div class="status-line">Special tags: ${specialLinks} <input id="custom-tag-input" type="text" placeholder="tag" style="background:#2a2a2a;color:#e0e0e0;border:1px solid #555;border-radius:3px;padding:1px 6px;font-size:12px;font-family:inherit;width:80px;margin-left:8px" /></div>`;
+            }
+
             // Tags (suppress in dialog mode)
             if (!isDialogMode && data.all_tags && data.all_tags.length > 0) {
                 const tc = data.tag_counts || {};
@@ -1319,6 +1329,18 @@
             searchInput.focus();
             restoreFromSearch();
             syncStateToUrl();
+        });
+
+        // Custom tag input — Enter toggles that tag as a filter
+        document.addEventListener('keydown', function(e) {
+            const input = document.getElementById('custom-tag-input');
+            if (e.target === input && e.key === 'Enter') {
+                const tag = input.value.trim();
+                if (tag) {
+                    input.value = '';
+                    toggleFilter('tag', tag, 'tag-link');
+                }
+            }
         });
 
         // Load filter state from URL params (for bookmarks / programmatic URLs)
