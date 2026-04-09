@@ -206,25 +206,14 @@
                 html += `<div style="margin-bottom:12px;display:flex;gap:18px">`;
                 html += `<a href="#" onclick="event.preventDefault();createDiaryEntry(todayStr())" style="color:#90caf9">Edit today's diary</a>`;
                 html += `<a href="/tjai/this-week/" style="color:#90caf9">This Workweek</a>`;
-                html += `</div>`;
-
-                // @Underway
                 if (data.underway) {
                     const u = data.underway;
-                    const key = 'underway';
-                    const collapsed = !!state[key];
                     const url = u.entry_id
                         ? `/tjai/entry/?entry_id=${encodeURIComponent(u.entry_id)}&edit=1`
                         : `/tjai/entry/?uuid=${u.id}&edit=1`;
-                    html += `<div class="diary-item" data-key="${key}">`;
-                    html += `<div class="diary-header${collapsed ? ' collapsed' : ''}" onclick="toggleItem('${key}')">`;
-                    html += `<span class="toggle">${collapsed ? '\u25B6' : '\u25BC'}</span>`;
-                    html += `<span class="label-underway">@Underway</span>`;
-                    html += `<a href="${url}" onclick="event.stopPropagation()">edit</a>`;
-                    html += `</div>`;
-                    html += `<div class="diary-body${collapsed ? ' hidden' : ''}">${u.content_html || '<em>empty</em>'}</div>`;
-                    html += `</div>`;
+                    html += `<a href="${url}" style="color:#90caf9">@Underway</a>`;
                 }
+                html += `</div>`;
 
                 // Build date->entry map from diary entries
                 const entryByDate = {};
