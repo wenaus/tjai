@@ -664,7 +664,8 @@
                     var st = document.getElementById('saveStatus');
                     st.style.display = 'inline';
                     setTimeout(function() { st.style.display = 'none'; }, 2000);
-                    location.href = data.url;
+                    var returnUrl = new URLSearchParams(window.location.search).get('return');
+                    location.href = returnUrl || data.url;
                 } else {
                     alert('Save failed: ' + (data.error || 'unknown'));
                     // Restart autosave since we stopped it
