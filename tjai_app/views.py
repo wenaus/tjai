@@ -1013,6 +1013,23 @@ def api_command(request):
         }
         return JsonResponse({"status": "ok", "result": sysconfig})
 
+    elif command == "increment_json":
+        key = data.get("key")
+        field = data.get("field")
+        if not key or not field:
+            return JsonResponse({"error": "key and field required"}, status=400)
+        sc, _ = SysConfig.objects.get_or_create(
+            key=key, defaults={"value": "{}", "timestamp_modified": time.time()})
+        try:
+            obj = json.loads(sc.value)
+        except (json.JSONDecodeError, TypeError):
+            obj = {}
+        obj[field] = obj.get(field, 0) + 1
+        sc.value = json.dumps(obj)
+        sc.timestamp_modified = time.time()
+        sc.save(update_fields=["value", "timestamp_modified"])
+        return JsonResponse({"status": "ok", "result": obj})
+
     else:
         return JsonResponse({"error": f"Unknown command: {command}"}, status=400)
 
