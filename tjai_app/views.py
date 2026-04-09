@@ -6157,7 +6157,7 @@ def api_agent_queue_data(request):
     completion_logs = AppLog.objects.filter(
         source='agent_complete',
         timestamp__gte=cutoff,
-        level=20,  # INFO only — the exit_code summary line
+        level__in=[20, 40],  # INFO and ERROR — success and failure summaries
         extra_data__action_id__isnull=False,
         message__contains='exit_code=',
     ).order_by('-timestamp')[:100]
