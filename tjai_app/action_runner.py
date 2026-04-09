@@ -340,6 +340,9 @@ def dispatch_ai(action, entry_id=None, target_date=None):
         SysConfig.objects.update_or_create(
             key=f'agent_{action_id}_launched',
             defaults={'value': str(now), 'timestamp_modified': now})
+        SysConfig.objects.update_or_create(
+            key=f'agent_{action_id}_last_activity',
+            defaults={'value': str(now), 'timestamp_modified': now})
         # Track specific target entry for UI
         next_target_entry_id = data.get('next_target_entry_id')
         if next_target_entry_id:
