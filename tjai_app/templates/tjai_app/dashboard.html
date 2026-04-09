@@ -536,7 +536,7 @@
                 if (isArchiveMode) {
                     line += ` <button class="restore-btn" data-eid="${entry.id}" style="background:#2a6e3f;color:#fff;border:none;border-radius:3px;padding:1px 8px;margin-left:8px;cursor:pointer;font-size:11px;font-family:inherit">Restore</button>`;
                 }
-                line += ` <button class="search-del-btn" data-eid="${entry.id}" style="background:#8b0000;color:#fff;border:none;border-radius:3px;padding:1px 8px;margin-left:8px;cursor:pointer;font-size:11px;font-family:inherit" title="Delete">delete</button>`;
+                line += ` <button class="search-del-btn" data-eid="${entry.id}" style="background:#8b0000;color:#fff;border:none;border-radius:3px;padding:1px 8px;margin-left:8px;cursor:pointer;font-size:11px;font-family:inherit" title="Delete">X</button>`;
 
                 // Build plain-text copy line: matches what's displayed, preserves markdown links
                 let plain = `=== ${tsStr} [${kindAbbr}]`;
@@ -826,12 +826,12 @@
                         if (row) row.remove();
                     } else {
                         delBtn.disabled = false;
-                        delBtn.textContent = 'delete';
+                        delBtn.textContent = 'X';
                         alert('Delete failed: ' + (data.error || 'unknown'));
                     }
                 }).catch(err => {
                     delBtn.disabled = false;
-                    delBtn.textContent = 'delete';
+                    delBtn.textContent = 'X';
                     alert('Delete failed: ' + err.message);
                 });
                 return;
