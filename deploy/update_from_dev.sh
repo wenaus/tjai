@@ -6,15 +6,14 @@ REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 TARGET_DIR=/var/www/tjai
 VENV=$TARGET_DIR/.venv
 PYTHON=/opt/python-3.14/bin/python3.14
+SECONDS=0
 
 # rsync code (preserve .venv, .env, data/)
 # --chmod ensures files are world-readable so www-data (gunicorn) can read them
-rsync -av --chmod=D755,F644 \
+rsync -a --chmod=D755,F644 \
   --exclude '.venv' --exclude '.venv.*' --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' --exclude '.env' --exclude 'data/' \
   "$REPO_ROOT/" "$TARGET_DIR/"
-
-# Safety net: ensure world-readable in case of manual rsyncs without --chmod
-find "$TARGET_DIR" -path "$TARGET_DIR/.venv" -prune -o -path "$TARGET_DIR/.venv.*" -prune -o -path "$TARGET_DIR/data" -prune -o -type f -exec chmod o+r {} \; -o -type d -exec chmod o+rx {} \;
+echo "[${SECONDS}s] rsync done"
 
 # ensure env
 if [[ ! -f $TARGET_DIR/.env ]]; then
@@ -37,10 +36,12 @@ if [[ ! -f "$REQ_HASH_FILE" ]] || [[ "$(cat "$REQ_HASH_FILE")" != "$REQ_HASH" ]]
 else
   echo "Requirements unchanged, skipping pip install."
 fi
+echo "[${SECONDS}s] pip done"
 
 # migrate
 pushd "$TARGET_DIR" >/dev/null
 "$VENV/bin/python" manage.py migrate --noinput
+echo "[${SECONDS}s] migrate done"
 
 # collect static only if static files changed
 STATIC_HASH=$(find "$TARGET_DIR/tjai_app/static" -type f -exec md5sum {} \; 2>/dev/null | sort | md5sum | cut -d' ' -f1)
@@ -51,11 +52,15 @@ if [[ ! -f "$STATIC_HASH_FILE" ]] || [[ "$(cat "$STATIC_HASH_FILE")" != "$STATIC
 else
   echo "Static files unchanged, skipping collectstatic."
 fi
+echo "[${SECONDS}s] static done"
 popd >/dev/null
 
-# restart services
-sudo systemctl restart tjai-gunicorn
+# reload gunicorn workers (graceful, no downtime, instant)
+sudo systemctl reload tjai-gunicorn
+echo "[${SECONDS}s] gunicorn reloaded"
 sudo systemctl restart tjai-tgbot
+echo "[${SECONDS}s] tgbot restarted"
 /var/www/tjai/.venv/bin/supervisorctl -c /var/www/tjai/deploy/supervisord.conf restart action-agent
+echo "[${SECONDS}s] action-agent restarted"
 
-echo "Deployment complete."
+echo "Deployment complete in ${SECONDS}s."
