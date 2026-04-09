@@ -1027,6 +1027,15 @@ def api_delete_entry(request, entry_id):
         {"status": "ok", "deleted": {...entry details...}}
         {"error": "..."} on failure
     """
+    # Handle AppLog records (dashboard shows them with id="log-<pk>")
+    if entry_id.startswith('log-'):
+        log_pk = entry_id[4:]
+        log = AppLog.objects.filter(id=log_pk).first()
+        if not log:
+            return JsonResponse({"error": f"Log '{entry_id}' not found"}, status=404)
+        log.delete()
+        return JsonResponse({"status": "ok", "deleted": {"id": entry_id, "kind": "log"}})
+
     entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
     if not entry:
         return JsonResponse({"error": f"Entry '{entry_id}' not found or already deleted"}, status=404)
