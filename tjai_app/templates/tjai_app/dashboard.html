@@ -532,7 +532,7 @@
                 if (isArchiveMode) {
                     line += ` <button class="restore-btn" data-eid="${entry.id}" style="background:#2a6e3f;color:#fff;border:none;border-radius:3px;padding:1px 8px;margin-left:8px;cursor:pointer;font-size:11px;font-family:inherit">Restore</button>`;
                 }
-                if (isSearchActive) {
+                if (isSearchActive || isFilterActive) {
                     line += ` <button class="search-del-btn" data-eid="${entry.id}" style="background:#8b0000;color:#fff;border:none;border-radius:3px;padding:1px 8px;margin-left:8px;cursor:pointer;font-size:11px;font-family:inherit" title="Delete">delete</button>`;
                 }
 
