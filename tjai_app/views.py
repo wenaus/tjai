@@ -1537,7 +1537,11 @@ def dashboard_status(request):
         # Get tags not already in content
         entry_tags = tags_by_entry.get(e.id, [])
         missing_tags = [t for t in entry_tags if f':{t}' not in e.content]
-        event_date_epoch = data.get('event_date') if data else None
+        event_date_raw = data.get('event_date') if data else None
+        try:
+            event_date_epoch = float(event_date_raw) if event_date_raw is not None else None
+        except (ValueError, TypeError):
+            event_date_epoch = None
         # Format event_date with all-day detection
         event_date_display = None
         if event_date_epoch and e.kind == 'journal':
