@@ -2852,6 +2852,18 @@ def entry_detail(request, entry_id=None):
     tags = list(Tag.objects.filter(entry_id=entry.id).values_list('tag_name', flat=True))
     lines = [l for l in entry.content.split('\n') if l.strip()]
     data = entry.data if isinstance(entry.data, dict) else None
+    # Update stale content_lines in data
+    actual_lines = len(lines)
+    if data is not None:
+        stored = data.get('content_lines')
+        if stored != actual_lines and actual_lines > 1:
+            data['content_lines'] = actual_lines
+            entry.data = data
+            entry.save(update_fields=['data'])
+        elif actual_lines <= 1 and stored is not None:
+            data.pop('content_lines', None)
+            entry.data = data
+            entry.save(update_fields=['data'])
     # Body content excludes first line (shown in summary header)
     body_lines = entry.content.split('\n')
     body_text = '\n'.join(body_lines[1:]).strip() if len(body_lines) > 1 else ''
