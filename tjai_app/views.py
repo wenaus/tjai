@@ -5425,6 +5425,17 @@ def api_system_status(request):
         except (ValueError, TypeError):
             pass
 
+    # Check for recent agent failures (ERROR logs from agent_complete in last hour)
+    if agents_status == 'green':
+        from django.utils import timezone as _tz
+        recent_errors = AppLog.objects.filter(
+            source='agent_complete',
+            level__gte=40,
+            timestamp__gte=_tz.now() - timedelta(hours=1),
+        ).exists()
+        if recent_errors:
+            agents_status = 'red'
+
     # Check for overdue periodic actions (only if heartbeat is ok)
     if agents_status == 'green':
         from .action_runner import get_next_scheduled_time
