@@ -56,8 +56,11 @@ echo "[${SECONDS}s] static done"
 popd >/dev/null
 
 # reload gunicorn workers (graceful, no downtime, instant)
+# NOTE: reload only cycles workers, not the master process. If changes to
+# settings, wsgi.py, or packages don't take effect, do a full restart:
+#   sudo systemctl restart tjai-gunicorn
 sudo systemctl reload tjai-gunicorn
-echo "[${SECONDS}s] gunicorn reloaded"
+echo "[${SECONDS}s] gunicorn reloaded (quick reload — if changes don't take effect, run: sudo systemctl restart tjai-gunicorn)"
 sudo systemctl restart tjai-tgbot
 echo "[${SECONDS}s] tgbot restarted"
 /var/www/tjai/.venv/bin/supervisorctl -c /var/www/tjai/deploy/supervisord.conf restart action-agent
