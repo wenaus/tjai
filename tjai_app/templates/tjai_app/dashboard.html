@@ -817,6 +817,7 @@
                 e.preventDefault();
                 e.stopPropagation();
                 const eid = delBtn.dataset.eid;
+                if (!confirm('Delete this entry?')) return;
                 delBtn.disabled = true;
                 delBtn.textContent = '...';
                 fetch(`/tjai/api/entry/${eid}${(isTrashMode || isArchiveMode) ? '?hard=1' : ''}`, {method: 'DELETE'})
