@@ -465,7 +465,7 @@ def create_entry(content, kind="memory", context=None, name=None, tags=None,
     )
 
     if tags:
-        tag_list = [t.strip() for t in tags.split(',') if t.strip()]
+        tag_list = [t.strip().lstrip(':') for t in tags.split(',') if t.strip()]
         for tag_name in tag_list:
             Tag.objects.create(tag_name=tag_name, entry=entry)
     else:
@@ -831,7 +831,7 @@ def edit_entry(entry_id, content=None, context=None, clear_context=False,
         entry.tags.all().delete()
         for tag_name in tags:
             if tag_name and tag_name.strip():
-                Tag.objects.create(tag_name=tag_name.strip(), entry=entry)
+                Tag.objects.create(tag_name=tag_name.strip().lstrip(':'), entry=entry)
         tags_changed = True
 
     if event_date or clear_event_date:
