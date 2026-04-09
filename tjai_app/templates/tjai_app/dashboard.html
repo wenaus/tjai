@@ -529,6 +529,10 @@
                         line += ` <span style="color:#9ccc65">:${t}</span><span class="tag-del" data-eid="${entry.id}" data-tag="${t}" style="color:#ef5350;cursor:pointer;margin-left:1px">-</span>`;
                     }
                 }
+                if (entry.kind !== 'log') {
+                    const editUrl = entryUrl + (entryUrl.includes('?') ? '&' : '?') + 'edit=1';
+                    line += ` <a href="${editUrl}" style="background:#2a6e3f;color:#fff;border:none;border-radius:3px;padding:1px 8px;margin-left:8px;cursor:pointer;font-size:11px;font-family:inherit;text-decoration:none">edit</a>`;
+                }
                 if (isArchiveMode) {
                     line += ` <button class="restore-btn" data-eid="${entry.id}" style="background:#2a6e3f;color:#fff;border:none;border-radius:3px;padding:1px 8px;margin-left:8px;cursor:pointer;font-size:11px;font-family:inherit">Restore</button>`;
                 }
