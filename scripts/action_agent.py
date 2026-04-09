@@ -849,7 +849,7 @@ def main():
         key='action_agent_started',
         defaults={'value': str(now), 'timestamp_modified': now},
     )
-    logger.info("Action agent started (PID %d)", pid)
+    logger.debug("Action agent started (PID %d)", pid)
     last_applog_cleanup = 0
     _action_run_log = {}  # action_id -> [timestamps] for runaway detection
     while not shutdown_requested:
@@ -869,7 +869,7 @@ def main():
                     with connection.cursor() as cur:
                         cur.execute("DELETE FROM applog WHERE source IN ('action_agent', 'system_health') AND timestamp < now() - interval '7 days'")
                         if cur.rowcount > 0:
-                            logger.info("Pruned %d old applog entries", cur.rowcount)
+                            logger.debug("Pruned %d old applog entries", cur.rowcount)
                     last_applog_cleanup = now_ts
                 except Exception as e:
                     logger.warning("Applog cleanup failed: %s", e)
@@ -918,7 +918,7 @@ def main():
             logger.error("Main loop: %s", e, exc_info=True)
             time.sleep(60)
 
-    logger.info("Action agent shutting down")
+    logger.debug("Action agent shutting down")
 
 
 if __name__ == '__main__':
