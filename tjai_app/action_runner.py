@@ -348,6 +348,12 @@ def dispatch_ai(action, entry_id=None, target_date=None):
                 defaults={'value': next_target_entry_id, 'timestamp_modified': now})
 
     env = os.environ.copy()
+    # Ensure MCP token is available for Claude subprocess
+    if 'TJAI_MCP_TOKEN' not in env:
+        from .models import SysConfig
+        tok = SysConfig.objects.filter(key='mcp_bearer_token').values_list('value', flat=True).first()
+        if tok:
+            env['TJAI_MCP_TOKEN'] = tok
     if action_id:
         env['TJAI_ACTION_ID'] = action_id
 
