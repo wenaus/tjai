@@ -1542,8 +1542,7 @@ def dashboard_status(request):
     for e in recent:
         lines = e.content.split('\n')
         data = e.data if isinstance(e.data, dict) else None
-        # Use stored line count (accurate for truncated display), fall back to computing
-        line_count = (data.get('content_lines') if data else None) or len([l for l in lines if l.strip()])
+        line_count = len([l for l in lines if l.strip()])
         # Get tags not already in content
         entry_tags = tags_by_entry.get(e.id, [])
         missing_tags = [t for t in entry_tags if f':{t}' not in e.content]
@@ -1795,8 +1794,7 @@ def dashboard_search(request):
     for e in entries:
         lines = e.content.split('\n')
         data = e.data if isinstance(e.data, dict) else None
-        stored = data.get('content_lines') if data else None
-        line_count = stored if stored else len([l for l in lines if l.strip()])
+        line_count = len([l for l in lines if l.strip()])
         entry_tags = tags_by_entry.get(e.id, [])
         missing_tags = [t for t in entry_tags if f':{t}' not in e.content]
         result.append({
@@ -3180,8 +3178,7 @@ def _entries_for_list(entries):
         lines = [l for l in e.content.split('\n') if l.strip()]
         e.first_line = lines[0] if lines else ''
         data = e.data if isinstance(e.data, dict) else None
-        stored = data.get('content_lines') if data else None
-        e.line_count = stored if stored else (len(lines) if len(lines) > 1 else None)
+        e.line_count = len([l for l in lines if l.strip()]) if len(lines) > 1 else None
         entry_tags = tags_by_entry.get(e.id, [])
         e.all_tags_csv = ','.join(entry_tags)
         e.display_tags = [t for t in entry_tags if f':{t}' not in e.first_line]
@@ -4162,8 +4159,7 @@ def api_context_entries(request, context_name):
     for e in entries:
         lines = e.content.split('\n')
         data = e.data if isinstance(e.data, dict) else None
-        stored = data.get('content_lines') if data else None
-        line_count = stored if stored else len([l for l in lines if l.strip()])
+        line_count = len([l for l in lines if l.strip()])
         entry_tags = tags_by_entry.get(e.id, [])
         missing_tags = [t for t in entry_tags if f':{t}' not in e.content]
         result.append({
