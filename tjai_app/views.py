@@ -1038,9 +1038,9 @@ def api_delete_entry(request, entry_id):
 
     hard = request.GET.get('hard') == '1'
     if hard:
-        entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=False).first()
+        entry = Entry.objects.filter(id=entry_id).first()
         if not entry:
-            return JsonResponse({"error": f"Entry '{entry_id}' not found in trash"}, status=404)
+            return JsonResponse({"error": f"Entry '{entry_id}' not found"}, status=404)
         entry.tags.all().delete()
         entry.versions.all().delete()
         entry.delete()

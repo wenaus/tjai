@@ -184,7 +184,7 @@
 <body>
     {% if is_trash %}{% with current_page="trash" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% elif is_archive %}{% with current_page="archive" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% elif is_dialog %}{% with current_page="dialog" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% else %}{% with current_page="dashboard" %}{% include "tjai_app/_menu.html" %}{% endwith %}{% endif %}
     <div class="container">
-        {% if not is_archive and not is_dialog %}
+        {% if not is_archive and not is_dialog and not is_trash %}
         <div class="panel panel-left" id="calendar-panel">
             <div id="calendar-section">
                 <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">Calendar <span id="calendar-time" style="color:#fff;font-weight:normal"></span> <span><button id="diary-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px">Diary</button> <button id="entry-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px">Entry</button></span></div>
@@ -821,7 +821,7 @@
                 const eid = delBtn.dataset.eid;
                 delBtn.disabled = true;
                 delBtn.textContent = '...';
-                fetch(`/tjai/api/entry/${eid}${isTrashMode ? '?hard=1' : ''}`, {method: 'DELETE'})
+                fetch(`/tjai/api/entry/${eid}${(isTrashMode || isArchiveMode) ? '?hard=1' : ''}`, {method: 'DELETE'})
                 .then(r => r.json()).then(data => {
                     if (data.status === 'ok') {
                         const row = document.getElementById('e-' + eid);
