@@ -943,7 +943,7 @@
 
             // Special tags (always shown, suppress in dialog mode)
             if (!isDialogMode) {
-                const specialTags = ['fave', 'my', 'cool', 'daily'];
+                const specialTags = ['cool', 'daily', 'fave', 'my'];
                 const specialLinks = specialTags.map(t => {
                     const activeClass = activeTags.has(t) ? ' active' : '';
                     return `<a href="#" class="tag-link${activeClass}" data-tag="${t}" style="color:#9ccc65;text-decoration:none">${t}</a>`;
