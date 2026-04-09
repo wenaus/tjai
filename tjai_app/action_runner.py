@@ -353,7 +353,6 @@ def dispatch_ai(action, entry_id=None, target_date=None):
     env = os.environ.copy()
     # Ensure MCP token is available for Claude subprocess
     if 'TJAI_MCP_TOKEN' not in env:
-        from .models import SysConfig
         tok = SysConfig.objects.filter(key='mcp_bearer_token').values_list('value', flat=True).first()
         if tok:
             env['TJAI_MCP_TOKEN'] = tok
