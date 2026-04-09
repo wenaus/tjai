@@ -284,7 +284,7 @@
             try {
                 const resp = await fetch('/tjai/api/entry/create', { method: 'POST' });
                 const data = await resp.json();
-                if (data.id) window.location.href = '/tjai/entry/?uuid=' + data.id;
+                if (data.id) window.location.href = '/tjai/entry/?uuid=' + data.id + '&edit=1';
             } catch (e) {
                 alert('Failed to create entry: ' + e.message);
             }
