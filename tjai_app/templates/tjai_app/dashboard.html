@@ -821,7 +821,7 @@
                 const eid = delBtn.dataset.eid;
                 delBtn.disabled = true;
                 delBtn.textContent = '...';
-                fetch(`/tjai/api/entry/${eid}`, {method: 'DELETE'})
+                fetch(`/tjai/api/entry/${eid}${isTrashMode ? '?hard=1' : ''}`, {method: 'DELETE'})
                 .then(r => r.json()).then(data => {
                     if (data.status === 'ok') {
                         const row = document.getElementById('e-' + eid);

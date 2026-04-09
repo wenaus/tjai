@@ -1036,6 +1036,16 @@ def api_delete_entry(request, entry_id):
         log.delete()
         return JsonResponse({"status": "ok", "deleted": {"id": entry_id, "kind": "log"}})
 
+    hard = request.GET.get('hard') == '1'
+    if hard:
+        entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=False).first()
+        if not entry:
+            return JsonResponse({"error": f"Entry '{entry_id}' not found in trash"}, status=404)
+        entry.tags.all().delete()
+        entry.versions.all().delete()
+        entry.delete()
+        return JsonResponse({"status": "ok", "deleted": {"id": entry_id, "kind": "hard"}})
+
     entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
     if not entry:
         return JsonResponse({"error": f"Entry '{entry_id}' not found or already deleted"}, status=404)
