@@ -497,6 +497,30 @@
                             cm.replaceSelection(dedented);
                         }
                     });
+                    addItem('Clean bullets', function() {
+                        // Join continuation lines back into their bullet, remove blank lines between bullets.
+                        // A "continuation line" is a non-blank line that doesn't start with a bullet marker
+                        // (-, *, +) and follows a bullet line — it's a wrapped fragment of the same item.
+                        var sel = cm.getSelection();
+                        var lines = sel.split('\n');
+                        var out = [];
+                        for (var i = 0; i < lines.length; i++) {
+                            var line = lines[i];
+                            var trimmed = line.trim();
+                            if (trimmed === '') continue;  // drop empty lines between bullets
+                            if (/^\s*[-*+]\s/.test(line)) {
+                                // Bullet line — push as-is
+                                out.push(line);
+                            } else if (out.length > 0) {
+                                // Continuation of previous bullet — append with a space
+                                out[out.length - 1] = out[out.length - 1].replace(/\s*$/, '') + ' ' + trimmed;
+                            } else {
+                                // Non-bullet before any bullet — keep as-is
+                                out.push(line);
+                            }
+                        }
+                        cm.replaceSelection(out.join('\n'));
+                    });
                     addItem('Bulletize selection', function() {
                         var from = cm.getCursor('from');
                         // Detect indent + bullet from line above selection
