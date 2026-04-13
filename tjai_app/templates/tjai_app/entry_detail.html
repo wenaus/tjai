@@ -665,7 +665,7 @@
             // Stop autosave before manual save to prevent race
             if (typeof _stopAutosave === 'function') _stopAutosave();
             var content = cm ? cm.getValue() : document.getElementById('editor').value;
-            var name = document.getElementById('nameField').value.trim();
+            var name = document.getElementById('nameField').value.trim().replace(/^@/, '');
             var context = document.getElementById('contextField').value.trim().replace(/^=/, '');
             var fmt = document.getElementById('formatField').value || null;
             var tags = document.getElementById('tagsField').value.trim();
