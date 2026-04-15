@@ -312,7 +312,7 @@
                     html += '<div class="pick-actions">';
                     html += `<button class="${pick.thumbs === 'up' ? 'active-up' : ''}" onclick="setThumbs('${pick.id}', 'up', this)">&#x25B2;</button>`;
                     html += `<button class="${pick.thumbs === 'down' ? 'active-down' : ''}" onclick="setThumbs('${pick.id}', 'down', this)">&#x25BC;</button>`;
-                    html += `<button class="${pick.kept ? 'active-keep' : ''}" onclick="toggleKeep('${pick.id}', ${!pick.kept}, this)">Keep</button>`;
+                    html += `<button class="${pick.kept ? 'active-keep' : ''}" onclick="toggleKeep('${pick.id}', this)">Keep</button>`;
                     html += `<button class="${pick.readme ? 'active-readme' : ''}" onclick="toggleReadme('${pick.id}', this)">ReadMe</button>`;
                     html += '</div>';
                     html += '</div>';
@@ -409,19 +409,20 @@
             btn.className = newVal ? 'active-readme' : '';
         }
 
-        function toggleKeep(id, keepVal, btn) {
+        function toggleKeep(id, btn) {
             const pick = findPick(id);
             if (!pick) return;
-            pick.kept = keepVal;
-            if (keepVal) pick.archived = false;
-            updatePick(id, 'kept', keepVal);
+            const newVal = !pick.kept;
+            pick.kept = newVal;
+            if (newVal) pick.archived = false;
+            updatePick(id, 'kept', newVal);
 
             const el = document.getElementById('pick-' + id);
             if (el) {
-                el.classList.toggle('kept', keepVal);
-                if (keepVal) el.classList.remove('archived');
+                el.classList.toggle('kept', newVal);
+                if (newVal) el.classList.remove('archived');
             }
-            btn.className = keepVal ? 'active-keep' : '';
+            btn.className = newVal ? 'active-keep' : '';
             updateGlobalStats();
             updateRunHeaders();
         }
