@@ -460,7 +460,7 @@
                     const firstLine = entry.content.split('\n')[0];
                     contentHtml = `<span class="${contentClass}">${linkifyContent(escapeHtml(firstLine))}</span>`;
                 }
-                const calEntryUrl = calEid && calEid.startsWith('daily-') ? `/tjai/synopsis/?date=${encodeURIComponent(calEid)}` : calEid ? `/tjai/entry/?entry_id=${encodeURIComponent(calEid)}` : `/tjai/entry/?uuid=${entry.id}`;
+                const calEntryUrl = calEid && calEid.startsWith('daily-') ? `/tjai/synopsis/?entry_id=${encodeURIComponent(calEid)}` : calEid ? `/tjai/entry/?entry_id=${encodeURIComponent(calEid)}` : `/tjai/entry/?uuid=${entry.id}`;
                 html += `<div class="entry"><a href="${calEntryUrl}" style="color:inherit;text-decoration:none">${timeStr}${countdownStr}${contentHtml}</a></div>`;
             }
 

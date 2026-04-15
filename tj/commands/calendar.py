@@ -391,7 +391,7 @@ def handle_calendar_view(args) -> None:
                     from tj.server import DEFAULT_SERVER
                     from tj.colors import BRIGHT_CYAN_BLUE, RESET
                     title = entry.content.split('\n')[0]
-                    url = f"{DEFAULT_SERVER}/synopsis/?date={entry_id}"
+                    url = f"{DEFAULT_SERVER}/synopsis/?entry_id={entry_id}"
                     content = f"{BRIGHT_CYAN_BLUE}\x1B]8;;{url}\x1B\\{title}\x1B]8;;\x1B\\{RESET}"
                 else:
                     # Truncate content if needed (by lines, before colorizing)

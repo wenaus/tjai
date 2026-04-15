@@ -156,7 +156,7 @@
         function renderMissingDay(dateStr) {
             const label = formatDateLabel(dateStr);
             const yyyymmdd = dateStr.replace(/-/g, '');
-            const synopsisLink = `/tjai/synopsis/?date=daily-${dateStr}`;
+            const synopsisLink = `/tjai/synopsis/?entry_id=daily-${dateStr}`;
             const workdayLink = `/tjai/workday/${yyyymmdd}/`;
             const ideationEid = 'ideation_' + yyyymmdd;
             let html = `<div class="diary-item">`;
@@ -180,7 +180,7 @@
             const dateMatch = (e.entry_id || '').match(/^diary-(\d{4}-\d{2}-\d{2})$/);
             const yyyymmdd = dateMatch ? dateMatch[1].replace(/-/g, '') : '';
             const workdayLink = dateMatch ? `/tjai/workday/${yyyymmdd}/` : '';
-            const synopsisLink = dateMatch ? `/tjai/synopsis/?date=daily-${dateMatch[1]}` : '';
+            const synopsisLink = dateMatch ? `/tjai/synopsis/?entry_id=daily-${dateMatch[1]}` : '';
             const ideationLink = dateMatch ? `/tjai/entry/?entry_id=ideation_${yyyymmdd}` : '';
             html += `<div class="diary-header${collapsed ? ' collapsed' : ''}" onclick="toggleItem('${escHtml(key)}')">`;
             html += `<span class="toggle">${collapsed ? '\u25B6' : '\u25BC'}</span>`;
