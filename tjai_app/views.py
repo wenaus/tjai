@@ -3865,6 +3865,29 @@ def api_add_entry(request):
 
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
+@login_required
+def api_dialog_daily_counts(request):
+    """Return daily dialog turn counts for the full collection period."""
+    try:
+        tz = get_app_tz()
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT (to_timestamp(timestamp_modified) AT TIME ZONE %s)::date AS day,
+                       count(*) AS cnt
+                FROM entries
+                WHERE context = 'claude-code' AND deleted_at IS NULL
+                      AND (status IS NULL OR status != 'archive')
+                GROUP BY day ORDER BY day
+            """, [str(tz)])
+            rows = [{'date': row[0].isoformat(), 'count': row[1]}
+                    for row in cursor.fetchall()]
+        return JsonResponse({'daily_counts': rows})
+    except Exception as e:
+        logger.exception("api_dialog_daily_counts failed")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
 def api_dialog(request):
     """Record and retrieve Claude Code dialog turns.
 

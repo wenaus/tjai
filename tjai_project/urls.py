@@ -24,6 +24,7 @@ urlpatterns = [
     path("api/log", views.api_log, name="api_log"),
     path("api/add-entry", views.api_add_entry, name="api_add_entry"),
     path("api/dialog", views.api_dialog, name="api_dialog"),
+    path("api/dialog/daily-counts", views.api_dialog_daily_counts, name="api_dialog_daily_counts"),
     path("api/kozy-chat", views.api_kozy_chat, name="api_kozy_chat"),
     path("api/bulk-import", views.api_bulk_import, name="api_bulk_import"),
     # Public landing

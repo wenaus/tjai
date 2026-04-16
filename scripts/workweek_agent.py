@@ -135,10 +135,10 @@ def _call_claude(prompt):
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY not set in environment")
     client = anthropic.Anthropic(api_key=api_key)
-    logger.info("workweek: calling Claude (claude-opus-4-6, %d char prompt)",
+    logger.info("workweek: calling Claude (claude-opus-4-7, %d char prompt)",
                 len(prompt))
     response = client.messages.create(
-        model='claude-opus-4-6',
+        model='claude-opus-4-7',
         max_tokens=8000,
         messages=[{'role': 'user', 'content': prompt}],
     )

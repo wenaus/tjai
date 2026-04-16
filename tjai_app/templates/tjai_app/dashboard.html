@@ -199,6 +199,13 @@
         <div class="panel panel-right" id="status-panel">
             <div class="panel-header" style="display:flex; align-items:center;">{% if is_trash %}Trash{% elif is_archive %}Archive <a href="{% url 'versions_page' %}" style="color:#90caf9;font-size:12px;font-weight:normal;margin-left:12px">Item Versions</a>{% elif is_dialog %}Dialog{% else %}Status{% endif %}<span class="refresh-indicator"><span id="refresh-indicator"></span> <a href="{% url 'logout' %}" style="color:#999;margin-left:12px">Logout</a></span></div>
             <div id="status-fixed">Loading status...</div>
+            <div id="dialog-chart" style="display:none; margin:8px 0; padding:8px; background:#222; border:1px solid #333; border-radius:4px; position:relative;">
+                <div style="color:#888; font-size:11px; margin-bottom:4px;">Daily dialog turns</div>
+                <canvas id="dialog-chart-canvas" style="width:100%; height:140px; cursor:pointer;"></canvas>
+                <div style="color:#888; font-size:11px; margin:8px 0 4px;">Weekly (Sat–Fri)</div>
+                <canvas id="dialog-weekly-canvas" style="width:100%; height:140px; cursor:pointer;"></canvas>
+                <div id="chart-tooltip" style="display:none; position:absolute; background:#333; color:#e0e0e0; padding:3px 8px; border-radius:3px; font-size:11px; pointer-events:none; white-space:nowrap; z-index:10;"></div>
+            </div>
             <div id="entries-header" style="display:flex; align-items:center; gap:12px; margin-top:16px; margin-bottom:8px; border-top:1px solid #333; padding-top:12px; flex-shrink:0;">
                 <span id="entries-label" style="color: #d8a070;">Entries <span style="color:#8a8a8a">with modified time</span></span>
                 <input type="text" id="entry-search" placeholder="Search..." style="background:#2a2a2a; color:#e0e0e0; border:1px solid #555; padding:2px 6px; font-family:inherit; font-size:inherit; width:180px; border-radius:3px;">
@@ -491,6 +498,132 @@
             e.preventDefault();
             window.scrollCalendarToToday();
         });
+
+        // Dialog charts — daily + weekly bar charts with tooltip + click-to-assessment
+        let _dialogChartData = null;
+        let _dialogChartDrawn = false;
+        let _dailyBarMeta = [];
+        let _weeklyBarMeta = [];
+        const _chartPad = {top: 10, right: 10, bottom: 30, left: 40};
+        const _months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+        function updateDialogChart() {
+            const el = document.getElementById('dialog-chart');
+            if (activeContext !== 'claude-code') { el.style.display = 'none'; return; }
+            el.style.display = '';
+            if (_dialogChartDrawn) return;
+            if (_dialogChartData) { _renderBothCharts(_dialogChartData); return; }
+            fetch('/tjai/api/dialog/daily-counts')
+                .then(r => r.json())
+                .then(data => { if (data.daily_counts) { _dialogChartData = data.daily_counts; _renderBothCharts(data.daily_counts); } })
+                .catch(() => {});
+        }
+        function _renderBothCharts(rows) {
+            _dailyBarMeta = _drawBarChart('dialog-chart-canvas', rows);
+            _weeklyBarMeta = _drawBarChart('dialog-weekly-canvas', _buildWeekly(rows));
+            _dialogChartDrawn = true;
+        }
+        function _buildWeekly(rows) {
+            const byDate = {};
+            rows.forEach(r => { byDate[r.date] = r.count; });
+            const dates = rows.map(r => r.date).sort();
+            if (!dates.length) return [];
+            let d = new Date(dates[0] + 'T00:00:00');
+            while (d.getDay() !== 6) d.setDate(d.getDate() + 1);
+            const today = new Date(); today.setHours(0,0,0,0);
+            const weeks = [];
+            while (true) {
+                const fri = new Date(d); fri.setDate(fri.getDate() + 6);
+                if (fri >= today) break;
+                let sum = 0;
+                for (let i = 0; i < 7; i++) {
+                    const wd = new Date(d); wd.setDate(wd.getDate() + i);
+                    const key = wd.toISOString().slice(0, 10);
+                    sum += byDate[key] || 0;
+                }
+                const label = d.toISOString().slice(0, 10);
+                weeks.push({date: label, count: sum});
+                d.setDate(d.getDate() + 7);
+            }
+            return weeks;
+        }
+        function _drawBarChart(canvasId, rows) {
+            const canvas = document.getElementById(canvasId);
+            const rect = canvas.parentElement.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            const W = rect.width, H = 140;
+            canvas.width = W * dpr; canvas.height = H * dpr;
+            canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+            const ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+            const p = _chartPad, cw = W - p.left - p.right, ch = H - p.top - p.bottom;
+            const maxC = Math.max(...rows.map(r => r.count), 1);
+            const barW = Math.max(1, cw / rows.length - 0.5);
+            ctx.clearRect(0, 0, W, H);
+            const meta = [];
+            rows.forEach((r, i) => {
+                const x = p.left + (i / rows.length) * cw;
+                const barH = (r.count / maxC) * ch;
+                ctx.fillStyle = '#90caf9';
+                ctx.fillRect(x, p.top + ch - barH, barW, barH);
+                meta.push({x, w: barW, date: r.date, count: r.count});
+            });
+            ctx.fillStyle = '#888'; ctx.font = '10px monospace';
+            ctx.textAlign = 'right';
+            ctx.fillText(maxC, p.left - 4, p.top + 10);
+            ctx.fillText('0', p.left - 4, p.top + ch);
+            ctx.textAlign = 'center';
+            let lastMon = '';
+            rows.forEach((r, i) => {
+                const mon = r.date.slice(0, 7);
+                if (mon !== lastMon) { lastMon = mon; const x = p.left + (i / rows.length) * cw; const parts = r.date.split('-'); ctx.fillText(_months[parseInt(parts[1]) - 1], x, H - 6); }
+            });
+            return meta;
+        }
+        function _chartHit(canvas, e, meta) {
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            for (const b of meta) { if (mx >= b.x && mx < b.x + b.w) return b; }
+            return null;
+        }
+        (function() {
+            const tip = document.getElementById('chart-tooltip');
+            const container = document.getElementById('dialog-chart');
+            function onMove(e, meta) {
+                const canvas = e.currentTarget;
+                const hit = _chartHit(canvas, e, meta);
+                if (!hit) { tip.style.display = 'none'; return; }
+                tip.textContent = `${hit.date}  ${hit.count}`;
+                const cr = container.getBoundingClientRect();
+                tip.style.display = '';
+                tip.style.left = (e.clientX - cr.left + 12) + 'px';
+                tip.style.top = (e.clientY - cr.top - 20) + 'px';
+            }
+            const daily = document.getElementById('dialog-chart-canvas');
+            const weekly = document.getElementById('dialog-weekly-canvas');
+            daily.addEventListener('mousemove', e => onMove(e, _dailyBarMeta));
+            weekly.addEventListener('mousemove', e => {
+                const canvas = e.currentTarget;
+                const hit = _chartHit(canvas, e, _weeklyBarMeta);
+                if (!hit) { tip.style.display = 'none'; return; }
+                const avg = (hit.count / 7).toFixed(0);
+                tip.textContent = `${hit.date}  ${hit.count} (${avg}/day)`;
+                const cr = container.getBoundingClientRect();
+                tip.style.display = '';
+                tip.style.left = (e.clientX - cr.left + 12) + 'px';
+                tip.style.top = (e.clientY - cr.top - 20) + 'px';
+            });
+            daily.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+            weekly.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+            daily.addEventListener('click', e => {
+                const hit = _chartHit(daily, e, _dailyBarMeta);
+                if (hit) window.location.href = `/tjai/assessment/?entry_id=assessment-${hit.date}-gemini`;
+            });
+            weekly.addEventListener('click', e => {
+                const hit = _chartHit(weekly, e, _weeklyBarMeta);
+                if (hit) window.location.href = `/tjai/assessment/?entry_id=assessment-${hit.date}-gemini`;
+            });
+        })();
 
         function renderEntries(entries, tz) {
             let html = '';
@@ -1058,6 +1191,7 @@
             }
 
             document.getElementById('status-fixed').innerHTML = html;
+            updateDialogChart();
 
             // Entries (tj l format) - skip only if search is active
             dashboardTimezone = data.timezone || 'America/New_York';

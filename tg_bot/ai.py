@@ -10,7 +10,7 @@ from .tools import TOOL_DEFINITIONS, execute_tool
 
 logger = logging.getLogger(__name__)
 
-MODEL = "claude-sonnet-4-20250514"
+MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 4096
 MAX_TOOL_ITERATIONS = 10
 
