@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/tjai/static/tjai/favicon.svg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weekly</title>
+    <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 13px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+        .page-content { padding: 16px; max-width: 900px; }
+        .week-header {
+            margin-bottom: 20px;
+            display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+        }
+        .week-title { font-size: 16px; color: #e0e0e0; font-weight: bold; }
+        .top-link a {
+            color: #ffd54f; text-decoration: none; font-size: 13px;
+            border: 1px solid #555; padding: 4px 12px; border-radius: 3px;
+        }
+        .top-link a:hover { background: #2a2a2a; }
+        ul.week-list { list-style: none; padding: 0; }
+        ul.week-list li { margin-bottom: 8px; padding: 8px 12px;
+            border: 1px solid #333; border-radius: 4px; background: #222; }
+        ul.week-list a { color: #90caf9; text-decoration: none; font-size: 14px; }
+        ul.week-list a:hover { text-decoration: underline; }
+        .empty { color: #777; font-style: italic; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    {% with current_page="weekly" %}{% include "tjai_app/_menu.html" %}{% endwith %}
+    <div class="page-content">
+        <div class="week-header">
+            <span class="week-title">Weekly</span>
+            <span class="top-link"><a href="/tjai/this-week/">This Workweek &rarr;</a></span>
+            <span class="top-link"><a href="/tjai/entry/?entry_id=work-hours-highlights">Work highlights &rarr;</a></span>
+        </div>
+        {% if items %}
+        <ul class="week-list">
+            {% for item in items %}
+            <li><a href="{{ item.url }}">{{ item.label }}</a></li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="empty">No workweek entries yet.</div>
+        {% endif %}
+    </div>
+</body>
+</html>

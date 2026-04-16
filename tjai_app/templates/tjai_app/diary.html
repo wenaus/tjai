@@ -205,7 +205,7 @@
                 // Quick links: edit today's diary, view current week
                 html += `<div style="margin-bottom:12px;display:flex;gap:18px">`;
                 html += `<a href="#" onclick="event.preventDefault();createDiaryEntry(todayStr())" style="color:#90caf9">Edit today's diary</a>`;
-                html += `<a href="/tjai/this-week/" style="color:#90caf9">This Workweek</a>`;
+                html += `<a href="/tjai/weekly/" style="color:#90caf9">Weekly</a>`;
                 if (data.underway) {
                     const u = data.underway;
                     const url = u.entry_id

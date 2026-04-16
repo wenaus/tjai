@@ -1,7 +1,7 @@
 <div id="top-menu">
     <span class="menu-title">tjai</span>
     {% if current_page == "dashboard" %}<span style="color:#e0e0e0">Dashboard</span>{% else %}<a href="{% url 'dashboard' %}">Dashboard</a>{% endif %}
-    {% if current_page == "diary" %}<span style="color:#e0e0e0">Diary</span>{% else %}<a href="{% url 'diary_page' %}">Diary</a>{% endif %}
+    {% if current_page == "diary" %}<span style="color:#e0e0e0">Diary</span>{% elif current_page == "weekly" %}<span style="color:#e0e0e0">Weekly</span>{% else %}<a href="{% url 'diary_page' %}">Diary</a>{% endif %}
     {% if current_page == "dialog" %}<span style="color:#e0e0e0">Dialog</span>{% else %}<a href="{% url 'dashboard' %}?context=claude-code">Dialog</a>{% endif %}
     {% if current_page == "synopsis" %}<span style="color:#e0e0e0">Daily</span>{% else %}<a href="{% url 'daily_synopsis' %}">Daily</a>{% endif %}
     {% if current_page == "assessment" %}<span style="color:#e0e0e0">AI</span>{% else %}<a href="{% url 'assessment' %}">AI</a>{% endif %}

@@ -114,6 +114,8 @@ urlpatterns = [
     path("workweek/<str:yyyymmdd>/", views.workweek_open, name="workweek_open"),
     # This week — Sat-Fri current-week diary digest
     path("this-week/", views.this_week, name="this_week"),
+    # Weekly — index of all workweek_<yyyymmdd> entries
+    path("weekly/", views.weekly, name="weekly"),
     path("context/<str:context_name>/", views.context_entries, name="context_entries"),
     path("poetry/author/<path:author_name>/", views.poetry_author_entries, name="poetry_author_entries"),
     path("tag/<str:tag_name>/", views.tag_entries, name="tag_entries"),

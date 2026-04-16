@@ -44,7 +44,7 @@ SUMMARY_INSTRUCTION = """You are summarizing a week of activity for the user.
 
 Below are seven daily activity reports (Saturday through Friday). Produce a
 TOPICAL summary of the week organized by project / area / theme — NOT day by
-day. Each topic gets a `## <Topic>` section with bulleted points covering what
+day. Each topic gets a `### <Topic>` section with bulleted points covering what
 was done across the week in that area.
 
 Cover everything substantive — code shipped, debugging, exploration,

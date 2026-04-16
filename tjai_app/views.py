@@ -2837,6 +2837,37 @@ def this_week(request):
 
 
 @login_required
+def weekly(request):
+    """List all workweek_<yyyymmdd> entries reverse-chronological with
+    top-row links to This Workweek and Work highlights."""
+    entries = Entry.objects.filter(
+        data__entry_id__startswith='workweek_',
+        deleted_at__isnull=True,
+    )
+    items = []
+    for e in entries:
+        eid = (e.data or {}).get('entry_id', '')
+        m = re.match(r'^workweek_(\d{8})$', eid)
+        if not m:
+            continue  # skip workweek_input_* and other shapes
+        yyyymmdd = m.group(1)
+        try:
+            start = datetime.strptime(yyyymmdd, '%Y%m%d').date()
+        except ValueError:
+            continue
+        end = start + timedelta(days=6)
+        items.append({
+            'entry_id': eid,
+            'start': start,
+            'label': f"Workweek {start.isoformat()} "
+                     f"({start.strftime('%a %b %-d')} – {end.strftime('%a %b %-d')})",
+            'url': f'/tjai/entry/?entry_id={eid}',
+        })
+    items.sort(key=lambda x: x['start'], reverse=True)
+    return render(request, 'tjai_app/weekly.html', {'items': items})
+
+
+@login_required
 def entry_detail(request, entry_id=None):
     """Show single entry detail page.
 
