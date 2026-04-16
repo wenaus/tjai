@@ -169,8 +169,13 @@ def main():
     prompt = f"{SUMMARY_INSTRUCTION}\n\n--- DAILY REPORTS ---\n\n{concat}"
     summary = _call_claude(prompt)
 
+    start = week_days[0]
+    end = week_days[-1]
+    title = f"Workweek {start.isoformat()} ({start.strftime('%a %b %-d')} – {end.strftime('%a %b %-d')})"
+    content = f"{title}\n\n{summary}"
+
     workweek_eid = f'workweek_{last_sat_str}'
-    _upsert_entry(workweek_eid, summary, tags='workweek-log,fromai')
+    _upsert_entry(workweek_eid, content, tags='workweek-log,fromai')
     logger.info("workweek: done")
 
 
