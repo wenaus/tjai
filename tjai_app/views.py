@@ -455,7 +455,7 @@ WORKER_CLAIM_STALE_SECONDS = 2 * 60 * 60  # 2h — see note above
 # Capability names a worker is allowed to advertise. Anything else is
 # rejected at the worker_poll endpoint to prevent sysconfig pollution from
 # typos or ad-hoc curl tests.
-WORKER_CAPABILITIES = {'gemma4', 'gemma4-fast'}
+WORKER_CAPABILITIES = {'gemma4', 'gemma4-fast', 'qwen'}
 
 
 def _claim_worker_entry(machine_id, capabilities):
