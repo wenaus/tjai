@@ -3888,6 +3888,8 @@ def api_dialog_daily_counts(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
 def api_dialog(request):
     """Record and retrieve Claude Code dialog turns.
 
