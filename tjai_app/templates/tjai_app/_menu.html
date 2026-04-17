@@ -42,53 +42,12 @@
     setInterval(poll, 60000);
 })();
 (function(){
+    // Clean trailing whitespace from copied text before it hits the clipboard.
+    // Only fires on copy; no paste handler here — pastes into the CodeMirror
+    // editor are handled in entry_detail.html (entry-aware paste, link
+    // preservation, HTML list → markdown, whitespace/escape cleanup).
     function cleanBuffer(s) {
         return s.replace(/[ \t]+(?=\n)/g, '').replace(/[ \t]+$/, '').replace(/\n{3,}/g, '\n\n').replace(/\s+$/, '');
-    }
-    function unescapeMd(s) {
-        return s.replace(/\\([^<>])/g, '$1');
-    }
-    function htmlToMarkdown(html) {
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-        const out = [];
-        function liText(li) {
-            let s = '';
-            for (const n of li.childNodes) {
-                if (n.nodeType === 1 && /^(UL|OL)$/.test(n.tagName)) continue;
-                s += n.textContent || '';
-            }
-            return s.replace(/\s+/g, ' ').trim();
-        }
-        function walkList(list, depth) {
-            for (const li of list.children) {
-                if (li.tagName !== 'LI') continue;
-                const t = liText(li);
-                if (t) out.push('  '.repeat(depth) + '- ' + t);
-                for (const c of li.children) {
-                    if (c.tagName === 'UL' || c.tagName === 'OL') walkList(c, depth + 1);
-                }
-            }
-        }
-        function walk(node) {
-            for (const c of node.childNodes) {
-                if (c.nodeType !== 1) continue;
-                const tag = c.tagName;
-                if (tag === 'UL' || tag === 'OL') {
-                    walkList(c, 0);
-                } else if (tag === 'P' || /^H[1-6]$/.test(tag) || tag === 'DIV') {
-                    if (c.querySelector && c.querySelector('ul, ol, p, div, li')) {
-                        walk(c);
-                    } else {
-                        const t = (c.textContent || '').replace(/\s+/g, ' ').trim();
-                        if (t) out.push(t);
-                    }
-                } else {
-                    walk(c);
-                }
-            }
-        }
-        walk(doc.body);
-        return out.join('\n');
     }
     document.addEventListener('copy', function(e){
         const sel = window.getSelection();
@@ -99,43 +58,6 @@
         if (cleaned === raw) return;
         e.clipboardData.setData('text/plain', cleaned);
         e.preventDefault();
-    });
-    document.addEventListener('paste', function(e){
-        const t = e.target;
-        if (!t) return;
-        const tag = t.tagName;
-        const editable = tag === 'TEXTAREA' || tag === 'INPUT' || t.isContentEditable;
-        if (!editable) return;
-        if (tag === 'INPUT') {
-            const type = (t.type || '').toLowerCase();
-            if (type && type !== 'text' && type !== 'search' && type !== 'url') return;
-        }
-        const cd = e.clipboardData || window.clipboardData;
-        if (!cd) return;
-        const raw = cd.getData('text/plain');
-        if (!raw) return;
-        const html = cd.getData('text/html') || '';
-        let cleaned;
-        if (html && /<(ul|ol)\b/i.test(html)) {
-            try {
-                const md = htmlToMarkdown(html);
-                cleaned = md ? cleanBuffer(unescapeMd(md)) : cleanBuffer(unescapeMd(raw));
-            } catch (err) {
-                cleaned = cleanBuffer(unescapeMd(raw));
-            }
-        } else {
-            cleaned = cleanBuffer(unescapeMd(raw));
-        }
-        if (cleaned === raw) return;
-        e.preventDefault();
-        if (tag === 'TEXTAREA' || tag === 'INPUT') {
-            const start = t.selectionStart, end = t.selectionEnd, val = t.value;
-            t.value = val.slice(0, start) + cleaned + val.slice(end);
-            t.selectionStart = t.selectionEnd = start + cleaned.length;
-            t.dispatchEvent(new Event('input', {bubbles: true}));
-        } else {
-            document.execCommand('insertText', false, cleaned);
-        }
     });
 })();
 </script>

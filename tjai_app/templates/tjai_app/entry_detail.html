@@ -565,6 +565,54 @@
                     }, 0);
                 });
 
+                // HTML <ul>/<ol> → markdown list converter. Used by the paste
+                // handler below when clipboard HTML contains a bulleted or
+                // numbered list (pasting from web pages, docs, etc.). Walks
+                // <ul>/<ol> subtrees emitting '  '-indented '- ' lines and
+                // flattens paragraph-like containers elsewhere.
+                function htmlToMarkdown(html) {
+                    const doc = new DOMParser().parseFromString(html, 'text/html');
+                    const out = [];
+                    function liText(li) {
+                        let s = '';
+                        for (const n of li.childNodes) {
+                            if (n.nodeType === 1 && /^(UL|OL)$/.test(n.tagName)) continue;
+                            s += n.textContent || '';
+                        }
+                        return s.replace(/\s+/g, ' ').trim();
+                    }
+                    function walkList(list, depth) {
+                        for (const li of list.children) {
+                            if (li.tagName !== 'LI') continue;
+                            const t = liText(li);
+                            if (t) out.push('  '.repeat(depth) + '- ' + t);
+                            for (const c of li.children) {
+                                if (c.tagName === 'UL' || c.tagName === 'OL') walkList(c, depth + 1);
+                            }
+                        }
+                    }
+                    function walk(node) {
+                        for (const c of node.childNodes) {
+                            if (c.nodeType !== 1) continue;
+                            const tag = c.tagName;
+                            if (tag === 'UL' || tag === 'OL') {
+                                walkList(c, 0);
+                            } else if (tag === 'P' || /^H[1-6]$/.test(tag) || tag === 'DIV') {
+                                if (c.querySelector && c.querySelector('ul, ol, p, div, li')) {
+                                    walk(c);
+                                } else {
+                                    const t = (c.textContent || '').replace(/\s+/g, ' ').trim();
+                                    if (t) out.push(t);
+                                }
+                            } else {
+                                walk(c);
+                            }
+                        }
+                    }
+                    walk(doc.body);
+                    return out.join('\n');
+                }
+
                 cm.on('paste', function(cm, e) {
                     const cd = e.clipboardData;
                     const html = (cd && cd.getData('text/html')) || '';
@@ -596,7 +644,16 @@
                     }
 
                     // General paste cleanup path: apply to every other paste.
+                    // Seed with HTML list conversion if the clipboard has lists;
+                    // otherwise start from the plain-text version.
                     let result = plain;
+                    let listConverted = false;
+                    if (html && /<(ul|ol)\b/i.test(html)) {
+                        try {
+                            const md = htmlToMarkdown(html);
+                            if (md) { result = md; listConverted = true; }
+                        } catch (err) { /* fall back to plain */ }
+                    }
                     let linkCount = 0;
 
                     // Link-preserving: merge HTML <a> hrefs into plain text as markdown links
@@ -633,7 +690,11 @@
                     if (result === plain) return;  // nothing to clean; let CodeMirror default paste run
                     e.preventDefault();
                     cm.replaceSelection(result);
-                    if (linkCount > 0) {
+                    if (listConverted && linkCount > 0) {
+                        flashNotice(`Pasted list (${linkCount} link${linkCount > 1 ? 's' : ''} preserved)`);
+                    } else if (listConverted) {
+                        flashNotice('Pasted HTML list as markdown');
+                    } else if (linkCount > 0) {
                         flashNotice(`Pasted with ${linkCount} link${linkCount > 1 ? 's' : ''} preserved`);
                     }
                 });
