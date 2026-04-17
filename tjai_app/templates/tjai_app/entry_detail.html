@@ -497,6 +497,13 @@
                             cm.replaceSelection(dedented);
                         }
                     });
+                    addItem('Strip all leading whitespace (every line)', function() {
+                        var sel = cm.getSelection();
+                        var stripped = sel.split('\n').map(function(line) {
+                            return line.replace(/^\s+/, '');
+                        }).join('\n');
+                        cm.replaceSelection(stripped);
+                    });
                     addItem('Clean bullets', function() {
                         // Join continuation lines back into their bullet, remove blank lines between bullets.
                         // A "continuation line" is a non-blank line that doesn't start with a bullet marker
