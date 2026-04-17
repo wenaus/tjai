@@ -109,6 +109,11 @@ def parse_date_filter(date_str: str, default_days_ago: int = None, end_of_day: b
     # ISO format
     try:
         dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+        is_date_only = 't' not in date_str and ' ' not in date_str
+        if dt.tzinfo is None and tz:
+            dt = dt.replace(tzinfo=tz)
+        if is_date_only:
+            dt = set_time(dt)
         return dt.timestamp(), None
     except ValueError:
         pass

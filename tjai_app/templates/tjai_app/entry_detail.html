@@ -566,10 +566,11 @@
                 });
 
                 cm.on('paste', function(cm, e) {
-                    const html = e.clipboardData && e.clipboardData.getData('text/html');
-                    if (!html) return;
+                    const cd = e.clipboardData;
+                    const html = (cd && cd.getData('text/html')) || '';
+                    const plain = (cd && cd.getData('text/plain')) || '';
 
-                    // tjai entry-aware paste (existing)
+                    // tjai entry-aware paste
                     if (html.includes('data-tjai-entry-id')) {
                         e.preventDefault();
                         const parser = new DOMParser();
@@ -589,40 +590,51 @@
                             cm.replaceSelection(lines.join('\n'));
                             flashNotice(`Pasted ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} (entry-aware)`);
                         }).catch(() => {
-                            const plain = e.clipboardData.getData('text/plain');
                             if (plain) cm.replaceSelection(plain);
                         });
                         return;
                     }
 
-                    // Link-preserving paste: convert HTML <a> tags to markdown links
+                    // General paste cleanup path: apply to every other paste.
+                    let result = plain;
+                    let linkCount = 0;
+
+                    // Link-preserving: merge HTML <a> hrefs into plain text as markdown links
                     if (html.includes('<a ')) {
-                        const plain = e.clipboardData.getData('text/plain') || '';
                         const parser = new DOMParser();
                         const doc = parser.parseFromString(html, 'text/html');
                         const links = doc.querySelectorAll('a[href]');
-                        if (links.length === 0) return;  // no links — let default paste handle it
-                        // Build a map of link text → href
                         const linkMap = new Map();
                         links.forEach(a => {
                             const text = a.textContent.trim();
                             const href = a.getAttribute('href');
                             if (text && href && href.startsWith('http')) linkMap.set(text, href);
                         });
-                        if (linkMap.size === 0) return;
-                        // Replace link text in plain text with markdown links
-                        let result = plain;
+                        let linked = result;
                         linkMap.forEach((href, text) => {
-                            // Only replace if the plain text doesn't already contain the URL
-                            if (!result.includes(href)) {
-                                result = result.replace(text, `[${text}](${href})`);
+                            if (!linked.includes(href)) {
+                                linked = linked.replace(text, `[${text}](${href})`);
                             }
                         });
-                        if (result !== plain) {
-                            e.preventDefault();
-                            cm.replaceSelection(result);
-                            flashNotice(`Pasted with ${linkMap.size} link${linkMap.size > 1 ? 's' : ''} preserved`);
+                        if (linked !== result) {
+                            linkCount = linkMap.size;
+                            result = linked;
                         }
+                    }
+
+                    // Strip markdown escapes except \< and \> (needed to avoid HTML interp)
+                    result = result.replace(/\\([^<>])/g, '$1');
+                    // Trim per-line trailing whitespace, collapse 3+ blank lines, strip trailing blank lines
+                    result = result.replace(/[ \t]+(?=\n)/g, '')
+                                   .replace(/[ \t]+$/, '')
+                                   .replace(/\n{3,}/g, '\n\n')
+                                   .replace(/\s+$/, '');
+
+                    if (result === plain) return;  // nothing to clean; let CodeMirror default paste run
+                    e.preventDefault();
+                    cm.replaceSelection(result);
+                    if (linkCount > 0) {
+                        flashNotice(`Pasted with ${linkCount} link${linkCount > 1 ? 's' : ''} preserved`);
                     }
                 });
             }
