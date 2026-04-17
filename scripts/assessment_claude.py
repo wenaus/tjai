@@ -68,8 +68,8 @@ def call_claude(prompt):
         claude_path,
         '-p',
         '--output-format', 'text',
-        '--model', 'sonnet',
-        '--effort', 'medium',
+        '--model', 'opus',
+        '--effort', 'high',
     ]
 
     env = os.environ.copy()
@@ -77,7 +77,7 @@ def call_claude(prompt):
     env.pop('ANTHROPIC_API_KEY', None)  # Force subscription auth
     env['TJAI_ACTION_ID'] = 'llm-assessment'  # Prevent dialog recording
 
-    logger.info("Calling claude -p (sonnet, subscription, %d char prompt via stdin)...", len(prompt))
+    logger.info("Calling claude -p (opus, subscription, %d char prompt via stdin)...", len(prompt))
     try:
         result = subprocess.run(
             cmd, input=prompt, capture_output=True, text=True,
