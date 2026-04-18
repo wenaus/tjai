@@ -267,16 +267,9 @@
             url.searchParams.delete('date');  // drop legacy param when canonicalising
             history.replaceState(null, '', url);
 
-            let selectedEl = null;
             document.querySelectorAll('.date-item').forEach(el => {
-                const isSel = el.dataset.entryId === entryId;
-                el.classList.toggle('selected', isSel);
-                if (isSel) selectedEl = el;
+                el.classList.toggle('selected', el.dataset.entryId === entryId);
             });
-            // Center the selected date in the panel — "after" dates (more recent)
-            // sit above, "before" dates sit below, so the selected day is
-            // mushroomed out of its surrounding column of days.
-            if (selectedEl) selectedEl.scrollIntoView({block: 'center', behavior: 'instant'});
             document.getElementById('synopsis-panel').innerHTML = '<div class="loading">Loading...</div>';
             try {
                 const resp = await fetch(`/tjai/api/synopsis/content?entry_id=${encodeURIComponent(entryId)}`);

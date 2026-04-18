@@ -51,36 +51,47 @@ def md_to_html(body):
     return out
 
 
-def past_days_links(exclude_mm_dd):
-    """Build HTML list linking to other available history files.
+def build_day_list(current_mm_dd, current_body_html, current_title_date):
+    """Build the full day-list HTML with the current day expanded inline.
 
-    Returns reverse-chronological list (going backwards from the day before
-    exclude_mm_dd, wrapping around the year).
+    Every available history day appears as a link; the current day sits in
+    its chronological slot with the history body expanded in place. List is
+    sorted by calendar ordinal descending, so calendar-later days are
+    higher — "after" dates above the current day, "before" dates below.
     """
     try:
         files = os.listdir(HISTORY_DIR)
     except OSError:
-        return ''
+        files = []
     dates = set()
     for f in files:
         m = re.match(r'^(\d{2}-\d{2})\.html$', f)
-        if m and m.group(1) != exclude_mm_dd:
+        if m:
             dates.add(m.group(1))
-    if not dates:
-        return ''
+    # The current day may not yet have a file on disk (we're writing it now).
+    dates.add(current_mm_dd)
 
     def ordinal(mm_dd):
         return (datetime.strptime(f'2024-{mm_dd}', '%Y-%m-%d').date()
                 - datetime.strptime('2024-01-01', '%Y-%m-%d').date()).days
 
-    ref = ordinal(exclude_mm_dd)
-    sorted_dates = sorted(dates, key=lambda d: (ref - ordinal(d)) % 366 or 366)
+    sorted_dates = sorted(dates, key=ordinal, reverse=True)
 
     items = []
     for d in sorted_dates:
-        label = datetime.strptime(f'2024-{d}', '%Y-%m-%d').strftime('%B %-d')
-        items.append(f'<li><a href="/public/today-in-history/{d}.html">{label}</a></li>')
-    return '<hr><h3>Past days in history</h3>\n<ul>\n' + '\n'.join(items) + '\n</ul>'
+        if d == current_mm_dd:
+            items.append(
+                '<li class="current">\n'
+                f'  <h2>Today in History — {current_title_date}</h2>\n'
+                f'{current_body_html}\n'
+                '</li>'
+            )
+        else:
+            label = datetime.strptime(f'2024-{d}', '%Y-%m-%d').strftime('%B %-d')
+            items.append(
+                f'<li class="day-link"><a href="/public/today-in-history/{d}.html">{label}</a></li>'
+            )
+    return '<ul class="day-list">\n' + '\n'.join(items) + '\n</ul>'
 
 
 HTML_TEMPLATE = """\
@@ -98,14 +109,15 @@ h2 {{ margin:20px 0 12px; }}
 h3 {{ margin:16px 0 8px; }}
 .light h3 {{ color:#2a6e3f; }} .dark h3 {{ color:#6cbf84; }}
 ol {{ margin:4px 0 12px 24px; }}
-li {{ margin:4px 0; }}
 .light b {{ color:#000; }} .dark b {{ color:#fff; }}
 a {{ text-decoration:none; }}
 .light a {{ color:#1a5ea0; }} .dark a {{ color:#6ca6d4; }}
 a:hover {{ text-decoration:underline; }}
-ul {{ list-style:none; padding:0; }}
-hr {{ border:none; margin:32px 0 16px; }}
-.light hr {{ border-top:1px solid #ccc; }} .dark hr {{ border-top:1px solid #444; }}
+ul.day-list {{ list-style:none; padding:0; margin:0; }}
+ul.day-list li.day-link {{ padding:2px 0; }}
+ul.day-list li.current {{ padding:8px 0; margin:8px 0; }}
+.light ul.day-list li.current {{ border-top:1px solid #ccc; border-bottom:1px solid #ccc; }}
+.dark ul.day-list li.current {{ border-top:1px solid #444; border-bottom:1px solid #444; }}
 </style>
 <script>
 document.addEventListener('DOMContentLoaded', function() {{
@@ -118,13 +130,15 @@ document.addEventListener('DOMContentLoaded', function() {{
       if (h.startsWith('/')) a.setAttribute('href', h + '?dark=1');
     }});
   }}
+  // Scroll the current day into view so the reader lands on it rather
+  // than at the top of the list of "after" days above it.
+  var cur = document.querySelector('ul.day-list li.current');
+  if (cur) cur.scrollIntoView({{block: 'start', behavior: 'instant'}});
 }});
 </script>
 </head>
 <body class="light">
-<h2>Today in History — {title_date}</h2>
-{body_html}
-{past_html}
+{day_list_html}
 </body></html>
 """
 
@@ -138,13 +152,12 @@ def save_history(date_str, body):
     os.makedirs(HISTORY_DIR, exist_ok=True)
 
     body_html = md_to_html(body)
-    past_html = past_days_links(mm_dd)
+    day_list_html = build_day_list(mm_dd, body_html, title_date)
 
     with open(filepath, 'w') as f:
         f.write(HTML_TEMPLATE.format(
             title_date=title_date,
-            body_html=body_html,
-            past_html=past_html,
+            day_list_html=day_list_html,
         ))
     return filepath
 
