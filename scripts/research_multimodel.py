@@ -41,13 +41,14 @@ if not logger.handlers:
 API_TIMEOUT = 1800  # 30 minutes
 
 
-def _call_gemini(prompt):
+def _call_gemini(prompt, initial_tier='flex'):
     """Call Gemini API with search grounding.
 
-    First attempt uses the Flex service tier (50% cost saving — nightly
-    research is latency-tolerant background work). Under high demand Flex
-    capacity returns 503 UNAVAILABLE; on that specific error we retry at
-    the Standard tier with 5 / 20 / 60 minute backoff. Any non-503 error
+    First attempt uses `initial_tier` ('flex' by default for scheduled
+    runs — 50% cost saving on latency-tolerant background work; 'standard'
+    for UI-initiated reruns where the user is waiting). Under high demand
+    Flex capacity returns 503 UNAVAILABLE; on that specific error we retry
+    at the Standard tier with 5 / 20 / 60 minute backoff. Any non-503 error
     is raised immediately.
     """
     from google import genai
@@ -61,10 +62,10 @@ def _call_gemini(prompt):
     grounding_tool = types.Tool(google_search=types.GoogleSearch())
 
     attempts = [
-        ('flex',     0),
-        ('standard', 5 * 60),
-        ('standard', 20 * 60),
-        ('standard', 60 * 60),
+        (initial_tier, 0),
+        ('standard',   5 * 60),
+        ('standard',   20 * 60),
+        ('standard',   60 * 60),
     ]
 
     last_err = None
@@ -108,7 +109,7 @@ def _call_gemini(prompt):
 
     raise RuntimeError(
         f"Gemini 503 UNAVAILABLE after {len(attempts)} attempts "
-        f"(flex then standard×3, 5/20/60 min backoff): {last_err}"
+        f"({initial_tier} then standard×3, 5/20/60 min backoff): {last_err}"
     )
 
 
@@ -138,15 +139,21 @@ def _call_chatgpt(prompt):
 
 
 def main():
-    if len(sys.argv) != 3:
-        print("Usage: research_multimodel.py <model> <entry_uuid>", file=sys.stderr)
+    if len(sys.argv) not in (3, 4):
+        print("Usage: research_multimodel.py <model> <entry_uuid> [gemini_tier]",
+              file=sys.stderr)
         sys.exit(1)
 
     model = sys.argv[1]
     entry_uuid = sys.argv[2]
+    gemini_tier = sys.argv[3] if len(sys.argv) == 4 else 'flex'
 
     if model not in ('gemini', 'chatgpt'):
         logger.error("Invalid model: %s (must be 'gemini' or 'chatgpt')", model)
+        sys.exit(1)
+    if gemini_tier not in ('flex', 'standard'):
+        logger.error("Invalid gemini_tier: %s (must be 'flex' or 'standard')",
+                     gemini_tier)
         sys.exit(1)
 
     ref_extra = {'entry_id': entry_uuid, 'action_id': 'research-agent',
@@ -184,7 +191,7 @@ def main():
 
         # Call the appropriate API
         if model == 'gemini':
-            result = _call_gemini(prompt)
+            result = _call_gemini(prompt, initial_tier=gemini_tier)
         else:
             result = _call_chatgpt(prompt)
 
@@ -214,7 +221,7 @@ def main():
         completion_logger.info("research-agent/%s: exit_code=1, status=failed",
                                 model, extra=ref_extra)
         entry.content = f"{topic}\n\nERROR: {error_msg}"
-        entry.status = 'blocked'
+        entry.status = 'failed'
         entry.save(update_fields=['content', 'status'])
 
         # Update base entry's model status so it's not stuck at 'active'
@@ -227,10 +234,10 @@ def main():
                 ).first()
                 if base:
                     bd = base.data if isinstance(base.data, dict) else {}
-                    bd[f'{model}_status'] = 'blocked'
+                    bd[f'{model}_status'] = 'failed'
                     base.data = bd
                     base.save(update_fields=['data'])
-                    logger.info("Set %s_status=blocked on base %s", model, base_eid)
+                    logger.info("Set %s_status=failed on base %s", model, base_eid)
         except Exception as be:
             logger.error("Failed to update base entry on failure: %s", be)
 

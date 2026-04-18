@@ -189,7 +189,7 @@ Entry(kind='memory', status='pending',  # pending → active → done
         'entry_id': 'research-mcp',
         'started_at': 1771962258.67,
         # Per-model tracking, populated by _dispatch_research_3way
-        'claude_status': 'done',         # None|staged|active|done|blocked|rerun
+        'claude_status': 'done',         # None|staged|active|done|failed|rerun
         'gemini_status': 'done',
         'gemma_status':  'active',
         'claude_entry_id': 'research-mcp-claude',

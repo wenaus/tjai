@@ -261,10 +261,10 @@ def _check_multimodel_stale():
             ).first()
             if base:
                 bd = base.data if isinstance(base.data, dict) else {}
-                bd[f'{model}_status'] = 'blocked'
+                bd[f'{model}_status'] = 'failed'
                 base.data = bd
                 base.save(update_fields=['data'])
-                logger.info("Set %s_status=blocked on base %s", model, base_entry_id)
+                logger.info("Set %s_status=failed on base %s", model, base_entry_id)
 
         # Clear the stale PID
         sc.value = ''

@@ -779,7 +779,7 @@ def worker_result(request):
             if status == 'done':
                 research_model_complete(entry)
             else:
-                # Mark base entry's model status as blocked
+                # Mark base entry's model status as failed
                 base_eid = edata.get('base_entry_id')
                 model = edata.get('model')
                 if base_eid and model:
@@ -788,7 +788,7 @@ def worker_result(request):
                     ).first()
                     if base:
                         bd = base.data if isinstance(base.data, dict) else {}
-                        bd[f'{model}_status'] = 'blocked'
+                        bd[f'{model}_status'] = 'failed'
                         base.data = bd
                         base.save(update_fields=['data'])
         except Exception as e:

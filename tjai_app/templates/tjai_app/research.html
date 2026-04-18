@@ -77,11 +77,11 @@
         .status-running { background: rgba(255, 213, 79, 0.15); color: #ffd54f; }
         .status-staged { background: rgba(144, 202, 249, 0.15); color: #90caf9; }
         .status-done { background: #1a3c1a; color: #4caf50; }
-        .status-blocked { background: rgba(239, 83, 80, 0.15); color: #ef5350; }
+        .status-blocked, .status-failed { background: rgba(239, 83, 80, 0.15); color: #ef5350; }
         .research-item.active { border-left-color: #ffd54f; }
         .research-item.running { border-left-color: #ffd54f; }
         .research-item.staged { border-left-color: #90caf9; }
-        .research-item.blocked { border-left-color: #ef5350; }
+        .research-item.blocked, .research-item.failed { border-left-color: #ef5350; }
         .item-content {
             color: #bbb;
             font-size: 12px;
@@ -383,7 +383,7 @@
                         let phrase = '';
                         let clr = '#b0bec5';
                         if (st === 'done') { phrase = `${m} done`; clr = '#9ccc65'; }
-                        else if (st === 'blocked' || st === 'failed') { phrase = `${m} ${st}`; clr = '#ef5350'; }
+                        else if (st === 'blocked' || st === 'failed') { phrase = `${m} failed`; clr = '#ef5350'; }
                         else if (st === 'active' && w && w.worker_claimed_ago) {
                             const mid = (w.worker_claimed_by || '').substring(0,8);
                             // If the worker holding this claim is a zombie at
@@ -453,12 +453,12 @@
             const pending = items.filter(i => i.status === 'pending').length;
             const active = items.filter(i => i.status === 'active').length;
             const done = items.filter(i => i.status === 'done').length;
-            const blocked = items.filter(i => i.status === 'blocked').length;
+            const blocked = items.filter(i => i.status === 'blocked' || i.status === 'failed').length;
             let statsText = `${items.length} topics`;
             if (pending) statsText += `, ${pending} pending`;
-            if (active) statsText += `, ${active} active`;
+            if (active) statsText += `, ${active} running`;
             if (done) statsText += `, ${done} completed`;
-            if (blocked) statsText += `, ${blocked} blocked`;
+            if (blocked) statsText += `, ${blocked} failed`;
             document.getElementById('stats').textContent = statsText;
 
             // Items
@@ -473,9 +473,13 @@
             for (const item of items) {
                 const isRunning = agentRunning && item.id === currentEntry && item.status !== 'done';
                 const st = item.status;
-                const cls = st === 'done' ? 'done' : st === 'blocked' ? 'blocked' : isRunning ? 'running' : st === 'active' ? 'active' : st === 'staged' ? 'staged' : 'pending';
+                // 'blocked' accepted for legacy data; new writes use 'failed'.
+                // 'active' displays as 'running' — it is the state in which work
+                // is in progress (subprocess running, or remote worker has claimed).
+                const isFailed = st === 'failed' || st === 'blocked';
+                const cls = st === 'done' ? 'done' : isFailed ? 'failed' : isRunning ? 'running' : st === 'active' ? 'running' : st === 'staged' ? 'staged' : 'pending';
                 const statusCls = 'status-' + cls;
-                const label = st === 'done' ? 'done' : st === 'blocked' ? 'blocked' : isRunning ? 'running' : st === 'active' ? 'active' : st === 'staged' ? 'staged' : 'pending';
+                const label = cls;
 
                 html += `<div class="research-item ${cls}">`;
                 html += '<div class="item-header">';
@@ -484,7 +488,7 @@
                 if (item.priority) {
                     html += `<span style="color:#666;font-size:11px">P${item.priority}</span>`;
                 }
-                if (item.status === 'done' || item.status === 'active' || item.status === 'blocked' || isRunning) {
+                if (item.status === 'done' || item.status === 'active' || item.status === 'blocked' || item.status === 'failed' || isRunning) {
                     const itemName = encodeURIComponent(item.entry_id || item.id.substring(0,8));
                     html += `<a href="/tjai/agent-log?ref=${item.id}&name=${itemName}" style="color:#90caf9;font-size:11px">log</a>`;
                     html += `<a href="/tjai/research/studies/?uuid=${item.id}&name=${itemName}" style="color:#90caf9;font-size:11px">studies</a>`;
@@ -496,7 +500,7 @@
                 if (!isRunning && item.source !== 'multimodel') {
                     // Models list comes from the API (derived from RESEARCH_MODELS on server)
                     const models = data.models || [];
-                    const mColors = {done: '#9ccc65', active: '#ffd54f', staged: '#90caf9', blocked: '#ef5350'};
+                    const mColors = {done: '#9ccc65', active: '#ffd54f', staged: '#90caf9', blocked: '#ef5350', failed: '#ef5350'};
                     html += '<span style="margin-left:8px;font-size:11px">';
                     for (const m of models) {
                         const label = m.charAt(0).toUpperCase() + m.slice(1);

@@ -575,7 +575,7 @@ def main():
                                  extra=ref_extra)
         _research_queue_drain(now)
 
-    # Claude failure on multimodel entry: mark model status as blocked on base
+    # Claude failure on multimodel entry: mark model status as failed on base
     if action_id == 'research-agent' and exit_code not in (0, 124) and entry:
         entry_data = entry.data if isinstance(entry.data, dict) else {}
         if entry_data.get('source') == 'multimodel' and entry_data.get('model'):
@@ -588,10 +588,10 @@ def main():
                     ).first()
                     if base:
                         bd = base.data if isinstance(base.data, dict) else {}
-                        bd[f'{model}_status'] = 'blocked'
+                        bd[f'{model}_status'] = 'failed'
                         base.data = bd
                         base.save(update_fields=['data'])
-                        logger.info("%s: set %s_status=blocked on base %s",
+                        logger.info("%s: set %s_status=failed on base %s",
                                     action_id, model, base_entry_id,
                                     extra=ref_extra)
                 except Exception as e:

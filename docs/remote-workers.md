@@ -174,7 +174,7 @@ There are five independent pieces of state. They have orthogonal lifecycles and 
 |---|---|---|---|
 | L1 | `SysConfig['agent_research-agent_status']` | The **local research-agent process** — the orchestrator that builds prompts, dispatches Claude/Gemini directly, stages gemma, and writes synthesis. | `idle`, `running`, `failed` |
 | L2 | base entry's `Entry.status` | Whether the **topic as a whole** is finalized | `pending`, `active`, `done`, `blocked` |
-| L3 | base entry's `data.{model}_status` for each model in `RESEARCH_MODELS = ('claude','gemini','gemma')` | Per-model lifecycle for this topic | `None`, `staged`, `active`, `done`, `blocked`, `rerun` |
+| L3 | base entry's `data.{model}_status` for each model in `RESEARCH_MODELS = ('claude','gemini','gemma')` | Per-model lifecycle for this topic | `None`, `staged`, `active`, `done`, `failed`, `rerun` (legacy entries may still carry `blocked`; treat as `failed`) |
 | L4 | sub-entry's `data.worker_*` (only present while remote work is in flight) | Per-claim tracking | `worker_target`, `worker_staged_at`, `worker_claimed_at`, `worker_claimed_by`, `worker_prompt`, `worker_timeout_sec` |
 | L5 | `SysConfig['worker_capability_{cap}_lastpoll']` → `{machine_id, ts}` | "Has any worker polled for this capability recently, and who" | JSON: machine_id, ts |
 
@@ -188,8 +188,8 @@ The local research-agent process (L1) being `idle` while a remote worker is mid-
 | `staged` | `active` | A worker poll claims the sub-entry | `_claim_worker_entry` |
 | `active` | `staged` | Free-capacity reset (the same worker polls again, signaling it has no in-flight work) | `worker_poll` |
 | `active` | `done` | Worker POSTs `status='done'` | `worker_result` → `research_model_complete` |
-| `active` | `blocked` | Worker POSTs `status='failed'` | `worker_result` |
-| `done` / `blocked` | `rerun` | User clicks "Rerun selections" with this model checked | `api_research_rerun_models` |
+| `active` | `failed` | Worker POSTs `status='failed'` | `worker_result` |
+| `done` / `failed` | `rerun` | User clicks "Rerun selections" with this model checked | `api_research_rerun_models` |
 | `rerun` | `staged` | Next dispatch loop picks it up | `_dispatch_research_3way` |
 
 For local-dispatch models (claude, gemini) the same L3 field is set directly without any `staged` phase.
@@ -573,7 +573,7 @@ Things that can go wrong and what the system does about them.
 
 | Failure | What happens | Recovery |
 |---|---|---|
-| **A model finishes `blocked`** | `research_model_complete` waits — synthesis requires every dispatched model to be `done`. The base entry stays active with the failed model visible in the banner. This is a deliberate human-in-the-loop checkpoint. | Investigate the failure (worker log, prompt size, ollama state, etc.), then click **Rerun selections** on the research page with the failed model checked. The rerun re-dispatches through `_dispatch_research_3way`; on success the all-done check passes and synthesis fires automatically. |
+| **A model finishes `failed`** | `research_model_complete` waits — synthesis requires every dispatched model to be `done`. The base entry stays active with the failed model visible in the banner. This is a deliberate human-in-the-loop checkpoint. | Investigate the failure (worker log, prompt size, ollama state, etc.), then click **Rerun selections** on the research page with the failed model checked. The rerun re-dispatches through `_dispatch_research_3way`; on success the all-done check passes and synthesis fires automatically. |
 | **`research_model_complete` raises** | `worker_result` catches the exception, logs it, but still returns `200` to the worker. The base entry's status is silently broken. | Read the gunicorn log for `worker_result: research_model_complete failed:`. No automated recovery. |
 | **Worker POSTs result for a claim it doesn't hold** | A warning is logged; the result is accepted anyway (the work was done — refusing it would just throw away real output). | None needed in normal operation. Two workers fighting over the same claim shouldn't happen in production. |
 | **Worker dies mid-inference** | Claim stays held. The next time *that same machine* polls, the free-capacity reset clears the claim and the same poll re-claims (or another worker can claim once `WORKER_CLAIM_STALE_SECONDS` elapses). | Automatic. |

@@ -742,6 +742,9 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
 
     # Create entries and dispatch — uniform loop, all models
     for model in models_to_run:
+        # Capture rerun state BEFORE we overwrite {model}_status below —
+        # UI-initiated reruns skip the flex tier on gemini (user is waiting).
+        was_rerun = base_data.get(f'{model}_status') == 'rerun'
         model_entry_id = f'{base_entry_id}-{model}'
         existing = Entry.objects.filter(
             data__entry_id=model_entry_id, deleted_at__isnull=True,
@@ -809,10 +812,13 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
             except Exception as e:
                 logger.error("Failed to stage gemma work for %s: %s",
                              model_entry_id, e)
-                base_data[f'{model}_status'] = 'blocked'
+                base_data[f'{model}_status'] = 'failed'
         else:
+            cmd = [sys.executable, str(script_path), model, str(entry.id)]
+            if model == 'gemini':
+                cmd.append('standard' if was_rerun else 'flex')
             proc = subprocess.Popen(
-                [sys.executable, str(script_path), model, str(entry.id)],
+                cmd,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 start_new_session=True,
             )

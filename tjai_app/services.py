@@ -22,7 +22,7 @@ from tj.commands.journal import parse_time
 from tj.date_utils import parse_date_filter
 
 VALID_KINDS = ('memory', 'todo', 'journal', 'profile', 'ai', 'bookmark', 'list', 'action', 'goal')
-VALID_STATUSES = ('active', 'done', 'blocked', 'archive')
+VALID_STATUSES = ('active', 'done', 'blocked', 'archive', 'failed')
 
 
 def _parse_date(date_str):
