@@ -129,16 +129,16 @@ Entry(
 
 ## Research Queue
 
-"Computer, perform an analysis." Deep autonomous research — the system dispatches **three models in parallel** (Claude, Gemini, and a local-hardware Gemma running on Torre's Mac Studio via the [Remote Worker Pipeline](remote-workers.md)). Each model produces an independent analyst's brief, then a final synthesis pass merges them into a single report.
+"Computer, perform an analysis." Deep autonomous research — the system dispatches **four models in parallel** (Claude, Gemini, and two local-hardware models — Gemma and Qwen — running on Torre's Mac Studio via the [Remote Worker Pipeline](remote-workers.md)). Each model produces an independent analyst's brief, then a final synthesis pass merges them into a single report.
 
 ### How It Works
 
 1. Create a memory entry tagged `:research_topic` with topic description
 2. Research page (`/tjai/research/`) shows the queue with status
-3. Click **Submit** (or **Submit All**). The research-agent action runs `_dispatch_research_3way` (`tjai_app/action_runner.py`), which dispatches each model in `RESEARCH_MODELS = ('claude','gemini','gemma')` via its own mechanism:
+3. Click **Submit** (or **Submit All**). The research-agent action runs `_dispatch_research_3way` (`tjai_app/action_runner.py`), which dispatches each model in `RESEARCH_MODELS = ('claude','gemini','gemma','qwen')` via its own mechanism:
    - **Claude** — detached Claude instance with research-optimized system prompt, spawning parallel subagents that search the web and write findings tagged `research-subagent`
    - **Gemini** — `scripts/research_multimodel.py gemini` subprocess via the Gemini API
-   - **Gemma** — staged for the [remote worker pipeline](remote-workers.md): the prompt is written to a sub-entry with `worker_target='gemma4'`, the local research-agent then exits, and `tj_agent` running on the Mac Studio long-polls `/api/worker/poll`, claims the work, runs `gemma3` via ollama, and POSTs the result back
+   - **Gemma** and **Qwen** — staged for the [remote worker pipeline](remote-workers.md) via the `REMOTE_WORKER_MODELS` mapping (`{'gemma': 'gemma4', 'qwen': 'qwen'}`). The prompt is written to a sub-entry with the mapped `worker_target`; the local research-agent then exits. `tj_agent` on the Mac Studio long-polls `/api/worker/poll`, claims the work, runs the locally-configured ollama model, and POSTs the result back. Adding another remote-worker research model is a one-line add to `REMOTE_WORKER_MODELS` + a matching entry in the Mac's `worker_models` config.
 4. As each model finishes, `research_model_complete` updates the base entry's `{model}_status`. When **all dispatched models** are `done`, the base entry transitions to `done` and synthesis is dispatched
 5. **Synthesis** — Claude is dispatched again with the synthesis prompt and links to all per-model reports, producing the final merged analyst's brief
 6. Automatically chains to next pending item (priority order, then FIFO)

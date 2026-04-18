@@ -24,7 +24,7 @@ There is no inbound connection to the worker, no fixed worker registry, and no a
 
 | Layer | File | Role |
 |---|---|---|
-| Dispatcher | `tjai_app/action_runner.py` `_dispatch_research_3way` | When a research topic is submitted, creates per-model sub-entries and stages gemma work with `worker_target='gemma4'` |
+| Dispatcher | `tjai_app/action_runner.py` `_dispatch_research_3way` | When a research topic is submitted, creates per-model sub-entries and stages remote-worker models (gemma, qwen) via the `REMOTE_WORKER_MODELS` mapping |
 | Endpoint (poll) | `tjai_app/views.py` `worker_poll`, `_claim_worker_entry` | Long-polls for matching work, atomically claims under transaction, returns prompt |
 | Endpoint (result) | `tjai_app/views.py` `worker_result` | Receives result, finalizes the sub-entry, calls `research_model_complete` |
 | Per-completion hook | `tjai_app/action_runner.py` `research_model_complete` | Updates base entry's `{model}_status`, triggers synthesis once all dispatched models are done |
@@ -158,7 +158,7 @@ Soft-delete the entry. Callers should issue this **after** successfully retrievi
 | `WORKER_POLL_HOLD_SECONDS` | 50 | `tjai_app/views.py` | Server holds the long-poll for up to this long. Must stay under gunicorn's `--timeout` (120s). |
 | `WORKER_POLL_INTERVAL` | 2 | `tjai_app/views.py` | DB recheck frequency inside the hold loop. |
 | `WORKER_CLAIM_STALE_SECONDS` | 7200 (2h) | `tjai_app/views.py` | A claim older than this can be auto-reclaimed by any poll. Must comfortably exceed the longest legitimate single work-item runtime (not the longest single ollama call) — with the Mac-side agent loop, one work item can be many ollama turns. |
-| `WORKER_CAPABILITIES` | `{'gemma4', 'gemma4-fast'}` | `tjai_app/views.py` | Capability whitelist. Edit this to add a new capability. |
+| `WORKER_CAPABILITIES` | `{'gemma4', 'gemma4-fast', 'qwen'}` | `tjai_app/views.py` | Capability whitelist. Edit this to add a new capability. |
 | `POLL_CLIENT_TIMEOUT` | 70 | `tj_agent/worker.py` | Worker socket timeout. Must exceed `WORKER_POLL_HOLD_SECONDS` (the 20s margin covers round-trip + safety). |
 | `POLL_BACKOFF_INITIAL` / `MAX` | 1.0 / 60.0 | `tj_agent/worker.py` | Exponential backoff between failed polls. |
 | `DEFAULT_INFERENCE_TIMEOUT` | 3600 | `tj_agent/worker.py` | Worker's local per-call timeout on each ollama request (60 min), overridden by `work.timeout_sec`. The agent loop has no separate wall-clock cap — it terminates naturally when the model emits no further tool_calls. |
@@ -174,7 +174,7 @@ There are five independent pieces of state. They have orthogonal lifecycles and 
 |---|---|---|---|
 | L1 | `SysConfig['agent_research-agent_status']` | The **local research-agent process** — the orchestrator that builds prompts, dispatches Claude/Gemini directly, stages gemma, and writes synthesis. | `idle`, `running`, `failed` |
 | L2 | base entry's `Entry.status` | Whether the **topic as a whole** is finalized | `pending`, `active`, `done`, `blocked` |
-| L3 | base entry's `data.{model}_status` for each model in `RESEARCH_MODELS = ('claude','gemini','gemma')` | Per-model lifecycle for this topic | `None`, `staged`, `active`, `done`, `failed`, `rerun` (legacy entries may still carry `blocked`; treat as `failed`) |
+| L3 | base entry's `data.{model}_status` for each model in `RESEARCH_MODELS = ('claude','gemini','gemma','qwen')` | Per-model lifecycle for this topic | `None`, `staged`, `active`, `done`, `failed`, `rerun` (legacy entries may still carry `blocked`; treat as `failed`) |
 | L4 | sub-entry's `data.worker_*` (only present while remote work is in flight) | Per-claim tracking | `worker_target`, `worker_staged_at`, `worker_claimed_at`, `worker_claimed_by`, `worker_prompt`, `worker_timeout_sec` |
 | L5 | `SysConfig['worker_capability_{cap}_lastpoll']` → `{machine_id, ts}` | "Has any worker polled for this capability recently, and who" | JSON: machine_id, ts |
 

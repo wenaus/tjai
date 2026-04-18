@@ -21,9 +21,13 @@ SCRIPTS_DIR = Path(__file__).resolve().parent.parent / 'scripts'
 
 # Models included in multi-model research dispatch and completion checks.
 # ChatGPT disabled 2026-03-30 — implementation intact, just not auto-dispatched.
-# gemma runs on a remote Mac Studio worker via the long-polling /api/worker/poll
-# endpoint (see views.worker_poll); dispatch just stages the prompt on the entry.
-RESEARCH_MODELS = ('claude', 'gemini', 'gemma')
+# gemma + qwen run on a remote Mac Studio worker via the long-polling
+# /api/worker/poll endpoint (see views.worker_poll); dispatch just stages the
+# prompt on the entry. REMOTE_WORKER_MODELS maps the research model name to its
+# WORKER_CAPABILITIES entry (which the worker's worker_models config then maps
+# to a local ollama tag).
+RESEARCH_MODELS = ('claude', 'gemini', 'gemma', 'qwen')
+REMOTE_WORKER_MODELS = {'gemma': 'gemma4', 'qwen': 'qwen'}
 TJAI_DIR = SCRIPTS_DIR.parent
 TJ_PY = TJAI_DIR / 'tj.py'
 
@@ -790,16 +794,17 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
             action.data = data
             action.save(update_fields=['data'])
             dispatch_ai(action, target_date=None)
-        elif model == 'gemma':
+        elif model in REMOTE_WORKER_MODELS:
             # Remote worker: stage prompt on entry and mark as claimable.
             # tj_agent on the Mac polls /api/worker/poll, grabs this, runs
             # ollama locally, POSTs result back to /api/worker/result.
             # Status starts as 'staged' (no worker has claimed yet) and is
             # upgraded to 'active' atomically by _claim_worker_entry.
+            worker_target = REMOTE_WORKER_MODELS[model]
             try:
                 prompt = build_research_prompt(topic_text)
                 edata = entry.data if isinstance(entry.data, dict) else {}
-                edata['worker_target'] = 'gemma4'
+                edata['worker_target'] = worker_target
                 edata['worker_prompt'] = prompt
                 edata['worker_staged_at'] = now_ts
                 edata.pop('worker_claimed_by', None)
@@ -807,11 +812,11 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
                 entry.data = edata
                 entry.save(update_fields=['data'])
                 base_data[f'{model}_status'] = 'staged'
-                logger.info("Staged gemma work for %s (prompt %d chars)",
-                            model_entry_id, len(prompt))
+                logger.info("Staged %s work for %s (target=%s, prompt %d chars)",
+                            model, model_entry_id, worker_target, len(prompt))
             except Exception as e:
-                logger.error("Failed to stage gemma work for %s: %s",
-                             model_entry_id, e)
+                logger.error("Failed to stage %s work for %s: %s",
+                             model, model_entry_id, e)
                 base_data[f'{model}_status'] = 'failed'
         else:
             cmd = [sys.executable, str(script_path), model, str(entry.id)]
