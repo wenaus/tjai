@@ -4426,6 +4426,12 @@ def api_research_data(request):
             sa = data.get(f'{m}_started_at')
             item[f'{m}_started_at'] = sa
             item[f'{m}_started_at_ago'] = fmt_ago(float(sa)) if sa else None
+        # Remote-worker sub-entry: Entry.status='active' spans both "staged
+        # but unclaimed" and "claim-held-running". Expose worker_target +
+        # worker_claimed_at so the UI can distinguish.
+        if data.get('source') == 'multimodel' and data.get('worker_target'):
+            item['worker_target'] = data.get('worker_target')
+            item['worker_claimed_at'] = data.get('worker_claimed_at')
         # Attach remote-worker sub-entry info if any
         beid = data.get('entry_id')
         if beid and beid in worker_entries_by_base:

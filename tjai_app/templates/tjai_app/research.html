@@ -485,8 +485,22 @@
                 // 'blocked' accepted for legacy data; new writes use 'failed'.
                 // 'active' displays as 'running' — it is the state in which work
                 // is in progress (subprocess running, or remote worker has claimed).
+                // Exception: a remote-worker sub-entry has Entry.status='active'
+                // from the moment it is staged, regardless of whether a worker
+                // has claimed it yet. Distinguish by worker_claimed_at — if
+                // absent, the sub-entry is still staged, not running.
                 const isFailed = st === 'failed' || st === 'blocked';
-                const cls = st === 'done' ? 'done' : isFailed ? 'failed' : isRunning ? 'running' : st === 'active' ? 'running' : st === 'staged' ? 'staged' : 'pending';
+                const isUnclaimedRemote = st === 'active'
+                    && item.source === 'multimodel'
+                    && item.worker_target
+                    && !item.worker_claimed_at;
+                const cls = st === 'done' ? 'done'
+                    : isFailed ? 'failed'
+                    : isRunning ? 'running'
+                    : isUnclaimedRemote ? 'staged'
+                    : st === 'active' ? 'running'
+                    : st === 'staged' ? 'staged'
+                    : 'pending';
                 const statusCls = 'status-' + cls;
                 const label = cls;
 
