@@ -193,6 +193,15 @@
         }
 
         let agentRunning = false;
+        // Pending model-checkbox selections, keyed by `${entry_id}::${model}`.
+        // Survives the 10-second fetchData re-render — without this, ticking
+        // a checkbox and waiting >10s wipes the selection.
+        const pendingChecks = new Set();
+        function togglePending(entryId, model, el) {
+            const k = entryId + '::' + model;
+            if (el.checked) pendingChecks.add(k);
+            else pendingChecks.delete(k);
+        }
 
         async function fetchData() {
             try {
@@ -506,7 +515,8 @@
                         const label = m.charAt(0).toUpperCase() + m.slice(1);
                         const st = item[m + '_status'];
                         const clr = mColors[st] || '#b0bec5';
-                        html += `<label style="margin-right:8px;cursor:pointer;color:${clr}"><input type="checkbox" class="model-cb-${esc(item.entry_id)}" value="${m}" style="vertical-align:middle;margin-right:2px">${label}</label>`;
+                        const checked = pendingChecks.has(item.entry_id + '::' + m) ? ' checked' : '';
+                        html += `<label style="margin-right:8px;cursor:pointer;color:${clr}"><input type="checkbox" class="model-cb-${esc(item.entry_id)}" value="${m}" onchange="togglePending('${esc(item.entry_id)}','${m}',this)"${checked} style="vertical-align:middle;margin-right:2px">${label}</label>`;
                     }
                     html += '</span>';
                     html += `<button class="btn-submit" onclick="rerunModels('${esc(item.entry_id)}', this)">Rerun selections</button>`;
@@ -613,6 +623,8 @@
                 }
                 btn.textContent = 'Queued ' + models.join('+');
                 btn.style.color = '#4caf50';
+                // Selections consumed — drop them so the next render doesn't re-tick.
+                for (const m of models) pendingChecks.delete(entryId + '::' + m);
                 setTimeout(fetchData, 2000);
             } catch (e) {
                 btn.textContent = 'Error';
