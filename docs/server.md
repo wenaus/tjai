@@ -53,6 +53,9 @@ cd /home/admin/github/tjrepo/tjai
 | `/tjai/login/` | Authentication |
 | `/tjai/entry/` | Entry detail with human-readable data display |
 | `/tjai/daily/` | Daily synopsis (Today in History) |
+| `/tjai/this-week/` | Current in-progress workweek (Sat–Fri), one row per day |
+| `/tjai/weekly/` | Index of past workweek entries (reverse chronological) |
+| `/tjai/workweek/<yyyymmdd>/` | Single workweek entry — topical summary assembled from Sat–Fri workday entries |
 | `/tjai/picks/` | AI-curated news picks triage |
 | `/tjai/rss/` | RSS reader with source-grouped triage |
 | `/tjai/readme/` | Reading list (items tagged :readme) |

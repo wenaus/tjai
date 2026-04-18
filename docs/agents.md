@@ -143,6 +143,12 @@ Entry(
 5. **Synthesis** — Claude is dispatched again with the synthesis prompt and links to all per-model reports, producing the final merged analyst's brief
 6. Automatically chains to next pending item (priority order, then FIFO)
 
+### Scheduling and Ideation Handoff
+
+`research-agent` runs on a daily schedule (`scheduled_time: "0300"`, interval 24h). On each scheduled run it picks up the highest-priority pending `:research_topic` via its AI prompt, runs it, then self-chains through the remaining queue via `_research_queue_drain` in `scripts/agent_complete.py`. When the queue is empty, chaining stops until the next scheduled run.
+
+**Ideation handoff:** `ideation-agent` runs daily at `0200` and creates new `:research_topic` entries from the day's material. Because research runs at `0300` — *after* ideation — ideation-created topics are auto-picked up the same morning. If you move research earlier than ideation, ideation-created topics will sit pending for a full 24 hours until the next research run. There is no separate auto-submit hook from ideation to research; the coupling is purely via scheduled-time ordering.
+
 ### Research Page (`/tjai/research/`)
 
 The page banner displays **three named, non-overlapping facts** so nothing reads as contradictory (this rule was learned the hard way — see `docs/remote-workers.md` § Display contract):
