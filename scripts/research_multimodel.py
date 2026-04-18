@@ -44,8 +44,11 @@ API_TIMEOUT = 1800  # 30 minutes
 def _call_gemini(prompt):
     """Call Gemini API with search grounding.
 
-    Uses the Flex service tier — nightly research is a background,
-    latency-tolerant workload, so the 50% cost saving is free money.
+    First attempt uses the Flex service tier (50% cost saving — nightly
+    research is latency-tolerant background work). Under high demand Flex
+    capacity returns 503 UNAVAILABLE; on that specific error we retry at
+    the Standard tier with 5 / 20 / 60 minute backoff. Any non-503 error
+    is raised immediately.
     """
     from google import genai
     from google.genai import types
@@ -55,27 +58,58 @@ def _call_gemini(prompt):
         raise RuntimeError("GEMINI_API_KEY not set in environment")
 
     client = genai.Client(api_key=api_key)
-
     grounding_tool = types.Tool(google_search=types.GoogleSearch())
-    # Dict form so 'service_tier' lands as a request field even if the
-    # installed google-genai SDK predates the typed accessor.
-    config = {
-        'tools': [grounding_tool],
-        'service_tier': 'flex',
-        'http_options': {'timeout': API_TIMEOUT * 1000},  # milliseconds
-    }
 
-    logger.info("Calling Gemini API (gemini-3.1-pro-preview, flex tier)...")
-    response = client.models.generate_content(
-        model='gemini-3.1-pro-preview',
-        contents=prompt,
-        config=config,
+    attempts = [
+        ('flex',     0),
+        ('standard', 5 * 60),
+        ('standard', 20 * 60),
+        ('standard', 60 * 60),
+    ]
+
+    last_err = None
+    for idx, (tier, delay) in enumerate(attempts):
+        if delay:
+            logger.info(
+                "Gemini retry %d: waiting %ds before %s-tier attempt",
+                idx, delay, tier,
+            )
+            time.sleep(delay)
+        # Dict form so 'service_tier' lands as a request field even if the
+        # installed google-genai SDK predates the typed accessor.
+        config = {
+            'tools': [grounding_tool],
+            'service_tier': tier,
+            'http_options': {'timeout': API_TIMEOUT * 1000},  # milliseconds
+        }
+        logger.info(
+            "Calling Gemini API (gemini-3.1-pro-preview, %s tier, attempt %d/%d)...",
+            tier, idx + 1, len(attempts),
+        )
+        try:
+            response = client.models.generate_content(
+                model='gemini-3.1-pro-preview',
+                contents=prompt,
+                config=config,
+            )
+            if not response.text:
+                raise RuntimeError(f"Gemini returned empty response: {response}")
+            return response.text
+        except Exception as e:
+            msg = str(e)
+            if '503' in msg or 'UNAVAILABLE' in msg:
+                logger.warning(
+                    "Gemini %s-tier attempt %d/%d got 503 UNAVAILABLE: %s",
+                    tier, idx + 1, len(attempts), msg[:300],
+                )
+                last_err = e
+                continue
+            raise
+
+    raise RuntimeError(
+        f"Gemini 503 UNAVAILABLE after {len(attempts)} attempts "
+        f"(flex then standard×3, 5/20/60 min backoff): {last_err}"
     )
-
-    if not response.text:
-        raise RuntimeError(f"Gemini returned empty response: {response}")
-
-    return response.text
 
 
 def _call_chatgpt(prompt):
