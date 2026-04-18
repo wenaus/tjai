@@ -519,13 +519,24 @@
                 svg += `<circle cx="${x(i)}" cy="${y(vals[i])}" r="3" fill="${dotColor}" style="cursor:pointer" onclick="selectDate('assessment-${d.date}${eidSuffix}')"><title>${d.date}: ${vals[i]}</title></circle>`;
             });
 
-            // Vertical marker: 1M context GA (2026-03-13)
-            const markerDate = '2026-03-13';
-            const markerIdx = days.findIndex(d => d.date === markerDate);
-            if (markerIdx >= 0) {
-                const mx2 = x(markerIdx);
-                svg += `<line x1="${mx2}" y1="${pad.t}" x2="${mx2}" y2="${pad.t + plotH}" stroke="#ff9800" stroke-width="1" stroke-dasharray="4,3"/>`;
-                svg += `<text x="${mx2+3}" y="${pad.t + 10}" fill="#ff9800" font-size="8" font-family="monospace">1M GA</text>`;
+            // Vertical markers
+            const markers = [
+                {date: '2026-03-13', label: '1M GA'},
+                {date: '2026-04-15', dateEnd: '2026-04-16', label: '4.7'},  // between Wed and Thu
+            ];
+            for (const m of markers) {
+                const idx = days.findIndex(d => d.date === m.date);
+                if (idx < 0) continue;
+                let mxPos;
+                if (m.dateEnd) {
+                    const idx2 = days.findIndex(d => d.date === m.dateEnd);
+                    if (idx2 < 0) continue;
+                    mxPos = x((idx + idx2) / 2);
+                } else {
+                    mxPos = x(idx);
+                }
+                svg += `<line x1="${mxPos}" y1="${pad.t}" x2="${mxPos}" y2="${pad.t + plotH}" stroke="#ff9800" stroke-width="1" stroke-dasharray="4,3"/>`;
+                svg += `<text x="${mxPos+3}" y="${pad.t + 10}" fill="#ff9800" font-size="8" font-family="monospace">${m.label}</text>`;
             }
 
             // X labels (every Nth day)
