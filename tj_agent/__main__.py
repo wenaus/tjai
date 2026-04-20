@@ -21,7 +21,8 @@ def main():
     from tj_agent import daemon
 
     if len(sys.argv) < 2:
-        print("Usage: python -m tj_agent [run|start|stop|restart|status]")
+        print("Usage: python -m tj_agent "
+              "[run|start|stop|restart|status|abort]")
         sys.exit(1)
 
     command = sys.argv[1]
@@ -58,6 +59,25 @@ def main():
             print("Agent is not running")
             if not daemon.is_daemon_installed():
                 print("  (daemon service not installed)")
+
+    elif command == "abort":
+        # POST status='failed' to the server for the locally-tracked
+        # in-flight claim, if any. Works whether tj_agent is running or
+        # not — it only reads the local marker and hits the server API.
+        # Intended for scripts/kill_worker.sh to run BEFORE launchctl
+        # bootout so server state reflects reality immediately rather
+        # than waiting up to 2h for auto-reclaim.
+        from tj_agent import abort as abort_mod
+        reason = " ".join(sys.argv[2:]) or "operator abort via CLI"
+        result = abort_mod.abort_current_claim(reason=reason)
+        if result.get("aborted"):
+            print(f"Aborted claim: entry={result['entry_id']} "
+                  f"capability={result.get('capability')}")
+        elif result.get("detail") == "no claim":
+            print("No in-flight claim to abort.")
+        else:
+            print(f"Abort failed: {result.get('detail')}")
+            sys.exit(1)
 
     else:
         print(f"Unknown command: {command}")

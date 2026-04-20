@@ -60,7 +60,7 @@ import urllib.request
 from typing import Any
 
 from tj.config import get_config
-from tj_agent import client
+from tj_agent import abort, client
 from tj_agent.sync import get_machine_id
 
 logger = logging.getLogger(__name__)
@@ -554,6 +554,17 @@ async def _process_work_async(work: dict, machine_id: str, cfg: dict,
         "(timeout %ds, %d prompt chars, %d tools)",
         work_type, entry_id, ollama_model, capability,
         timeout_sec, len(prompt), len(tools))
+    # Record the in-flight claim so `tj_agent abort` / scripts/kill_worker.sh
+    # (and startup crash recovery) can POST status='failed' for this entry
+    # if the worker is killed before it returns its result. Cleared below on
+    # every completion path (success, inference error, empty-final-text).
+    abort.write_current_claim(
+        entry_id=entry_id,
+        capability=capability,
+        base_entry_id=work.get("base_entry_id"),
+        claimed_at=time.time(),
+        ollama_model=ollama_model,
+    )
     hostname = socket.gethostname()
     await _log_to_tjai(
         f"received {work_type} prompt {entry_id} via {capability}={ollama_model} "
@@ -667,6 +678,7 @@ async def _process_work_async(work: dict, machine_id: str, cfg: dict,
                 status="failed", error=err, duration_sec=duration)
         except Exception as re:
             logger.exception("failed to post failure result: %s", re)
+        abort.clear_current_claim()
         return
 
     duration = int(time.time() - start)
@@ -699,6 +711,7 @@ async def _process_work_async(work: dict, machine_id: str, cfg: dict,
                 status="failed", error=err, duration_sec=duration)
         except Exception as e:
             logger.exception("failed to post failure result: %s", e)
+        abort.clear_current_claim()
         return
 
     logger.info("%s: done in %ds (%d turn(s), %d tool call(s), "
@@ -730,6 +743,7 @@ async def _process_work_async(work: dict, machine_id: str, cfg: dict,
     except Exception as e:
         logger.exception("%s: failed to post result after %ds: %s",
                          entry_id, duration, e)
+    abort.clear_current_claim()
 
 
 async def _run_worker_forever_async() -> None:
@@ -762,6 +776,21 @@ async def _run_worker_forever_async() -> None:
     logger.info(
         "worker: loop starting (machine_id=%s, mcp_servers=%s, tools=%d)",
         machine_id, server_names or "none", tool_count)
+
+    # Crash recovery: if the previous tj_agent process was killed mid-work
+    # (SIGKILL, crash, power loss) without clearing the in-flight marker,
+    # POST status='failed' to the server now so the next poll doesn't race
+    # with a stale 'active' claim. Marker may also be left by a graceful
+    # shutdown whose POST hit a network error — retrying here is correct.
+    recovery = abort.abort_current_claim(
+        reason="stale in-flight claim found at tj_agent startup")
+    if recovery.get("aborted"):
+        logger.warning("worker: startup crash recovery aborted stale claim "
+                       "entry=%s cap=%s",
+                       recovery.get("entry_id"), recovery.get("capability"))
+    elif recovery.get("detail") and recovery["detail"] != "no claim":
+        logger.warning("worker: startup crash recovery non-fatal: %s",
+                       recovery.get("detail"))
 
     try:
         while True:

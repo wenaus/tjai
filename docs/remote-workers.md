@@ -552,9 +552,11 @@ Two paths are also configurable via env, with sensible defaults so most setups n
 To rotate any of these values, edit `~/.tjai/env` and restart `tj_agent` via:
 
 ```bash
-launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.tj_agent.plist
+~/github/tjrepo/tjai/scripts/kill_worker.sh env rotation
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tj_agent.plist
 ```
+
+`scripts/kill_worker.sh` is the deterministic kill — it POSTs `status='failed'` for any in-flight claim before running `launchctl bootout`, so the server doesn't see a stale 2h zombie. See § Stopping a worker cleanly. If no work is in flight the abort step is a safe no-op, so the script is fine to run unconditionally.
 
 `launchctl kickstart -k gui/$(id -u)/com.tjai.agent` is **not** sufficient — it only restarts the running job, it does not re-read the plist or re-source the env file. New env vars added to `~/.tjai/env` will not be visible to the worker until the bootout/bootstrap pair is run.
 
@@ -601,8 +603,9 @@ Things that can go wrong and what the system does about them.
 | **A model finishes `failed`** | `research_model_complete` waits — synthesis requires every dispatched model to be `done`. The base entry stays active with the failed model visible in the banner. This is a deliberate human-in-the-loop checkpoint. | Investigate the failure (worker log, prompt size, ollama state, etc.), then click **Rerun selections** on the research page with the failed model checked. The rerun re-dispatches through `_dispatch_research_3way`; on success the all-done check passes and synthesis fires automatically. |
 | **`research_model_complete` raises** | `worker_result` catches the exception, logs it, but still returns `200` to the worker. The base entry's status is silently broken. | Read the gunicorn log for `worker_result: research_model_complete failed:`. No automated recovery. |
 | **Worker POSTs result for a claim it doesn't hold** | A warning is logged; the result is accepted anyway (the work was done — refusing it would just throw away real output). | None needed in normal operation. Two workers fighting over the same claim shouldn't happen in production. |
-| **Worker dies mid-inference** | Claim stays held. The next time *that same machine* polls, the free-capacity reset clears the claim and the same poll re-claims (or another worker can claim once `WORKER_CLAIM_STALE_SECONDS` elapses). | Automatic. |
-| **Worker process gone permanently** | Claim stays held until `WORKER_CLAIM_STALE_SECONDS` (2h), then any poll can re-claim it. | Automatic, with a 2-hour worst-case delay. The display calls this `zombie` once the claim age crosses the threshold, otherwise just `busy`. |
+| **Worker dies mid-inference (graceful, via `scripts/kill_worker.sh`)** | The script POSTs `status='failed'` for the current claim *before* bootout. Server transitions sub-entry to `failed` immediately; UI stops showing it as running within one refresh. | Intentional — this is the clean path. See § Stopping a worker cleanly. |
+| **Worker dies mid-inference (ungraceful, e.g. SIGKILL, crash)** | Local `~/.tjai/current_claim.json` marker is left behind. On next `tj_agent` startup, `_run_worker_forever_async` calls `abort.abort_current_claim()` which POSTs `failed` and clears the marker before entering the poll loop. | Automatic on next startup. If tj_agent is not restarted, run `python -m tj_agent abort` manually. |
+| **Worker process gone permanently** | If a startup never happens and no operator runs `tj_agent abort`, the claim sits until `WORKER_CLAIM_STALE_SECONDS` (2h), then any poll can re-claim it. | Eliminate the delay with `python -m tj_agent abort` on the Mac, OR let the 2-hour auto-reclaim fire. The display calls this `zombie` once the claim age crosses the threshold, otherwise just `busy`. |
 | **Server restarts mid-claim** | The worker's HTTP request gets a connection-reset; its retry loop backs off and eventually polls again, hitting the free-capacity reset path. | Automatic. |
 | **Result POST fails (network)** | Worker logs the failure; the work is lost; the claim remains until the worker's next poll triggers the free-capacity reset, which re-stages the work for re-claim. | Automatic. The work runs again. |
 | **Worker advertises an unknown capability** | `400` from `worker_poll`; sysconfig is not polluted. Worker logs the rejection and backs off. | Edit `WORKER_CAPABILITIES` on the server, or fix the worker config. |
@@ -610,6 +613,58 @@ Things that can go wrong and what the system does about them.
 | **MCP `call_tool` raises during the agent loop** | The exception is caught per-tool, the error text is fed back to the model as the tool result (`TOOL ERROR: <ExceptionType>: <message>`). The model can choose to retry, try a different tool, or give up and answer in text. The work item completes normally. | None — this is by design. The model gets to see and react to tool failures. |
 | **Worker posts to `/api/log` and the call fails** | Logged locally as a warning; work processing continues unaffected. No retry. | None — central logging is best-effort by design; the local agent.log line is the source of truth. |
 | **`TJAI_API_KEY` not set in `~/.tjai/env`** | `_post_log_sync` silently no-ops on every event. No central logging happens. The worker still works normally. | Add the key to `~/.tjai/env` and bootout/bootstrap. |
+
+## Stopping a worker cleanly
+
+The remote-worker protocol has no "cancel" message. The only way for the server to learn that in-flight work won't complete is a `POST /api/worker/result` with `status='failed'`. If a worker is killed (SIGTERM from `launchctl bootout`, SIGKILL, crash, power loss) without posting that failure, the server keeps showing the claim as busy until `WORKER_CLAIM_STALE_SECONDS` (2h) elapses — a long, avoidable lag between reality and the UI.
+
+**Don't run bare `launchctl bootout`** when a worker is processing work. Use:
+
+```bash
+~/github/tjrepo/tjai/scripts/kill_worker.sh [optional reason text]
+```
+
+This is the deterministic, committed kill. It does two things in order:
+
+1. `python -m tj_agent abort "<reason>"` — reads `~/.tjai/current_claim.json` (the in-flight marker the worker maintains, see below), POSTs `status='failed'` for that `entry_id` with the reason, and removes the marker. Works whether `tj_agent` is running or already dead — it only needs the local marker and the server API.
+2. `launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.tj_agent.plist` — stops the process.
+
+The server transitions the sub-entry from `active` to `failed` immediately; the UI stops showing it as running within one refresh cycle.
+
+### The `current_claim.json` marker
+
+`tj_agent/worker.py` writes `~/.tjai/current_claim.json` at the start of every work item in `_process_work_async` and removes it on every completion path (success, inference error, empty-final-text failure). Shape:
+
+```json
+{
+  "entry_id": "<sub-entry uuid>",
+  "capability": "gemma4",
+  "base_entry_id": "research-<topic>",
+  "claimed_at": 1776715123.4,
+  "ollama_model": "gemma4:31b"
+}
+```
+
+The marker is the local record of "this worker currently owes the server a result for this entry." It is the contract that makes `abort` safe to invoke without coordination with a running worker — the marker exists iff there's a claim to abort.
+
+### Startup crash recovery
+
+If a worker dies ungracefully (SIGKILL, OOM, power loss) the marker is left behind. On the next `tj_agent` startup, `_run_worker_forever_async` calls `abort.abort_current_claim()` before entering the poll loop. This POSTs `status='failed'` for the stranded entry and clears the marker, so the first poll doesn't race with a stale `active` claim. A graceful shutdown whose POST hit a network error is also recovered this way on next start.
+
+### Why not a SIGTERM handler in the worker thread
+
+Python signal handlers run in the main thread, but the worker is a separate thread running an asyncio loop. Delivering a clean cancel from a signal handler into that thread (while it's blocked inside `asyncio.to_thread` on a long ollama call) is fragile — the ollama HTTP request would need to be torn down, the message history discarded, and a POST made before the parent process exits in the time the launchd gives us between SIGTERM and SIGKILL (typically seconds).
+
+The current design sidesteps that: `scripts/kill_worker.sh` does the POST **before** stopping the process, using the local marker. The marker-based recovery handles the residual "got killed without scripts/kill_worker.sh" case on next startup. Simple, correct, no signal-thread-asyncio interaction surface.
+
+### When to use which
+
+| Situation | Use |
+|---|---|
+| Operator killing the worker for any reason (restage, debug, shutdown) | `scripts/kill_worker.sh` |
+| Just POSTing failure without stopping the worker (e.g., because prompt needs refresh) | `python -m tj_agent abort "<reason>"`, then let the worker keep running for the next work item |
+| tj_agent already crashed, need to clean server state | `python -m tj_agent abort "post-crash cleanup"` — reads the leftover marker and POSTs |
+| Updating env vars or re-sourcing `~/.tjai/env` | `scripts/kill_worker.sh` then `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tj_agent.plist` |
 
 ## Troubleshooting
 
