@@ -4940,6 +4940,62 @@ def api_research_rerun(request):
 @login_required
 @csrf_exempt
 @require_http_methods(["POST"])
+def api_research_restage_subentry(request):
+    """Re-stage a remote-worker sub-entry: rebuild the prompt from the current
+    per-model system-prompt entry, reset worker_staged_at, clear any stale
+    claim. Lets a staged sub-entry pick up prompt edits without doing a full
+    rerun of the topic. Only valid for multimodel sub-entries with a
+    worker_target (i.e. gemma/qwen-class remote-worker entries).
+    """
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    sub_uuid = body.get('uuid')
+    if not sub_uuid:
+        return JsonResponse({'error': 'uuid required'}, status=400)
+    sub = Entry.objects.filter(id=sub_uuid, deleted_at__isnull=True).first()
+    if not sub:
+        return JsonResponse({'error': 'sub-entry not found'}, status=404)
+    sd = sub.data if isinstance(sub.data, dict) else {}
+    if sd.get('source') != 'multimodel' or not sd.get('worker_target'):
+        return JsonResponse({'error': 'not a remote-worker sub-entry'}, status=400)
+    model = sd.get('model')
+    base_eid = sd.get('base_entry_id')
+    if not (model and base_eid):
+        return JsonResponse({'error': 'model or base_entry_id missing on sub-entry'}, status=400)
+    base = Entry.objects.filter(
+        data__entry_id=base_eid, deleted_at__isnull=True,
+    ).first()
+    if not base:
+        return JsonResponse({'error': f'base entry {base_eid} not found'}, status=404)
+    from .action_runner import build_research_prompt
+    topic_text = (base.content or '').split('\n')[0].strip()
+    try:
+        new_prompt = build_research_prompt(topic_text, model)
+    except Exception as e:
+        return JsonResponse({'error': f'prompt build failed: {e}'}, status=500)
+    now = time.time()
+    sd['worker_prompt'] = new_prompt
+    sd['worker_staged_at'] = now
+    sd.pop('worker_claimed_by', None)
+    sd.pop('worker_claimed_at', None)
+    sub.data = sd
+    sub.timestamp_modified = now
+    sub.save(update_fields=['data', 'timestamp_modified'])
+    # Reset base tracking to 'staged' in case it was 'active' under a stale
+    # claim — the next poll will flip it back to 'active' atomically.
+    bd = base.data if isinstance(base.data, dict) else {}
+    bd[f'{model}_status'] = 'staged'
+    base.data = bd
+    base.timestamp_modified = now
+    base.save(update_fields=['data', 'timestamp_modified'])
+    return JsonResponse({'status': 'ok', 'prompt_chars': len(new_prompt), 'model': model})
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
 def api_research_rerun_models(request):
     """Rerun selected models for a completed research topic.
 

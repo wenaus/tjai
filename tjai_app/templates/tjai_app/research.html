@@ -519,6 +519,13 @@
                 if (isRunning) {
                     html += `<button class="btn-submit" style="color:#ef5350;border-color:#ef5350" onclick="abortAgent(this)">Abort</button>`;
                 }
+                // Staged remote-worker sub-entry: let the user cycle it to pick up
+                // fresh prompt content (e.g. after editing the per-model system
+                // prompt entry). Rebuilds worker_prompt from the current
+                // research-system-prompt-<model> body and resets worker_staged_at.
+                if (item.source === 'multimodel' && item.worker_target && cls === 'staged') {
+                    html += `<button class="btn-submit" onclick="restageSubentry('${item.id}', this)">Restage</button>`;
+                }
                 // Always show model checkboxes + rerun for base entries (not model sub-entries)
                 if (!isRunning && item.source !== 'multimodel') {
                     // Models list comes from the API (derived from RESEARCH_MODELS on server)
@@ -643,6 +650,30 @@
             } catch (e) {
                 btn.textContent = 'Error';
                 setTimeout(() => { btn.textContent = 'Rerun selections'; btn.disabled = false; }, 3000);
+            }
+        }
+
+        async function restageSubentry(uuid, btn) {
+            btn.disabled = true;
+            btn.textContent = 'Restaging...';
+            try {
+                const resp = await fetch('/tjai/api/research/restage-subentry', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                    body: JSON.stringify({uuid: uuid}),
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    btn.textContent = data.error;
+                    setTimeout(() => { btn.textContent = 'Restage'; btn.disabled = false; }, 3000);
+                    return;
+                }
+                btn.textContent = `Restaged (${data.prompt_chars} chars)`;
+                btn.style.color = '#4caf50';
+                setTimeout(fetchData, 2000);
+            } catch (e) {
+                btn.textContent = 'Error';
+                setTimeout(() => { btn.textContent = 'Restage'; btn.disabled = false; }, 3000);
             }
         }
 
