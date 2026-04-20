@@ -142,11 +142,15 @@ Located in `computers/common/claude-hooks/`:
 ### Session-Start Bootstrap Directive
 
 `load.py` emits a per-machine directive instructing the model to call
-`mcp__tjai__get_ai_guidance(context=X)` before responding to the user's first
-message, regardless of message content. Mapping lives in `HOSTNAME_CONTEXTS`
-inside `load.py`, keyed by `location_name` from `~/.tjai/config.json` (fallback:
-`socket.gethostname()`). Unknown hosts get no directive — add an entry for
-each new machine.
+`mcp__tjai__get_ai_guidance(context=X)` and `mcp__tjai__get_profile()` before
+responding to the user's first message, regardless of message content. Mapping
+lives in `HOSTNAME_CONTEXTS` inside `load.py`, keyed by `location_name` from
+`~/.tjai/config.json` (fallback: `socket.gethostname()`). Unknown hosts fall
+back to a general-guidance directive (`mcp__tjai__get_ai_guidance()` with no
+context arg) and a stderr warning — the universal rules still apply, and the
+warning makes the unmapped host discoverable via `claude --verbose`. Add an
+entry to `HOSTNAME_CONTEXTS` to also load project-specific guidance. The
+profile call is host-independent and always included.
 
 Why this exists: CLAUDE.md's "before anything else, call `get_ai_guidance`"
 rule was inconsistently honored when the first user message read as trivial
