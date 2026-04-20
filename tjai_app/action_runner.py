@@ -478,49 +478,41 @@ def load_reader_context():
     return '\n\n'.join(parts)
 
 
-def build_research_prompt(topic, reader_context=None):
-    """Build the research prompt from research-system-prompt-v2.
+def _system_prompt_content_for_model(model):
+    """Resolve the per-model research system prompt body.
 
-    Strips MCP-specific sections so the prompt works for API-only / remote
-    worker models. If reader_context is None, loads it fresh.
+    Looks up `research-system-prompt-<model>` in the tjai entries. Falls back
+    to the legacy `research-system-prompt-v2` if the per-model entry is
+    missing (for the transition window). Each per-model entry holds the full
+    prompt body — no runtime stripping, no templating. Editing the entry
+    updates the live prompt, versioned by tjai's entry version history.
+    """
+    for entry_id in (f'research-system-prompt-{model}', 'research-system-prompt-v2'):
+        entry = Entry.objects.filter(
+            data__entry_id=entry_id,
+            deleted_at__isnull=True,
+        ).first()
+        if entry:
+            return entry.content
+    raise RuntimeError(
+        f"No system prompt found for model={model!r} "
+        f"(tried research-system-prompt-{model} and research-system-prompt-v2)"
+    )
+
+
+def build_research_prompt(topic, model, reader_context=None):
+    """Build the final research prompt for one model's dispatch.
+
+    The per-model entry (research-system-prompt-<model>) holds the full prompt
+    body — tailored for that model's runtime, tool surface, and dispatch path.
+    This function appends reader context (profile + guidance), the topic, and
+    the output instructions, and returns the composed text ready to hand to
+    the model.
     """
     if reader_context is None:
         reader_context = load_reader_context()
 
-    sp_entry = Entry.objects.filter(
-        data__entry_id='research-system-prompt-v2',
-        deleted_at__isnull=True,
-    ).first()
-    if not sp_entry:
-        raise RuntimeError("research-system-prompt-v2 entry not found in DB")
-
-    prompt = sp_entry.content
-
-    # Remove MCP-specific sections that don't apply to API-only models
-    remove_sections = [
-        '## Operational',
-        '## Entry Provenance',
-        '## ALL Content Must Be in tjai Entries',
-    ]
-    for section in remove_sections:
-        idx = prompt.find(section)
-        if idx == -1:
-            continue
-        next_heading = prompt.find('\n## ', idx + len(section))
-        if next_heading == -1:
-            prompt = prompt[:idx].rstrip()
-        else:
-            prompt = prompt[:idx] + prompt[next_heading:]
-
-    # Remove individual MCP references
-    for phrase in [
-        'Call get_profile() and get_ai_guidance() first.',
-        'You can see the MCP interface\nyou have available to further educate and equip yourself for this task.',
-        'You can see the MCP interface you have available to further educate and equip yourself for this task.',
-        '- Use MCP tools for tjai data access (search_entries, edit_entry).\n',
-        '- Write the completed report directly into the research entry via edit_entry,\n  setting status to "done".\n',
-    ]:
-        prompt = prompt.replace(phrase, '')
+    prompt = _system_prompt_content_for_model(model)
 
     full_prompt = f"""{reader_context}
 
@@ -807,7 +799,7 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
             # upgraded to 'active' atomically by _claim_worker_entry.
             worker_target = REMOTE_WORKER_MODELS[model]
             try:
-                prompt = build_research_prompt(topic_text)
+                prompt = build_research_prompt(topic_text, model)
                 edata = entry.data if isinstance(entry.data, dict) else {}
                 edata['worker_target'] = worker_target
                 edata['worker_prompt'] = prompt

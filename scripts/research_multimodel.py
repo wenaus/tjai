@@ -187,7 +187,7 @@ def main():
     try:
         # Build the prompt
         reader_context = load_reader_context()
-        prompt = build_research_prompt(topic, reader_context)
+        prompt = build_research_prompt(topic, model, reader_context)
 
         # Call the appropriate API
         if model == 'gemini':
