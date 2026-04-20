@@ -637,6 +637,7 @@ The server transitions the sub-entry from `active` to `failed` immediately; the 
 
 ```json
 {
+  "state": "pending",
   "entry_id": "<sub-entry uuid>",
   "capability": "gemma4",
   "base_entry_id": "research-<topic>",
@@ -646,6 +647,23 @@ The server transitions the sub-entry from `active` to `failed` immediately; the 
 ```
 
 The marker is the local record of "this worker currently owes the server a result for this entry." It is the contract that makes `abort` safe to invoke without coordination with a running worker — the marker exists iff there's a claim to abort.
+
+**State transitions** — the marker is two-phase to close a silent-regression race: if the worker's POST to `/api/worker/result` succeeds but the subsequent unlink fails (filesystem / permissions glitch), a bare pending marker would cause the next startup recovery to re-POST `status='failed'` for an entry whose `status='done'` was already accepted — because `worker_result` accepts results from any machine_id unconditionally (see § Wire protocol), there's no server-side check that would reject the duplicate.
+
+The fix: marker has a `state` field.
+
+| State | Written when | Startup recovery behavior |
+|---|---|---|
+| `pending` | Work start, before inference | POST `status='failed'` and clear |
+| `posted` | Immediately after a successful `worker_result` POST, just before clear | Clear only, no POST |
+
+Worker sequence on a completion path: POST → flip marker state to `posted` (atomic tmp+rename) → unlink. Crash between any two steps is recoverable without duplicate POSTs:
+
+- Crash before POST → marker is `pending`, recovery POSTs failed (correct — server never saw the result)
+- Crash between POST and state flip → marker is `pending`, recovery re-POSTs failed (small window, minor: server accepts the POST, may clobber a `done` with `failed` — but this window is microseconds-narrow)
+- Crash between state flip and unlink → marker is `posted`, recovery just unlinks (correct — server already has the result)
+
+The middle case is the residual hole. The probability is far lower than the original "entire unlink can fail" hole, because the state flip uses the same atomic write as the initial marker and happens in-memory between two disk operations. Considered acceptable.
 
 ### Startup crash recovery
 

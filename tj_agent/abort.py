@@ -44,6 +44,17 @@ logger = logging.getLogger(__name__)
 CURRENT_CLAIM_FILE = Path(os.path.expanduser("~/.tjai/current_claim.json"))
 
 
+STATE_PENDING = "pending"  # POST to /api/worker/result not yet sent
+STATE_POSTED = "posted"    # POST succeeded; marker just needs unlinking
+
+
+def _atomic_write(payload: dict) -> None:
+    CURRENT_CLAIM_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = CURRENT_CLAIM_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload))
+    tmp.replace(CURRENT_CLAIM_FILE)
+
+
 def write_current_claim(entry_id: str, capability: str,
                         base_entry_id: str | None,
                         claimed_at: float,
@@ -51,23 +62,47 @@ def write_current_claim(entry_id: str, capability: str,
     """Record the in-flight claim so abort_current_claim can find it.
 
     Called from _process_work_async right after the worker accepts a
-    work item. Idempotent — last write wins if called repeatedly.
+    work item. State is `pending` — POST has not yet been sent.
+    Idempotent — last write wins if called repeatedly.
     """
-    payload = {
+    _atomic_write({
+        "state": STATE_PENDING,
         "entry_id": entry_id,
         "capability": capability,
         "base_entry_id": base_entry_id,
         "claimed_at": claimed_at,
         "ollama_model": ollama_model,
-    }
-    CURRENT_CLAIM_FILE.parent.mkdir(parents=True, exist_ok=True)
-    tmp = CURRENT_CLAIM_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(payload))
-    tmp.replace(CURRENT_CLAIM_FILE)
+    })
+
+
+def mark_current_claim_posted() -> None:
+    """Flip the marker to state=`posted` after worker_result POSTed OK.
+
+    Must be called AFTER a successful client.worker_result call and
+    BEFORE clear_current_claim(). Exists to close a narrow race: if the
+    POST succeeded but the subsequent unlink fails (filesystem,
+    permissions), a bare pending marker left behind would cause the
+    next tj_agent startup to re-POST status='failed' for the same
+    entry — clobbering the just-succeeded 'done' result, because
+    worker_result accepts results unconditionally (even from non-claim-
+    holders, per the doc). Flipping to `posted` first makes the startup
+    recovery path recognize "POST was already sent, nothing to do" and
+    skip the re-abort. Safe no-op if no marker exists.
+    """
+    claim = read_current_claim()
+    if not claim:
+        return
+    claim["state"] = STATE_POSTED
+    try:
+        _atomic_write(claim)
+    except Exception as e:
+        logger.warning("failed to flip current_claim marker to posted: %s", e)
 
 
 def clear_current_claim() -> None:
-    """Remove the claim marker. Called on every completion path.
+    """Remove the claim marker. Called on every completion path AFTER
+    the POST is made (and, in the success path, after
+    mark_current_claim_posted).
 
     Safe to call when no marker exists.
     """
@@ -112,6 +147,17 @@ def abort_current_claim(reason: str) -> dict:
     if not entry_id:
         clear_current_claim()
         return {"aborted": False, "detail": "marker had no entry_id"}
+
+    # If the marker says the result was already posted, the previous
+    # process got as far as a successful worker_result POST and only
+    # failed to unlink the marker. Re-POSTing would clobber the
+    # already-accepted result (worker_result accepts any POST from any
+    # machine_id with only a warning). Just clear and return no-op.
+    if claim.get("state") == STATE_POSTED:
+        clear_current_claim()
+        return {"aborted": False,
+                "detail": "marker was already posted; cleared",
+                "entry_id": entry_id, "capability": capability}
 
     machine_id = get_machine_id()
     logger.info("abort: POSTing failed for entry=%s cap=%s reason=%s",

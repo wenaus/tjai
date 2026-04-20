@@ -671,13 +671,17 @@ async def _process_work_async(work: dict, machine_id: str, cfg: dict,
                 "error": err,
             },
         )
+        posted_ok = False
         try:
             await asyncio.to_thread(
                 client.worker_result,
                 machine_id=machine_id, entry_id=entry_id,
                 status="failed", error=err, duration_sec=duration)
+            posted_ok = True
         except Exception as re:
             logger.exception("failed to post failure result: %s", re)
+        if posted_ok:
+            abort.mark_current_claim_posted()
         abort.clear_current_claim()
         return
 
@@ -704,13 +708,17 @@ async def _process_work_async(work: dict, machine_id: str, cfg: dict,
                 "error": err,
             },
         )
+        posted_ok = False
         try:
             await asyncio.to_thread(
                 client.worker_result,
                 machine_id=machine_id, entry_id=entry_id,
                 status="failed", error=err, duration_sec=duration)
+            posted_ok = True
         except Exception as e:
             logger.exception("failed to post failure result: %s", e)
+        if posted_ok:
+            abort.mark_current_claim_posted()
         abort.clear_current_claim()
         return
 
@@ -735,14 +743,18 @@ async def _process_work_async(work: dict, machine_id: str, cfg: dict,
             "output_chars": len(final_text),
         },
     )
+    posted_ok = False
     try:
         await asyncio.to_thread(
             client.worker_result,
             machine_id=machine_id, entry_id=entry_id,
             status="done", result=final_text, duration_sec=duration)
+        posted_ok = True
     except Exception as e:
         logger.exception("%s: failed to post result after %ds: %s",
                          entry_id, duration, e)
+    if posted_ok:
+        abort.mark_current_claim_posted()
     abort.clear_current_claim()
 
 
