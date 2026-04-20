@@ -134,9 +134,30 @@ Dialog entries: `kind='memory'`, `context='claude-code'`, `tag='ccdialog'`, `is_
 ### Hook Scripts
 
 Located in `computers/common/claude-hooks/`:
-- `load.py` — SessionStart (synchronous). Fetches dialog, prints SYSPROMPT.md + history.
+- `load.py` — SessionStart (synchronous). Prints SYSPROMPT.md, a mandatory
+  session-start bootstrap directive (see below), and dialog history.
 - `record.py` — UserPromptSubmit + Stop (async). Records prompts and responses.
 - `SYSPROMPT.md` — Static context injected at session start.
+
+### Session-Start Bootstrap Directive
+
+`load.py` emits a per-machine directive instructing the model to call
+`mcp__tjai__get_ai_guidance(context=X)` before responding to the user's first
+message, regardless of message content. Mapping lives in `HOSTNAME_CONTEXTS`
+inside `load.py`, keyed by `location_name` from `~/.tjai/config.json` (fallback:
+`socket.gethostname()`). Unknown hosts get no directive — add an entry for
+each new machine.
+
+Why this exists: CLAUDE.md's "before anything else, call `get_ai_guidance`"
+rule was inconsistently honored when the first user message read as trivial
+(e.g. "hello"). The directive lives in session-start context — the same
+channel as dialog history — is imperative, names the context by name, and
+explicitly disarms the "trivial greeting" rationalization. Fires
+unconditionally, independent of `TJAI_DIALOG_TURNS` activation.
+
+This is a priming fix, not a harness-enforced fix — if priming proves
+insufficient, the next step is to have `load.py` fetch the guidance text
+server-side (new REST endpoint mirroring `api_dialog`) and inject it directly.
 
 ### Configuration
 
