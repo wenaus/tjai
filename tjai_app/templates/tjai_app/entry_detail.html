@@ -211,8 +211,15 @@
                     }
                     return '<span>' + escHtml(s) + '</span>';
                 }
+                // Fields that duplicate content or are pure API-consumption
+                // audit copies of entry.content — hide from the detail panel.
+                // `worker_result` and `worker_error` are kept on data for the
+                // /api/work/result/<uuid> external-caller endpoint but they
+                // are redundant with entry.content for display purposes.
+                var HIDE_DATA_KEYS = {worker_result: 1, worker_error: 1};
                 var html = '';
                 for (var key in raw) {
+                    if (HIDE_DATA_KEYS[key]) continue;
                     html += '<div style="margin: 3px 0;"><span style="color:#7a7a7a">' + escHtml(key) + '</span> ' + fmtVal(key, raw[key]) + '</div>';
                 }
                 el.innerHTML = html;
