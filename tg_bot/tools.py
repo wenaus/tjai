@@ -131,17 +131,41 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "edit_entry",
-        "description": "Edit an existing entry.",
+        "name": "replace_entry_content",
+        "description": "Replace an entry's content with new text (destructive full rewrite). For additive edits use append_entry_content; for metadata-only use edit_entry_metadata.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "entry_id": {"type": "string", "description": "The UUID of the entry to edit."},
-                "content": {"type": "string", "description": "New content text."},
+                "entry_id": {"type": "string", "description": "The UUID of the entry."},
+                "content": {"type": "string", "description": "New content (replaces existing)."},
+            },
+            "required": ["entry_id", "content"],
+        },
+    },
+    {
+        "name": "append_entry_content",
+        "description": "Append text to an entry's existing content. Existing content is preserved.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entry_id": {"type": "string", "description": "The UUID of the entry."},
+                "content": {"type": "string", "description": "Text to append."},
+                "separator": {"type": "string", "description": "Inserted between existing and new. Default blank line."},
+            },
+            "required": ["entry_id", "content"],
+        },
+    },
+    {
+        "name": "edit_entry_metadata",
+        "description": "Edit metadata fields (status, priority) without changing content. For content changes use replace_entry_content or append_entry_content.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entry_id": {"type": "string", "description": "The UUID of the entry."},
                 "status": {"type": "string", "description": "New status: active, done, blocked, archive."},
                 "priority": {"type": "integer", "description": "New priority (1=highest)."},
             },
-            "required": ["entry_id", "content"],
+            "required": ["entry_id"],
         },
     },
     {
@@ -221,9 +245,27 @@ def get_entry(entry_id):
     return services.get_entry(entry_id=entry_id)
 
 
-def edit_entry(entry_id, content, status=None, priority=None):
+# Deprecated back-compat shim; not exposed in SCHEMA. Kept so any cached
+# caller still using this name continues to work.
+def edit_entry(entry_id, content=None, status=None, priority=None):
     return services.edit_entry(
         entry_id=entry_id, content=content, status=status, priority=priority,
+    )
+
+
+def replace_entry_content(entry_id, content):
+    return services.replace_entry_content(entry_id=entry_id, content=content)
+
+
+def append_entry_content(entry_id, content, separator="\n\n"):
+    return services.append_entry_content(
+        entry_id=entry_id, content=content, separator=separator,
+    )
+
+
+def edit_entry_metadata(entry_id, status=None, priority=None):
+    return services.edit_entry_metadata(
+        entry_id=entry_id, status=status, priority=priority,
     )
 
 
@@ -243,7 +285,10 @@ TOOL_FUNCTIONS = {
     "search_entries": search_entries,
     "create_entry": create_entry,
     "get_entry": get_entry,
-    "edit_entry": edit_entry,
+    "replace_entry_content": replace_entry_content,
+    "append_entry_content": append_entry_content,
+    "edit_entry_metadata": edit_entry_metadata,
+    "edit_entry": edit_entry,  # deprecated back-compat; not in SCHEMA
     "delete_entry": delete_entry,
 }
 

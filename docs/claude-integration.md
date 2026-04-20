@@ -91,7 +91,10 @@ Full `~/.claude/settings.json` with tjai MCP, permissions, and status line:
       "mcp__tjai__get_bookmarks", "mcp__tjai__search_entries",
       "mcp__tjai__get_named_entries", "mcp__tjai__get_entry",
       "mcp__tjai__get_entry_by_entry_id", "mcp__tjai__create_entry",
-      "mcp__tjai__edit_entry", "mcp__tjai__copy_calendar_entry",
+      "mcp__tjai__edit_entry_metadata",
+      "mcp__tjai__replace_entry_content",
+      "mcp__tjai__append_entry_content",
+      "mcp__tjai__copy_calendar_entry",
       "mcp__tjai__change_entry_kind", "mcp__tjai__run_action",
       "WebSearch", "WebFetch"
     ],

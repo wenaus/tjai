@@ -174,7 +174,12 @@ Tools:
 - get_entry_by_entry_id(entry_id): Find entry by human-readable entry_id.
 - create_entry(content, kind, context, name, tags, event_date, priority, status,
   create_context): Add new entries. Context must exist unless create_context=True.
-- edit_entry(entry_id, content, ...): Edit an existing entry.
+- edit_entry_metadata(entry_id, tags, status, priority, ...): Edit metadata
+  fields only (no content).
+- replace_entry_content(entry_id, content): Replace an entry's content
+  (destructive full rewrite).
+- append_entry_content(entry_id, content, separator): Append text to an
+  entry's existing content (preserves existing).
 - copy_calendar_entry(entry_id, event_date, event_time): Copy a journal entry
   to a new date, preserving all fields.
 - change_entry_kind(entry_id, kind): Change entry type without modifying

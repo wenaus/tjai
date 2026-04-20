@@ -201,7 +201,7 @@ def _build_system_prompt(guidance: str, entry_id: str, original_prompt: str,
 OPERATIONAL RULES:
 - Use mcp__tjai__ tools for all tjai data access.
 - Be concise and factual. No preamble.
-- If you encounter any error, report it visibly in tracking entry {entry_id} via mcp__tjai__edit_entry. Never fail silently.
+- If you encounter any error, append it visibly to tracking entry {entry_id} via mcp__tjai__append_entry_content. Never fail silently.
 
 {custom_prompt}"""
 
@@ -212,15 +212,14 @@ OPERATIONAL RULES:
 OPERATIONAL RULES:
 - Use mcp__tjai__ tools for all tjai data access.
 - Be concise and factual. No preamble.
-- If you encounter any error, append it to entry {entry_id} via mcp__tjai__edit_entry. Never fail silently.
-- When appending to the entry, always preserve all existing content and add your new text after it.
+- If you encounter any error, append it to entry {entry_id} via mcp__tjai__append_entry_content. Never fail silently.
+- mcp__tjai__append_entry_content always preserves existing content — do NOT use replace_entry_content, which clobbers.
 
 MANDATORY CONCLUSION:
-When your task is complete, you MUST call mcp__tjai__edit_entry to APPEND your result to entry {entry_id}.
-Read the entry first with mcp__tjai__get_entry, then edit it preserving all existing content and appending:
+When your task is complete, you MUST call mcp__tjai__append_entry_content on entry {entry_id} with:
 [RESULT]
 <your findings formatted in markdown — use headings, bullets, formatted links, etc.>
-This is not optional. The entry is your report-back mechanism."""
+This is not optional. The entry is your report-back mechanism. Existing content is preserved automatically — you never need to read-then-rewrite."""
 
 
 def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: str) -> None:

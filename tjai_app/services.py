@@ -803,10 +803,65 @@ def get_entry_by_entry_id(entry_id):
     return _format_entry(entry)
 
 
-def edit_entry(entry_id, content=None, context=None, clear_context=False,
-               tags=None, event_date=None, event_time=None, clear_event_date=False,
-               priority=None, clear_priority=False, status=None, clear_status=False,
-               name=None, clear_name=False, keep_time=False, data=None):
+def edit_entry_metadata(entry_id, context=None, clear_context=False, tags=None,
+                        event_date=None, event_time=None, clear_event_date=False,
+                        priority=None, clear_priority=False,
+                        status=None, clear_status=False,
+                        name=None, clear_name=False, keep_time=False, data=None):
+    """Edit an entry's metadata fields (tags, status, priority, context, name,
+    event date/time, data, …) without touching its content. For content
+    changes use replace_entry_content or append_entry_content."""
+    return _edit_entry_impl(
+        entry_id=entry_id, content=None,
+        context=context, clear_context=clear_context, tags=tags,
+        event_date=event_date, event_time=event_time, clear_event_date=clear_event_date,
+        priority=priority, clear_priority=clear_priority,
+        status=status, clear_status=clear_status,
+        name=name, clear_name=clear_name, keep_time=keep_time, data=data,
+    )
+
+
+def replace_entry_content(entry_id, content):
+    """Replace an entry's content with the supplied text (destructive — the
+    previous content is gone from the current version; it remains in version
+    history and can be recovered via restore_version). Use when you genuinely
+    want a full rewrite; use append_entry_content when you want to add to it."""
+    if not entry_id:
+        return {"error": "entry_id is required"}
+    if content is None or not content.strip():
+        return {"error": "content is required and cannot be empty"}
+    return _edit_entry_impl(entry_id=entry_id, content=content)
+
+
+def append_entry_content(entry_id, content, separator="\n\n"):
+    """Append text to an entry's existing content. Final content is
+    `existing + separator + content`. Existing content is always preserved.
+    Use this for log-style entries, agent report-back, shopping lists, etc."""
+    if not entry_id:
+        return {"error": "entry_id is required"}
+    if content is None or not content.strip():
+        return {"error": "content is required and cannot be empty"}
+    entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
+    if not entry:
+        return {"error": f"Entry '{entry_id}' not found or already deleted"}
+    existing = entry.content or ""
+    sep = separator if separator is not None else ""
+    new_content = (existing + sep + content) if existing else content
+    return _edit_entry_impl(entry_id=entry_id, content=new_content)
+
+
+def edit_entry(entry_id, content=None, **kwargs):
+    """Deprecated back-compat shim. Preserved undocumented for callers that
+    still use the old combined API. New code: edit_entry_metadata for metadata,
+    replace_entry_content / append_entry_content for content. This shim
+    forwards to _edit_entry_impl with the same semantics as before the split."""
+    return _edit_entry_impl(entry_id=entry_id, content=content, **kwargs)
+
+
+def _edit_entry_impl(entry_id, content=None, context=None, clear_context=False,
+                     tags=None, event_date=None, event_time=None, clear_event_date=False,
+                     priority=None, clear_priority=False, status=None, clear_status=False,
+                     name=None, clear_name=False, keep_time=False, data=None):
     from .signals import set_changed_by
     set_changed_by('api')
     if not entry_id:

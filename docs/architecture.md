@@ -98,7 +98,7 @@ LLM → Local MCP (tjai-agent) → Local SQLite (fast queries)
 - `tj find "topic"` → Aggregates local + server results
 
 **MCP tools provided** (see `tjai_app/mcp.py` for full list):
-- Entry CRUD: `create_entry`, `edit_entry`, `delete_entry`, `get_entry`
+- Entry CRUD: `create_entry`, `replace_entry_content`, `append_entry_content`, `edit_entry_metadata`, `delete_entry`, `get_entry`
 - Queries: `get_memories`, `get_todos`, `get_bookmarks`, `search_entries`, `get_calendar`
 - Knowledge graph: `create_goal`, `get_goal`, `create_relation`, `get_relations`, `get_web`
 - Context: `get_ai_guidance`, `get_profile`, `list_contexts`

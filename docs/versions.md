@@ -55,7 +55,7 @@ old = get_entry_versions(entry_id=current.id, age="24h")
 
 - **Activity summary**: Compare @Underway current vs 24h-ago version to identify today's work
 - **Research ideation**: Track how living documents evolve — shifts in priorities signal emerging interests
-- **Recovery**: Restore previous content after an unwanted edit (view version, copy content, edit_entry)
+- **Recovery**: Restore previous content after an unwanted `replace_entry_content` (view version, copy content, `replace_entry_content`) — or better, prefer `append_entry_content` to add to an entry without risking a clobber
 - **Audit**: See who changed what and when
 
 ## UI

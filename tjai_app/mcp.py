@@ -17,7 +17,9 @@ Available tools:
     get_named_entries - Get entries by @name, or list all named entries
     get_entry         - Get a single entry by ID
     get_entry_by_entry_id - Find entry by human-readable entry_id
-    edit_entry        - Edit an existing entry
+    edit_entry_metadata    - Edit an entry's metadata (tags, status, priority, …)
+    replace_entry_content  - Replace an entry's content (destructive rewrite)
+    append_entry_content   - Append text to an entry's existing content
     run_action        - Execute an action entry immediately
     copy_calendar_entry - Copy a journal entry to a new date (preserves all fields)
     change_entry_kind - Change an entry's type without modifying content or timestamp
@@ -487,9 +489,8 @@ async def get_entry_by_entry_id(entry_id: str) -> dict:
 
 
 @mcp.tool()
-async def edit_entry(
+async def edit_entry_metadata(
     entry_id: str,
-    content: str = None,
     context: str = None,
     clear_context: bool = False,
     tags: list[str] = None,
@@ -506,15 +507,14 @@ async def edit_entry(
     data: dict = None,
 ) -> dict:
     """
-    Edit an existing entry in the user's tjai knowledge base.
+    Edit metadata fields of an existing entry WITHOUT touching its content.
 
-    Updates the content and optionally other fields of an existing entry.
-    The entry must exist and not be deleted.
+    For content changes use replace_entry_content (full replace) or
+    append_entry_content (add to existing). This tool has no `content`
+    parameter so the content-vs-metadata distinction is unmissable.
 
     Args:
         entry_id: The UUID of the entry to edit (required).
-        content: The new content text. If omitted, content is unchanged — use this
-              for metadata-only edits (tags, status, priority, etc.).
         context: Set the entry's context to this value. Must be an existing context.
         clear_context: If True, removes the entry's context.
         tags: Replace all tags with this list. Pass [] to remove all tags.
@@ -535,6 +535,65 @@ async def edit_entry(
         The updated entry with all fields.
         Returns {"error": "..."} if validation fails.
     """
+    return await sync_to_async(services.edit_entry_metadata)(
+        entry_id=entry_id, context=context,
+        clear_context=clear_context, tags=tags, event_date=event_date,
+        event_time=event_time, clear_event_date=clear_event_date,
+        priority=priority, clear_priority=clear_priority,
+        status=status, clear_status=clear_status,
+        name=name, clear_name=clear_name, keep_time=keep_time,
+        data=data,
+    )
+
+
+@mcp.tool()
+async def replace_entry_content(entry_id: str, content: str) -> dict:
+    """
+    Replace an entry's content with new text. DESTRUCTIVE — the previous
+    content is gone from the current version.
+
+    The previous content remains in version history (see get_entry_versions /
+    restore_version) and can be recovered if this was a mistake. Still: use
+    append_entry_content when you want to ADD to existing content; use this
+    only for deliberate full rewrites.
+
+    For metadata-only edits use edit_entry_metadata.
+
+    Args:
+        entry_id: The UUID of the entry to edit (required).
+        content: The new content text (required, non-empty).
+
+    Returns:
+        The updated entry with all fields.
+        Returns {"error": "..."} if validation fails.
+    """
+    return await sync_to_async(services.replace_entry_content)(
+        entry_id=entry_id, content=content,
+    )
+
+
+@mcp.tool()
+async def edit_entry(
+    entry_id: str,
+    content: str = None,
+    context: str = None,
+    clear_context: bool = False,
+    tags: list[str] = None,
+    event_date: str = None,
+    event_time: str = None,
+    clear_event_date: bool = False,
+    priority: int = None,
+    clear_priority: bool = False,
+    status: str = None,
+    clear_status: bool = False,
+    name: str = None,
+    clear_name: bool = False,
+    keep_time: bool = False,
+    data: dict = None,
+) -> dict:
+    """Deprecated. Use edit_entry_metadata / replace_entry_content /
+    append_entry_content. Kept registered for back-compat with callers that
+    already have this name cached; do not use in new code."""
     return await sync_to_async(services.edit_entry)(
         entry_id=entry_id, content=content, context=context,
         clear_context=clear_context, tags=tags, event_date=event_date,
@@ -543,6 +602,33 @@ async def edit_entry(
         status=status, clear_status=clear_status,
         name=name, clear_name=clear_name, keep_time=keep_time,
         data=data,
+    )
+
+
+@mcp.tool()
+async def append_entry_content(
+    entry_id: str, content: str, separator: str = "\n\n"
+) -> dict:
+    """
+    Append text to an entry's existing content. Final content is
+    `existing + separator + content`. Existing content is always preserved.
+
+    Use for log-style entries, agent report-back, shopping-list additions,
+    any case where you want to ADD to what's there. For full-replace use
+    replace_entry_content; for metadata-only use edit_entry_metadata.
+
+    Args:
+        entry_id: The UUID of the entry to append to (required).
+        content: The text to append (required, non-empty).
+        separator: Inserted between existing and new content. Default
+                   '\\n\\n' (blank line). Pass '' for no separator.
+
+    Returns:
+        The updated entry with all fields.
+        Returns {"error": "..."} if validation fails.
+    """
+    return await sync_to_async(services.append_entry_content)(
+        entry_id=entry_id, content=content, separator=separator,
     )
 
 
