@@ -301,7 +301,7 @@ def get_profile():
     return [_format_entry(entry) for entry in qs]
 
 
-def get_ai_guidance(context=None):
+def get_ai_guidance(context=None, location_name=None):
     from django.db.models.functions import Coalesce
     qs = Entry.objects.filter(
         kind='ai',
@@ -320,6 +320,35 @@ def get_ai_guidance(context=None):
                 results.append(_format_entry(entry))
         else:
             results.append(_format_entry(entry))
+
+    # Per-machine details entries are kind='memory' (facts about a machine, not
+    # AI behavioral rules), so they don't appear in the kind='ai' query above
+    # and don't leak between machines. They're fetched by entry_id regardless
+    # of kind when location_name is supplied.
+    if location_name:
+        details_id = f"{location_name}_details"
+        details = Entry.objects.select_related('context').filter(
+            data__entry_id=details_id,
+            deleted_at__isnull=True,
+        ).prefetch_related('tags').first()
+        if details:
+            results.append(_format_entry(details))
+        else:
+            results.append({
+                "kind": "info",
+                "location_name": location_name,
+                "message": (
+                    f"No machine details entry found for "
+                    f"location_name='{location_name}'. To add one, create an "
+                    f"entry with kind='memory', context=None, and "
+                    f"data={{'entry_id': '{details_id}'}} describing this "
+                    f"machine (deployed apps, working dirs, local quirks, "
+                    f"collaboration axes relevant to this host). Surface "
+                    f"this notice to the user so the missing entry gets "
+                    f"authored."
+                ),
+            })
+
     return results
 
 

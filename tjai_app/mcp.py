@@ -107,13 +107,15 @@ async def get_profile() -> list:
 
 
 @mcp.tool()
-async def get_ai_guidance(context: str = None) -> list:
+async def get_ai_guidance(context: str = None, location_name: str = None) -> list:
     """
     Get AI guidance entries - behavioral instructions for AI assistants.
 
     AI guidance entries define how AI assistants should behave. They include:
     - General guidance (no context): Universal rules applying to all interactions
     - Context-specific guidance: Rules for working on particular projects/topics
+    - Machine-specific guidance: Rules/facts for a particular host, keyed by
+      location_name (see below)
 
     IMPORTANT: Always call this before starting work on any context/project to
     get project-specific instructions. The user expects you to follow these.
@@ -121,13 +123,27 @@ async def get_ai_guidance(context: str = None) -> list:
     Args:
         context: If provided, returns general guidance PLUS guidance specific
                  to this context. If None, returns all guidance entries.
+        location_name: If provided, additionally returns the machine-details
+                 entry named `<location_name>_details` (kind='memory',
+                 context=null, data.entry_id='<location_name>_details').
+                 Machine-details are facts about a machine (deployed apps,
+                 working dirs, ingress paths, collaboration axes) — not AI
+                 behavioral rules — so they are kind='memory', not 'ai'. The
+                 SessionStart hook reads `location_name` from the local
+                 `~/.tjai/config.json` and passes it here. If no such entry
+                 exists, an info notice is appended to the results telling
+                 you to surface that fact to the user so the missing entry
+                 can be authored.
 
     Returns:
         List of AI guidance entries ordered by context then modification date,
         each containing: id, content, context (null for general), kind,
-        created, modified, tags.
+        created, modified, tags. When location_name is supplied, the
+        machine-specific entry (or an info notice if absent) is appended.
     """
-    return await sync_to_async(services.get_ai_guidance)(context=context)
+    return await sync_to_async(services.get_ai_guidance)(
+        context=context, location_name=location_name
+    )
 
 
 @mcp.tool()
