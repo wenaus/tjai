@@ -166,6 +166,25 @@ def _create_tracking_entry(prompt: str, context: Optional[str]) -> str:
     state["last_entry_id"] = entry_id
     save_state(state)
 
+    # Force an immediate sync push. Without this the tracking entry sits
+    # in local SQLite with is_dirty=1 and only reaches Postgres on the
+    # tj_agent daemon's next 30s sync cycle. Meanwhile the caller
+    # launches a Claude subprocess within seconds — when that subprocess
+    # queries via MCP (which reads Postgres), the entry isn't there yet
+    # and the agent falls back to creating a duplicate "standalone
+    # result" entry. Same entry_id → duplicate rows. Diagnosed
+    # 2026-04-18: affected ideation 04-16, 04-17, 04-18.
+    #
+    # Wrapped to swallow errors — a transient sync failure must not
+    # break the agent run. The worst case without the push is the old
+    # failure mode (30s sync lag) which the caller already tolerates.
+    try:
+        from tj_agent.sync import push_dirty_entries
+        push_dirty_entries()
+    except Exception as e:
+        print(f"Warning: sync push after tracking-entry create failed: {e}",
+              file=sys.stderr)
+
     return entry_id
 
 
