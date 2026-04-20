@@ -321,7 +321,7 @@ for stale in stale_claims:
 
 The same poll then proceeds into the long-poll loop and may immediately re-claim the entry (legitimately, this time). The net effect is that a worker that died holding a claim, came back, and polled again, will reclaim its own work without operator intervention.
 
-**Scope**: the reset filters by `worker_claimed_by=machine_id` only — it clears **every** claim held by the polling machine regardless of which capability the poll is for. This is correct under the current "one worker, one capability per process" assumption (a polling worker has free capacity full stop, not just for the polled cap). If a single worker ever advertises multiple capabilities, this is still likely the right semantics, but it's a place to recheck.
+**Scope**: the reset filters by `worker_claimed_by=machine_id` only — it clears **every** claim held by the polling machine regardless of which capability the poll is for. This is the right semantics for the current multi-capability worker (qwen + gemma4 + gemma4-fast on one Mac Studio) — since the worker is single-threaded on the poll loop, the arrival of *any* poll means the machine has no in-flight work on *any* capability, so any claim of any cap held by this machine is stale.
 
 ## Stale claim auto-reclaim (the 2-hour safety net)
 
@@ -340,10 +340,10 @@ WORKER_CAPABILITIES = {'gemma4'}
 
 To add a new capability:
 1. Add the name to `WORKER_CAPABILITIES` in `views.py`.
-2. Configure a worker to advertise it in `tj` config (`worker_capabilities` list).
+2. Configure a worker to advertise it in `tj` config (`worker_models` dict — map the capability name to a local ollama model tag).
 3. Stage work with `data.worker_target = '<new-cap>'` from whatever dispatcher needs it.
 
-The worker side is generic — `tj_agent/worker.py` does not know about specific capabilities; it just polls for whatever `worker_capabilities` is set to in its config and forwards each work item to `_call_ollama` with whichever ollama model is configured locally.
+The worker side is generic — `tj_agent/worker.py` does not know about specific capabilities; it just polls for whatever `worker_models` maps in its config (in dict insertion order — see § Capability order is priority order) and forwards each work item to `_call_ollama` with whichever ollama model is configured locally for that capability.
 
 ## Display contract: three named facts, never conflated
 
@@ -417,6 +417,29 @@ Example covering both today's capabilities:
 ```
 
 The capability name on the server side and the local ollama model tag are decoupled — the server sends `model: gemma4` and the worker substitutes its locally configured tag. The same physical machine can serve a slow-but-thorough capability and a fast-and-light capability against the same hardware.
+
+### Capability order is priority order
+
+When a worker advertises multiple capabilities and more than one has staged work, **the order of `worker_models` keys in `config.json` determines which work gets claimed first.** Put the capability you want polled first at the top of the dict.
+
+The mechanism:
+- `tj_agent/worker.py` passes `capabilities = list(cfg["models"].keys())` to the poll request (Python preserves dict insertion order).
+- The server's `_claim_worker_entry` in `tjai_app/views.py` iterates capabilities in request order: `for capability in capabilities:` — the first capability with matching staged work wins the claim.
+- Result: config insertion order → poll order → claim order.
+
+Worked example. Config:
+```json
+"worker_models": {
+  "qwen":        "qwen3.6:latest",
+  "gemma4":      "gemma3:27b",
+  "gemma4-fast": {"ollama_name": "gemma3:e4b", "max_tokens": 8000}
+}
+```
+With staged work for both `qwen` and `gemma4`, this worker will claim `qwen` first. When `qwen` completes and the worker polls again, `gemma4` gets claimed.
+
+Historical note: `worker.py` previously sorted capabilities alphabetically (`sorted(cfg["models"].keys())`), which made `gemma4` always beat `qwen` regardless of config order and was surprising when one capability was consistently slow. Switched to insertion-order preservation on 2026-04-20.
+
+This is per-worker only — it does not affect the *server's* dispatch order across multiple workers, or which model of a multi-model research topic runs first. Those are separate concerns.
 
 `start_worker_thread()` is called from `tj_agent.daemon.run_forever()` alongside the sync loop. If `worker_enabled=false` or `worker_models={}`, the thread doesn't start. Reconfiguring requires restarting `tj_agent` on the Mac.
 
@@ -535,6 +558,8 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tj_agent.plist
 
 `launchctl kickstart -k gui/$(id -u)/com.tjai.agent` is **not** sufficient — it only restarts the running job, it does not re-read the plist or re-source the env file. New env vars added to `~/.tjai/env` will not be visible to the worker until the bootout/bootstrap pair is run.
 
+The bootout/bootstrap pair is also the correct way to pick up **code changes** to `tj_agent/*.py`. `tj config.json` is re-read on every poll iteration (so toggling `worker_enabled` or reordering `worker_models` is picked up on the next poll without any restart), but edits to the worker Python itself — e.g., changing the poll-capability-order logic in `worker.py` — only take effect on next process start.
+
 ### Per-prompt logging to `/api/log`
 
 The worker posts events to tjai's central `AppLog` via `POST /api/log` (Bearer-authenticated with `TJAI_API_KEY`), source `worker-mac`. Three event types per work item:
@@ -615,12 +640,12 @@ Any new endpoint that writes AppLog must follow this pattern. Pass datetimes to 
 Check on the Mac whether `tj_agent` is running and the worker thread started:
 ```bash
 pgrep -af tj_agent     # process alive?
-tail -F ~/.tjai/logs/agent.log | grep -i worker
+tail -F ~/.tjai/agent.log | grep -i worker
 ```
 
 Confirm the worker is configured:
 ```bash
-jq '.worker_enabled, .worker_capabilities' ~/.tjai/config.json
+jq '.worker_enabled, .worker_models' ~/.tjai/config.json
 ```
 
 If the worker is polling but the server returns 500, see the previous section.
@@ -727,7 +752,7 @@ The pipeline is generic — adding a second model is straightforward:
 
 1. **Server: register the capability.** Add the new name to `WORKER_CAPABILITIES` in `tjai_app/views.py`.
 2. **Server: stage work for it.** A dispatcher writes an `Entry` with `data.worker_target='<cap>'`, `data.worker_prompt='<text>'`, `data.worker_staged_at=time.time()`, optionally `data.worker_timeout_sec=<int>`, and `Entry.status='active'`. For research-style integration, also write the per-model status fields (`{model}_status='staged'`, `{model}_entry_id=<id>`) on the base entry so `research_model_complete` will know to expect this model's contribution.
-3. **Worker: advertise it.** On the worker machine, add the new capability name to `worker_capabilities` in `tj` config and configure `ollama_model` to the appropriate ollama tag. Restart `tj_agent`.
+3. **Worker: advertise it.** On the worker machine, add an entry in `worker_models` mapping the new capability name to the appropriate local ollama model tag. Put it at the position in the dict that reflects its priority relative to other capabilities (§ Capability order is priority order). Restart `tj_agent` via `launchctl bootout`/`bootstrap`.
 4. **Result handling.** If the work is for the multi-model research pipeline, no further work is needed — `worker_result` calls `research_model_complete`, which is generic over `RESEARCH_MODELS`. If the work is for something else, extend `worker_result` to dispatch on `data.source` and route accordingly.
 
 The display layer is automatic: `api_research_data` synthesizes `worker_health[<cap>]` for any cap that has either a poll record or a held claim, and the banner renders one line per cap.

@@ -769,7 +769,7 @@ async def _run_worker_forever_async() -> None:
             if not cfg["enabled"] or not cfg["models"]:
                 await asyncio.sleep(30)  # config disabled — idle check every 30s
                 continue
-            capabilities = sorted(cfg["models"].keys())
+            capabilities = list(cfg["models"].keys())
 
             try:
                 response = await asyncio.to_thread(
