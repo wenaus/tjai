@@ -575,28 +575,18 @@ def main():
                                  extra=ref_extra)
         _research_queue_drain(now)
 
-    # Claude failure on multimodel entry: mark model status as failed on base
+    # Claude failure on multimodel entry: mark model as failed and run the
+    # terminal-check + synthesis-trigger path, so a failure that is the last
+    # remaining model still fires synthesis (failed == done for trigger).
     if action_id == 'research-agent' and exit_code not in (0, 124) and entry:
         entry_data = entry.data if isinstance(entry.data, dict) else {}
         if entry_data.get('source') == 'multimodel' and entry_data.get('model'):
-            model = entry_data['model']
-            base_entry_id = entry_data.get('base_entry_id')
-            if base_entry_id:
-                try:
-                    base = Entry.objects.filter(
-                        data__entry_id=base_entry_id, deleted_at__isnull=True,
-                    ).first()
-                    if base:
-                        bd = base.data if isinstance(base.data, dict) else {}
-                        bd[f'{model}_status'] = 'failed'
-                        base.data = bd
-                        base.save(update_fields=['data'])
-                        logger.info("%s: set %s_status=failed on base %s",
-                                    action_id, model, base_entry_id,
-                                    extra=ref_extra)
-                except Exception as e:
-                    logger.error("%s: failed to update base on failure: %s",
-                                 action_id, e, extra=ref_extra)
+            try:
+                from tjai_app.action_runner import research_model_complete
+                research_model_complete(entry, terminal_status='failed')
+            except Exception as e:
+                logger.error("%s: research_model_complete(failed) failed: %s",
+                             action_id, e, extra=ref_extra)
 
 
 

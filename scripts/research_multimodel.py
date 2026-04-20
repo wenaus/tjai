@@ -224,22 +224,14 @@ def main():
         entry.status = 'failed'
         entry.save(update_fields=['content', 'status'])
 
-        # Update base entry's model status so it's not stuck at 'active'
+        # Mark the model failed on base and run the terminal-check + synthesis
+        # trigger: failed counts as done for synthesis purposes, so a failure
+        # that's the last remaining model still fires the synthesis step.
         try:
-            edata = entry.data if isinstance(entry.data, dict) else {}
-            base_eid = edata.get('base_entry_id')
-            if base_eid:
-                base = Entry.objects.filter(
-                    data__entry_id=base_eid, deleted_at__isnull=True,
-                ).first()
-                if base:
-                    bd = base.data if isinstance(base.data, dict) else {}
-                    bd[f'{model}_status'] = 'failed'
-                    base.data = bd
-                    base.save(update_fields=['data'])
-                    logger.info("Set %s_status=failed on base %s", model, base_eid)
+            from tjai_app.action_runner import research_model_complete
+            research_model_complete(entry, terminal_status='failed')
         except Exception as be:
-            logger.error("Failed to update base entry on failure: %s", be)
+            logger.error("research_model_complete(failed) failed: %s", be)
 
         sys.exit(1)
 

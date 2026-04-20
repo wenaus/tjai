@@ -246,25 +246,22 @@ def _check_multimodel_stale():
             continue
 
         # Process dead + entry still active = crashed subprocess
-        logger.warning("%s: process PID %s dead, entry still active after %.0fs — marking blocked",
+        logger.warning("%s: process PID %s dead, entry still active after %.0fs — marking failed",
                        model_entry_id, pid_str, age)
-        entry.status = 'blocked'
+        entry.status = 'failed'
         entry_data = entry.data if isinstance(entry.data, dict) else {}
         entry_data['run_error'] = f'Process PID {pid_str} died without completing'
         entry.data = entry_data
         entry.save(update_fields=['status', 'data'])
 
-        # Update base entry's model status
+        # Mark the model failed on base and run the terminal-check + synthesis
+        # trigger (failed counts as done for synthesis purposes).
         if base_entry_id:
-            base = Entry.objects.filter(
-                data__entry_id=base_entry_id, deleted_at__isnull=True,
-            ).first()
-            if base:
-                bd = base.data if isinstance(base.data, dict) else {}
-                bd[f'{model}_status'] = 'failed'
-                base.data = bd
-                base.save(update_fields=['data'])
-                logger.info("Set %s_status=failed on base %s", model, base_entry_id)
+            try:
+                from tjai_app.action_runner import research_model_complete
+                research_model_complete(entry, terminal_status='failed')
+            except Exception as e:
+                logger.error("research_model_complete(failed) failed: %s", e)
 
         # Clear the stale PID
         sc.value = ''

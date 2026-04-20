@@ -26,8 +26,8 @@ SCRIPTS_DIR = Path(__file__).resolve().parent.parent / 'scripts'
 # prompt on the entry. REMOTE_WORKER_MODELS maps the research model name to its
 # WORKER_CAPABILITIES entry (which the worker's worker_models config then maps
 # to a local ollama tag).
-RESEARCH_MODELS = ('claude', 'gemini', 'gemma', 'qwen')
-REMOTE_WORKER_MODELS = {'gemma': 'gemma4', 'qwen': 'qwen'}
+RESEARCH_MODELS = ('claude', 'gemini', 'qwen', 'gemma')
+REMOTE_WORKER_MODELS = {'qwen': 'qwen', 'gemma': 'gemma4'}
 TJAI_DIR = SCRIPTS_DIR.parent
 TJ_PY = TJAI_DIR / 'tj.py'
 
@@ -539,7 +539,7 @@ exactly as specified in the Output Format section above."""
     return full_prompt
 
 
-def research_model_complete(model_entry):
+def research_model_complete(model_entry, terminal_status='done'):
     """Called when any research model finishes (claude/gemini/chatgpt/gemma).
 
     Updates the base entry's tracking, checks if all active models are done,
@@ -568,37 +568,42 @@ def research_model_complete(model_entry):
             return
 
         base_data = base.data if isinstance(base.data, dict) else {}
-        base_data[f'{model}_status'] = 'done'
+        base_data[f'{model}_status'] = terminal_status
 
         # Only check models that were actually dispatched for THIS topic.
         # A model was dispatched iff its entry_id was recorded on the base.
         # This lets us add new models (e.g. gemma) without breaking in-flight
         # research that was dispatched before the new model existed.
+        #
+        # For synthesis-trigger purposes, failed counts as done: with 4
+        # models in the dispatch, one or two failures still leaves a
+        # meaningful synthesis. 'blocked' is accepted as the legacy
+        # spelling of 'failed'.
         dispatched = [m for m in RESEARCH_MODELS
                       if base_data.get(f'{m}_entry_id')]
         statuses = {
             m: base_data.get(f'{m}_status')
             for m in dispatched
         }
-        all_done = bool(dispatched) and all(
-            s == 'done' for s in statuses.values())
+        all_terminal = bool(dispatched) and all(
+            s in ('done', 'failed', 'blocked') for s in statuses.values())
 
-        if all_done:
+        if all_terminal:
             base.status = 'done'
 
         base.data = base_data
         update_fields = ['data']
-        if all_done:
+        if all_terminal:
             update_fields.append('status')
         base.save(update_fields=update_fields)
 
-    logger.info("Updated base %s: %s_status=done", base_entry_id, model)
+    logger.info("Updated base %s: %s_status=%s", base_entry_id, model, terminal_status)
 
-    if not all_done:
-        logger.info("Not all models done: %s", statuses)
+    if not all_terminal:
+        logger.info("Not all models terminal: %s", statuses)
         return
 
-    logger.info("Base %s: all models done, status=done", base_entry_id)
+    logger.info("Base %s: all models terminal, status=done", base_entry_id)
 
     synth_entry_id = f'{base_entry_id}-synthesis'
     if base_data.get('synthesis_triggered'):
@@ -623,7 +628,7 @@ def research_model_complete(model_entry):
         logger.info("Synthesis %s already exists", synth_entry_id)
         return
 
-    logger.info("All models done for %s — triggering synthesis", base_entry_id)
+    logger.info("All models terminal for %s — triggering synthesis", base_entry_id)
     _create_and_dispatch_synthesis(base_entry_id, base, synth_entry_id)
 
 

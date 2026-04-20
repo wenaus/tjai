@@ -772,25 +772,16 @@ def worker_result(request):
                     'status': status, 'duration_sec': duration_sec},
     )
 
-    # Research entries: update base tracking and check for synthesis trigger
+    # Research entries: update base tracking and check for synthesis trigger.
+    # Failed counts as done for synthesis purposes (with 4 models dispatched,
+    # one or two failures still leaves a meaningful synthesis).
     if edata.get('source') == 'multimodel' and edata.get('model'):
         try:
             from tjai_app.action_runner import research_model_complete
-            if status == 'done':
-                research_model_complete(entry)
-            else:
-                # Mark base entry's model status as failed
-                base_eid = edata.get('base_entry_id')
-                model = edata.get('model')
-                if base_eid and model:
-                    base = Entry.objects.filter(
-                        data__entry_id=base_eid, deleted_at__isnull=True,
-                    ).first()
-                    if base:
-                        bd = base.data if isinstance(base.data, dict) else {}
-                        bd[f'{model}_status'] = 'failed'
-                        base.data = bd
-                        base.save(update_fields=['data'])
+            research_model_complete(
+                entry,
+                terminal_status='done' if status == 'done' else 'failed',
+            )
         except Exception as e:
             logger.error("worker_result: research_model_complete failed: %s", e)
 
