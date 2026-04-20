@@ -25,7 +25,7 @@ from pathlib import Path
 import bootstrap  # noqa: F401 - Django setup
 
 from django.db import connection
-from django.db.models import Count, Q
+from django.db.models import Count
 
 from tjai_app.db_log_handler import DbLogHandler
 from tjai_app.models import Entry, AppLog, Tag
@@ -279,22 +279,28 @@ def collect_entries(since_ts):
 
 
 def collect_dialog(since_ts):
-    """Dialog turn counts by source."""
+    """Dialog turn counts by source.
+
+    CC dialog turns live with context='claude-code' (and tag 'ccdialog');
+    they do not carry a data.source field. This is the canonical
+    discriminator used across the rest of the codebase (services.py,
+    views.py SQL). A prior data.source='mcp'|'claude_code' filter
+    matched zero entries and silently reported 0 CC turns.
+
+    Telegram dialog turns: context='telegram' is the canonical home.
+    """
     metrics = {}
 
-    # Claude Code turns: entries created via MCP
     metrics['dialog_cc_turns_24h'] = Entry.objects.filter(
         timestamp_created__gte=since_ts,
         deleted_at__isnull=True,
-    ).filter(
-        Q(data__source='mcp') | Q(data__source='claude_code')
+        context__name='claude-code',
     ).count()
 
-    # Telegram turns
     metrics['dialog_tg_turns_24h'] = Entry.objects.filter(
         timestamp_created__gte=since_ts,
         deleted_at__isnull=True,
-        data__source='telegram',
+        context__name='telegram',
     ).count()
 
     return metrics
