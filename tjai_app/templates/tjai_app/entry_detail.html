@@ -146,6 +146,14 @@
             </select>
             <label style="margin-left:16px">priority</label>
             <input id="priorityField" type="number" min="1" value="{{ entry.priority|default:'' }}" placeholder="(none)" style="width:60px">
+            <label style="margin-left:16px">status</label>
+            <select id="statusField" style="background:#111;color:#c0d8f0;border:1px solid #555;padding:3px 6px;font-family:inherit;font-size:13px;border-radius:3px;">
+                <option value=""{% if not entry.status %} selected{% endif %}>(none)</option>
+                <option value="active"{% if entry.status == 'active' %} selected{% endif %}>active</option>
+                <option value="done"{% if entry.status == 'done' %} selected{% endif %}>done</option>
+                <option value="blocked"{% if entry.status == 'blocked' %} selected{% endif %}>blocked</option>
+                <option value="archive"{% if entry.status == 'archive' %} selected{% endif %}>archive</option>
+            </select>
             <label style="margin-left:16px">format</label>
             <select id="formatField" style="background:#111;color:#c0d8f0;border:1px solid #555;padding:3px 6px;font-family:inherit;font-size:13px;border-radius:3px;">
                 <option value="">auto</option>
@@ -763,11 +771,12 @@
             var kind = document.getElementById('kindField').value;
             var priorityVal = document.getElementById('priorityField').value.trim();
             var priority = priorityVal ? parseInt(priorityVal) : null;
+            var status = document.getElementById('statusField').value || null;
             var isPublic = document.getElementById('publicToggle').checked;
             fetch(saveUrl, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-                body: JSON.stringify({content: content, name: name, context: context, format: fmt, tags: tags, entry_id: entryIdVal, kind: kind, priority: priority, access: isPublic ? 'public' : null, expected_ts: _serverTimestamp})
+                body: JSON.stringify({content: content, name: name, context: context, format: fmt, tags: tags, entry_id: entryIdVal, kind: kind, priority: priority, status: status, access: isPublic ? 'public' : null, expected_ts: _serverTimestamp})
             }).then(function(r) { return r.json(); }).then(function(data) {
                 if (data.conflict) {
                     alert('WARNING: Entry was modified elsewhere. Your save went through but may have overwritten other changes. Reload to check.');
