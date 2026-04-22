@@ -1654,14 +1654,19 @@ def dashboard_status(request):
     ).exclude(status='done').values('context_id').annotate(count=Count('id')).order_by('-count'))
     open_todos = [{'context': t['context_id'], 'count': t['count']} for t in todos_by_ctx]
 
-    # Machine sync status - filter out test machines, find longest since sync
+    # Machine sync status - filter out test machines and hostname-less orphans
+    # (any machine_id posted to a sync endpoint creates a row; rows with no
+    # hostname are uninformative — drop them rather than showing machine_id[:8])
     test_names = {'test', 'test123', 'testhost', 'test-host', 'fake-mac', 'debug'}
-    machines_qs = Machine.objects.filter(is_active=1).exclude(hostname__in=test_names)
+    machines_qs = (Machine.objects.filter(is_active=1)
+                   .exclude(hostname__in=test_names)
+                   .exclude(hostname__isnull=True)
+                   .exclude(hostname=''))
     machines = []
     oldest_sync = now
     oldest_machine = None
     for m in machines_qs:
-        name = m.hostname or m.machine_id[:8]
+        name = m.hostname
         if name.lower() in test_names:
             continue
         machines.append(name)

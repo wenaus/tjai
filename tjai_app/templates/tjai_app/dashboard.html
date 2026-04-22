@@ -197,13 +197,19 @@
         </div>
         {% endif %}
         <div class="panel panel-right" id="status-panel">
-            <div class="panel-header" style="display:flex; align-items:center;">{% if is_trash %}Trash{% elif is_archive %}Archive <a href="{% url 'versions_page' %}" style="color:#90caf9;font-size:12px;font-weight:normal;margin-left:12px">Item Versions</a>{% elif is_dialog %}Dialog{% else %}Status{% endif %}<span class="refresh-indicator"><span id="refresh-indicator"></span> <a href="{% url 'logout' %}" style="color:#999;margin-left:12px">Logout</a></span></div>
+            <div class="panel-header" style="display:flex; align-items:center;">{% if is_trash %}Trash{% elif is_archive %}Archive <a href="{% url 'versions_page' %}" style="color:#90caf9;font-size:12px;font-weight:normal;margin-left:12px">Item Versions</a>{% elif is_dialog %}<span id="dialog-panel-title">Dialog</span>{% else %}Status{% endif %}<span class="refresh-indicator"><span id="refresh-indicator"></span> <a href="{% url 'logout' %}" style="color:#999;margin-left:12px">Logout</a></span></div>
             <div id="status-fixed">Loading status...</div>
             <div id="dialog-chart" style="display:none; margin:8px 0; padding:8px; background:#222; border:1px solid #333; border-radius:4px; position:relative;">
-                <div style="color:#888; font-size:11px; margin-bottom:4px;">Daily dialog turns</div>
-                <canvas id="dialog-chart-canvas" style="width:100%; height:140px; cursor:pointer;"></canvas>
-                <div style="color:#888; font-size:11px; margin:8px 0 4px;">Weekly (Sat–Fri)</div>
-                <canvas id="dialog-weekly-canvas" style="width:100%; height:140px; cursor:pointer;"></canvas>
+                <div style="display:flex; gap:12px;">
+                    <div style="flex:1; min-width:0;">
+                        <div style="color:#888; font-size:11px; margin-bottom:4px;">Daily dialog turns</div>
+                        <canvas id="dialog-chart-canvas" style="width:100%; height:140px; cursor:pointer;"></canvas>
+                    </div>
+                    <div style="flex:1; min-width:0;">
+                        <div style="color:#888; font-size:11px; margin-bottom:4px;">Weekly (Sat–Fri)</div>
+                        <canvas id="dialog-weekly-canvas" style="width:100%; height:140px; cursor:pointer;"></canvas>
+                    </div>
+                </div>
                 <div id="chart-tooltip" style="display:none; position:absolute; background:#333; color:#e0e0e0; padding:3px 8px; border-radius:3px; font-size:11px; pointer-events:none; white-space:nowrap; z-index:10;"></div>
             </div>
             <div id="entries-header" style="display:flex; align-items:center; gap:12px; margin-top:16px; margin-bottom:8px; border-top:1px solid #333; padding-top:12px; flex-shrink:0;">
@@ -1044,17 +1050,22 @@
         function renderStatus(data) {
             let html = '';
 
-            // Context line
-            html += `<div class="status-line"><span class="entry-time">${data.timestamp}</span> `;
-            if (data.context) {
-                html += `Context is <span class="context">=${data.context}</span>.`;
-                if (data.context_description) {
-                    html += ` ${escapeHtml(data.context_description)}`;
-                }
+            // Context line (suppressed in dialog mode — timestamp moves to panel header instead)
+            if (isDialogMode) {
+                const titleEl = document.getElementById('dialog-panel-title');
+                if (titleEl) titleEl.textContent = `Dialog as of ${data.timestamp}`;
             } else {
-                html += 'Context is clear.';
+                html += `<div class="status-line"><span class="entry-time">${data.timestamp}</span> `;
+                if (data.context) {
+                    html += `Context is <span class="context">=${data.context}</span>.`;
+                    if (data.context_description) {
+                        html += ` ${escapeHtml(data.context_description)}`;
+                    }
+                } else {
+                    html += 'Context is clear.';
+                }
+                html += '</div>';
             }
-            html += '</div>';
 
             // Time range display
             {
@@ -1070,7 +1081,7 @@
             }
 
             // Contexts — clickable in-dash filters (poetry/recipe link to custom pages)
-            if (data.contexts && data.contexts.length > 0) {
+            if (!isDialogMode && data.contexts && data.contexts.length > 0) {
                 const customPages = ['poetry', 'recipe'];
                 const ctxChips = data.contexts.map(c => {
                     const excl = excludedContexts.has(c);
@@ -1106,31 +1117,37 @@
                 html += `<div class="status-line">Tags: ${tagLinks}, <a href="#" class="tag-link${noneActive}" data-tag="_none" style="color:#888;text-decoration:none">(none)</a></div>`;
             }
 
-            // Entry types
-            const types = [
-                ['ai', 'ai', 'AI guidance'], ['b', 'bookmark', 'bookmark'], ['do', 'todo', 'todo'],
-                ['g', 'goal', 'goal'], ['j', 'journal', 'journal'], ['m', 'memory', 'memory'],
-                ['p', 'profile', 'profile']
-            ];
-            const kc = data.kind_counts || {};
-            const typeLinks = types.map(([abbr, kind, label]) => {
-                const activeClass = activeKind === kind ? ' active' : '';
-                const count = kc[kind] || 0;
-                return `<a href="#" class="kind-link${activeClass}" data-kind="${kind}" style="color:#daa520;text-decoration:none">[${abbr}]=${label} <span style="color:#8a8a8a;font-size:11px">${count}</span></a>`;
-            }).join(' ');
-            html += `<div class="status-line">Types: ${typeLinks}</div>`;
+            // Entry types (suppress in dialog mode)
+            if (!isDialogMode) {
+                const types = [
+                    ['ai', 'ai', 'AI guidance'], ['b', 'bookmark', 'bookmark'], ['do', 'todo', 'todo'],
+                    ['g', 'goal', 'goal'], ['j', 'journal', 'journal'], ['m', 'memory', 'memory'],
+                    ['p', 'profile', 'profile']
+                ];
+                const kc = data.kind_counts || {};
+                const typeLinks = types.map(([abbr, kind, label]) => {
+                    const activeClass = activeKind === kind ? ' active' : '';
+                    const count = kc[kind] || 0;
+                    return `<a href="#" class="kind-link${activeClass}" data-kind="${kind}" style="color:#daa520;text-decoration:none">[${abbr}]=${label} <span style="color:#8a8a8a;font-size:11px">${count}</span></a>`;
+                }).join(' ');
+                html += `<div class="status-line">Types: ${typeLinks}</div>`;
+            }
 
-            // Expand dialog toggle
-            const expandClass = expandDialog ? ' active' : '';
-            html += `<div class="status-line"><a href="#" id="expand-toggle" class="kind-link${expandClass}" style="color:#d8a070;text-decoration:none">[expand dialog]</a></div>`;
-
-            // Open todos
-            if (data.open_todos && data.open_todos.length > 0) {
+            // Open todos (suppress in dialog mode)
+            if (!isDialogMode && data.open_todos && data.open_todos.length > 0) {
                 const todoStr = data.open_todos.map(t =>
                     `<a href="#" class="todo-link" style="color:inherit;text-decoration:none"><span class="context">${t.context ? t.context : '(none)'}</span> <span style="color:#8a8a8a;font-size:11px">${t.count}</span></a>`
                 ).join(' ');
                 html += `<div class="status-line">Todos: ${todoStr}</div>`;
             }
+
+            // Expand dialog + Public filter — paired checkboxes, one line
+            const cbStyle = 'width:14px;height:14px;vertical-align:middle;cursor:pointer;accent-color:#9ccc65;margin-left:4px';
+            html += `<div class="status-line">`
+                + `<label style="cursor:pointer">Expand dialog <input type="checkbox" id="expand-toggle" ${expandDialog ? 'checked' : ''} style="${cbStyle}"></label>`
+                + `&nbsp;&nbsp;&nbsp;`
+                + `<label style="cursor:pointer">Public <input type="checkbox" id="public-filter" ${activePublic ? 'checked' : ''} style="${cbStyle}"></label>`
+                + `</div>`;
 
             // Machines
             if (data.machines && data.machines.length > 0) {
@@ -1146,9 +1163,6 @@
                 });
                 html += `<div class="status-line">Machines: ${machineStrs.join(', ')}</div>`;
             }
-
-            // Public filter checkbox
-            html += `<div class="status-line"><label style="cursor:pointer">Public <input type="checkbox" id="public-filter" ${activePublic ? 'checked' : ''} style="width:14px;height:14px;vertical-align:middle;cursor:pointer;accent-color:#9ccc65;margin-left:4px"></label></div>`;
 
             // Daily counts bar (dialog mode) — after machines, at bottom of status
             if (data.daily_counts) cachedDailyCounts = data.daily_counts;
@@ -1355,9 +1369,7 @@
 
             const expandToggle = e.target.closest('#expand-toggle');
             if (expandToggle) {
-                e.preventDefault();
-                expandDialog = !expandDialog;
-                expandToggle.classList.toggle('active', expandDialog);
+                expandDialog = expandToggle.checked;
                 syncStateToUrl();
                 refresh();
                 return;
