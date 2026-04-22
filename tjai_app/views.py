@@ -5059,13 +5059,9 @@ def api_research_rerun_models(request):
             old.deleted_at = now
             old.save(update_fields=['deleted_at'])
 
-    # Also delete old synthesis (will be regenerated)
-    old_synth = Entry.objects.filter(
-        data__entry_id=f'{entry_id}-synthesis', deleted_at__isnull=True,
-    ).first()
-    if old_synth:
-        old_synth.deleted_at = now
-        old_synth.save(update_fields=['deleted_at'])
+    # Leave any existing synthesis entry intact — it stays visible while the
+    # rerun runs. The synthesis regeneration path (_create_and_dispatch_synthesis)
+    # replaces it atomically at the moment the new synthesis begins writing.
 
     # Clear stale run/synthesis metadata so rerun works correctly
     base_data.pop('run_status', None)

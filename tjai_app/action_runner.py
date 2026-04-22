@@ -617,8 +617,12 @@ def research_model_complete(model_entry, terminal_status='done'):
         data__entry_id=synth_entry_id, deleted_at__isnull=True,
     ).first()
     if existing:
-        logger.info("Synthesis %s already exists", synth_entry_id)
-        return
+        # Rerun path: an older synthesis is still live from the prior run.
+        # Retire it now so the new dispatch can create a fresh entry under
+        # the same slug; the old one stays visible up to this moment.
+        existing.deleted_at = time.time()
+        existing.save(update_fields=['deleted_at'])
+        logger.info("Retired prior synthesis %s for regeneration", synth_entry_id)
 
     logger.info("All models terminal for %s — triggering synthesis", base_entry_id)
     _create_and_dispatch_synthesis(base_entry_id, base, synth_entry_id)
