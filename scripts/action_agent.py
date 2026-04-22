@@ -271,7 +271,7 @@ def _check_multimodel_stale():
 
 ENTRY_FLOOD_INTERVAL = 300  # check every 5 min
 ENTRY_FLOOD_WINDOW = 1800   # 30 min lookback
-ENTRY_FLOOD_THRESHOLD = 5   # same content prefix appearing this many times = flood
+ENTRY_FLOOD_THRESHOLD = 10  # same content prefix appearing this many times = flood
 
 
 def _jaccard(words_a, words_b):
