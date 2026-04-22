@@ -2855,8 +2855,7 @@ def weekly(request):
         items.append({
             'entry_id': eid,
             'start': start,
-            'label': f"Workweek {start.isoformat()} "
-                     f"({start.strftime('%a %b %-d')} – {end.strftime('%a %b %-d')})",
+            'label': f"Workweek {start.strftime('%a %b %-d')} – {end.strftime('%a %b %-d')}",
             'url': f'/tjai/entry/?entry_id={eid}',
         })
     items.sort(key=lambda x: x['start'], reverse=True)
