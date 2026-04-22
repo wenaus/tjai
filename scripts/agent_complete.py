@@ -607,7 +607,8 @@ def _research_queue_drain(now):
     research_ids = Tag.objects.filter(
         tag_name='research_topic'
     ).values_list('entry_id', flat=True)
-    next_item = Entry.objects.filter(
+    from tjai_app.action_runner import RESEARCH_MODELS
+    qs = Entry.objects.filter(
         id__in=research_ids,
         kind='memory',
         deleted_at__isnull=True,
@@ -619,7 +620,14 @@ def _research_queue_drain(now):
         data__source='multimodel'
     ).exclude(
         data__has_key='run_status'     # skip already-researched entries
-    ).order_by('priority', 'timestamp_created').first()
+    )
+    # Skip topics that have already been dispatched at least once —
+    # presence of any {model}_status means the topic has per-model state,
+    # which the drain has no mechanism to re-dispatch (reruns come via the
+    # explicit api_research_rerun path, not the drain).
+    for _m in RESEARCH_MODELS:
+        qs = qs.exclude(data__has_key=f'{_m}_status')
+    next_item = qs.order_by('priority', 'timestamp_created').first()
 
     if not next_item:
         logger.info("research-agent: queue empty, not chaining")
