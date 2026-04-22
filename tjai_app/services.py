@@ -1375,4 +1375,4 @@ def restore_version(entry_id, version=None):
         entry.data = v['data']
     entry.save()
 
-    return _entry_to_dict(entry)
+    return _format_entry(entry)
