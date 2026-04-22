@@ -26,7 +26,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parent.parent / 'scripts'
 # prompt on the entry. REMOTE_WORKER_MODELS maps the research model name to its
 # WORKER_CAPABILITIES entry (which the worker's worker_models config then maps
 # to a local ollama tag).
-RESEARCH_MODELS = ('claude', 'gemini', 'qwen', 'gemma')
+RESEARCH_MODELS = ('claude', 'gemini', 'qwen')  # gemma off — code kept (remote worker, completion handling) so it can be re-enabled by adding 'gemma' back
 REMOTE_WORKER_MODELS = {'qwen': 'qwen', 'gemma': 'gemma4'}
 TJAI_DIR = SCRIPTS_DIR.parent
 TJ_PY = TJAI_DIR / 'tj.py'
