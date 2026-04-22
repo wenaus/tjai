@@ -17,7 +17,7 @@ Three action entries run in sequence by `scheduled_time`:
 The `daily-synopsis` action creates the journal entry, then runs its `mechanical_script` list:
 
 ```
-["section_keeps.py", "section_git.py", "section_backup.py", "health_digest.py", "section_health.py"]
+["section_todos.py", "section_keeps.py", "section_goals.py", "section_git.py", "section_backup.py", "health_digest.py", "section_health.py", "section_mattermost.py"]
 ```
 
 Each script appends its `## Section`. Ordering matches the list order.
@@ -56,10 +56,15 @@ No agent restart needed — section scripts run as subprocesses.
 
 | Script | Heading | Data Source |
 |--------|---------|-------------|
+| `section_todos.py` | ToDo | DB: todos added or modified in last 30 days, reverse time order, 3-line subtext |
 | `section_keeps.py` | Keeps | DB: saved bookmarks + kept picks, last 24h |
+| `section_goals.py` | Goals | DB: goals created or modified in last 24h |
 | `section_git.py` | Git | `git log --since` on `/home/admin/github/tjrepo` |
 | `section_backup.py` | Backups | `~/Dropbox/tjai-backups/server/` directory scan, 7-day table |
 | `section_health.py` | System Health | `data/health-digest/{date}.json` (written by `health_digest.py`) |
+| `section_mattermost.py` | Mattermost | swf-monitor REST: pandabot/testbedbot channel posts, last 24h |
+
+Sections with a 24h window skip silently on quiet days (`build()` returns None). `section_todos.py` uses a 30-day window specifically so it surfaces something most days.
 
 ### Web UI
 
