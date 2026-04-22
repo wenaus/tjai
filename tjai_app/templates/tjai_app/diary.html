@@ -209,8 +209,8 @@
                 if (data.underway) {
                     const u = data.underway;
                     const url = u.entry_id
-                        ? `/tjai/entry/?entry_id=${encodeURIComponent(u.entry_id)}&edit=1&return=${encodeURIComponent('/tjai/diary/')}`
-                        : `/tjai/entry/?uuid=${u.id}&edit=1&return=${encodeURIComponent('/tjai/diary/')}`;
+                        ? `/tjai/entry/?entry_id=${encodeURIComponent(u.entry_id)}`
+                        : `/tjai/entry/?uuid=${u.id}`;
                     html += `<a href="${url}" style="color:#90caf9">@Underway</a>`;
                 }
                 html += `</div>`;
