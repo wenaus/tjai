@@ -147,13 +147,7 @@
             <label style="margin-left:16px">priority</label>
             <input id="priorityField" type="number" min="1" value="{{ entry.priority|default:'' }}" placeholder="(none)" style="width:60px">
             <label style="margin-left:16px">status</label>
-            <select id="statusField" style="background:#111;color:#c0d8f0;border:1px solid #555;padding:3px 6px;font-family:inherit;font-size:13px;border-radius:3px;">
-                <option value=""{% if not entry.status %} selected{% endif %}>(none)</option>
-                <option value="active"{% if entry.status == 'active' %} selected{% endif %}>active</option>
-                <option value="done"{% if entry.status == 'done' %} selected{% endif %}>done</option>
-                <option value="blocked"{% if entry.status == 'blocked' %} selected{% endif %}>blocked</option>
-                <option value="archive"{% if entry.status == 'archive' %} selected{% endif %}>archive</option>
-            </select>
+            <input id="statusField" type="text" value="{{ entry.status|default:'' }}" placeholder="(none)" style="width:100px">
             <label style="margin-left:16px">format</label>
             <select id="formatField" style="background:#111;color:#c0d8f0;border:1px solid #555;padding:3px 6px;font-family:inherit;font-size:13px;border-radius:3px;">
                 <option value="">auto</option>
@@ -771,7 +765,7 @@
             var kind = document.getElementById('kindField').value;
             var priorityVal = document.getElementById('priorityField').value.trim();
             var priority = priorityVal ? parseInt(priorityVal) : null;
-            var status = document.getElementById('statusField').value || null;
+            var status = document.getElementById('statusField').value.trim() || null;
             var isPublic = document.getElementById('publicToggle').checked;
             fetch(saveUrl, {
                 method: 'POST',

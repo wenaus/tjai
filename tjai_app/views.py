@@ -3179,11 +3179,10 @@ def api_entry_save(request, entry_id):
     # Priority
     if 'priority' in data:
         entry.priority = data['priority'] if data['priority'] else None
-    # Status
+    # Status — free text, whatever the user wants
     if 'status' in data:
-        valid_statuses = ('active', 'done', 'blocked', 'archive')
-        sv = data['status']
-        entry.status = sv if sv in valid_statuses else None
+        sv = (data['status'] or '').strip() if isinstance(data['status'], str) else None
+        entry.status = sv or None
     # Content format: md/txt/None (auto)
     fmt_changed = False
     if 'format' in data:
