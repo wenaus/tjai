@@ -25,10 +25,14 @@ def main() -> int:
     args = ap.parse_args()
 
     mode_arg = '--delta' if args.delta else '--full'
+    # Clear tjai's DJANGO_SETTINGS_MODULE so it doesn't leak into the corun
+    # subprocess and override the one it sets for itself.
+    import os
+    env = {k: v for k, v in os.environ.items() if k != 'DJANGO_SETTINGS_MODULE'}
     try:
         proc = subprocess.run(
             [CORUN_PY, CORUN_SCRIPT, mode_arg],
-            capture_output=True, text=True, timeout=600,
+            capture_output=True, text=True, timeout=600, env=env,
         )
     except subprocess.TimeoutExpired:
         print(f'codoc_prs_refresh: timeout after 600s running {CORUN_SCRIPT} {mode_arg}',
