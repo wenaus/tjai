@@ -228,7 +228,6 @@ def main():
         # trigger: failed counts as done for synthesis purposes, so a failure
         # that's the last remaining model still fires the synthesis step.
         try:
-            from tjai_app.action_runner import research_model_complete
             research_model_complete(entry, terminal_status='failed')
         except Exception as be:
             logger.error("research_model_complete(failed) failed: %s", be)
