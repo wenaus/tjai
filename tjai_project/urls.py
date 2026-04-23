@@ -66,6 +66,7 @@ urlpatterns = [
     path("api/research/abort", views.api_research_abort, name="api_research_abort"),
     path("api/research/rerun", views.api_research_rerun, name="api_research_rerun"),
     path("api/research/rerun-models", views.api_research_rerun_models, name="api_research_rerun_models"),
+    path("api/research/synthesize", views.api_research_synthesize, name="api_research_synthesize"),
     path("api/research/restage-subentry", views.api_research_restage_subentry, name="api_research_restage_subentry"),
     path("research/studies/", views.research_studies, name="research_studies"),
     path("api/research/studies", views.api_research_studies, name="api_research_studies"),

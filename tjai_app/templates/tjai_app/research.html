@@ -541,6 +541,7 @@
                     }
                     html += '</span>';
                     html += `<button class="btn-submit" onclick="rerunModels('${esc(item.entry_id)}', this)">Rerun selections</button>`;
+                    html += `<button class="btn-submit" onclick="synthesizeItem('${esc(item.entry_id)}', this)">Synthesize</button>`;
                     html += `<button class="btn-submit" onclick="rerunItem('${esc(item.entry_id)}', this)">Resubmit</button>`;
                     html += `<button class="btn-submit" onclick="submitItem('${esc(item.entry_id)}', this)">Submit</button>`;
                 }
@@ -621,6 +622,31 @@
             } catch (e) {
                 btn.textContent = 'Error';
                 setTimeout(() => { btn.textContent = 'Resubmit'; btn.disabled = false; }, 3000);
+            }
+        }
+
+        async function synthesizeItem(entryId, btn) {
+            if (!confirm('Dispatch synthesis for ' + entryId + '?\n\nAny existing synthesis sub-entry is retired and regenerated.')) return;
+            btn.disabled = true;
+            btn.textContent = 'Dispatching...';
+            try {
+                const resp = await fetch('/tjai/api/research/synthesize', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                    body: JSON.stringify({entry_id: entryId}),
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    btn.textContent = data.error;
+                    setTimeout(() => { btn.textContent = 'Synthesize'; btn.disabled = false; }, 3000);
+                    return;
+                }
+                btn.textContent = 'Queued (' + (data.models || []).join('+') + ')';
+                btn.style.color = '#4caf50';
+                setTimeout(fetchData, 2000);
+            } catch (e) {
+                btn.textContent = 'Error';
+                setTimeout(() => { btn.textContent = 'Synthesize'; btn.disabled = false; }, 3000);
             }
         }
 

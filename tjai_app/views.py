@@ -5115,6 +5115,82 @@ def api_research_rerun_models(request):
 @login_required
 @csrf_exempt
 @require_http_methods(["POST"])
+def api_research_synthesize(request):
+    """Manually dispatch the synthesis step for a research topic.
+
+    Always-live button — the human decides when synthesis is appropriate.
+    Reuses the same dispatch path as the automatic all-models-terminal trigger:
+    retires any existing synthesis sub-entry, then calls
+    _create_and_dispatch_synthesis. Refuses if the research agent is already
+    running (same 409 behavior as rerun endpoints).
+    """
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    entry_id = body.get('entry_id')
+    if not entry_id:
+        return JsonResponse({'error': 'entry_id required'}, status=400)
+
+    status_val = SysConfig.objects.filter(
+        key='agent_research-agent_status'
+    ).values_list('value', flat=True).first()
+    if status_val == 'running':
+        return JsonResponse({'error': 'Research agent already running'}, status=409)
+
+    base = Entry.objects.filter(
+        data__entry_id=entry_id, deleted_at__isnull=True,
+    ).first()
+    if not base:
+        return JsonResponse({'error': f'Entry not found: {entry_id}'}, status=404)
+
+    from .action_runner import RESEARCH_MODELS, _create_and_dispatch_synthesis
+
+    base_data = base.data if isinstance(base.data, dict) else {}
+    dispatched = [m for m in RESEARCH_MODELS
+                  if base_data.get(f'{m}_entry_id')]
+    if not dispatched:
+        return JsonResponse(
+            {'error': 'No dispatched models on this topic — nothing to synthesize'},
+            status=400)
+
+    synth_entry_id = f'{entry_id}-synthesis'
+    now = time.time()
+
+    with transaction.atomic():
+        base = Entry.objects.select_for_update().filter(
+            data__entry_id=entry_id, deleted_at__isnull=True,
+        ).first()
+        base_data = base.data if isinstance(base.data, dict) else {}
+        base_data['synthesis_triggered'] = True
+        base.data = base_data
+        base.save(update_fields=['data'])
+
+    existing = Entry.objects.filter(
+        data__entry_id=synth_entry_id, deleted_at__isnull=True,
+    ).first()
+    if existing:
+        existing.deleted_at = now
+        existing.save(update_fields=['deleted_at'])
+
+    _create_and_dispatch_synthesis(entry_id, base, synth_entry_id)
+
+    _log_research(logging.INFO,
+                  f"Manual synthesis: {entry_id} models={dispatched}",
+                  entry_id=str(base.id))
+
+    return JsonResponse({
+        'ok': True,
+        'entry_id': entry_id,
+        'synthesis_entry_id': synth_entry_id,
+        'models': dispatched,
+    })
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
 def api_picks_abort(request):
     """Hard abort: kill processes immediately and reset status."""
     return _abort_agent('agent_picks-agent_status', 'picks agent')
