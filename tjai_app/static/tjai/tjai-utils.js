@@ -72,3 +72,46 @@ function fmtDuration(sec) {
     var hr = Math.floor((sec % 86400) / 3600);
     return hr > 0 ? d + 'd ' + hr + 'h' : d + 'd';
 }
+
+/**
+ * Ensure copy events put text/html on the clipboard.
+ *
+ * Chrome's default copy serialization does not always populate the text/html
+ * channel — we observed it writing text/plain only for a copy from a
+ * contenteditable=false rendered page. Without text/html the entry-editor
+ * paste handler cannot reconstruct wiki-links or run Turndown, so links and
+ * inline formatting are lost on paste. This handler mirrors the selection
+ * into both channels so downstream pastes have structure to work with.
+ *
+ * Skips if another copy handler (e.g. the dashboard entry-aware copier)
+ * already populated clipboardData.
+ */
+(function installClipboardHtmlCopyHandler() {
+    document.addEventListener('copy', function(e) {
+        try {
+            if (e.clipboardData.types && e.clipboardData.types.length > 0) return;
+            var sel = window.getSelection();
+            if (!sel || sel.isCollapsed) return;
+            var range = sel.getRangeAt(0);
+            var frag = range.cloneContents();
+            var div = document.createElement('div');
+            div.appendChild(frag);
+            // Absolutize relative <a href> to survive Chrome's clipboard
+            // sanitizer, which blanks hrefs that aren't fully resolvable at
+            // write time — this was dropping every tjai wiki-link href on
+            // the OS clipboard.
+            var anchors = div.querySelectorAll('a[href]');
+            for (var i = 0; i < anchors.length; i++) {
+                var h = anchors[i].getAttribute('href');
+                if (h && /^\//.test(h)) {
+                    anchors[i].setAttribute('href', location.origin + h);
+                }
+            }
+            var html = div.innerHTML;
+            if (!html) return;
+            e.clipboardData.setData('text/html', html);
+            e.clipboardData.setData('text/plain', sel.toString());
+            e.preventDefault();
+        } catch (err) { /* let the browser default run */ }
+    });
+})();

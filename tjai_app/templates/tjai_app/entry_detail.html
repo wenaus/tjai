@@ -601,7 +601,7 @@
                     filter: function (node) {
                         if (node.nodeName !== 'A') return false;
                         const href = node.getAttribute('href') || '';
-                        const m = href.match(/^\/tjai\/(?:entry|p)\/\?(?:entry_id|name)=([^&]+)/);
+                        const m = href.match(/^(?:https?:\/\/[^\/]+)?\/tjai\/(?:entry|p)\/\?(?:entry_id|name)=([^&]+)/);
                         if (!m) return false;
                         const ref = decodeURIComponent(m[1]);
                         const text = (node.textContent || '').trim();
@@ -613,7 +613,7 @@
                     },
                     replacement: function (content, node) {
                         const href = node.getAttribute('href') || '';
-                        const m = href.match(/^\/tjai\/(?:entry|p)\/\?(?:entry_id|name)=([^&]+)/);
+                        const m = href.match(/^(?:https?:\/\/[^\/]+)?\/tjai\/(?:entry|p)\/\?(?:entry_id|name)=([^&]+)/);
                         const ref = decodeURIComponent(m[1]);
                         const isName = /[?&]name=/.test(href);
                         return isName ? `[[@${ref.replace(/^@/, '')}]]` : `[[${ref}]]`;
