@@ -7,6 +7,7 @@
     <title>{% if entry.name %}{{ entry.name }}{% elif entry.data.entry_id %}{{ entry.data.entry_id }}{% else %}tjai - Entry{% endif %}</title>
     <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
     <script src="/tjai/static/tjai/tjai-utils.js"></script>
+    <script src="/tjai/static/tjai/turndown-7.2.0.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/theme/material-darker.min.css">
     <style>
@@ -584,60 +585,49 @@
                     }, 0);
                 });
 
-                // HTML <ul>/<ol> → markdown list converter. Used by the paste
-                // handler below when clipboard HTML contains a bulleted or
-                // numbered list (pasting from web pages, docs, etc.). Walks
-                // <ul>/<ol> subtrees emitting '  '-indented '- ' lines and
-                // flattens paragraph-like containers elsewhere.
-                function htmlToMarkdown(html) {
-                    const doc = new DOMParser().parseFromString(html, 'text/html');
-                    const out = [];
-                    function liText(li) {
-                        let s = '';
-                        for (const n of li.childNodes) {
-                            if (n.nodeType === 1 && /^(UL|OL)$/.test(n.tagName)) continue;
-                            s += n.textContent || '';
-                        }
-                        return s.replace(/\s+/g, ' ').trim();
-                    }
-                    function walkList(list, depth) {
-                        for (const li of list.children) {
-                            if (li.tagName !== 'LI') continue;
-                            const t = liText(li);
-                            if (t) out.push('  '.repeat(depth) + '- ' + t);
-                            for (const c of li.children) {
-                                if (c.tagName === 'UL' || c.tagName === 'OL') walkList(c, depth + 1);
-                            }
-                        }
-                    }
-                    function walk(node) {
-                        for (const c of node.childNodes) {
-                            if (c.nodeType !== 1) continue;
-                            const tag = c.tagName;
-                            if (tag === 'UL' || tag === 'OL') {
-                                walkList(c, 0);
-                            } else if (tag === 'P' || /^H[1-6]$/.test(tag) || tag === 'DIV') {
-                                if (c.querySelector && c.querySelector('ul, ol, p, div, li')) {
-                                    walk(c);
-                                } else {
-                                    const t = (c.textContent || '').replace(/\s+/g, ' ').trim();
-                                    if (t) out.push(t);
-                                }
-                            } else {
-                                walk(c);
-                            }
-                        }
-                    }
-                    walk(doc.body);
-                    return out.join('\n');
-                }
+                // HTML → Markdown via Turndown, with a tjai-specific rule that
+                // round-trips wiki-link anchors (<a href="/tjai/entry/?entry_id=X">)
+                // back to [[X]] syntax. Replaces an earlier custom converter that
+                // flattened inline markup (including <a>) via textContent, silently
+                // stripping links on paste.
+                const turndown = new TurndownService({
+                    bulletListMarker: '-',
+                    headingStyle: 'atx',
+                    codeBlockStyle: 'fenced',
+                    emDelimiter: '*',
+                    linkStyle: 'inlined',
+                });
+                turndown.addRule('tjaiWikiLink', {
+                    filter: function (node) {
+                        if (node.nodeName !== 'A') return false;
+                        const href = node.getAttribute('href') || '';
+                        const m = href.match(/^\/tjai\/(?:entry|p)\/\?(?:entry_id|name)=([^&]+)/);
+                        if (!m) return false;
+                        const ref = decodeURIComponent(m[1]);
+                        const text = (node.textContent || '').trim();
+                        // Only round-trip when text matches the ref (or @ref) — i.e.
+                        // the visible anchor is the wiki-link slug, which is how
+                        // tjai renders [[X]]. Keep other tjai links as regular
+                        // markdown links so aliased text is preserved.
+                        return text === ref || text === ('@' + ref.replace(/^@/, ''));
+                    },
+                    replacement: function (content, node) {
+                        const href = node.getAttribute('href') || '';
+                        const m = href.match(/^\/tjai\/(?:entry|p)\/\?(?:entry_id|name)=([^&]+)/);
+                        const ref = decodeURIComponent(m[1]);
+                        const isName = /[?&]name=/.test(href);
+                        return isName ? `[[@${ref.replace(/^@/, '')}]]` : `[[${ref}]]`;
+                    },
+                });
 
                 cm.on('paste', function(cm, e) {
                     const cd = e.clipboardData;
                     const html = (cd && cd.getData('text/html')) || '';
                     const plain = (cd && cd.getData('text/plain')) || '';
 
-                    // tjai entry-aware paste
+                    // tjai entry-aware paste (from dashboard copy — clipboard HTML
+                    // is tagged with data-tjai-entry-id UUIDs; fetch fresh content
+                    // via API so formatting matches the current canonical entry).
                     if (html.includes('data-tjai-entry-id')) {
                         e.preventDefault();
                         const parser = new DOMParser();
@@ -662,44 +652,21 @@
                         return;
                     }
 
-                    // General paste cleanup path: apply to every other paste.
-                    // Seed with HTML list conversion if the clipboard has lists;
-                    // otherwise start from the plain-text version.
+                    // General paste: run Turndown if we have HTML with structure
+                    // worth converting; otherwise let the plain-text path handle it.
                     let result = plain;
-                    let listConverted = false;
-                    if (html && /<(ul|ol)\b/i.test(html)) {
+                    let turndownUsed = false;
+                    if (html && /<(ul|ol|a\s|strong|em|b>|i>|code|pre|h[1-6])\b/i.test(html)) {
                         try {
-                            const md = htmlToMarkdown(html);
-                            if (md) { result = md; listConverted = true; }
+                            const md = turndown.turndown(html);
+                            if (md && md.trim()) { result = md; turndownUsed = true; }
                         } catch (err) { /* fall back to plain */ }
-                    }
-                    let linkCount = 0;
-
-                    // Link-preserving: merge HTML <a> hrefs into plain text as markdown links
-                    if (html.includes('<a ')) {
-                        const parser = new DOMParser();
-                        const doc = parser.parseFromString(html, 'text/html');
-                        const links = doc.querySelectorAll('a[href]');
-                        const linkMap = new Map();
-                        links.forEach(a => {
-                            const text = a.textContent.trim();
-                            const href = a.getAttribute('href');
-                            if (text && href && href.startsWith('http')) linkMap.set(text, href);
-                        });
-                        let linked = result;
-                        linkMap.forEach((href, text) => {
-                            if (!linked.includes(href)) {
-                                linked = linked.replace(text, `[${text}](${href})`);
-                            }
-                        });
-                        if (linked !== result) {
-                            linkCount = linkMap.size;
-                            result = linked;
-                        }
                     }
 
                     // Strip markdown escapes except \< and \> (needed to avoid HTML interp)
                     result = result.replace(/\\([^<>])/g, '$1');
+                    // Normalize Turndown's "-   item" (3-space) to tjai's "- item" convention.
+                    result = result.replace(/^(\s*)- {2,}/gm, '$1- ');
                     // Trim per-line trailing whitespace, collapse 3+ blank lines, strip trailing blank lines
                     result = result.replace(/[ \t]+(?=\n)/g, '')
                                    .replace(/[ \t]+$/, '')
@@ -709,13 +676,7 @@
                     if (result === plain) return;  // nothing to clean; let CodeMirror default paste run
                     e.preventDefault();
                     cm.replaceSelection(result);
-                    if (listConverted && linkCount > 0) {
-                        flashNotice(`Pasted list (${linkCount} link${linkCount > 1 ? 's' : ''} preserved)`);
-                    } else if (listConverted) {
-                        flashNotice('Pasted HTML list as markdown');
-                    } else if (linkCount > 0) {
-                        flashNotice(`Pasted with ${linkCount} link${linkCount > 1 ? 's' : ''} preserved`);
-                    }
+                    if (turndownUsed) flashNotice('Pasted HTML as markdown');
                 });
             }
             var isRestore = !!restoreContent;
