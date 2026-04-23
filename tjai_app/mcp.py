@@ -573,6 +573,103 @@ async def replace_entry_content(entry_id: str, content: str) -> dict:
 
 
 @mcp.tool()
+async def replace_text_in_entry(
+    entry_id: str,
+    old_text: str,
+    new_text: str,
+    replace_all: bool = False,
+    expected_modified_at: str = None,
+) -> dict:
+    """
+    Surgical exact-match replace within an entry's content. Replaces
+    `old_text` with `new_text`. Errors if `old_text` is absent, or if it
+    occurs more than once and `replace_all` is False (supply more
+    surrounding context to disambiguate, or set `replace_all=True`).
+
+    PREFER THIS over `replace_entry_content` whenever you only want to
+    change a small portion of a long entry — `replace_entry_content`
+    forces you to re-emit the entire body, which is dominated by output
+    token cost. Surgical edits send only the change. Same pattern as
+    Claude Code's `Edit` tool.
+
+    Each call creates a new entry version (existing version-history /
+    restore_version semantics). Atomic: succeeds or no change.
+
+    Args:
+        entry_id: UUID of the entry (required).
+        old_text: exact substring to find (required, non-empty).
+        new_text: replacement text (required; pass "" to delete).
+        replace_all: replace every occurrence. Default False (must be unique).
+        expected_modified_at: optional ISO `modified` timestamp from a prior
+            read; if supplied and the entry has changed since, returns
+            STALE_PRECONDITION instead of writing.
+
+    Returns:
+        On success: the updated entry dict + 'replaced_count'.
+        On error: {"error": "...", "code": "..."} where code is one of
+            NOT_FOUND, BAD_REQUEST, NO_MATCH, MULTIPLE_MATCHES (with `count`),
+            STALE_PRECONDITION (with current/expected timestamps), EMPTY_RESULT.
+    """
+    return await sync_to_async(services.replace_text_in_entry)(
+        entry_id=entry_id, old_text=old_text, new_text=new_text,
+        replace_all=replace_all, expected_modified_at=expected_modified_at,
+    )
+
+
+@mcp.tool()
+async def replace_section_in_entry(
+    entry_id: str,
+    heading: str,
+    new_body: str,
+    level: int = None,
+    occurrence: int = None,
+    expected_modified_at: str = None,
+) -> dict:
+    """
+    Replace the body under a markdown heading. The heading line itself is
+    preserved; everything from the line after the heading up to the next
+    heading at the same OR higher level is replaced with `new_body`.
+
+    USE THIS for compressing or rewriting a structured section (a bullet
+    list under `##`, the action items under `### Distilled actions`, etc.)
+    without sending the surrounding document back. Eliminates the
+    'rewrite a 4kB entry to change 200 bytes' tax that
+    `replace_entry_content` imposes.
+
+    Heading match is exact text after the `#` markers (case-sensitive).
+    Headings inside fenced code blocks (``` or ~~~) are ignored. If the
+    heading text appears more than once, you must specify `level` or
+    `occurrence` — otherwise MULTIPLE_HEADINGS.
+
+    Each call creates a new entry version. Atomic.
+
+    Args:
+        entry_id: UUID of the entry (required).
+        heading: exact heading text without leading '#' or trailing whitespace.
+        new_body: replacement body (may be ""). Provide your own blank-line
+            padding if you want it around the section — this tool does not
+            add markdown formatting magic.
+        level: optional heading depth (1-6) to disambiguate.
+        occurrence: 1-based index when multiple headings match. None
+            requires the heading to be unique.
+        expected_modified_at: optional ISO `modified` timestamp precondition.
+
+    Returns:
+        On success: updated entry dict + 'section_lines_replaced' and
+            'heading_line_index'.
+        On error: {"error": "...", "code": "..."} where code is one of
+            NOT_FOUND, BAD_REQUEST, HEADING_NOT_FOUND, MULTIPLE_HEADINGS
+            (with `count`), OCCURRENCE_OUT_OF_RANGE, STALE_PRECONDITION,
+            EMPTY_RESULT.
+    """
+    return await sync_to_async(services.replace_section_in_entry)(
+        entry_id=entry_id, heading=heading, new_body=new_body,
+        level=level, occurrence=occurrence,
+        expected_modified_at=expected_modified_at,
+    )
+
+
+@mcp.tool()
 async def edit_entry(
     entry_id: str,
     content: str = None,

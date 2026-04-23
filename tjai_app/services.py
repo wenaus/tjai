@@ -850,6 +850,249 @@ def append_entry_content(entry_id, content, separator="\n\n"):
     return _edit_entry_impl(entry_id=entry_id, content=new_content)
 
 
+def _check_precondition(entry, expected_modified_at):
+    """Verify the entry's current modified_at matches the client's expectation.
+    Returns an error dict on mismatch, or None if precondition holds (or absent)."""
+    if expected_modified_at is None:
+        return None
+    current_iso = datetime.fromtimestamp(entry.timestamp_modified, tz=get_app_tz()).isoformat()
+    if current_iso != expected_modified_at:
+        return {
+            "error": "Entry was modified since expected_modified_at",
+            "code": "STALE_PRECONDITION",
+            "current_modified_at": current_iso,
+            "expected_modified_at": expected_modified_at,
+        }
+    return None
+
+
+_HEADING_RE = re.compile(r'^(#{1,6})\s+(.+?)\s*#*\s*$')
+
+
+def _find_section(content, heading, level=None, occurrence=None):
+    """Locate a markdown heading and return its body line range.
+
+    Args:
+        content: full entry content.
+        heading: heading text to match (exact, after stripping the leading
+                 '#' markers and whitespace).
+        level: optional heading depth (1-6) to disambiguate.
+        occurrence: 1-based index when multiple headings match. If None and
+                    >1 match, returns ('multiple', count).
+
+    Returns: tuple (status, *details).
+        ('found', heading_line_idx, body_start, body_end, total_matches) — body lines are
+            content.split('\\n')[body_start:body_end].
+        ('not_found', 0)
+        ('multiple', count) — only when occurrence is None and count > 1.
+        ('out_of_range', count) — occurrence supplied but out of bounds.
+    """
+    lines = content.split('\n')
+    matches = []
+    in_fence = False
+    target = heading.strip()
+    for i, line in enumerate(lines):
+        stripped = line.lstrip()
+        if stripped.startswith('```') or stripped.startswith('~~~'):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        m = _HEADING_RE.match(line)
+        if not m:
+            continue
+        line_level = len(m.group(1))
+        if level is not None and line_level != level:
+            continue
+        if m.group(2).strip() != target:
+            continue
+        matches.append((i, line_level))
+
+    count = len(matches)
+    if count == 0:
+        return ('not_found', 0)
+    if count > 1 and occurrence is None:
+        return ('multiple', count)
+    chosen = (occurrence or 1) - 1
+    if chosen < 0 or chosen >= count:
+        return ('out_of_range', count)
+
+    heading_line_idx, heading_level = matches[chosen]
+    body_start = heading_line_idx + 1
+    body_end = len(lines)
+    in_fence = False
+    for j in range(body_start, len(lines)):
+        stripped = lines[j].lstrip()
+        if stripped.startswith('```') or stripped.startswith('~~~'):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        m = _HEADING_RE.match(lines[j])
+        if m and len(m.group(1)) <= heading_level:
+            body_end = j
+            break
+    return ('found', heading_line_idx, body_start, body_end, count)
+
+
+def replace_text_in_entry(entry_id, old_text, new_text, replace_all=False, expected_modified_at=None):
+    """Surgical exact-match replace within an entry's content. Replaces
+    `old_text` with `new_text`. Errors if `old_text` is absent, or if it
+    occurs more than once and `replace_all` is False (supply more
+    surrounding context to disambiguate, or set `replace_all=True`).
+
+    Use this instead of `replace_entry_content` whenever you only want to
+    change a small portion of a long entry — sending the whole body back is
+    expensive in token output. Pattern matches Claude Code's `Edit` tool.
+
+    Args:
+        entry_id: UUID of the entry (required).
+        old_text: exact substring to find (required, non-empty).
+        new_text: replacement text (required; may be empty for deletion).
+        replace_all: replace every occurrence. Default False.
+        expected_modified_at: optional ISO modification timestamp from a
+            prior read; if supplied and the entry has changed since, returns
+            STALE_PRECONDITION instead of writing.
+
+    Returns:
+        On success: the updated entry dict (same shape as get_entry) plus
+            'replaced_count'.
+        On error: {"error": "...", "code": "..."} with code one of NOT_FOUND,
+            BAD_REQUEST, NO_MATCH, MULTIPLE_MATCHES, STALE_PRECONDITION,
+            EMPTY_RESULT.
+    """
+    if not entry_id:
+        return {"error": "entry_id is required", "code": "BAD_REQUEST"}
+    if old_text is None or old_text == "":
+        return {"error": "old_text is required and cannot be empty", "code": "BAD_REQUEST"}
+    if new_text is None:
+        return {"error": "new_text is required (use empty string to delete)", "code": "BAD_REQUEST"}
+    entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
+    if not entry:
+        return {"error": f"Entry '{entry_id}' not found or already deleted", "code": "NOT_FOUND"}
+    err = _check_precondition(entry, expected_modified_at)
+    if err:
+        return err
+
+    existing = entry.content or ""
+    count = existing.count(old_text)
+    if count == 0:
+        return {"error": "old_text not found in entry content", "code": "NO_MATCH"}
+    if count > 1 and not replace_all:
+        return {
+            "error": (f"old_text matched {count} times; pass replace_all=True to "
+                      "replace all, or supply more surrounding context to make it unique"),
+            "code": "MULTIPLE_MATCHES",
+            "count": count,
+        }
+
+    if replace_all:
+        new_content = existing.replace(old_text, new_text)
+        replaced = count
+    else:
+        new_content = existing.replace(old_text, new_text, 1)
+        replaced = 1
+
+    if new_content == existing:
+        return {"error": "old_text and new_text are identical; no change would result",
+                "code": "NOOP_PATCH"}
+    if not new_content.strip():
+        return {"error": "Result would be empty content; use delete_entry instead",
+                "code": "EMPTY_RESULT"}
+
+    result = _edit_entry_impl(entry_id=entry_id, content=new_content)
+    if isinstance(result, dict) and "error" not in result:
+        result["replaced_count"] = replaced
+    return result
+
+
+def replace_section_in_entry(entry_id, heading, new_body, level=None, occurrence=None,
+                             expected_modified_at=None):
+    """Replace the body under a markdown heading. Heading line itself is
+    preserved; everything from the line after the heading up to the next
+    heading at the same OR higher level is replaced with `new_body`.
+
+    Use this for compressing or rewriting a structured section (e.g., a
+    bullet list under a `##` heading) without sending the surrounding
+    document back. Eliminates the 'rewrite a 4kB entry to change 200 bytes'
+    tax that `replace_entry_content` imposes.
+
+    Heading match is exact text after the `#` markers. Headings inside
+    fenced code blocks (``` or ~~~) are ignored. If the heading text
+    appears more than once, you must specify `level` or `occurrence`.
+
+    Args:
+        entry_id: UUID of the entry (required).
+        heading: exact heading text without leading '#' or trailing whitespace.
+        new_body: replacement body text (may be empty). Provide your own
+            blank-line padding if you want it around the section — this
+            tool does not add markdown formatting magic.
+        level: optional heading depth (1-6) to disambiguate.
+        occurrence: 1-based index if multiple headings match. None requires
+            uniqueness (returns MULTIPLE_HEADINGS otherwise).
+        expected_modified_at: optional ISO modification timestamp from a
+            prior read.
+
+    Returns:
+        On success: the updated entry dict + 'section_lines_replaced' and
+            'heading_line_index'.
+        On error: {"error": "...", "code": "..."} with code one of NOT_FOUND,
+            BAD_REQUEST, HEADING_NOT_FOUND, MULTIPLE_HEADINGS,
+            OCCURRENCE_OUT_OF_RANGE, STALE_PRECONDITION, EMPTY_RESULT.
+    """
+    if not entry_id:
+        return {"error": "entry_id is required", "code": "BAD_REQUEST"}
+    if not heading:
+        return {"error": "heading is required", "code": "BAD_REQUEST"}
+    if new_body is None:
+        return {"error": "new_body is required (use empty string for an empty section)",
+                "code": "BAD_REQUEST"}
+    if level is not None and (not isinstance(level, int) or not 1 <= level <= 6):
+        return {"error": f"level must be an int 1-6, got {level!r}", "code": "BAD_REQUEST"}
+    entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
+    if not entry:
+        return {"error": f"Entry '{entry_id}' not found or already deleted", "code": "NOT_FOUND"}
+    err = _check_precondition(entry, expected_modified_at)
+    if err:
+        return err
+
+    existing = entry.content or ""
+    found = _find_section(existing, heading, level=level, occurrence=occurrence)
+    status = found[0]
+    if status == 'not_found':
+        msg = f"No heading matching {heading!r}"
+        if level is not None:
+            msg += f" at level {level}"
+        return {"error": msg, "code": "HEADING_NOT_FOUND"}
+    if status == 'multiple':
+        return {"error": (f"Found {found[1]} headings matching {heading!r}; "
+                          "specify level or occurrence to disambiguate"),
+                "code": "MULTIPLE_HEADINGS", "count": found[1]}
+    if status == 'out_of_range':
+        return {"error": (f"occurrence out of range: only {found[1]} matching "
+                          f"heading(s) exist"),
+                "code": "OCCURRENCE_OUT_OF_RANGE", "count": found[1]}
+
+    _, h_idx, b_start, b_end, total_matches = found
+    lines = existing.split('\n')
+    new_body_lines = new_body.split('\n')
+    new_lines = lines[:b_start] + new_body_lines + lines[b_end:]
+    new_content = '\n'.join(new_lines)
+
+    if new_content == existing:
+        return {"error": "new_body matches the existing section body; no change would result",
+                "code": "NOOP_PATCH"}
+    if not new_content.strip():
+        return {"error": "Result would be empty content; use delete_entry instead",
+                "code": "EMPTY_RESULT"}
+
+    result = _edit_entry_impl(entry_id=entry_id, content=new_content)
+    if isinstance(result, dict) and "error" not in result:
+        result["section_lines_replaced"] = b_end - b_start
+        result["heading_line_index"] = h_idx
+    return result
+
+
 def edit_entry(entry_id, content=None, **kwargs):
     """Deprecated back-compat shim. Preserved undocumented for callers that
     still use the old combined API. New code: edit_entry_metadata for metadata,
