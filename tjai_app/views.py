@@ -44,6 +44,37 @@ def _fix_md_list_spacing(text):
         result.append(line)
     return '\n'.join(result)
 
+
+# HTML elements that put the parser into rcdata / raw-text / plaintext mode,
+# swallowing all following page content until their (often absent) close tag.
+# A literal '<title>' in entry content — e.g. from a commit message like
+# "PR #<N>: <title>" — truncated the 2026-04-23 daily synopsis mid-render.
+# None of these tags have any legitimate place in rendered tjai entry content,
+# so escaping them is side-effect-free across every markdown render path.
+_HAZARD_TAGS_RE = re.compile(
+    r'</?(?:title|script|style|textarea|iframe|noscript|noembed|noframes|xmp|plaintext)\b[^>]*>',
+    re.IGNORECASE,
+)
+
+
+def _neutralize_hazard_tags(html):
+    return _HAZARD_TAGS_RE.sub(
+        lambda m: m.group(0).replace('<', '&lt;').replace('>', '&gt;'),
+        html,
+    )
+
+
+def _render_markdown(text, extensions=None):
+    """Unified entry-content render: list-spacing fix + markdown + hazard-tag
+    neutralization. Use this instead of markdown.markdown() directly so that
+    every render path gets the same safety post-processing."""
+    import markdown
+    if not text:
+        return ''
+    exts = extensions if extensions is not None else ['nl2br', 'tables', 'fenced_code']
+    html = markdown.markdown(_fix_md_list_spacing(text), extensions=exts, tab_length=2)
+    return _neutralize_hazard_tags(html)
+
 from .tjai_utils import fmt_datetime, fmt_date, fmt_time, fmt_duration, fmt_ago, get_app_tz
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
@@ -1178,7 +1209,6 @@ def diary_page(request):
 @login_required
 def api_diary_entries(request):
     """Return @Underway entry and diary journal entries as JSON."""
-    import markdown as md_lib
     from .models import Entry, Tag
 
     def render_entry(entry):
@@ -1188,7 +1218,7 @@ def api_diary_entries(request):
         data = entry.data if isinstance(entry.data, dict) else {}
         fmt = data.get('format') or 'md'
         md_exts = ['nl2br', 'tables', 'fenced_code'] if fmt == 'txt' else ['tables', 'fenced_code']
-        content_html = md_lib.markdown(_fix_md_list_spacing(body_text), extensions=md_exts, tab_length=2) if body_text else ''
+        content_html = _render_markdown(body_text, extensions=md_exts)
         def _wl(m):
             ref = m.group(1)
             if ref.startswith('http://') or ref.startswith('https://'):
@@ -1902,8 +1932,6 @@ def daily_synopsis_data(request):
 @login_required
 def daily_synopsis_content(request):
     """Return rendered markdown content for a specific daily synopsis."""
-    import markdown
-
     entry_id = request.GET.get('entry_id')
     if not entry_id:
         return JsonResponse({'error': 'entry_id parameter required'}, status=400)
@@ -1915,11 +1943,7 @@ def daily_synopsis_content(request):
     if not entry:
         return JsonResponse({'error': 'Synopsis not found'}, status=404)
 
-    content_html = markdown.markdown(
-        _fix_md_list_spacing(entry.content),
-        extensions=['nl2br', 'tables', 'fenced_code'],
-        tab_length=2,
-    )
+    content_html = _render_markdown(entry.content)
     content_html = re.sub(
         r'(?<!["\'>])(https?://[^\s<]+)',
         r'<a href="\1" target="_blank">\1</a>',
@@ -2036,8 +2060,6 @@ def api_assessment_dates(request):
 @login_required
 def api_assessment_content(request):
     """Return assessment data for a specific date."""
-    import markdown as md
-
     entry_id = request.GET.get('entry_id')
     if not entry_id:
         return JsonResponse({'error': 'entry_id parameter required'}, status=400)
@@ -2057,11 +2079,7 @@ def api_assessment_content(request):
         date_display = date_str
 
     # Render observations section (content after scored events table) as HTML
-    content_html = md.markdown(
-        _fix_md_list_spacing(entry.content),
-        extensions=['nl2br', 'tables', 'fenced_code'],
-        tab_length=2,
-    )
+    content_html = _render_markdown(entry.content)
     content_html = re.sub(
         r'(?<!["\'>])(https?://[^\s<]+)',
         r'<a href="\1" target="_blank">\1</a>',
@@ -2441,7 +2459,6 @@ def _restructure_git_md(md_text):
 @login_required
 def git_activity_data(request):
     """Return git activity assembled from daily files."""
-    import markdown
     from pathlib import Path
 
     # Refresh today and yesterday files from live git log
@@ -2476,11 +2493,7 @@ def git_activity_data(request):
             date_display = date_str
         md_text = f.read_text(encoding='utf-8')
         md_text = _restructure_git_md(md_text)
-        html = markdown.markdown(
-            _fix_md_list_spacing(md_text),
-            extensions=['nl2br', 'tables', 'fenced_code'],
-            tab_length=2,
-        )
+        html = _render_markdown(md_text)
         html = re.sub(
             r'(?<!["\'>])(https?://[^\s<]+)',
             r'<a href="\1" target="_blank">\1</a>',
@@ -2604,7 +2617,6 @@ def _is_public(entry):
 @require_http_methods(["GET"])
 def entry_public(request, entry_id=None):
     """Public entry detail page — no auth required. Only serves entries with data.access='public'."""
-    import markdown
     entry = _lookup_entry(entry_id, request)
     if not entry or not _is_public(entry):
         return render(request, 'tjai_app/entry_public.html', {'not_public': True})
@@ -2627,7 +2639,7 @@ def entry_public(request, entry_id=None):
     body_text = '\n'.join(body_lines[1:]).strip() if len(body_lines) > 1 else ''
     fmt = data.get('format') or ('txt' if entry.context_id == 'recipe' else 'md')
     md_exts = ['nl2br', 'tables', 'fenced_code'] if fmt == 'txt' else ['tables', 'fenced_code']
-    content_html = markdown.markdown(_fix_md_list_spacing(body_text), extensions=md_exts, tab_length=2) if body_text else ''
+    content_html = _render_markdown(body_text, extensions=md_exts)
     # Linkify wiki-links to public URLs
     def _wiki_link_public(m):
         ref = m.group(1)
@@ -2775,7 +2787,6 @@ def this_week(request):
     empty editable stub. The workweek_<sat-yyyymmdd> entry is linked at the
     top via the same get-or-create flow.
     """
-    import markdown as md_lib
     tz = get_app_tz()
     today = datetime.now(tz).date()
     # Sat-Fri week. Python weekday: Mon=0..Sun=6, Sat=5.
@@ -2807,11 +2818,7 @@ def this_week(request):
             body_lines = e.content.split('\n')
             body_text = '\n'.join(body_lines[1:]).strip() if len(body_lines) > 1 else ''
             if body_text:
-                body_html = md_lib.markdown(
-                    _fix_md_list_spacing(body_text),
-                    extensions=['tables', 'fenced_code'],
-                    tab_length=2,
-                )
+                body_html = _render_markdown(body_text, extensions=['tables', 'fenced_code'])
         days.append({
             'date': d,
             'day_label': d.strftime('%a %b ') + str(d.day),
@@ -2875,7 +2882,6 @@ def entry_detail(request, entry_id=None):
     Path arg (legacy): /entry/<entry_id>/ — detects UUID format, otherwise
     tries entry_id then nickname then name.
     """
-    import markdown
     base = Entry.objects.filter(deleted_at__isnull=True)
 
     # Query-param lookups: one param, one query
@@ -2925,7 +2931,7 @@ def entry_detail(request, entry_id=None):
         else:
             fmt = 'md'
     md_exts = ['nl2br', 'tables', 'fenced_code'] if fmt == 'txt' else ['tables', 'fenced_code']
-    content_html = markdown.markdown(_fix_md_list_spacing(body_text), extensions=md_exts, tab_length=2) if body_text else ''
+    content_html = _render_markdown(body_text, extensions=md_exts)
     # [[wiki-links]] first — before bare URL linkification
     def _wiki_link(m):
         ref = m.group(1)
