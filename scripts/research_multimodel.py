@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Call Gemini or ChatGPT API for a research topic.
+"""Call Gemini, ChatGPT, or DeepSeek API for a research topic.
 
-Usage: research_multimodel.py <model> <entry_uuid>
-  model: "gemini" or "chatgpt"
+Usage: research_multimodel.py <model> <entry_uuid> [gemini_tier]
+  model: "gemini", "chatgpt", "deepseek-flash", or "deepseek-pro"
   entry_uuid: UUID of the model-specific research entry (already created)
+  gemini_tier: "flex" (default) or "standard" (gemini only)
 
 Loads the entry, builds a prompt from research-system-prompt-v2,
-calls the API with web search enabled, writes result to the entry,
-and checks whether all three models are done to trigger synthesis.
+calls the API with web search enabled (or SerpAPI prefetch for DeepSeek,
+which has no native grounding), writes result to the entry, and checks
+whether all dispatched models are done to trigger synthesis.
 """
 import os
 import sys
@@ -138,6 +140,108 @@ def _call_chatgpt(prompt):
     return result
 
 
+def _fetch_web_context(query, num=8):
+    """Fetch top SerpAPI organic results as markdown context.
+
+    Best-effort enrichment for models without native web grounding (DeepSeek).
+    Returns formatted markdown, or '' if SERPAPI_API_KEY is unset or the
+    request fails. Never raises — web context is enrichment, not a blocker.
+    """
+    api_key = os.environ.get('SERPAPI_API_KEY')
+    if not api_key:
+        logger.info("SERPAPI_API_KEY not set; running without web context")
+        return ''
+
+    import json as _json
+    import urllib.parse
+    import urllib.request
+
+    params = urllib.parse.urlencode({
+        'engine': 'google',
+        'q': query,
+        'num': max(1, min(int(num), 20)),
+        'api_key': api_key,
+    })
+    url = f'https://serpapi.com/search.json?{params}'
+    try:
+        with urllib.request.urlopen(url, timeout=30) as resp:
+            data = _json.loads(resp.read().decode('utf-8'))
+    except Exception as e:
+        logger.warning("SerpAPI fetch failed for %r: %s", query, e)
+        return ''
+
+    if 'error' in data:
+        logger.warning("SerpAPI returned error for %r: %s", query, data['error'])
+        return ''
+
+    organic = data.get('organic_results') or []
+    if not organic:
+        return ''
+
+    lines = [f'Recent web search results for: {query}', '']
+    for i, it in enumerate(organic[:num], start=1):
+        title = it.get('title', '(no title)')
+        link = it.get('link', '')
+        snippet = (it.get('snippet') or '').replace('\n', ' ').strip()
+        lines.append(f'{i}. **{title}**')
+        if link:
+            lines.append(f'   {link}')
+        if snippet:
+            lines.append(f'   {snippet}')
+        lines.append('')
+    return '\n'.join(lines).rstrip()
+
+
+def _call_deepseek(prompt, tier):
+    """Call DeepSeek V4 via its Anthropic-compatible endpoint.
+
+    DeepSeek exposes an Anthropic-compat surface at
+    https://api.deepseek.com/anthropic — using the anthropic SDK with
+    api_key + base_url overrides keeps this idiomatically Anthropic-shaped
+    rather than mixing in an OpenAI-shaped second path.
+
+    Tier maps to the API model string:
+      'flash' → deepseek-v4-flash
+      'pro'   → deepseek-v4-pro
+
+    DeepSeek has no native web-search tool; the caller injects SerpAPI
+    context via _fetch_web_context before calling.
+    """
+    from anthropic import Anthropic
+
+    api_key = os.environ.get('DEEPSEEK_API_KEY')
+    if not api_key:
+        raise RuntimeError("DEEPSEEK_API_KEY not set in environment")
+
+    api_model = f'deepseek-v4-{tier}'
+    client = Anthropic(
+        api_key=api_key,
+        base_url='https://api.deepseek.com/anthropic',
+        timeout=API_TIMEOUT,
+    )
+
+    logger.info("Calling DeepSeek API (%s, Anthropic-compat)...", api_model)
+    response = client.messages.create(
+        model=api_model,
+        max_tokens=8192,
+        messages=[{'role': 'user', 'content': prompt}],
+    )
+
+    # DeepSeek V4 returns extended-thinking blocks before the text block;
+    # concatenate all text blocks, ignoring thinking.
+    text_parts = [
+        getattr(b, 'text', '') for b in (response.content or [])
+        if getattr(b, 'type', None) == 'text'
+    ]
+    result = ''.join(text_parts).strip()
+    if not result:
+        raise RuntimeError(
+            f"DeepSeek returned no text blocks. "
+            f"Block types: {[getattr(b, 'type', '?') for b in (response.content or [])]}"
+        )
+    return result
+
+
 def main():
     if len(sys.argv) not in (3, 4):
         print("Usage: research_multimodel.py <model> <entry_uuid> [gemini_tier]",
@@ -148,8 +252,10 @@ def main():
     entry_uuid = sys.argv[2]
     gemini_tier = sys.argv[3] if len(sys.argv) == 4 else 'flex'
 
-    if model not in ('gemini', 'chatgpt'):
-        logger.error("Invalid model: %s (must be 'gemini' or 'chatgpt')", model)
+    valid_models = ('gemini', 'chatgpt', 'deepseek-flash', 'deepseek-pro')
+    if model not in valid_models:
+        logger.error("Invalid model: %s (must be one of: %s)",
+                     model, ', '.join(valid_models))
         sys.exit(1)
     if gemini_tier not in ('flex', 'standard'):
         logger.error("Invalid gemini_tier: %s (must be 'flex' or 'standard')",
@@ -192,8 +298,20 @@ def main():
         # Call the appropriate API
         if model == 'gemini':
             result = _call_gemini(prompt, initial_tier=gemini_tier)
-        else:
+        elif model == 'chatgpt':
             result = _call_chatgpt(prompt)
+        else:
+            # deepseek-flash / deepseek-pro — no native web search, so
+            # prepend a SerpAPI prefetch as a "Recent web search results"
+            # block. Search query is the topic's first line, capped.
+            tier = model.split('-', 1)[1]
+            search_query = topic.split('\n', 1)[0].strip()[:200]
+            web_context = _fetch_web_context(search_query)
+            full_prompt = (
+                f"## Recent web search results (SerpAPI Google)\n\n"
+                f"{web_context}\n\n---\n\n{prompt}"
+            ) if web_context else prompt
+            result = _call_deepseek(full_prompt, tier)
 
         # Write result to entry
         # Preserve topic as first line, add report below
