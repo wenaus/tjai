@@ -129,27 +129,34 @@ def _upsert_entry(entry_id, content, tags):
 
 
 def _call_claude(prompt):
-    """Direct Anthropic API call. No MCP, no tools — pure summarization."""
+    """Direct Anthropic API call. No MCP, no tools — pure summarization.
+
+    Uses streaming because Anthropic's Messages API rejects non-streaming
+    requests whose declared max_tokens implies the operation may take
+    longer than 10 minutes (HTTP 400 "Streaming is required..."). At Opus
+    4.7's documented 128k output ceiling that threshold is tripped, so
+    streaming is mandatory regardless of how long the actual response
+    turns out to be. No cost difference — per-token pricing is identical.
+    """
     import anthropic
     api_key = os.environ.get('ANTHROPIC_API_KEY')
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY not set in environment")
     client = anthropic.Anthropic(api_key=api_key)
-    logger.info("workweek: calling Claude (claude-opus-4-7, %d char prompt)",
+    logger.info("workweek: calling Claude (claude-opus-4-7, %d char prompt, streaming)",
                 len(prompt))
-    response = client.messages.create(
+    text_parts = []
+    with client.messages.stream(
         model='claude-opus-4-7',
-        # 128_000 is Claude Opus 4.7's documented model max output for
-        # the synchronous Messages API (per Anthropic docs at
-        # platform.claude.com/docs/en/about-claude/models). The API
-        # requires max_tokens; using the model's own ceiling means the
-        # model — not this code — decides how long the response is.
         max_tokens=128_000,
         messages=[{'role': 'user', 'content': prompt}],
-    )
-    if not response.content or not response.content[0].text:
-        raise RuntimeError(f"Claude returned empty response: {response}")
-    return response.content[0].text
+    ) as stream:
+        for text in stream.text_stream:
+            text_parts.append(text)
+    result = ''.join(text_parts)
+    if not result:
+        raise RuntimeError("Claude returned empty response (no text in stream)")
+    return result
 
 
 def main():
