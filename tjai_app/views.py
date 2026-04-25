@@ -2560,7 +2560,7 @@ def agent_log(request):
 def agent_log_data(request):
     """Return agent log entries as JSON."""
     import logging as _logging
-    limit = min(int(request.GET.get('limit', 200)), 1000)
+    limit = int(request.GET.get('limit', 200))
     min_level = request.GET.get('level', '').upper()
     level_map = {'DEBUG': _logging.DEBUG, 'INFO': _logging.INFO,
                  'WARNING': _logging.WARNING, 'ERROR': _logging.ERROR}
@@ -4033,7 +4033,7 @@ def api_kozy_chat(request):
         return JsonResponse({"error": "Invalid API key"}, status=403)
 
     if request.method == "GET":
-        limit = min(int(request.GET.get("limit", 50)), 200)
+        limit = int(request.GET.get("limit", 50))
         before = request.GET.get("before")
         sender = request.GET.get("sender", "").strip()
         search = request.GET.get("q", "").strip()
@@ -5270,7 +5270,7 @@ def api_research_studies(request):
         items.append({
             'id': str(e.id),
             'entry_id': data.get('entry_id', ''),
-            'content': e.content[:500] if e.content else '',
+            'content': e.content or '',
             'kind': e.kind,
             'created': e.timestamp_created,
             'modified': e.timestamp_modified,

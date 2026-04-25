@@ -139,7 +139,12 @@ def _call_claude(prompt):
                 len(prompt))
     response = client.messages.create(
         model='claude-opus-4-7',
-        max_tokens=8000,
+        # 128_000 is Claude Opus 4.7's documented model max output for
+        # the synchronous Messages API (per Anthropic docs at
+        # platform.claude.com/docs/en/about-claude/models). The API
+        # requires max_tokens; using the model's own ceiling means the
+        # model — not this code — decides how long the response is.
+        max_tokens=128_000,
         messages=[{'role': 'user', 'content': prompt}],
     )
     if not response.content or not response.content[0].text:

@@ -109,7 +109,10 @@ def web_search(
     if not query.strip():
         return "ERROR: query is empty"
 
-    num = max(1, min(int(num_results), 20))
+    # Pass num_results through to SerpAPI as-is (clamping only against
+    # negative values). SerpAPI enforces its own server-side maximum
+    # per engine; not the place of this wrapper to second-guess it.
+    num = max(1, int(num_results))
     start = max(0, int(start))
 
     params: dict[str, Any] = {

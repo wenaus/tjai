@@ -110,8 +110,12 @@ def npp_search(
     if not query.strip():
         return "ERROR: query is empty"
 
-    num = max(1, min(int(num_results), 10))
-    start = max(1, min(int(start), 91))
+    # Pass num_results through as-is. CSE enforces its own server-side
+    # maximum (typically 10/page) and pagination rules. start is capped
+    # at 100 because that is CSE's documented absolute maximum for the
+    # `start` parameter — not an arbitrary cap we picked.
+    num = max(1, int(num_results))
+    start = max(1, min(int(start), 100))
 
     params: dict[str, Any] = {
         "key": API_KEY,

@@ -140,12 +140,16 @@ def _call_chatgpt(prompt):
     return result
 
 
-def _fetch_web_context(query, num=8):
-    """Fetch top SerpAPI organic results as markdown context.
+def _fetch_web_context(query):
+    """Fetch SerpAPI organic results as markdown context.
 
     Best-effort enrichment for models without native web grounding (DeepSeek).
     Returns formatted markdown, or '' if SERPAPI_API_KEY is unset or the
     request fails. Never raises — web context is enrichment, not a blocker.
+
+    No client-side caps: `num` is not sent so SerpAPI's own default applies,
+    and ALL returned organic results are formatted into the context (no
+    slicing). The query is passed through unmodified.
     """
     api_key = os.environ.get('SERPAPI_API_KEY')
     if not api_key:
@@ -159,7 +163,6 @@ def _fetch_web_context(query, num=8):
     params = urllib.parse.urlencode({
         'engine': 'google',
         'q': query,
-        'num': max(1, min(int(num), 20)),
         'api_key': api_key,
     })
     url = f'https://serpapi.com/search.json?{params}'
@@ -179,7 +182,7 @@ def _fetch_web_context(query, num=8):
         return ''
 
     lines = [f'Recent web search results for: {query}', '']
-    for i, it in enumerate(organic[:num], start=1):
+    for i, it in enumerate(organic, start=1):
         title = it.get('title', '(no title)')
         link = it.get('link', '')
         snippet = (it.get('snippet') or '').replace('\n', ' ').strip()
@@ -221,9 +224,13 @@ def _call_deepseek(prompt, tier):
     )
 
     logger.info("Calling DeepSeek API (%s, Anthropic-compat)...", api_model)
+    # max_tokens is REQUIRED by DeepSeek's Anthropic-compat endpoint
+    # (HTTP 400 if absent). 384_000 is DeepSeek V4's own documented model
+    # max (per api-docs.deepseek.com/quick_start/pricing — same for both
+    # flash and pro), so the only ceiling here is the model's own spec.
     response = client.messages.create(
         model=api_model,
-        max_tokens=8192,
+        max_tokens=384_000,
         messages=[{'role': 'user', 'content': prompt}],
     )
 
@@ -305,7 +312,10 @@ def main():
             # prepend a SerpAPI prefetch as a "Recent web search results"
             # block. Search query is the topic's first line, capped.
             tier = model.split('-', 1)[1]
-            search_query = topic.split('\n', 1)[0].strip()[:200]
+            # Use the topic's first line as the search query, untruncated.
+            # No length cap — SerpAPI / Google enforce their own URL limits
+            # if the query is genuinely too long.
+            search_query = topic.split('\n', 1)[0].strip()
             web_context = _fetch_web_context(search_query)
             full_prompt = (
                 f"## Recent web search results (SerpAPI Google)\n\n"

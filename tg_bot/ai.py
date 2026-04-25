@@ -11,8 +11,12 @@ from .tools import TOOL_DEFINITIONS, execute_tool
 logger = logging.getLogger(__name__)
 
 MODEL = "claude-sonnet-4-6"
-MAX_TOKENS = 4096
-MAX_TOOL_ITERATIONS = 10
+# 64_000 is Claude Sonnet 4.6's documented model max output for the
+# synchronous Messages API (per Anthropic docs at
+# platform.claude.com/docs/en/about-claude/models). The API requires
+# max_tokens; using the model's own ceiling means the model — not this
+# constant — decides how long the response is.
+MAX_TOKENS = 64_000
 
 # User location for web search (updated by location handler)
 _user_location = None
@@ -156,8 +160,12 @@ class Assistant:
         messages = list(conversation_history or [])
         messages.append({"role": "user", "content": user_message})
 
-        for iteration in range(MAX_TOOL_ITERATIONS):
-            logger.debug(f"API call iteration {iteration + 1}")
+        # Unbounded tool-use loop — the model decides when it's done by
+        # emitting a non-tool-use stop_reason. No iteration cap.
+        iteration = 0
+        while True:
+            iteration += 1
+            logger.debug(f"API call iteration {iteration}")
 
             response = self.client.messages.create(
                 model=MODEL,
@@ -218,9 +226,6 @@ class Assistant:
                         text_parts.append(block.text)
 
                 return "\n".join(text_parts) if text_parts else "(no response)"
-
-        logger.warning(f"Max tool iterations ({MAX_TOOL_ITERATIONS}) reached")
-        return "I'm having trouble completing this request. Please try again."
 
 
 # Singleton instance

@@ -645,7 +645,7 @@ def _create_and_dispatch_synthesis(base_entry_id, base_entry, synth_entry_id):
 
     synth = Entry.objects.create(
         id=str(_uuid.uuid7()),
-        content=f"Synthesis: {base_entry.content.split(chr(10))[0][:200]}",
+        content=f"Synthesis: {base_entry.content.split(chr(10))[0]}",
         kind='memory',
         context=base_entry.context,
         timestamp_created=now,
