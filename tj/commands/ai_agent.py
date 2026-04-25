@@ -213,11 +213,19 @@ def _build_system_prompt(guidance: str, entry_id: str, original_prompt: str,
         return original_prompt
 
     if custom_prompt:
+        # The custom_prompt path is for actions that supply their own system
+        # prompt via `system_prompt_entry_id` (research-agent, llm-assessment-mcp).
+        # Those custom prompts set their own format and depth requirements
+        # (e.g. research-system-prompt-claude mandates 3000-6000 words and
+        # specific sections). Do NOT inject a generic "Be concise. No preamble."
+        # here — under Opus 4.7 it overrides the custom prompt's depth mandate
+        # and collapses output ~10x. Keep only the universally-needed
+        # operational rules (tool routing + error visibility) and let the
+        # custom prompt own the rest.
         return f"""{guidance}
 
 OPERATIONAL RULES:
 - Use mcp__tjai__ tools for all tjai data access.
-- Be concise and factual. No preamble.
 - If you encounter any error, append it visibly to tracking entry {entry_id} via mcp__tjai__append_entry_content. Never fail silently.
 
 {custom_prompt}"""
