@@ -5130,6 +5130,7 @@ def api_research_synthesize(request):
     _create_and_dispatch_synthesis. Refuses if the research agent is already
     running (same 409 behavior as rerun endpoints).
     """
+    from django.db import transaction
     try:
         body = json.loads(request.body)
     except json.JSONDecodeError:
