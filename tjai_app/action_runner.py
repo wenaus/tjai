@@ -370,6 +370,11 @@ def dispatch_ai(action, entry_id=None, target_date=None):
     effort = data.get('effort')
     if effort:
         env['TJAI_AGENT_EFFORT'] = effort
+    # Per-action opt-in: when true, the action's ai_prompt is used as the
+    # system prompt verbatim, with a minimal kick-off in the user-prompt
+    # slot. See _build_system_prompt in tj/commands/ai_agent.py.
+    if data.get('prompt_is_system_prompt'):
+        env['TJAI_PROMPT_IS_SYSTEM'] = '1'
     system_prompt_entry_id_id = data.get('system_prompt_entry_id')
     if system_prompt_entry_id_id:
         sp_entry = Entry.objects.filter(

@@ -192,9 +192,26 @@ def _build_system_prompt(guidance: str, entry_id: str, original_prompt: str,
                          custom_prompt: str = None) -> str:
     """Build the system prompt for the claude instance.
 
-    If custom_prompt is provided (e.g. research system prompt), it replaces the
-    default agent behavior. Guidance and operational rules are still included.
+    Per-action opt-in (TJAI_PROMPT_IS_SYSTEM=1): the action's ai_prompt IS
+    the laser-targeted ground-zero instruction and is used verbatim as the
+    system prompt body, with guidance prepended. No generic wrapper, no
+    MANDATORY-CONCLUSION-into-tracking-entry — those silently veto the
+    action's own output requirements. Opt-in via `prompt_is_system_prompt:
+    true` on the action's data. Default behavior for actions and ad-hoc
+    `tj agent` runs is unchanged. Diagnosed 2026-04-25 from the ideation
+    output regression that started with the Opus 4.7 release on 2026-04-16:
+    4.7 obeys the system prompt strictly where 4.6 was loose enough for
+    the user prompt's rich-output requirements to win.
+
+    If custom_prompt is provided (e.g. research system prompt), it replaces
+    the default agent behavior. Guidance and operational rules are still
+    included.
     """
+    if os.environ.get('TJAI_PROMPT_IS_SYSTEM'):
+        if guidance:
+            return f"{guidance}\n\n---\n\n{original_prompt}"
+        return original_prompt
+
     if custom_prompt:
         return f"""{guidance}
 
@@ -235,9 +252,16 @@ def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: 
     if not os.environ.get('TJAI_AGENT_EFFORT'):
         print(f"WARNING: TJAI_AGENT_EFFORT not set, defaulting to {effort}", file=sys.stderr)
 
+    # When the per-action opt-in is set, the action's ai_prompt has been
+    # used as the system prompt (see _build_system_prompt). User-prompt
+    # slot becomes a minimal kick-off so the model starts immediately and
+    # the system prompt isn't duplicated. Default behavior unchanged.
+    user_prompt = ("Begin executing your task per the system prompt now."
+                   if os.environ.get('TJAI_PROMPT_IS_SYSTEM') else prompt)
+
     cmd = [
         claude_path,
-        '-p', prompt,
+        '-p', user_prompt,
         '--system-prompt', system_prompt,
         '--output-format', 'text',
         '--model', model,
