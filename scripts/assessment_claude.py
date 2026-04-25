@@ -131,7 +131,7 @@ def call_claude(prompt):
         '-p',
         '--output-format', 'text',
         '--model', 'opus',
-        '--effort', 'high',
+        '--effort', 'xhigh',
     ]
 
     env = os.environ.copy()

@@ -227,7 +227,7 @@ def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: 
     import shlex
 
     model = os.environ.get('TJAI_AGENT_MODEL', 'opus')
-    effort = os.environ.get('TJAI_AGENT_EFFORT', 'high')
+    effort = os.environ.get('TJAI_AGENT_EFFORT', 'xhigh')
     timeout_secs = int(os.environ.get('TJAI_AGENT_TIMEOUT', '0'))
 
     if not os.environ.get('TJAI_AGENT_MODEL'):
