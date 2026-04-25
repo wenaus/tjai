@@ -568,6 +568,8 @@ def main():
                     and entry_data.get('model')
                     and entry_data.get('model') != 'synthesis'):
                 try:
+                    entry.status = 'done'
+                    entry.save(update_fields=['status'])
                     from tjai_app.action_runner import research_model_complete
                     research_model_complete(entry)
                 except Exception as e:
@@ -582,6 +584,8 @@ def main():
         entry_data = entry.data if isinstance(entry.data, dict) else {}
         if entry_data.get('source') == 'multimodel' and entry_data.get('model'):
             try:
+                entry.status = 'failed'
+                entry.save(update_fields=['status'])
                 from tjai_app.action_runner import research_model_complete
                 research_model_complete(entry, terminal_status='failed')
             except Exception as e:
