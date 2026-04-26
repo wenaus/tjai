@@ -67,7 +67,7 @@ function entryRefUrl(ref) {
 function linkifyEntryReferences(content) {
     var L = 'style="color:#90caf9"';
     var uuidRe = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/ig;
-    var keyedRe = /((?:entry_id|entry|uuid|current_entry|source_entry_id|result_entry_id)(?:&quot;)?\s*[:=]\s*(?:&quot;)?)([A-Za-z0-9][A-Za-z0-9_.:-]{2,})(?=(&quot;|[\s,)}\]]|$))/g;
+    var keyedRe = /((?:&quot;)?(?:entry_id|entry|uuid|current_entry|source_entry_id|result_entry_id)(?:&quot;)?\s*[:=]\s*(?:&quot;)?)([A-Za-z0-9][A-Za-z0-9_.:-]{2,})(?=(&quot;|[\s,)}\]]|$))/g;
     return content.split(/(<[^>]+>)/g).map(function(part) {
         if (part.startsWith('<')) return part;
         part = part.replace(uuidRe, function(ref) {
