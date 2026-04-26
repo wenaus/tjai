@@ -212,19 +212,32 @@ def collect_cloudwatch():
     """Fetch 24h CloudWatch metrics via boto3."""
     try:
         import boto3
-        from datetime import datetime, timedelta
+        from datetime import datetime, timezone
         from zoneinfo import ZoneInfo
 
-        tz_et = ZoneInfo('America/New_York')
-
-        def day_label(ts):
-            return ts.astimezone(tz_et).strftime('%m/%d')
-
         cw = boto3.client('cloudwatch', region_name='us-east-1')
-        end = datetime.utcnow()
-        start = datetime(2026, 2, 1, tzinfo=None)
+        # Keep CloudWatch calls cheap: daily bins only. Use completed Eastern
+        # calendar days, so each point represents midnight-to-midnight ET
+        # rather than a partial current-day bucket.
+        tz_et = ZoneInfo('America/New_York')
+        today_et = datetime.now(tz_et).date()
+        start = datetime(2026, 2, 1, tzinfo=tz_et).astimezone(timezone.utc)
+        end = datetime(
+            today_et.year, today_et.month, today_et.day, tzinfo=tz_et
+        ).astimezone(timezone.utc)
+
+        def day_point(d):
+            ts = d['Timestamp'].astimezone(tz_et)
+            return {
+                'date': ts.strftime('%Y-%m-%d'),
+                'hour': ts.strftime('%m/%d'),  # legacy key consumed by UI
+                'avg': round(d['Average'], 1),
+            }
 
         metrics = {}
+        metrics['daily_period'] = 'Eastern complete days'
+        metrics['daily_start'] = start.astimezone(tz_et).date().isoformat()
+        metrics['daily_end_exclusive'] = end.astimezone(tz_et).date().isoformat()
 
         # CPU Utilization from AWS/EC2
         resp = cw.get_metric_statistics(
@@ -237,14 +250,11 @@ def collect_cloudwatch():
             Statistics=['Average'],
         )
         cpu_points = sorted(resp['Datapoints'], key=lambda d: d['Timestamp'])
-        metrics['cpu_hourly'] = [
-            {'hour': day_label(d['Timestamp']), 'avg': round(d['Average'], 1)}
-            for d in cpu_points
-        ]
+        metrics['cpu_daily'] = [day_point(d) for d in cpu_points]
+        metrics['cpu_hourly'] = metrics['cpu_daily']  # backward-compatible UI key
         if cpu_points:
-            metrics['cpu_avg_24h'] = round(
-                sum(d['Average'] for d in cpu_points) / len(cpu_points), 1
-            )
+            metrics['cpu_latest_daily_avg'] = metrics['cpu_daily'][-1]['avg']
+            metrics['cpu_avg_24h'] = metrics['cpu_latest_daily_avg']
 
         # CWAgent metrics — uses host dimension (not InstanceId)
         # disk_used_percent has extra dimensions (path, device, fstype)
@@ -270,10 +280,9 @@ def collect_cloudwatch():
                 )
                 points = sorted(resp['Datapoints'], key=lambda d: d['Timestamp'])
                 if points:
-                    metrics[f'{metric_name}_hourly'] = [
-                        {'hour': day_label(d['Timestamp']), 'avg': round(d['Average'], 1)}
-                        for d in points
-                    ]
+                    daily_key = f'{metric_name}_daily'
+                    metrics[daily_key] = [day_point(d) for d in points]
+                    metrics[f'{metric_name}_hourly'] = metrics[daily_key]
                 else:
                     logger.warning("CWAgent %s: no datapoints returned", metric_name)
             except Exception as e:

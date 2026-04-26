@@ -500,31 +500,35 @@
             if (cw && !cw.error) {
                 html += '<div class="section"><div class="section-title">CloudWatch</div>';
                 if (cw.cpu_avg_24h !== undefined) {
-                    html += `<div style="margin-bottom:8px;color:#b0bec5">CPU avg: ${cw.cpu_avg_24h}%</div>`;
+                    html += `<div style="margin-bottom:8px;color:#b0bec5">CPU daily avg, latest complete ET day: ${cw.cpu_avg_24h}%</div>`;
                 }
-                if (cw.cpu_hourly && cw.cpu_hourly.length > 0) {
-                    for (const p of cw.cpu_hourly) {
+                const cpuDaily = cw.cpu_daily || cw.cpu_hourly;
+                if (cpuDaily && cpuDaily.length > 0) {
+                    for (const p of cpuDaily) {
                         const barWidth = Math.max(1, Math.min(100, p.avg));
                         html += `<div class="chart-row"><span class="chart-label">${p.hour}</span><div class="chart-bar-bg"><div class="chart-bar" style="width:${barWidth}%"></div></div><span class="chart-val">${p.avg}%</span></div>`;
                     }
                 }
-                if (cw.mem_used_percent_hourly) {
+                const memDaily = cw.mem_used_percent_daily || cw.mem_used_percent_hourly;
+                if (memDaily) {
                     html += '<div style="margin-top:12px;margin-bottom:4px;color:#b0bec5">Memory Used %</div>';
-                    for (const p of cw.mem_used_percent_hourly) {
+                    for (const p of memDaily) {
                         const barWidth = Math.max(1, Math.min(100, p.avg));
                         html += `<div class="chart-row"><span class="chart-label">${p.hour}</span><div class="chart-bar-bg"><div class="chart-bar" style="width:${barWidth}%;background:#ce93d8"></div></div><span class="chart-val">${p.avg}%</span></div>`;
                     }
                 }
-                if (cw.swap_used_percent_hourly) {
+                const swapDaily = cw.swap_used_percent_daily || cw.swap_used_percent_hourly;
+                if (swapDaily) {
                     html += '<div style="margin-top:12px;margin-bottom:4px;color:#b0bec5">Swap Used %</div>';
-                    for (const p of cw.swap_used_percent_hourly) {
+                    for (const p of swapDaily) {
                         const barWidth = Math.max(1, Math.min(100, p.avg));
                         html += `<div class="chart-row"><span class="chart-label">${p.hour}</span><div class="chart-bar-bg"><div class="chart-bar" style="width:${barWidth}%;background:#ffb74d"></div></div><span class="chart-val">${p.avg}%</span></div>`;
                     }
                 }
-                if (cw.disk_used_percent_hourly) {
+                const diskDaily = cw.disk_used_percent_daily || cw.disk_used_percent_hourly;
+                if (diskDaily) {
                     html += '<div style="margin-top:12px;margin-bottom:4px;color:#b0bec5">Disk Used %</div>';
-                    for (const p of cw.disk_used_percent_hourly) {
+                    for (const p of diskDaily) {
                         const barWidth = Math.max(1, Math.min(100, p.avg));
                         html += `<div class="chart-row"><span class="chart-label">${p.hour}</span><div class="chart-bar-bg"><div class="chart-bar" style="width:${barWidth}%;background:#4db6ac"></div></div><span class="chart-val">${p.avg}%</span></div>`;
                     }
