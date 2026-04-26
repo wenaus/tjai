@@ -7,14 +7,16 @@ Usage: research_multimodel.py <model> <entry_uuid> [gemini_tier]
   gemini_tier: "flex" (default) or "standard" (gemini only)
 
 Loads the entry, builds a prompt from research-system-prompt-v2,
-calls the API with web search enabled (or SerpAPI prefetch for DeepSeek,
-which has no native grounding), writes result to the entry, and checks
-whether all dispatched models are done to trigger synthesis.
+calls the API with web search enabled (or MCP tools for DeepSeek), writes
+result to the entry, and checks whether all dispatched models are done to
+trigger synthesis.
 """
+import asyncio
 import os
 import sys
 import time
 import traceback
+from contextlib import AsyncExitStack
 
 import bootstrap  # noqa: F401 - Django setup
 
@@ -41,6 +43,33 @@ if not logger.handlers:
     logger.addHandler(_sh)
 
 API_TIMEOUT = 1800  # 30 minutes
+TJAI_MCP_URL = os.environ.get('TJAI_MCP_URL', 'https://etaverse.com/tjai/mcp/')
+DEEPSEEK_TOOL_PREFIXES = ('get_', 'list_', 'search_')
+DEEPSEEK_TOOL_NAMES = {'get_server_instructions'}
+DEEPSEEK_TOOL_DENY = {'run_action'}
+
+DEEPSEEK_WRAPPER_NOTE = """## DeepSeek tjai MCP execution note
+
+You have read-only tjai MCP tools for research context: search, list, and get
+tools. Mutating tools are intentionally not exposed in this API subprocess.
+Return the completed research report as your final response; the wrapper will
+write that final response into the research entry.
+"""
+
+
+async def _alog(level, message, *args, **kwargs):
+    """Log from async code without calling Django DB handlers in the event loop."""
+    await asyncio.to_thread(logger.log, level, message, *args, **kwargs)
+
+
+def _deepseek_prompt(prompt):
+    return f"{DEEPSEEK_WRAPPER_NOTE}\n\n{prompt}"
+
+
+def _deepseek_tool_allowed(name):
+    if name in DEEPSEEK_TOOL_DENY:
+        return False
+    return name in DEEPSEEK_TOOL_NAMES or name.startswith(DEEPSEEK_TOOL_PREFIXES)
 
 
 def _call_gemini(prompt, initial_tier='flex'):
@@ -140,63 +169,111 @@ def _call_chatgpt(prompt):
     return result
 
 
-def _fetch_web_context(query):
-    """Fetch SerpAPI organic results as markdown context.
-
-    Best-effort enrichment for models without native web grounding (DeepSeek).
-    Returns formatted markdown, or '' if SERPAPI_API_KEY is unset or the
-    request fails. Never raises — web context is enrichment, not a blocker.
-
-    No client-side caps: `num` is not sent so SerpAPI's own default applies,
-    and ALL returned organic results are formatted into the context (no
-    slicing). The query is passed through unmodified.
-    """
-    api_key = os.environ.get('SERPAPI_API_KEY')
-    if not api_key:
-        logger.info("SERPAPI_API_KEY not set; running without web context")
-        return ''
-
-    import json as _json
-    import urllib.parse
-    import urllib.request
-
-    params = urllib.parse.urlencode({
-        'engine': 'google',
-        'q': query,
-        'api_key': api_key,
-    })
-    url = f'https://serpapi.com/search.json?{params}'
+def _get_tjai_mcp_token():
+    """Return the tjai MCP bearer token from env or SysConfig."""
+    token = os.environ.get('TJAI_MCP_TOKEN', '').strip()
+    if token:
+        return token
     try:
-        with urllib.request.urlopen(url, timeout=30) as resp:
-            data = _json.loads(resp.read().decode('utf-8'))
+        from tjai_app.models import SysConfig
+        return (
+            SysConfig.objects.filter(key='mcp_bearer_token')
+            .values_list('value', flat=True)
+            .first()
+            or ''
+        ).strip()
     except Exception as e:
-        logger.warning("SerpAPI fetch failed for %r: %s", query, e)
+        logger.warning("Could not load mcp_bearer_token from SysConfig: %s", e)
         return ''
 
-    if 'error' in data:
-        logger.warning("SerpAPI returned error for %r: %s", query, data['error'])
-        return ''
 
-    organic = data.get('organic_results') or []
-    if not organic:
-        return ''
+class TjaiMcpClient:
+    """HTTP MCP client that exposes tjai tools to DeepSeek."""
 
-    lines = [f'Recent web search results for: {query}', '']
-    for i, it in enumerate(organic, start=1):
-        title = it.get('title', '(no title)')
-        link = it.get('link', '')
-        snippet = (it.get('snippet') or '').replace('\n', ' ').strip()
-        lines.append(f'{i}. **{title}**')
-        if link:
-            lines.append(f'   {link}')
-        if snippet:
-            lines.append(f'   {snippet}')
-        lines.append('')
-    return '\n'.join(lines).rstrip()
+    def __init__(self, url, token):
+        self.url = url
+        self.token = token
+        self._stack = None
+        self._session = None
+        self.tools = []
+
+    async def start(self):
+        if not self.token:
+            raise RuntimeError("TJAI_MCP_TOKEN / SysConfig mcp_bearer_token not available")
+
+        from mcp import ClientSession
+        from mcp.client.streamable_http import streamablehttp_client
+
+        self._stack = AsyncExitStack()
+        await self._stack.__aenter__()
+        transport = await self._stack.enter_async_context(
+            streamablehttp_client(
+                self.url,
+                headers={'Authorization': f'Bearer {self.token}'},
+                timeout=60,
+                sse_read_timeout=300,
+            )
+        )
+        read, write, _get_session_id = transport
+        self._session = await self._stack.enter_async_context(ClientSession(read, write))
+        await self._session.initialize()
+        tools_resp = await self._session.list_tools()
+
+        self.tools = []
+        for tool in tools_resp.tools:
+            if not _deepseek_tool_allowed(tool.name):
+                continue
+            self.tools.append({
+                'name': tool.name,
+                'description': tool.description or '',
+                'input_schema': tool.inputSchema or {'type': 'object', 'properties': {}},
+            })
+        await _alog(logging.INFO, "DeepSeek MCP ready: %d tjai tools from %s",
+                    len(self.tools), self.url)
+
+    async def call(self, name, arguments):
+        if self._session is None:
+            return "MCP session is not initialized", True
+        try:
+            result = await self._session.call_tool(name, arguments=arguments or {})
+        except Exception as e:
+            return f"tool {name!r} call raised: {type(e).__name__}: {e}", True
+
+        parts = []
+        for block in (result.content or []):
+            text = getattr(block, 'text', None)
+            parts.append(text if text is not None else repr(block))
+        return '\n'.join(parts).strip() or '(empty result)', bool(getattr(result, 'isError', False))
+
+    async def close(self):
+        if self._stack is not None:
+            try:
+                await self._stack.__aexit__(None, None, None)
+            except Exception as e:
+                await _alog(logging.WARNING, "DeepSeek MCP close warning: %s", e)
+        self._stack = None
+        self._session = None
+        self.tools = []
 
 
-def _call_deepseek(prompt, tier):
-    """Call DeepSeek V4 via its Anthropic-compatible endpoint.
+def _looks_like_unfired_tool_stub(text):
+    lowered = (text or '').strip().lower()
+    if not lowered:
+        return True
+    markers = (
+        '<tjai_tool_use_control>',
+        '<function_result>',
+        '"type": "internal_monologue"',
+        '"tool": "mcp__',
+        '```json\n{\n  "tool":',
+        'proceeding with research',
+        'stand by for the report',
+    )
+    return any(marker in lowered for marker in markers)
+
+
+async def _call_deepseek(prompt, tier):
+    """Call DeepSeek V4 via Anthropic-compatible endpoint with tjai MCP tools.
 
     DeepSeek exposes an Anthropic-compat surface at
     https://api.deepseek.com/anthropic — using the anthropic SDK with
@@ -207,8 +284,8 @@ def _call_deepseek(prompt, tier):
       'flash' → deepseek-v4-flash
       'pro'   → deepseek-v4-pro
 
-    DeepSeek has no native web-search tool; the caller injects SerpAPI
-    context via _fetch_web_context before calling.
+    The loop mirrors the working codoc-ai DeepSeek runner: expose MCP tools,
+    execute tool_use blocks, append tool_result blocks, and return final text.
     """
     from anthropic import Anthropic
 
@@ -222,31 +299,109 @@ def _call_deepseek(prompt, tier):
         base_url='https://api.deepseek.com/anthropic',
         timeout=API_TIMEOUT,
     )
+    mcp = TjaiMcpClient(TJAI_MCP_URL, _get_tjai_mcp_token())
+    await mcp.start()
 
-    logger.info("Calling DeepSeek API (%s, Anthropic-compat)...", api_model)
-    # max_tokens is REQUIRED by DeepSeek's Anthropic-compat endpoint
-    # (HTTP 400 if absent). 384_000 is DeepSeek V4's own documented model
-    # max (per api-docs.deepseek.com/quick_start/pricing — same for both
-    # flash and pro), so the only ceiling here is the model's own spec.
-    response = client.messages.create(
-        model=api_model,
-        max_tokens=384_000,
-        messages=[{'role': 'user', 'content': prompt}],
-    )
+    messages = [{'role': 'user', 'content': prompt}]
+    accumulated_chunks = []
 
-    # DeepSeek V4 returns extended-thinking blocks before the text block;
-    # concatenate all text blocks, ignoring thinking.
-    text_parts = [
-        getattr(b, 'text', '') for b in (response.content or [])
-        if getattr(b, 'type', None) == 'text'
-    ]
-    result = ''.join(text_parts).strip()
-    if not result:
-        raise RuntimeError(
-            f"DeepSeek returned no text blocks. "
-            f"Block types: {[getattr(b, 'type', '?') for b in (response.content or [])]}"
-        )
-    return result
+    try:
+        iteration = 0
+        while True:
+            iteration += 1
+            await _alog(
+                logging.INFO,
+                "Calling DeepSeek API (%s, Anthropic-compat, iter %d, %d tools)...",
+                api_model, iteration, len(mcp.tools),
+            )
+            response = await asyncio.to_thread(
+                lambda: client.messages.create(
+                    model=api_model,
+                    max_tokens=384_000,
+                    messages=messages,
+                    tools=mcp.tools,
+                )
+            )
+
+            assistant_blocks = []
+            for block in response.content or []:
+                block_type = getattr(block, 'type', None)
+                if block_type == 'text':
+                    assistant_blocks.append({'type': 'text', 'text': block.text})
+                elif block_type == 'tool_use':
+                    assistant_blocks.append({
+                        'type': 'tool_use',
+                        'id': block.id,
+                        'name': block.name,
+                        'input': block.input,
+                    })
+                elif block_type == 'thinking':
+                    assistant_blocks.append({
+                        'type': 'thinking',
+                        'thinking': getattr(block, 'thinking', ''),
+                    })
+                else:
+                    await _alog(logging.WARNING, "DeepSeek: dropping unknown block type %r", block_type)
+
+            messages.append({'role': 'assistant', 'content': assistant_blocks})
+            text_this_turn = ''.join(
+                b['text'] for b in assistant_blocks if b['type'] == 'text'
+            )
+
+            if response.stop_reason == 'tool_use':
+                tool_uses = [b for b in assistant_blocks if b['type'] == 'tool_use']
+                await _alog(logging.INFO, "DeepSeek requested %d MCP tool call(s)", len(tool_uses))
+                tool_results = []
+                for tool_use in tool_uses:
+                    tool_text, is_error = await mcp.call(
+                        tool_use['name'], tool_use['input'] or {}
+                    )
+                    await _alog(
+                        logging.INFO,
+                        "DeepSeek tool %s -> %s%d chars",
+                        tool_use['name'],
+                        'ERROR ' if is_error else '',
+                        len(tool_text),
+                    )
+                    result_block = {
+                        'type': 'tool_result',
+                        'tool_use_id': tool_use['id'],
+                        'content': tool_text,
+                    }
+                    if is_error:
+                        result_block['is_error'] = True
+                    tool_results.append(result_block)
+                messages.append({'role': 'user', 'content': tool_results})
+                continue
+
+            if response.stop_reason == 'max_tokens':
+                await _alog(
+                    logging.WARNING,
+                    "DeepSeek hit max_tokens after %d chars; requesting continuation",
+                    len(text_this_turn),
+                )
+                accumulated_chunks.append(text_this_turn)
+                messages.append({
+                    'role': 'user',
+                    'content': (
+                        'Your previous response hit the per-call max_tokens limit. '
+                        'Continue from exactly where you left off. Do not repeat or '
+                        'summarize earlier text.'
+                    ),
+                })
+                continue
+
+            result = ''.join(accumulated_chunks + [text_this_turn]).strip()
+            if not result:
+                raise RuntimeError(
+                    f"DeepSeek returned no final text. "
+                    f"Block types: {[getattr(b, 'type', '?') for b in (response.content or [])]}"
+                )
+            if _looks_like_unfired_tool_stub(result):
+                raise RuntimeError("DeepSeek returned simulated tool/control output, not a report")
+            return result
+    finally:
+        await mcp.close()
 
 
 def main():
@@ -308,20 +463,10 @@ def main():
         elif model == 'chatgpt':
             result = _call_chatgpt(prompt)
         else:
-            # deepseek-flash / deepseek-pro — no native web search, so
-            # prepend a SerpAPI prefetch as a "Recent web search results"
-            # block. Search query is the topic's first line, capped.
+            # deepseek-flash / deepseek-pro — Anthropic-compat endpoint
+            # with tjai MCP tools exposed through a multi-turn tool loop.
             tier = model.split('-', 1)[1]
-            # Use the topic's first line as the search query, untruncated.
-            # No length cap — SerpAPI / Google enforce their own URL limits
-            # if the query is genuinely too long.
-            search_query = topic.split('\n', 1)[0].strip()
-            web_context = _fetch_web_context(search_query)
-            full_prompt = (
-                f"## Recent web search results (SerpAPI Google)\n\n"
-                f"{web_context}\n\n---\n\n{prompt}"
-            ) if web_context else prompt
-            result = _call_deepseek(full_prompt, tier)
+            result = asyncio.run(_call_deepseek(_deepseek_prompt(prompt), tier))
 
         # Write result to entry
         # Preserve topic as first line, add report below
