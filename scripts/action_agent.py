@@ -19,7 +19,7 @@ import time
 import bootstrap  # noqa: F401 - Django setup
 from tjai_app.action_runner import (
     get_due_actions, get_next_scheduled_time, execute_action, write_heartbeat,
-    update_last_run, logger,
+    update_last_run, logger, process_failure_details,
 )
 from tjai_app.models import Entry
 
@@ -558,10 +558,12 @@ def _check_assessment_rerun_for(sysconfig_key, action_entry_id):
                 for line in stdout.rstrip().split('\n'):
                     logger.info("rerun %s: %s", action_entry_id, line)
             if proc.returncode != 0:
-                logger.error("rerun %s: %s failed (exit %d)", action_entry_id, date_str, proc.returncode)
-                if stderr:
-                    for line in stderr.rstrip().split('\n')[:10]:
-                        logger.error("rerun %s:   %s", action_entry_id, line)
+                logger.error(process_failure_details(
+                    f"rerun {action_entry_id}: {date_str}",
+                    proc.returncode,
+                    stdout=stdout,
+                    stderr=stderr,
+                ))
             from django.db import connection
             connection.ensure_connection()
             now = time.time()

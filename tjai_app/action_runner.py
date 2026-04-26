@@ -39,6 +39,7 @@ LOCAL_API_LAUNCH_GRACE_SECONDS = 60
 
 # Thread-local for auto-tagging log lines with the current action's entry_id
 _log_context = threading.local()
+PROCESS_LOG_OUTPUT_LIMIT = 20000
 
 
 class _ActionContextFilter(logging.Filter):
@@ -63,6 +64,32 @@ if not logger.handlers:
     _sh.setFormatter(_fmt)
     logger.addHandler(_sh)
 logger.addFilter(_ActionContextFilter())
+
+
+def _tail_for_log(text, limit=PROCESS_LOG_OUTPUT_LIMIT):
+    """Return text capped for one log row, with an explicit truncation marker."""
+    if not text:
+        return ''
+    text = text.rstrip()
+    if len(text) <= limit:
+        return text
+    return f"[truncated: showing last {limit} of {len(text)} chars]\n{text[-limit:]}"
+
+
+def process_failure_details(label, returncode, stdout='', stderr='', limit=PROCESS_LOG_OUTPUT_LIMIT):
+    """Format subprocess failure output as a single bounded log message."""
+    stderr = (stderr or '').rstrip()
+    stdout = (stdout or '').rstrip()
+    parts = [f"{label} failed with exit {returncode}"]
+    if stderr:
+        parts.append("stderr:\n" + _tail_for_log(stderr, limit=limit))
+    if stdout and not stderr:
+        parts.append("stdout:\n" + _tail_for_log(stdout, limit=limit))
+    elif stdout:
+        parts.append("stdout:\n" + _tail_for_log(stdout, limit=limit // 2))
+    if len(parts) == 1:
+        parts.append("no stdout/stderr captured")
+    return "\n".join(parts)
 
 
 def get_next_scheduled_time(action):
@@ -230,14 +257,12 @@ def _run_one_script(script_cmd, timeout=3600):
         logger.error("%s timed out after %ds — killed", script_name, timeout)
         return False
     if result.returncode != 0:
-        logger.error("Mechanical step failed, aborting")
-        if result.stderr:
-            for line in result.stderr.rstrip().split('\n'):
-                logger.error("  %s", line)
-        elif result.stdout:
-            # Log stdout on failure if no stderr (some scripts report errors to stdout)
-            for line in result.stdout.rstrip().split('\n')[-10:]:
-                logger.error("  %s", line)
+        logger.error(process_failure_details(
+            f"Mechanical step {script_name}",
+            result.returncode,
+            stdout=result.stdout,
+            stderr=result.stderr,
+        ))
         return False
 
     return True
@@ -446,11 +471,12 @@ def dispatch_ai(action, entry_id=None, target_date=None):
                             defaults={'value': tracking_id,
                                       'timestamp_modified': time.time()})
             if proc.returncode != 0:
-                logger.error("tj agent exited %d (status set by agent_complete)",
-                             proc.returncode)
-                if stderr:
-                    for line in stderr.rstrip().split('\n'):
-                        logger.error("  %s", line)
+                logger.error(process_failure_details(
+                    "tj agent (status set by agent_complete)",
+                    proc.returncode,
+                    stdout=stdout,
+                    stderr=stderr,
+                ))
         except Exception:
             logger.error("Agent monitor thread error:\n%s", traceback.format_exc())
 
@@ -1107,7 +1133,6 @@ def execute_action(action, target_date=None):
             return False
 
         if not run_mechanical(action, target_date=target_date):
-            logger.error("Mechanical step failed, aborting")
             _write_agent_error(action_id, "Mechanical step failed")
             update_last_run(action)  # prevent infinite retry on next loop
             return False
