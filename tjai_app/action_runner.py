@@ -845,9 +845,15 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
             cmd = [sys.executable, str(script_path), model, str(entry.id)]
             if model == 'gemini':
                 cmd.append('standard' if was_rerun else 'flex')
+            env = os.environ.copy()
+            if 'TJAI_MCP_TOKEN' not in env:
+                tok = SysConfig.objects.filter(key='mcp_bearer_token').values_list('value', flat=True).first()
+                if tok:
+                    env['TJAI_MCP_TOKEN'] = tok
             proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                env=env,
                 start_new_session=True,
             )
             logger.info("Launched %s (PID %d, entry %s)",
