@@ -5,6 +5,7 @@ All functions use Django ORM directly — must be called in a Django context.
 """
 
 import logging
+import os
 import subprocess
 import sys
 import threading
