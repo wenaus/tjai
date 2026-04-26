@@ -383,6 +383,7 @@ async def search_entries(
     kind: str = None,
     context: str = None,
     limit: int = 50,
+    offset: int = 0,
     start_date: str = None,
     end_date: str = None,
     max_content_length: int = 200,
@@ -402,6 +403,8 @@ async def search_entries(
               ai, bookmark, or list.
         context: Filter to entries in this context/project only.
         limit: Maximum results to return. Default: 50. Set higher if needed.
+        offset: Zero-based result offset for pagination. Default: 0. To fetch
+                the next page, call again with offset += limit.
         start_date: Start of date range (YYYYMMDD, ISO format, or natural language
                     like '7d', 'yesterday', 'monday'). Default: no filtering.
         end_date: End of date range. Default: no filtering.
@@ -414,10 +417,12 @@ async def search_entries(
     Returns:
         List of matching entries, each containing: id, content (preview), kind,
         context, created, modified, and optional name, priority, status, tags.
+        If the number of results equals limit, more results may exist; call
+        again with a larger offset to continue.
         Returns {"error": "..."} if parameters are invalid.
     """
     return await sync_to_async(services.search_entries)(
-        query=query, kind=kind, context=context, limit=limit,
+        query=query, kind=kind, context=context, limit=limit, offset=offset,
         start_date=start_date, end_date=end_date,
         max_content_length=max_content_length,
         order_by=order_by,

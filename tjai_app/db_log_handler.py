@@ -49,4 +49,8 @@ class DbLogHandler(logging.Handler):
     EXTRA_KEYS = (
         'entry_id', 'action_id', 'model', 'tracking',
         'run_status', 'exit_code', 'duration_sec',
+        'event', 'call_type', 'tool', 'caller', 'tool_call_id',
+        'iteration', 'args_preview', 'ok', 'error', 'is_error',
+        'duration_ms', 'result_chars', 'returned_chars', 'result_count',
+        'truncated', 'truncation_limit',
     )

@@ -27,6 +27,7 @@ from tjai_app.action_runner import (
     research_model_complete,
 )
 from tjai_app.models import Entry
+from tjai_app.tool_logging import CallTimer, applog_call
 
 import logging
 
@@ -51,11 +52,22 @@ TJAI_MCP_URL = os.environ.get('TJAI_MCP_URL', 'https://etaverse.com/tjai/mcp/')
 DEEPSEEK_TOOL_PREFIXES = ('get_', 'list_', 'search_')
 DEEPSEEK_TOOL_NAMES = {'get_server_instructions'}
 DEEPSEEK_TOOL_DENY = {'run_action'}
+DEEPSEEK_TOOL_RESULT_BUDGET = {
+    'flash': int(os.environ.get('DEEPSEEK_FLASH_TOOL_RESULT_CHARS', '80000')),
+    'pro': int(os.environ.get('DEEPSEEK_PRO_TOOL_RESULT_CHARS', '200000')),
+}
+DEEPSEEK_SEARCH_DEFAULT_LIMIT = int(os.environ.get('DEEPSEEK_SEARCH_DEFAULT_LIMIT', '20'))
+DEEPSEEK_SEARCH_DEFAULT_MAX_CONTENT = int(
+    os.environ.get('DEEPSEEK_SEARCH_DEFAULT_MAX_CONTENT', '2000'))
 
 DEEPSEEK_WRAPPER_NOTE = """## DeepSeek tjai MCP execution note
 
 You have read-only tjai MCP tools for research context: search, list, and get
 tools. Mutating tools are intentionally not exposed in this API subprocess.
+If you omit bounds on search_entries, the wrapper supplies safe defaults
+(limit and max_content_length) to prevent oversized tool results. Use the
+offset argument to page through more search results, and use get_entry for full
+content after identifying promising hits.
 Return the completed research report as your final response; the wrapper will
 write that final response into the research entry.
 """
@@ -66,6 +78,10 @@ async def _alog(level, message, *args, **kwargs):
     await asyncio.to_thread(logger.log, level, message, *args, **kwargs)
 
 
+async def _applog_call(**kwargs):
+    await asyncio.to_thread(applog_call, logger, **kwargs)
+
+
 def _deepseek_prompt(prompt):
     return f"{DEEPSEEK_WRAPPER_NOTE}\n\n{prompt}"
 
@@ -74,6 +90,32 @@ def _deepseek_tool_allowed(name):
     if name in DEEPSEEK_TOOL_DENY:
         return False
     return name in DEEPSEEK_TOOL_NAMES or name.startswith(DEEPSEEK_TOOL_PREFIXES)
+
+
+def _deepseek_tool_args(name, arguments):
+    """Apply DeepSeek-only safety defaults for verbose tjai tools."""
+    args = dict(arguments or {})
+    if name == 'search_entries':
+        args.setdefault('limit', DEEPSEEK_SEARCH_DEFAULT_LIMIT)
+        args.setdefault('offset', 0)
+        args.setdefault('max_content_length', DEEPSEEK_SEARCH_DEFAULT_MAX_CONTENT)
+    return args
+
+
+def _truncate_tool_text(text, remaining_budget):
+    """Return text bounded by remaining DeepSeek tool-result budget."""
+    original_chars = len(text)
+    if remaining_budget is None or original_chars <= remaining_budget:
+        return text, original_chars, original_chars, False
+    notice = (
+        "\n\n[TRUNCATED by tjai DeepSeek wrapper: original "
+        f"{original_chars} chars, returned {remaining_budget} chars. "
+        "Narrow the query or call the tool again with smaller limit / "
+        "max_content_length arguments.]"
+    )
+    keep = max(0, remaining_budget - len(notice))
+    returned = text[:keep] + notice
+    return returned, original_chars, len(returned), True
 
 
 def _call_gemini(prompt, initial_tier='flex'):
@@ -283,7 +325,7 @@ def _looks_like_unfired_tool_stub(text):
     return any(marker in lowered for marker in markers)
 
 
-async def _call_deepseek(prompt, tier):
+async def _call_deepseek(prompt, tier, entry_uuid=None):
     """Call DeepSeek V4 via Anthropic-compatible endpoint with tjai MCP tools.
 
     DeepSeek exposes an Anthropic-compat surface at
@@ -305,6 +347,7 @@ async def _call_deepseek(prompt, tier):
         raise RuntimeError("DEEPSEEK_API_KEY not set in environment")
 
     api_model = f'deepseek-v4-{tier}'
+    research_model = f'deepseek-{tier}'
     client = Anthropic(
         api_key=api_key,
         base_url='https://api.deepseek.com/anthropic',
@@ -363,16 +406,53 @@ async def _call_deepseek(prompt, tier):
                 tool_uses = [b for b in assistant_blocks if b['type'] == 'tool_use']
                 await _alog(logging.INFO, "DeepSeek requested %d MCP tool call(s)", len(tool_uses))
                 tool_results = []
+                result_budget = DEEPSEEK_TOOL_RESULT_BUDGET.get(tier)
+                result_budget_remaining = result_budget
                 for tool_use in tool_uses:
-                    tool_text, is_error = await mcp.call(
+                    tool_args = _deepseek_tool_args(
                         tool_use['name'], tool_use['input'] or {}
+                    )
+                    timer = CallTimer()
+                    tool_text, is_error = await mcp.call(
+                        tool_use['name'], tool_args
+                    )
+                    original_chars = len(tool_text)
+                    truncated = False
+                    returned_chars = original_chars
+                    if not is_error and result_budget_remaining is not None:
+                        tool_text, original_chars, returned_chars, truncated = (
+                            _truncate_tool_text(tool_text, result_budget_remaining)
+                        )
+                        result_budget_remaining = max(
+                            0, result_budget_remaining - returned_chars
+                        )
+                    await _applog_call(
+                        call_type='search' if tool_use['name'] == 'search_entries' else 'tool',
+                        tool=tool_use['name'],
+                        caller='research_multimodel',
+                        model=research_model,
+                        entry_id=entry_uuid,
+                        action_id='research-agent',
+                        tool_call_id=tool_use['id'],
+                        iteration=iteration,
+                        args=tool_args,
+                        ok=not is_error,
+                        error=tool_text[:1000] if is_error else None,
+                        is_error=is_error,
+                        duration_ms=timer.ms(),
+                        result_chars=original_chars,
+                        returned_chars=returned_chars,
+                        truncated=truncated,
+                        truncation_limit=result_budget,
                     )
                     await _alog(
                         logging.INFO,
-                        "DeepSeek tool %s -> %s%d chars",
+                        "DeepSeek tool %s -> %s%d/%d chars%s",
                         tool_use['name'],
                         'ERROR ' if is_error else '',
-                        len(tool_text),
+                        returned_chars,
+                        original_chars,
+                        ' TRUNCATED' if truncated else '',
                     )
                     result_block = {
                         'type': 'tool_result',
@@ -477,7 +557,8 @@ def main():
             # deepseek-flash / deepseek-pro — Anthropic-compat endpoint
             # with tjai MCP tools exposed through a multi-turn tool loop.
             tier = model.split('-', 1)[1]
-            result = asyncio.run(_call_deepseek(_deepseek_prompt(prompt), tier))
+            result = asyncio.run(_call_deepseek(
+                _deepseek_prompt(prompt), tier, entry_uuid=entry_uuid))
 
         # Write result to entry
         # Preserve topic as first line, add report below

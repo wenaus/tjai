@@ -712,13 +712,15 @@ def get_bookmarks(context=None, limit=50, start_date=None, end_date=None, max_co
     return [_format_entry(entry, max_content_length=max_content_length) for entry in qs]
 
 
-def search_entries(query, kind=None, context=None, limit=50, start_date=None, end_date=None, max_content_length=200, order_by='time'):
+def search_entries(query, kind=None, context=None, limit=50, offset=0, start_date=None, end_date=None, max_content_length=200, order_by='time'):
     if not query:
         return {"error": "query is required"}
     if kind is not None and kind not in VALID_KINDS:
         return {"error": f"Invalid kind '{kind}'. Must be one of: {', '.join(VALID_KINDS)}"}
     if not isinstance(limit, int) or limit < 1:
         return {"error": f"limit must be a positive integer, got {limit}"}
+    if not isinstance(offset, int) or offset < 0:
+        return {"error": f"offset must be a non-negative integer, got {offset}"}
 
     from django.contrib.postgres.search import SearchQuery, SearchRank
 
@@ -753,7 +755,7 @@ def search_entries(query, kind=None, context=None, limit=50, start_date=None, en
         qs = qs.annotate(content_len=Length('content')).order_by('-content_len')
     else:
         qs = qs.order_by('-timestamp_modified')
-    qs = qs[:limit]
+    qs = qs[offset:offset + limit]
     return [_format_entry(entry, max_content_length=max_content_length) for entry in qs]
 
 

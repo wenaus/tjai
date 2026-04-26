@@ -97,6 +97,7 @@ TOOL_DEFINITIONS = [
                 "start_date": {"type": "string", "description": "Start of date range. Supports YYYYMMDD, 'yesterday', '3d', 'monday', etc. Default: 7 days ago."},
                 "end_date": {"type": "string", "description": "End of date range. Default: now."},
                 "limit": {"type": "integer", "description": "Maximum results. Default: 50."},
+                "offset": {"type": "integer", "description": "Zero-based result offset for pagination. Default: 0. Use offset + limit for the next page."},
             },
             "required": ["query"],
         },
@@ -223,11 +224,11 @@ def get_bookmarks(context=None, start_date=None, end_date=None, limit=50):
     )
 
 
-def search_entries(query, kind=None, context=None, start_date=None, end_date=None, limit=50):
+def search_entries(query, kind=None, context=None, start_date=None, end_date=None, limit=50, offset=0):
     if start_date is None:
         start_date = '7d'
     return services.search_entries(
-        query=query, kind=kind, context=context, limit=limit,
+        query=query, kind=kind, context=context, limit=limit, offset=offset,
         start_date=start_date, end_date=end_date,
     )
 
