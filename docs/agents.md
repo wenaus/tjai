@@ -134,15 +134,16 @@ Entry(
 
 ## Research Queue
 
-"Computer, perform an analysis." Deep autonomous research — the system dispatches **up to five models in parallel** (Claude, Gemini, Qwen on Torre's Mac Studio via the [Remote Worker Pipeline](remote-workers.md), and DeepSeek-Flash + DeepSeek-Pro via DeepSeek's Anthropic-compatible endpoint). Each model produces an independent analyst's brief, then a final synthesis pass merges them into a single report.
+"Computer, perform an analysis." Deep autonomous research — the system dispatches **up to six models in parallel** (Claude, Gemini, ChatGPT, Qwen on Torre's Mac Studio via the [Remote Worker Pipeline](remote-workers.md), and DeepSeek-Flash + DeepSeek-Pro via DeepSeek's Anthropic-compatible endpoint). Each model produces an independent analyst's brief, then a final synthesis pass merges them into a single report.
 
 ### How It Works
 
 1. Create a memory entry tagged `:research_topic` with topic description
 2. Research page (`/tjai/research/`) shows the queue with status
-3. Click **Submit** (or **Submit All**). The research-agent action runs `_dispatch_research_3way` (`tjai_app/action_runner.py`), which dispatches each model in `RESEARCH_MODELS = ('claude','gemini','qwen','deepseek-flash','deepseek-pro')` via its own mechanism (gemma is currently off; remote-worker plumbing retained for re-enable):
+3. Click **Submit** (or **Submit All**). The research-agent action runs `_dispatch_research_3way` (`tjai_app/action_runner.py`), which dispatches each model in `RESEARCH_MODELS = ('claude','gemini','chatgpt','qwen','deepseek-flash','deepseek-pro')` via its own mechanism (gemma is currently off; remote-worker plumbing retained for re-enable):
    - **Claude** — detached Claude instance with research-optimized system prompt, spawning parallel subagents that search the web and write findings tagged `research-subagent`
    - **Gemini** — `scripts/research_multimodel.py gemini` subprocess via the Gemini API (native grounding)
+   - **ChatGPT** — `scripts/research_multimodel.py chatgpt` subprocess via the OpenAI Responses API (`CHATGPT_RESEARCH_MODEL`, default `gpt-5.5`) with hosted web search, high search context, and configurable reasoning/verbosity env vars
    - **Qwen** (and Gemma when re-enabled) — staged for the [remote worker pipeline](remote-workers.md) via the `REMOTE_WORKER_MODELS` mapping (`{'gemma': 'gemma4', 'qwen': 'qwen'}`). The prompt is written to a sub-entry with the mapped `worker_target`; the local research-agent then exits. `tj_agent` on the Mac Studio long-polls `/api/worker/poll`, claims the work, runs the locally-configured ollama model, and POSTs the result back. Adding another remote-worker research model is a one-line add to `REMOTE_WORKER_MODELS` + a matching entry in the Mac's `worker_models` config.
    - **DeepSeek-Flash / DeepSeek-Pro** — `scripts/research_multimodel.py deepseek-flash|deepseek-pro` subprocess via DeepSeek's Anthropic-compat endpoint (`https://api.deepseek.com/anthropic`, accessed with the `anthropic` SDK + `base_url` override; `DEEPSEEK_API_KEY` env var). The script exposes read-only tjai MCP tools (`get_*`, `list_*`, `search_*`) through a multi-turn `tool_use` / `tool_result` loop, then writes DeepSeek's final report text into the research entry.
 4. As each model finishes, `research_model_complete` updates the base entry's `{model}_status`. When **all dispatched models** are `done`, the base entry transitions to `done` and synthesis is dispatched

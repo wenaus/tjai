@@ -20,13 +20,13 @@ from . import services
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / 'scripts'
 
 # Models included in multi-model research dispatch and completion checks.
-# ChatGPT disabled 2026-03-30 — implementation intact, just not auto-dispatched.
+# ChatGPT is dispatched through the OpenAI Responses API with hosted web search.
 # gemma + qwen run on a remote Mac Studio worker via the long-polling
 # /api/worker/poll endpoint (see views.worker_poll); dispatch just stages the
 # prompt on the entry. REMOTE_WORKER_MODELS maps the research model name to its
 # WORKER_CAPABILITIES entry (which the worker's worker_models config then maps
 # to a local ollama tag).
-RESEARCH_MODELS = ('claude', 'gemini', 'qwen', 'deepseek-flash', 'deepseek-pro')  # gemma off — code kept (remote worker, completion handling) so it can be re-enabled by adding 'gemma' back. deepseek-flash/pro: research_multimodel.py via DeepSeek's Anthropic-compat endpoint with read-only tjai MCP tools
+RESEARCH_MODELS = ('claude', 'gemini', 'chatgpt', 'qwen', 'deepseek-flash', 'deepseek-pro')  # gemma off — code kept (remote worker, completion handling) so it can be re-enabled by adding 'gemma' back. chatgpt: research_multimodel.py via OpenAI Responses API with hosted web search. deepseek-flash/pro: research_multimodel.py via DeepSeek's Anthropic-compat endpoint with read-only tjai MCP tools
 REMOTE_WORKER_MODELS = {'qwen': 'qwen', 'gemma': 'gemma4'}
 TJAI_DIR = SCRIPTS_DIR.parent
 TJ_PY = TJAI_DIR / 'tj.py'
@@ -723,7 +723,7 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
     model that needs to run.  No other function should create model entries
     or launch model processes for research.
 
-    On first run: all 3 models have status=None → dispatches all.
+    On first run: every enabled model has status=None → dispatches all.
     On selective rerun: only models with status='rerun' are dispatched.
 
     Dispatch mechanisms differ per model (Claude via tj agent, others via
@@ -738,6 +738,19 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
     now_ts = time.time()
     base_data = base_entry.data if isinstance(base_entry.data, dict) else {}
     script_path = SCRIPTS_DIR / 'research_multimodel.py'
+
+    def _save_base_model_state(model):
+        """Persist this model's dispatch fields without clobbering completions."""
+        nonlocal base_data
+        base_entry.refresh_from_db(fields=['data'])
+        fresh = base_entry.data if isinstance(base_entry.data, dict) else {}
+        for suffix in ('entry_id', 'status', 'started_at'):
+            key = f'{model}_{suffix}'
+            if key in base_data:
+                fresh[key] = base_data[key]
+        base_entry.data = fresh
+        base_entry.save(update_fields=['data'])
+        base_data = fresh
 
     # Determine which models to run
     models_to_run = []
@@ -790,6 +803,7 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
 
         # Dispatch — mechanism differs per model, control flow is uniform
         if model == 'claude':
+            _save_base_model_state(model)
             data['next_target_entry_id'] = str(entry.id)
             next_target = data.get('next_target', '')
             if next_target:
@@ -818,13 +832,16 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
                 entry.data = edata
                 entry.save(update_fields=['data'])
                 base_data[f'{model}_status'] = 'staged'
+                _save_base_model_state(model)
                 logger.info("Staged %s work for %s (target=%s, prompt %d chars)",
                             model, model_entry_id, worker_target, len(prompt))
             except Exception as e:
                 logger.error("Failed to stage %s work for %s: %s",
                              model, model_entry_id, e)
                 base_data[f'{model}_status'] = 'failed'
+                _save_base_model_state(model)
         else:
+            _save_base_model_state(model)
             cmd = [sys.executable, str(script_path), model, str(entry.id)]
             if model == 'gemini':
                 cmd.append('standard' if was_rerun else 'flex')
@@ -840,10 +857,6 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
                 key=f'research_{base_entry_id}_{model}_pid',
                 defaults={'value': str(proc.pid),
                           'timestamp_modified': now_ts})
-
-    # Save base entry tracking (model entries track their own status)
-    base_entry.data = base_data
-    base_entry.save(update_fields=['data'])
 
     # True iff a local claude subprocess was launched — the only case where
     # agent_complete.py will later clear research-agent sysconfig status.

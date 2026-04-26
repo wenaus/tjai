@@ -172,13 +172,13 @@ There are five independent pieces of state. They have orthogonal lifecycles and 
 
 | # | Where it lives | Purpose | Values |
 |---|---|---|---|
-| L1 | `SysConfig['agent_research-agent_status']` | The **local research-agent process** — the orchestrator that builds prompts, dispatches Claude/Gemini directly, stages gemma, and writes synthesis. | `idle`, `running`, `failed` |
+| L1 | `SysConfig['agent_research-agent_status']` | The **local research-agent process** — the orchestrator that builds prompts, dispatches local/API models directly, stages remote-worker models, and writes synthesis. | `idle`, `running`, `failed` |
 | L2 | base entry's `Entry.status` | Whether the **topic as a whole** is finalized | `pending`, `active`, `done`, `blocked` |
-| L3 | base entry's `data.{model}_status` for each model in `RESEARCH_MODELS = ('claude','gemini','gemma','qwen')` | Per-model lifecycle for this topic | `None`, `staged`, `active`, `done`, `failed`, `rerun` (legacy entries may still carry `blocked`; treat as `failed`) |
+| L3 | base entry's `data.{model}_status` for each model in `RESEARCH_MODELS` | Per-model lifecycle for this topic | `None`, `staged`, `active`, `done`, `failed`, `rerun` (legacy entries may still carry `blocked`; treat as `failed`) |
 | L4 | sub-entry's `data.worker_*` (only present while remote work is in flight) | Per-claim tracking | `worker_target`, `worker_staged_at`, `worker_claimed_at`, `worker_claimed_by`, `worker_prompt`, `worker_timeout_sec` |
 | L5 | `SysConfig['worker_capability_{cap}_lastpoll']` → `{machine_id, ts}` | "Has any worker polled for this capability recently, and who" | JSON: machine_id, ts |
 
-The local research-agent process (L1) being `idle` while a remote worker is mid-inference (L4 has a fresh claim) is **correct and intentional** — once the local agent has staged the gemma work and dispatched Claude/Gemini, it has nothing more to do until results arrive. Display text that reads "Agent: idle" alone is misleading because it conflates L1 with the system as a whole.
+The local research-agent process (L1) being `idle` while a remote worker is mid-inference (L4 has a fresh claim) is **correct and intentional** — once the local agent has staged remote work and dispatched direct/API models, it has nothing more to do until results arrive. Display text that reads "Agent: idle" alone is misleading because it conflates L1 with the system as a whole.
 
 ### L3 transitions for a remote-worker model
 
@@ -192,7 +192,7 @@ The local research-agent process (L1) being `idle` while a remote worker is mid-
 | `done` / `failed` | `rerun` | User clicks "Rerun selections" with this model checked | `api_research_rerun_models` |
 | `rerun` | `staged` | Next dispatch loop picks it up | `_dispatch_research_3way` |
 
-For local-dispatch models (claude, gemini) the same L3 field is set directly without any `staged` phase.
+For direct-dispatch models (Claude, Gemini, ChatGPT, DeepSeek) the same L3 field is set directly without any `staged` phase.
 
 ### Sub-entry status vs L3
 

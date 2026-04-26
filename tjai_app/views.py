@@ -4812,7 +4812,7 @@ def api_research_run(request):
 
     _log_research(logging.INFO, "Action agent woken", entry_id=target_uuid)
 
-    # _dispatch_research_3way handles all 3 models when the action agent picks this up.
+    # _dispatch_research_3way handles all enabled models when the action agent picks this up.
     return JsonResponse({'ok': True, 'entry_id': entry_id})
 
 
@@ -4946,7 +4946,7 @@ def api_research_rerun(request):
                 defaults={'value': '1', 'timestamp_modified': now})
 
             _wake_action_agent()
-            # _dispatch_research_3way handles all 3 models when agent picks this up
+            # _dispatch_research_3way handles all enabled models when agent picks this up
 
             _log_research(logging.INFO,
                           f"Rerun auto-submitted: {new_entry_id}",

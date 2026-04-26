@@ -16,7 +16,7 @@ Transform tjai from a reactive knowledge base into a proactive thinking system t
 
 **Implemented so far:**
 - **Research agent** — Claude-driven deep research on queued topics, with auto-chaining through the queue
-- **Multi-model research** — parallel Gemini + ChatGPT research alongside Claude, with automated synthesis when all three complete. Completions logged to agent_complete with model metadata.
+- **Multi-model research** — parallel Claude, Gemini, ChatGPT, Qwen, and DeepSeek research, with automated synthesis when all dispatched models complete. Completions logged to agent_complete with model metadata.
 - **Ideation agent** — overnight review of daily activity (picks, dialog, entries) to propose research-worthy questions
 - **Picks agent** — AI-curated article selection from RSS feeds
 - **Daily history** — "on this day" historical events and birthdays

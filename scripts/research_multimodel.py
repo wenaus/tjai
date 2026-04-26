@@ -43,6 +43,10 @@ if not logger.handlers:
     logger.addHandler(_sh)
 
 API_TIMEOUT = 1800  # 30 minutes
+CHATGPT_RESEARCH_MODEL = os.environ.get('CHATGPT_RESEARCH_MODEL', 'gpt-5.5')
+CHATGPT_RESEARCH_REASONING_EFFORT = os.environ.get(
+    'CHATGPT_RESEARCH_REASONING_EFFORT', 'high')
+CHATGPT_RESEARCH_VERBOSITY = os.environ.get('CHATGPT_RESEARCH_VERBOSITY', 'high')
 TJAI_MCP_URL = os.environ.get('TJAI_MCP_URL', 'https://etaverse.com/tjai/mcp/')
 DEEPSEEK_TOOL_PREFIXES = ('get_', 'list_', 'search_')
 DEEPSEEK_TOOL_NAMES = {'get_server_instructions'}
@@ -154,11 +158,18 @@ def _call_chatgpt(prompt):
 
     client = OpenAI(api_key=api_key, timeout=API_TIMEOUT)
 
-    logger.info("Calling ChatGPT API (gpt-4o)...")
+    logger.info(
+        "Calling ChatGPT API (%s, reasoning=%s, verbosity=%s)...",
+        CHATGPT_RESEARCH_MODEL,
+        CHATGPT_RESEARCH_REASONING_EFFORT,
+        CHATGPT_RESEARCH_VERBOSITY,
+    )
     response = client.responses.create(
-        model='gpt-4o',
+        model=CHATGPT_RESEARCH_MODEL,
         input=prompt,
-        tools=[{'type': 'web_search'}],
+        reasoning={'effort': CHATGPT_RESEARCH_REASONING_EFFORT},
+        text={'verbosity': CHATGPT_RESEARCH_VERBOSITY},
+        tools=[{'type': 'web_search_preview', 'search_context_size': 'high'}],
     )
 
     # Extract text from the response output
@@ -482,7 +493,7 @@ def main():
         completion_logger.info("research-agent/%s: exit_code=0, status=completed",
                                 model, extra=ref_extra)
 
-        # Update base entry and check if all 3 models are done
+        # Update base entry and check whether all dispatched models are done
         research_model_complete(entry)
 
     except Exception as e:

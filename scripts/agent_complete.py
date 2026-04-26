@@ -561,7 +561,7 @@ def main():
     # Research-agent post-processing: model completion first, then queue drain.
     # Order matters — synthesis must set next_target before queue drain overwrites it.
     if action_id == 'research-agent' and exit_code in (0, 124):
-        # Update base entry tracking and check if all 3 models are done
+        # Update base entry tracking and check whether all dispatched models are done
         if entry:
             entry_data = entry.data if isinstance(entry.data, dict) else {}
             if (entry_data.get('source') == 'multimodel'
@@ -697,8 +697,13 @@ def _linkify_synthesis_sources(current_entry_uuid):
         content = new_content
         changed = True
 
-    # Fix 2: For each source entry_id, ensure proper markdown links exist
-    for key in ('source_claude_entry_id', 'source_gemini_entry_id', 'source_chatgpt_entry_id'):
+    # Fix 2: For each source entry_id, ensure proper markdown links exist.
+    # Source keys are generated dynamically as source_{model}_entry_id.
+    source_keys = sorted(
+        k for k in data
+        if k.startswith('source_') and k.endswith('_entry_id')
+    )
+    for key in source_keys:
         eid = data.get(key)
         if not eid:
             continue
