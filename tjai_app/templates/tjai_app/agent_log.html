@@ -21,6 +21,7 @@
         .toolbar {
             display: flex;
             align-items: center;
+            flex-wrap: wrap;
             gap: 12px;
             padding: 8px 16px;
             border-bottom: 1px solid #333;
@@ -37,19 +38,47 @@
             border-radius: 3px;
         }
         .toolbar button:hover { background: #444; cursor: pointer; }
+        .toolbar input {
+            background: #2a2a2a;
+            color: #e0e0e0;
+            border: 1px solid #555;
+            padding: 2px 8px;
+            font-family: inherit;
+            font-size: 12px;
+            border-radius: 3px;
+            width: 190px;
+        }
         #log-container {
             flex: 1;
             overflow-y: auto;
             padding: 8px 16px;
         }
         .log-line {
-            padding: 2px 0;
+            display: grid;
+            grid-template-columns: 136px 58px 150px minmax(0, 1fr);
+            gap: 8px;
+            align-items: start;
+            padding: 3px 0;
             line-height: 1.5;
             border-bottom: 1px solid #252525;
         }
+        .log-main { min-width: 0; }
         .log-ts { color: #8a8a8a; }
         .log-src { color: #ce93d8; }
-        .log-msg { color: #e0e0e0; }
+        .log-msg { color: #e0e0e0; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .log-meta { margin-top: 2px; display: flex; flex-wrap: wrap; gap: 4px; }
+        .badge {
+            color: #b0bec5;
+            background: #242424;
+            border: 1px solid #3a3a3a;
+            border-radius: 3px;
+            padding: 0 4px;
+            font-size: 11px;
+            white-space: nowrap;
+        }
+        .badge-warn { color: #ffd54f; border-color: #6d5b20; }
+        .badge-error { color: #ef5350; border-color: #6b2a2a; }
+        .log-line.hidden { display: none; }
         .log-INFO .log-level { color: #90caf9; }
         .log-WARNING .log-level { color: #ffd54f; }
         .log-ERROR .log-level { color: #ef5350; font-weight: bold; }
@@ -73,6 +102,12 @@
             <option value="INFO" selected>INFO+</option>
             <option value="DEBUG">DEBUG</option>
         </select>
+        <label>Source:</label>
+        <select id="source-filter">
+            <option value="">All</option>
+        </select>
+        <label>Text:</label>
+        <input id="text-filter" type="search" placeholder="message, model, tool...">
         <label>Limit:</label>
         <select id="limit-select">
             <option value="200">200</option>
@@ -82,6 +117,7 @@
         <button onclick="fetchLog()">Refresh</button>
         <span id="ref-filter"></span>
         <span id="log-count"></span>
+        <span id="tz-label" style="color:#8a8a8a;white-space:nowrap"></span>
         <span id="refresh-ago" style="color:#8a8a8a;white-space:nowrap"></span>
     </div>
     <div id="log-container">Loading...</div>
@@ -90,6 +126,7 @@
         const urlParams = new URLSearchParams(window.location.search);
         const refFilter = urlParams.get('ref') || '';
         const refName = urlParams.get('name') || refFilter.substring(0, 8);
+        let lastEntries = [];
 
         if (refFilter) {
             document.getElementById('ref-filter').innerHTML =
@@ -106,13 +143,37 @@
             try {
                 const resp = await fetch(url);
                 const data = await resp.json();
-                renderLog(data.entries);
+                lastEntries = data.entries || [];
+                document.getElementById('tz-label').textContent = data.timezone ? `Times: ${data.timezone}` : '';
+                updateSourceOptions(lastEntries);
+                renderLog(lastEntries);
             } catch (e) {
                 document.getElementById('log-container').innerHTML = 'Error loading log';
             }
         }
 
+        function updateSourceOptions(entries) {
+            const select = document.getElementById('source-filter');
+            const current = select.value;
+            const sources = Array.from(new Set(entries.map(e => e.source).filter(Boolean))).sort();
+            select.innerHTML = '<option value="">All</option>' +
+                sources.map(s => `<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`).join('');
+            if (sources.includes(current)) select.value = current;
+        }
+
         function renderLog(entries) {
+            const sourceFilter = document.getElementById('source-filter').value;
+            const textFilter = document.getElementById('text-filter').value.trim().toLowerCase();
+            if (sourceFilter) entries = entries.filter(e => e.source === sourceFilter);
+            if (textFilter) {
+                entries = entries.filter(e => {
+                    const hay = [
+                        e.timestamp, e.level, e.source, e.message,
+                        JSON.stringify(e.extra_data || {}),
+                    ].join(' ').toLowerCase();
+                    return hay.includes(textFilter);
+                });
+            }
             if (!entries.length) {
                 document.getElementById('log-container').innerHTML = '<span style="color:#8a8a8a">No log entries</span>';
                 document.getElementById('log-count').textContent = '0 entries';
@@ -120,11 +181,15 @@
             }
             let html = '';
             for (const e of entries) {
+                const badges = renderBadges(e);
                 html += `<div class="log-line log-${e.level}">` +
                     `<span class="log-ts">${e.timestamp}</span> ` +
                     `<span class="log-level">${e.level.padEnd(7)}</span> ` +
                     `<span class="log-src">${e.source}</span> ` +
-                    `<span class="log-msg">${linkifyMsg(escapeHtml(e.message))}</span>` +
+                    `<div class="log-main">` +
+                    `<div class="log-msg">${linkifyMsg(escapeHtml(e.message))}</div>` +
+                    (badges ? `<div class="log-meta">${badges}</div>` : '') +
+                    `</div>` +
                     `</div>`;
             }
             document.getElementById('log-container').innerHTML = html;
@@ -132,7 +197,40 @@
         }
 
         function escapeHtml(str) {
-            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+        function escapeAttr(str) {
+            return escapeHtml(str).replace(/"/g, '&quot;');
+        }
+        function shortId(id) {
+            if (!id) return '';
+            return String(id).length > 12 ? String(id).substring(0, 8) : String(id);
+        }
+        function badge(label, value, cls = '') {
+            if (value === undefined || value === null || value === '') return '';
+            return `<span class="badge ${cls}">${escapeHtml(label)}=${escapeHtml(value)}</span>`;
+        }
+        function renderBadges(e) {
+            const x = e.extra_data || {};
+            const bits = [];
+            bits.push(badge('action', shortId(x.action_id)));
+            bits.push(badge('entry', shortId(x.entry_id)));
+            bits.push(badge('model', x.model));
+            bits.push(badge('tool', x.tool));
+            bits.push(badge('call', x.call_type));
+            bits.push(badge('iter', x.iteration));
+            bits.push(badge('duration', x.duration_ms !== undefined ? `${x.duration_ms}ms` : null));
+            bits.push(badge('run', x.duration_sec !== undefined ? `${x.duration_sec}s` : null));
+            bits.push(badge('exit', x.exit_code, x.exit_code ? 'badge-error' : ''));
+            if (x.returned_chars !== undefined && x.result_chars !== undefined && x.returned_chars !== x.result_chars) {
+                bits.push(badge('chars', `${x.returned_chars}/${x.result_chars}`, 'badge-warn'));
+            } else {
+                bits.push(badge('chars', x.result_chars));
+            }
+            bits.push(badge('count', x.result_count));
+            if (x.truncated) bits.push('<span class="badge badge-warn">truncated</span>');
+            if (x.is_error || x.ok === false) bits.push('<span class="badge badge-error">call-error</span>');
+            return bits.filter(Boolean).join('');
         }
         const _linkRoutes = {
             tracking: id => `/tjai/agent-log?ref=${id}&name=${id.substring(0,8)}`,
@@ -150,6 +248,8 @@
         const _fetchLogOrig = fetchLog;
         fetchLog = async function() { await _fetchLogOrig(); lastRefresh = Date.now(); };
         document.getElementById('level-filter').addEventListener('change', fetchLog);
+        document.getElementById('source-filter').addEventListener('change', () => renderLog(lastEntries));
+        document.getElementById('text-filter').addEventListener('input', () => renderLog(lastEntries));
         document.getElementById('limit-select').addEventListener('change', fetchLog);
         fetchLog();
         setInterval(fetchLog, 60000);

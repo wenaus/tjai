@@ -2560,6 +2560,7 @@ def agent_log(request):
 def agent_log_data(request):
     """Return agent log entries as JSON."""
     import logging as _logging
+    import re as _re
     limit = int(request.GET.get('limit', 200))
     min_level = request.GET.get('level', '').upper()
     level_map = {'DEBUG': _logging.DEBUG, 'INFO': _logging.INFO,
@@ -2581,14 +2582,28 @@ def agent_log_data(request):
     qs = qs[:limit]
 
     tz = get_app_tz()
+
+    def clean_message(message):
+        # Older DbLogHandler rows stored formatter output in message, e.g.
+        # "2026-04-26 15:48:05 INFO actual message".  The API already returns
+        # AppLog.timestamp/level/source separately, so strip that duplicate.
+        return _re.sub(
+            r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} '
+            r'(DEBUG|INFO|WARNING|ERROR|CRITICAL)\s+',
+            '',
+            message or '',
+            count=1,
+        )
+
     entries = [{
         'timestamp': log.timestamp.astimezone(tz).strftime('%Y-%m-%d %H:%M:%S'),
         'level': log.levelname,
-        'message': log.message,
+        'message': clean_message(log.message),
         'source': log.source,
+        'extra_data': log.extra_data or {},
     } for log in qs]
 
-    return JsonResponse({'entries': entries})
+    return JsonResponse({'entries': entries, 'timezone': str(tz)})
 
 
 def _lookup_entry(entry_id, request=None):

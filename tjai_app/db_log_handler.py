@@ -33,7 +33,7 @@ class DbLogHandler(logging.Handler):
                 timestamp=timezone.now(),
                 level=record.levelno,
                 levelname=record.levelname,
-                message=self.format(record),
+                message=record.getMessage(),
                 extra_data=extra_data or None,
             )
         except Exception as e:
