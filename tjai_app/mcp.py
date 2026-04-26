@@ -320,7 +320,7 @@ async def get_dialog(
     max_content_length: int = 200,
 ) -> list:
     """
-    Get Claude Code dialog turns for a host and time range.
+    Get AI assistant dialog turns for a host and time range.
 
     Retrieves recorded human-AI dialog turns ordered chronologically.
     Use this to review prior session dialog for continuity or assessment.
@@ -338,7 +338,7 @@ async def get_dialog(
 
     Returns:
         List of dialog turns ordered chronologically, each containing:
-        timestamp, role (user/assistant), hostname, content.
+        timestamp, role (user/assistant), client, model, hostname, content.
     """
     return await sync_to_async(services.get_dialog)(
         host=host, start_date=start_date, end_date=end_date,

@@ -70,6 +70,8 @@ def fetch_dialog(date_str):
         turns.append({
             'timestamp': ts,
             'role': data.get('role', 'unknown'),
+            'client': data.get('client', ''),
+            'model': data.get('model', ''),
             'hostname': data.get('hostname', ''),
             'content': e.content,
         })
@@ -118,7 +120,11 @@ def build_prompt(date_str, dialog_turns):
     for turn in dialog_turns:
         role = turn['role'].upper()
         host = f" [{turn['hostname']}]" if turn['hostname'] else ''
-        dialog_lines.append(f"### {turn['timestamp']} {role}{host}\n{turn['content']}")
+        model = ''
+        if turn.get('client') or turn.get('model'):
+            model_parts = [p for p in (turn.get('client'), turn.get('model')) if p]
+            model = f" ({' / '.join(model_parts)})"
+        dialog_lines.append(f"### {turn['timestamp']} {role}{host}{model}\n{turn['content']}")
     dialog_text = '\n\n'.join(dialog_lines)
 
     full_prompt = f"""{prompt}

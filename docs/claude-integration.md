@@ -1,4 +1,4 @@
-# Claude Integration
+# AI Assistant Integration
 
 ## MCP Server
 
@@ -115,7 +115,8 @@ The status line shows model, cost, context usage, session duration, and working 
 
 ## Cross-Session Dialog Memory
 
-Every Claude Code conversation is recorded into tjai so new sessions on any machine can load recent dialog context.
+Claude Code and Codex conversations are recorded into tjai so new sessions on
+any machine can load recent dialog context.
 
 ### How It Works
 
@@ -124,15 +125,20 @@ Every Claude Code conversation is recorded into tjai so new sessions on any mach
   → HTTP GET /api/dialog → fetches recent dialog turns
   → Prints SYSPROMPT.md + formatted dialog → injected into Claude context
 
-[User submits prompt] → UserPromptSubmit hook → record.py (async)
+[User submits prompt] → UserPromptSubmit hook → record.py / codex_record.py
   → HTTP POST /api/dialog → creates tjai entry with role='user'
 
-[Claude finishes] → Stop hook → record.py (async)
+[Assistant finishes] → Stop hook → record.py / codex_record.py
   → Extracts last assistant text from JSONL transcript
   → HTTP POST /api/dialog → creates tjai entry with role='assistant'
 ```
 
-Dialog entries: `kind='memory'`, `context='claude-code'`, `tag='ccdialog'`, `is_dirty=0` (server-only). Uses `Entry.objects.create()` directly (bypasses 60s dedup).
+Dialog entries: `kind='memory'`, `context='claude-code'`, `tag='ccdialog'`,
+`is_dirty=0` (server-only). Uses `Entry.objects.create()` directly (bypasses
+60s dedup). Metadata in `Entry.data` includes `role`, `client`, `model`,
+`model_provider`, `reasoning_effort`, `session_id`, `project_path`, and
+`hostname` when the recording hook can determine them. Older entries may lack
+the model fields.
 
 ### Hook Scripts
 
@@ -141,6 +147,11 @@ Located in `computers/common/claude-hooks/`:
   session-start bootstrap directive (see below), and dialog history.
 - `record.py` — UserPromptSubmit + Stop (async). Records prompts and responses.
 - `SYSPROMPT.md` — Static context injected at session start.
+
+Codex equivalents live in `computers/common/codex-hooks/`:
+- `codex_load.py` — SessionStart context and recent dialog injection.
+- `codex_record.py` — UserPromptSubmit + Stop dialog recording.
+- `codex_sysprompt.md` — Static Codex context injected at session start.
 
 ### Session-Start Bootstrap Directive
 
@@ -253,4 +264,3 @@ ln -s ~/github/tjrepo/computers/laptop/config-files/.env ~/.env
 - Hook issues blocking startup → `export TJAI_DIALOG_TURNS=0` bypasses all network activity
 
 All errors print to stderr (`claude --verbose`). Hooks always exit 0. HTTP calls have 5s timeout. Assistant responses truncated at 4000 chars on record, 2000 on display.
-

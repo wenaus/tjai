@@ -3899,7 +3899,7 @@ def api_dialog_daily_counts(request):
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
 def api_dialog(request):
-    """Record and retrieve Claude Code dialog turns.
+    """Record and retrieve AI assistant dialog turns.
 
     GET: Return recent dialog entries (query param: turns, default 20).
     POST: Record a dialog turn.
@@ -3940,6 +3940,10 @@ def api_dialog(request):
                 "id": e.id,
                 "content": e.content[:2000] + (f"\n[truncated — full entry: {e.id}]" if len(e.content) > 2000 else ""),
                 "role": data.get("role", "unknown"),
+                "client": data.get("client"),
+                "model": data.get("model"),
+                "model_provider": data.get("model_provider"),
+                "reasoning_effort": data.get("reasoning_effort"),
                 "session_id": data.get("session_id"),
                 "project_path": data.get("project_path"),
                 "hostname": data.get("hostname"),
@@ -3964,6 +3968,10 @@ def api_dialog(request):
     now = time.time()
     entry_data = {
         "role": role,
+        "client": data.get("client"),
+        "model": data.get("model"),
+        "model_provider": data.get("model_provider"),
+        "reasoning_effort": data.get("reasoning_effort"),
         "session_id": data.get("session_id"),
         "project_path": data.get("project_path"),
         "hostname": data.get("hostname"),

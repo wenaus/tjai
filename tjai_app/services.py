@@ -682,6 +682,10 @@ def get_dialog(host, start_date=None, end_date=None, max_content_length=200):
         turns.append({
             'timestamp': datetime.fromtimestamp(e.timestamp_created, tz=tz).isoformat(),
             'role': data.get('role', 'unknown'),
+            'client': data.get('client', ''),
+            'model': data.get('model', ''),
+            'model_provider': data.get('model_provider', ''),
+            'reasoning_effort': data.get('reasoning_effort', ''),
             'hostname': data.get('hostname', ''),
             'content': content,
         })
