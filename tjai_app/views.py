@@ -3354,6 +3354,8 @@ def relate_to_view(request, entry_uuid):
     from collections import Counter
     kind_counter = Counter(e.kind for e in entries if e.kind)
     kinds = sorted(kind_counter.items(), key=lambda x: x[0].lower())
+    # Named-entry options for relate picker — sorted case-insensitively.
+    names = sorted({e.name for e in entries if e.name}, key=str.lower)
 
     relation_types = list(
         Relation.objects.values_list('relation_type', flat=True)
@@ -3371,6 +3373,7 @@ def relate_to_view(request, entry_uuid):
         'tags': tags,
         'contexts': contexts,
         'kinds': kinds,
+        'names': names,
         'relate_to': str(entry_uuid),
         'relate_to_name': source_name,
         'relation_types': relation_types,

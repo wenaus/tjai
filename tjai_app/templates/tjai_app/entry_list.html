@@ -199,8 +199,14 @@
         {% for name, count in kinds %}<span class="kind-chip" data-kind="{{ name }}">{{ name }} <span class="count">{{ count }}</span></span> {% endfor %}<button class="clear-btn" id="clearKindBtn">clear</button>
     </div>
     {% endif %}
+    {% if names %}
+    <div class="tag-bar" id="name-bar">
+        <span style="color:#c0d8f0;margin-right:4px;">named:</span>
+        {% for n in names %}<span class="name-chip" data-name="{{ n }}" style="cursor:pointer;color:#c0d8f0;font-weight:bold;margin-right:6px;">@{{ n }}</span>{% endfor %}
+    </div>
+    {% endif %}
     {% for e in entries %}
-    <div class="entry" data-tags="{{ e.all_tags_csv }}" data-ctx="{{ e.context_id|default:'(none)' }}" data-kind="{{ e.kind }}" {% if relate_to %}data-entry-uuid="{{ e.id }}"{% endif %}>
+    <div class="entry" data-tags="{{ e.all_tags_csv }}" data-ctx="{{ e.context_id|default:'(none)' }}" data-kind="{{ e.kind }}" data-name="{{ e.name|default:'' }}" {% if relate_to %}data-entry-uuid="{{ e.id }}"{% endif %}>
         {% if relate_to %}<input type="checkbox" class="relate-check" data-uuid="{{ e.id }}">{% endif %}
         <a href="{% url 'entry_detail' e.detail_slug %}" {% if relate_to %}target="_blank"{% endif %}>
             <span class="entry-num">===</span>
@@ -293,8 +299,15 @@
                 }
                 var searchMatch = true;
                 if (searchQuery) {
-                    var text = (el.textContent || '').toLowerCase();
-                    searchMatch = text.indexOf(searchQuery) >= 0;
+                    if (searchQuery.charAt(0) === '@') {
+                        // @name filter — match against entry's data-name (case-insensitive substring).
+                        var needle = searchQuery.slice(1);
+                        var entryName = (el.dataset.name || '').toLowerCase();
+                        searchMatch = needle === '' ? entryName !== '' : entryName.indexOf(needle) >= 0;
+                    } else {
+                        var text = (el.textContent || '').toLowerCase();
+                        searchMatch = text.indexOf(searchQuery) >= 0;
+                    }
                 }
                 var visible = ctxMatch && kindMatch && tagMatch && searchMatch;
                 el.style.display = visible ? '' : 'none';
@@ -427,7 +440,36 @@
             if (e.key === 'Escape') clearSearch();
             if (e.key === 'Enter') doTitleSearch();
         });
+        // Live client-side filter — fires on every keystroke. Recognizes a
+        // leading "@" as a name-filter (matches data-name on each entry).
+        searchInput.addEventListener('input', function() {
+            var q = searchInput.value.trim().toLowerCase();
+            searchQuery = q;
+            searchClear.style.display = q ? 'inline' : 'none';
+            applyFilter();
+        });
         searchClear.addEventListener('click', function() { clearSearch(); searchInput.focus(); });
+
+        // Named-entry chips — clicking one filters the list to that @name AND,
+        // in relate mode, toggles the matching entry's relate-check so Save
+        // sees a target. The chip reads as a "select-this-as-target" affordance,
+        // not just a search shortcut.
+        document.querySelectorAll('.name-chip[data-name]').forEach(chip => {
+            chip.addEventListener('click', function() {
+                var nm = chip.dataset.name;
+                searchInput.value = '@' + nm;
+                searchInput.dispatchEvent(new Event('input'));
+                if (relateToId) {
+                    var sel = '.entry[data-name="' + nm.replace(/"/g, '\\"') + '"] .relate-check';
+                    document.querySelectorAll(sel).forEach(cb => {
+                        cb.checked = !cb.checked;
+                        cb.dispatchEvent(new Event('change', {bubbles: true}));
+                        chip.classList.toggle('active', cb.checked);
+                    });
+                }
+                searchInput.focus();
+            });
+        });
 
         // Linkify content
         document.querySelectorAll('.content[data-content]').forEach(el => {
