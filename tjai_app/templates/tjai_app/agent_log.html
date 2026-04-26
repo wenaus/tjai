@@ -55,16 +55,16 @@
         }
         .log-line {
             display: grid;
-            grid-template-columns: 136px 58px 150px minmax(0, 1fr);
-            gap: 8px;
+            grid-template-columns: 138px 54px 138px minmax(0, 1fr);
+            gap: 6px;
             align-items: start;
             padding: 3px 0;
             line-height: 1.5;
             border-bottom: 1px solid #252525;
         }
         .log-main { min-width: 0; }
-        .log-ts { color: #8a8a8a; }
-        .log-src { color: #ce93d8; }
+        .log-ts { color: #8a8a8a; font-size: 12px; white-space: nowrap; }
+        .log-src { color: #ce93d8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .log-msg { color: #e0e0e0; white-space: pre-wrap; overflow-wrap: anywhere; }
         .log-meta { margin-top: 2px; display: flex; flex-wrap: wrap; gap: 4px; }
         .badge {
