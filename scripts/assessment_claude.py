@@ -9,7 +9,6 @@ parses structured JSON + markdown output, writes the assessment entry.
 
 If no date argument, defaults to today.
 """
-import json
 import os
 import re
 import shutil
@@ -18,7 +17,6 @@ import sys
 import time
 import traceback
 import uuid as uuid_mod
-from pathlib import Path
 
 import bootstrap  # noqa: F401 - Django setup
 
@@ -58,67 +56,6 @@ def _find_claude():
     raise RuntimeError("'claude' CLI not found in PATH or ~/.local/bin")
 
 
-def _nohook_home():
-    """Build (or refresh) a scratch HOME that mirrors the real one but with
-    all Claude Code hooks disabled. Returns the scratch HOME path.
-
-    Needed because ~/.claude/settings.json wires a stop-phrase-guard Stop hook
-    that grep-matches phrases like "pre-existing" in model context. The
-    assessment prompt injects 1000+ dialog turns containing exactly such
-    phrases (from the dialog being scored, not from the scoring model's own
-    output), so the hook fires, Claude replies to the hook feedback instead
-    of the scoring task, the ```json``` block never appears, and
-    assessment_gemini.parse_response raises. Saw this cold on both the
-    original 01:00 ET run and the manual 10:24 ET rerun on 2026-04-22.
-
-    Claude Code offers no documented way to disable hooks per-invocation
-    (verified via claude-code-guide agent, 2026-04-22). Its only lever is
-    the settings.json key `"disableAllHooks": true`, read from
-    `$HOME/.claude/settings.json`. So we HOME-redirect: mirror ~/.claude/
-    via symlinks, drop a settings.json with disableAllHooks=true and no
-    hooks block, and symlink ~/.claude.json (which Claude Code also needs).
-    Fresh rebuild each call so any user-side settings.json changes flow
-    through automatically (we read the real one and splice).
-    """
-    scratch = Path('/var/www/tjai/data/claude-nohook-home')
-    scratch_claude = scratch / '.claude'
-    real_claude = Path.home() / '.claude'
-    real_claude_json = Path.home() / '.claude.json'
-
-    # Clear old symlinks + our written settings.json, then rebuild.
-    if scratch_claude.exists():
-        for item in scratch_claude.iterdir():
-            if item.is_symlink():
-                item.unlink()
-            elif item.name == 'settings.json' and item.is_file():
-                item.unlink()
-    scratch_claude.mkdir(parents=True, exist_ok=True)
-
-    # Symlink every entry in real ~/.claude/ except settings.json
-    for item in real_claude.iterdir():
-        if item.name == 'settings.json':
-            continue
-        (scratch_claude / item.name).symlink_to(item)
-
-    # Symlink ~/.claude.json at HOME root — Claude looks for it there too
-    cjson_link = scratch / '.claude.json'
-    if cjson_link.is_symlink():
-        cjson_link.unlink()
-    elif cjson_link.exists():
-        cjson_link.unlink()
-    cjson_link.symlink_to(real_claude_json)
-
-    # Write the override settings.json: real config minus hooks, plus disable flag
-    with open(real_claude / 'settings.json') as f:
-        settings = json.load(f)
-    settings['disableAllHooks'] = True
-    settings.pop('hooks', None)
-    with open(scratch_claude / 'settings.json', 'w') as f:
-        json.dump(settings, f, indent=2)
-
-    return str(scratch)
-
-
 def call_claude(prompt):
     """Call Claude via `claude -p` (subscription auth, no API cost).
 
@@ -138,7 +75,6 @@ def call_claude(prompt):
     env.pop('CLAUDECODE', None)
     env.pop('ANTHROPIC_API_KEY', None)  # Force subscription auth
     env['TJAI_ACTION_ID'] = 'llm-assessment'  # Prevent dialog recording
-    env['HOME'] = _nohook_home()  # disableAllHooks=true settings override
 
     logger.info("Calling claude -p (opus, subscription, %d char prompt via stdin)...", len(prompt))
     try:
