@@ -53,6 +53,33 @@ function linkifyContent(content) {
     return content;
 }
 
+function entryRefUrl(ref) {
+    var uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidRe.test(ref)) return '/tjai/entry/?uuid=' + encodeURIComponent(ref);
+    return '/tjai/entry/?entry_id=' + encodeURIComponent(ref);
+}
+
+/**
+ * Linkify explicit entry references in already-escaped log/API text.
+ * Handles UUIDs and values following keys such as entry_id=, entry=, uuid=,
+ * plus JSON-style "entry_id": "value" after HTML escaping.
+ */
+function linkifyEntryReferences(content) {
+    var L = 'style="color:#90caf9"';
+    var uuidRe = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/ig;
+    var keyedRe = /((?:entry_id|entry|uuid|current_entry|source_entry_id|result_entry_id)(?:&quot;)?\s*[:=]\s*(?:&quot;)?)([A-Za-z0-9][A-Za-z0-9_.:-]{2,})(?=(&quot;|[\s,)}\]]|$))/g;
+    return content.split(/(<[^>]+>)/g).map(function(part) {
+        if (part.startsWith('<')) return part;
+        part = part.replace(uuidRe, function(ref) {
+            return '<a href="' + entryRefUrl(ref) + '" ' + L + '>' + ref + '</a>';
+        });
+        return part.replace(keyedRe, function(m, prefix, ref, suffix) {
+            if (/^https?:/i.test(ref)) return m;
+            return prefix + '<a href="' + entryRefUrl(ref) + '" ' + L + '>' + ref + '</a>';
+        });
+    }).join('');
+}
+
 /**
  * Format a duration in seconds as human-readable string.
  * @param {number} sec - Duration in seconds

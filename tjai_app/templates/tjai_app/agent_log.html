@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Agent Log - tjai</title>
     <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
+    <script src="/tjai/static/tjai/tjai-utils.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -208,7 +209,7 @@
         }
         function badge(label, value, cls = '') {
             if (value === undefined || value === null || value === '') return '';
-            return `<span class="badge ${cls}">${escapeHtml(label)}=${escapeHtml(value)}</span>`;
+            return `<span class="badge ${cls}">${escapeHtml(label)}=${linkifyEntryReferences(escapeHtml(value))}</span>`;
         }
         function renderBadges(e) {
             const x = e.extra_data || {};
@@ -237,11 +238,11 @@
             entry: id => `/tjai/entry/${id}/`,
         };
         function linkifyMsg(str) {
-            return str.replace(/\[\[(\w+):([^\]]+)\]\]/g, (m, type, id) => {
+            return linkifyEntryReferences(linkifyContent(str).replace(/\[\[(\w+):([^\]]+)\]\]/g, (m, type, id) => {
                 const route = _linkRoutes[type];
                 if (!route) return m;
                 return `<a href="${route(id)}" style="color:#90caf9">${id.substring(0,8)}</a>`;
-            });
+            }));
         }
 
         let lastRefresh = 0;
