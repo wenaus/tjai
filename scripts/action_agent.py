@@ -189,84 +189,13 @@ def _check_kill_request():
 
 
 HEALTH_CHECK_INTERVAL = 30  # seconds between agent health checks
-MULTIMODEL_WATCHDOG_INTERVAL = 300  # 5 min between stale multimodel checks
-MULTIMODEL_STALE_THRESHOLD = 900  # 15 min (API_TIMEOUT=600 + 5min margin)
+MULTIMODEL_WATCHDOG_INTERVAL = 30  # seconds between local API subprocess checks
 
 
 def _check_multimodel_stale():
-    """Detect Gemini/ChatGPT subprocesses that crashed without updating entries.
-
-    These subprocesses have no agent_complete.py — if they crash before writing
-    status, the model entry stays 'active' forever.  Check stored PIDs; if the
-    process is dead and the entry is still active beyond the timeout threshold,
-    mark it blocked.
-    """
-    from tjai_app.models import SysConfig, Entry
-
-    now = time.time()
-    for sc in SysConfig.objects.filter(key__startswith='research_', key__endswith='_pid'):
-        if not sc.value:
-            continue
-        pid_str = sc.value
-        # Key format: research_{base_entry_id}_{model}_pid
-        parts = sc.key.rsplit('_', 2)  # ['research_{base}', '{model}', 'pid']
-        if len(parts) < 3:
-            continue
-        model = parts[-2]
-        if model not in ('gemini', 'chatgpt'):
-            continue
-
-        # Check if process is alive
-        try:
-            pid = int(pid_str)
-            os.kill(pid, 0)  # signal 0 = existence check
-            continue  # still alive, nothing to do
-        except (ValueError, ProcessLookupError):
-            pass  # dead or invalid — check the entry
-        except PermissionError:
-            continue  # alive but owned by different user
-
-        # Process is dead — check if we've waited long enough since PID was stored
-        age = now - sc.timestamp_modified
-        if age < MULTIMODEL_STALE_THRESHOLD:
-            continue  # might have just finished normally, give it time
-
-        # Find the model entry via the base_entry_id encoded in the key
-        base_entry_id = sc.key[len('research_'):-(len(model) + 5)]  # strip research_ prefix and _{model}_pid suffix
-        model_entry_id = f'{base_entry_id}-{model}'
-        entry = Entry.objects.filter(
-            data__entry_id=model_entry_id, deleted_at__isnull=True,
-            status='active',
-        ).first()
-        if not entry:
-            # Entry already done/blocked, just clear stale PID
-            sc.value = ''
-            sc.timestamp_modified = now
-            sc.save(update_fields=['value', 'timestamp_modified'])
-            continue
-
-        # Process dead + entry still active = crashed subprocess
-        logger.warning("%s: process PID %s dead, entry still active after %.0fs — marking failed",
-                       model_entry_id, pid_str, age)
-        entry.status = 'failed'
-        entry_data = entry.data if isinstance(entry.data, dict) else {}
-        entry_data['run_error'] = f'Process PID {pid_str} died without completing'
-        entry.data = entry_data
-        entry.save(update_fields=['status', 'data'])
-
-        # Mark the model failed on base and run the terminal-check + synthesis
-        # trigger (failed counts as done for synthesis purposes).
-        if base_entry_id:
-            try:
-                from tjai_app.action_runner import research_model_complete
-                research_model_complete(entry, terminal_status='failed')
-            except Exception as e:
-                logger.error("research_model_complete(failed) failed: %s", e)
-
-        # Clear the stale PID
-        sc.value = ''
-        sc.timestamp_modified = now
-        sc.save(update_fields=['value', 'timestamp_modified'])
+    """Repair stale local API-model subprocess states."""
+    from tjai_app.action_runner import heal_research_subprocess_state
+    heal_research_subprocess_state()
 
 
 ENTRY_FLOOD_INTERVAL = 300  # check every 5 min

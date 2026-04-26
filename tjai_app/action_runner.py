@@ -34,6 +34,8 @@ TJ_PY = TJAI_DIR / 'tj.py'
 
 # Day-of-week strings for scheduled_dow gating in get_next_scheduled_time
 DOW_MAP = {'mon': 0, 'tue': 1, 'wed': 2, 'thu': 3, 'fri': 4, 'sat': 5, 'sun': 6}
+MODEL_TERMINAL_STATUSES = ('done', 'failed', 'blocked')
+LOCAL_API_LAUNCH_GRACE_SECONDS = 60
 
 # Thread-local for auto-tagging log lines with the current action's entry_id
 _log_context = threading.local()
@@ -537,6 +539,120 @@ exactly as specified in the Output Format section above."""
     return full_prompt
 
 
+def _local_api_research_models():
+    """Models launched as local research_multimodel.py subprocesses."""
+    return [m for m in RESEARCH_MODELS
+            if m != 'claude' and m not in REMOTE_WORKER_MODELS]
+
+
+def _research_pid_key(base_entry_id, model):
+    return f'research_{base_entry_id}_{model}_pid'
+
+
+def _pid_is_alive(pid_str):
+    try:
+        os.kill(int(pid_str), 0)
+        return True
+    except (TypeError, ValueError, ProcessLookupError):
+        return False
+    except PermissionError:
+        return True
+
+
+def _mark_research_model_failed(entry, message, trigger_completion=True):
+    """Mark one model sub-entry failed and run the terminal/synthesis check."""
+    now = time.time()
+    entry.status = 'failed'
+    entry_data = entry.data if isinstance(entry.data, dict) else {}
+    entry_data['run_error'] = message
+    entry.data = entry_data
+    entry.timestamp_modified = now
+    entry.save(update_fields=['status', 'data', 'timestamp_modified'])
+    if trigger_completion:
+        research_model_complete(entry, terminal_status='failed')
+
+
+def heal_research_subprocess_state():
+    """Repair impossible local API-model states before they reach the UI.
+
+    A local API model is genuinely in progress only if it has a live stored
+    PID.  States such as `launching`/`active` without a PID, or with a dead
+    PID after a short grace window, are launch/runtime failures and must be
+    reflected as failed in both the sub-entry and base model status.
+    """
+    now = time.time()
+    local_models = set(_local_api_research_models())
+
+    for sc in SysConfig.objects.filter(key__startswith='research_', key__endswith='_pid'):
+        if not sc.value:
+            continue
+        parts = sc.key.rsplit('_', 2)
+        if len(parts) < 3:
+            continue
+        model = parts[-2]
+        if model not in local_models:
+            continue
+        if _pid_is_alive(sc.value):
+            continue
+        age = now - sc.timestamp_modified
+        if age < LOCAL_API_LAUNCH_GRACE_SECONDS:
+            continue
+
+        base_entry_id = sc.key[len('research_'):-(len(model) + 5)]
+        model_entry_id = f'{base_entry_id}-{model}'
+        entry = Entry.objects.filter(
+            data__entry_id=model_entry_id,
+            deleted_at__isnull=True,
+        ).first()
+        if entry and entry.status not in MODEL_TERMINAL_STATUSES:
+            logger.warning(
+                "%s: process PID %s is gone after %.0fs; marking failed",
+                model_entry_id, sc.value, age,
+            )
+            _mark_research_model_failed(
+                entry,
+                f'Process PID {sc.value} died without completing',
+            )
+        sc.value = ''
+        sc.timestamp_modified = now
+        sc.save(update_fields=['value', 'timestamp_modified'])
+
+    active_entries = Entry.objects.filter(
+        data__source='multimodel',
+        data__model__in=list(local_models),
+        status__in=['launching', 'active'],
+        deleted_at__isnull=True,
+    )
+    for entry in active_entries:
+        data = entry.data if isinstance(entry.data, dict) else {}
+        model = data.get('model')
+        base_entry_id = data.get('base_entry_id')
+        if not model or not base_entry_id:
+            continue
+        pid_row = SysConfig.objects.filter(
+            key=_research_pid_key(base_entry_id, model),
+        ).first()
+        if pid_row and pid_row.value:
+            if _pid_is_alive(pid_row.value):
+                continue
+            age = now - pid_row.timestamp_modified
+            if age < LOCAL_API_LAUNCH_GRACE_SECONDS:
+                continue
+        else:
+            age = now - entry.timestamp_modified
+            if age < LOCAL_API_LAUNCH_GRACE_SECONDS:
+                continue
+
+        logger.warning(
+            "%s: %s without live PID after %.0fs; marking failed",
+            data.get('entry_id') or entry.id, entry.status, age,
+        )
+        _mark_research_model_failed(
+            entry,
+            'Local API subprocess is not running and has no live PID',
+        )
+
+
 def research_model_complete(model_entry, terminal_status='done'):
     """Called when any research model finishes (claude/gemini/chatgpt/gemma).
 
@@ -748,6 +864,10 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
         for suffix in ('entry_id', 'status', 'started_at'):
             key = f'{model}_{suffix}'
             if key in base_data:
+                if (suffix == 'status'
+                        and fresh.get(key) in MODEL_TERMINAL_STATUSES
+                        and base_data[key] not in MODEL_TERMINAL_STATUSES):
+                    continue
                 fresh[key] = base_data[key]
         base_entry.data = fresh
         base_entry.save(update_fields=['data'])
@@ -765,6 +885,7 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
         return
 
     # Create entries and dispatch — uniform loop, all models
+    launch_failures = []
     for model in models_to_run:
         # Capture rerun state BEFORE we overwrite {model}_status below —
         # UI-initiated reruns skip the flex tier on gemini (user is waiting).
@@ -775,7 +896,7 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
         ).first()
         if existing:
             entry = existing
-            entry.status = 'active'
+            entry.status = 'launching'
             entry.save(update_fields=['status'])
         else:
             entry = Entry.objects.create(
@@ -783,7 +904,7 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
                 content=topic_text,
                 kind='memory',
                 context=base_entry.context,
-                status='active',
+                status='launching',
                 timestamp_created=now_ts,
                 timestamp_modified=now_ts,
                 is_dirty=1,
@@ -798,23 +919,35 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
             Tag.objects.create(tag_name='research_topic', entry=entry)
 
         base_data[f'{model}_entry_id'] = model_entry_id
-        # Default 'active' — overridden below for remote workers (gemma → staged)
-        base_data[f'{model}_status'] = 'active'
+        base_data[f'{model}_status'] = 'launching'
         base_data[f'{model}_started_at'] = now_ts
+        _save_base_model_state(model)
 
         # Dispatch — mechanism differs per model, control flow is uniform
         if model == 'claude':
-            _save_base_model_state(model)
-            data['next_target_entry_id'] = str(entry.id)
-            next_target = data.get('next_target', '')
-            if next_target:
-                data['next_target'] = next_target.replace(
-                    f'Entry UUID: {base_uuid}',
-                    f'Entry UUID: {entry.id}',
-                )
-            action.data = data
-            action.save(update_fields=['data'])
-            dispatch_ai(action, target_date=None)
+            try:
+                data['next_target_entry_id'] = str(entry.id)
+                next_target = data.get('next_target', '')
+                if next_target:
+                    data['next_target'] = next_target.replace(
+                        f'Entry UUID: {base_uuid}',
+                        f'Entry UUID: {entry.id}',
+                    )
+                action.data = data
+                action.save(update_fields=['data'])
+                dispatch_ai(action, target_date=None)
+                entry.status = 'active'
+                entry.save(update_fields=['status'])
+                base_data[f'{model}_status'] = 'active'
+                _save_base_model_state(model)
+            except Exception as e:
+                logger.error("Failed to launch %s for %s: %s",
+                             model, model_entry_id, e)
+                _mark_research_model_failed(
+                    entry, f'Launch failed: {e}', trigger_completion=False)
+                base_data[f'{model}_status'] = 'failed'
+                _save_base_model_state(model)
+                launch_failures.append(entry)
         elif model in REMOTE_WORKER_MODELS:
             # Remote worker: stage prompt on entry and mark as claimable.
             # tj_agent on the Mac polls /api/worker/poll, grabs this, runs
@@ -831,7 +964,8 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
                 edata.pop('worker_claimed_by', None)
                 edata.pop('worker_claimed_at', None)
                 entry.data = edata
-                entry.save(update_fields=['data'])
+                entry.status = 'active'
+                entry.save(update_fields=['data', 'status'])
                 base_data[f'{model}_status'] = 'staged'
                 _save_base_model_state(model)
                 logger.info("Staged %s work for %s (target=%s, prompt %d chars)",
@@ -839,10 +973,12 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
             except Exception as e:
                 logger.error("Failed to stage %s work for %s: %s",
                              model, model_entry_id, e)
+                _mark_research_model_failed(
+                    entry, f'Stage failed: {e}', trigger_completion=False)
                 base_data[f'{model}_status'] = 'failed'
                 _save_base_model_state(model)
+                launch_failures.append(entry)
         else:
-            _save_base_model_state(model)
             cmd = [sys.executable, str(script_path), model, str(entry.id)]
             if model == 'gemini':
                 cmd.append('standard' if was_rerun else 'flex')
@@ -851,12 +987,22 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
                 tok = SysConfig.objects.filter(key='mcp_bearer_token').values_list('value', flat=True).first()
                 if tok:
                     env['TJAI_MCP_TOKEN'] = tok
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                env=env,
-                start_new_session=True,
-            )
+            try:
+                proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    env=env,
+                    start_new_session=True,
+                )
+            except Exception as e:
+                logger.error("Failed to launch %s for %s: %s",
+                             model, model_entry_id, e)
+                _mark_research_model_failed(
+                    entry, f'Launch failed: {e}', trigger_completion=False)
+                base_data[f'{model}_status'] = 'failed'
+                _save_base_model_state(model)
+                launch_failures.append(entry)
+                continue
             logger.info("Launched %s (PID %d, entry %s)",
                          model, proc.pid, model_entry_id)
             # Track PID for abort capability
@@ -864,6 +1010,15 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
                 key=f'research_{base_entry_id}_{model}_pid',
                 defaults={'value': str(proc.pid),
                           'timestamp_modified': now_ts})
+            entry.refresh_from_db(fields=['status'])
+            if entry.status not in MODEL_TERMINAL_STATUSES:
+                entry.status = 'active'
+                entry.save(update_fields=['status'])
+            base_data[f'{model}_status'] = 'active'
+            _save_base_model_state(model)
+
+    for failed_entry in launch_failures:
+        research_model_complete(failed_entry, terminal_status='failed')
 
     # True iff a local claude subprocess was launched — the only case where
     # agent_complete.py will later clear research-agent sysconfig status.

@@ -75,11 +75,13 @@
         .status-pending { background: #1a3a5c; color: #90caf9; }
         .status-active { background: rgba(255, 213, 79, 0.15); color: #ffd54f; }
         .status-running { background: rgba(255, 213, 79, 0.15); color: #ffd54f; }
+        .status-launching { background: rgba(255, 152, 0, 0.15); color: #ffb74d; }
         .status-staged { background: rgba(144, 202, 249, 0.15); color: #90caf9; }
         .status-done { background: #1a3c1a; color: #4caf50; }
         .status-blocked, .status-failed { background: rgba(239, 83, 80, 0.15); color: #ef5350; }
         .research-item.active { border-left-color: #ffd54f; }
         .research-item.running { border-left-color: #ffd54f; }
+        .research-item.launching { border-left-color: #ffb74d; }
         .research-item.staged { border-left-color: #90caf9; }
         .research-item.blocked, .research-item.failed { border-left-color: #ef5350; }
         .item-content {
@@ -406,6 +408,11 @@
                                 clr = '#ffd54f';
                             }
                         }
+                        else if (st === 'launching') {
+                            const ago = it[m + '_started_at_ago'];
+                            phrase = ago ? `${m} launching (${ago})` : `${m} launching`;
+                            clr = '#ffb74d';
+                        }
                         else if (st === 'active') {
                             const ago = it[m + '_started_at_ago'];
                             phrase = ago ? `${m} in-progress (${ago})` : `${m} in-progress`;
@@ -498,6 +505,7 @@
                     : isFailed ? 'failed'
                     : isRunning ? 'running'
                     : isUnclaimedRemote ? 'staged'
+                    : st === 'launching' ? 'launching'
                     : st === 'active' ? 'running'
                     : st === 'staged' ? 'staged'
                     : 'pending';

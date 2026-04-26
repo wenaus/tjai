@@ -4327,7 +4327,8 @@ def research_page(request):
 @login_required
 def api_research_data(request):
     """Return research queue entries and agent status as JSON."""
-    from .action_runner import RESEARCH_MODELS
+    from .action_runner import RESEARCH_MODELS, heal_research_subprocess_state
+    heal_research_subprocess_state()
     research_ids = Tag.objects.filter(
         tag_name='research_topic'
     ).values_list('entry_id', flat=True)
@@ -4670,9 +4671,16 @@ def api_research_data(request):
 
     # One-bit "is something legitimately progressing in the system" flag.
     # Zombie claims are NOT busy — they are leftovers from a dead worker.
+    local_model_busy = any(
+        item.get('source') != 'multimodel'
+        and any(item.get(f'{m}_status') in ('active', 'launching')
+                for m in RESEARCH_MODELS)
+        for item in items
+    )
     system_busy = (
         status_val == 'running'
         or any(w.get('state') == 'busy' for w in workers)
+        or local_model_busy
     )
 
     return JsonResponse({
