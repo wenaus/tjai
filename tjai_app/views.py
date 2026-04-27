@@ -1537,7 +1537,8 @@ def dashboard_status(request):
     filter_from_time = request.GET.get('from_time')  # ISO datetime e.g. 2026-03-04T03:30
     filter_to_time = request.GET.get('to_time')  # ISO datetime e.g. 2026-03-04T05:30
     expand_dialog = request.GET.get('expand_dialog') == '1'
-    exclude_contexts = [c for c in request.GET.get('exclude_context', '').split(',') if c]
+    user_exclude_contexts = [c for c in request.GET.get('exclude_context', '').split(',') if c]
+    exclude_contexts = list(user_exclude_contexts)
 
     # Exclude dialog contexts from the default dashboard view.
     if not filter_context and not dialog_view:
@@ -1694,9 +1695,21 @@ def dashboard_status(request):
             'all_tags': entry_tags,
         })
 
-    # Inject recent ERROR-level logs as pseudo-entries (first page only),
-    # sorted into proper time order with real entries
-    if offset == 0 and not dialog_view:
+    has_entry_filter = any([
+        filter_tag, filter_kind, filter_context, filter_client, filter_model,
+        filter_machine, filter_status, filter_date, filter_from_time,
+        filter_to_time, user_exclude_contexts, request.GET.get('public') == '1',
+        request.GET.get('with_relations') == '1',
+    ])
+    include_error_logs = (
+        offset == 0
+        and not dialog_view
+        and (not has_entry_filter or filter_kind == 'log')
+    )
+
+    # Inject recent ERROR-level logs as pseudo-entries on the default dashboard
+    # (or explicit kind=log view), sorted into proper time order with real entries.
+    if include_error_logs:
         from django.utils import timezone as _tz
         error_cutoff = _tz.now() - timedelta(hours=24)
         error_logs = AppLog.objects.filter(
