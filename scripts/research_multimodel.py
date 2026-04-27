@@ -86,6 +86,17 @@ def _deepseek_prompt(prompt):
     return f"{DEEPSEEK_WRAPPER_NOTE}\n\n{prompt}"
 
 
+def _load_research_topic(entry):
+    """Return the clean base research topic for a model-specific child entry."""
+    data = entry.data if isinstance(entry.data, dict) else {}
+    base_uuid = data.get('base_uuid')
+    if base_uuid:
+        base = Entry.objects.filter(id=base_uuid, deleted_at__isnull=True).first()
+        if base:
+            return base.content
+    return entry.content.split('\n\nERROR:', 1)[0].split('\n\n# RESEARCH', 1)[0]
+
+
 def _deepseek_tool_allowed(name):
     if name in DEEPSEEK_TOOL_DENY:
         return False
@@ -96,9 +107,20 @@ def _deepseek_tool_args(name, arguments):
     """Apply DeepSeek-only safety defaults for verbose tjai tools."""
     args = dict(arguments or {})
     if name == 'search_entries':
-        args.setdefault('limit', DEEPSEEK_SEARCH_DEFAULT_LIMIT)
+        try:
+            limit = int(args.get('limit', DEEPSEEK_SEARCH_DEFAULT_LIMIT))
+        except (TypeError, ValueError):
+            limit = DEEPSEEK_SEARCH_DEFAULT_LIMIT
+        args['limit'] = max(1, min(limit, DEEPSEEK_SEARCH_DEFAULT_LIMIT))
         args.setdefault('offset', 0)
-        args.setdefault('max_content_length', DEEPSEEK_SEARCH_DEFAULT_MAX_CONTENT)
+        try:
+            max_content = int(args.get(
+                'max_content_length', DEEPSEEK_SEARCH_DEFAULT_MAX_CONTENT))
+        except (TypeError, ValueError):
+            max_content = DEEPSEEK_SEARCH_DEFAULT_MAX_CONTENT
+        if max_content <= 0 or max_content > DEEPSEEK_SEARCH_DEFAULT_MAX_CONTENT:
+            max_content = DEEPSEEK_SEARCH_DEFAULT_MAX_CONTENT
+        args['max_content_length'] = max_content
     return args
 
 
@@ -289,6 +311,8 @@ class TjaiMcpClient:
             return "MCP session is not initialized", True
         try:
             result = await self._session.call_tool(name, arguments=arguments or {})
+        except asyncio.CancelledError as e:
+            return f"tool {name!r} call cancelled: {type(e).__name__}: {e}", True
         except Exception as e:
             return f"tool {name!r} call raised: {type(e).__name__}: {e}", True
 
@@ -310,19 +334,26 @@ class TjaiMcpClient:
 
 
 def _looks_like_unfired_tool_stub(text):
-    lowered = (text or '').strip().lower()
+    stripped = (text or '').strip()
+    lowered = stripped.lower()
     if not lowered:
         return True
-    markers = (
-        '<tjai_tool_use_control>',
-        '<function_result>',
-        '"type": "internal_monologue"',
-        '"tool": "mcp__',
-        '```json\n{\n  "tool":',
+    first_chunk = lowered[:2000]
+    if lowered.startswith(('<tjai_tool_use_control>', '<function_result>')):
+        return True
+    if lowered.startswith('```json') and '"tool":' in first_chunk:
+        return True
+    if lowered.startswith('{') and '"type": "internal_monologue"' in first_chunk:
+        return len(stripped) < 5000
+    if '"tool": "mcp__' in first_chunk and len(stripped) < 5000:
+        return True
+    control_phrases = (
         'proceeding with research',
         'stand by for the report',
     )
-    return any(marker in lowered for marker in markers)
+    if any(lowered.startswith(p) for p in control_phrases):
+        return len(stripped) < 5000
+    return False
 
 
 async def _call_deepseek(prompt, tier, entry_uuid=None):
@@ -525,7 +556,7 @@ def main():
         logger.error("Entry %s not found", entry_uuid, extra=ref_extra)
         sys.exit(1)
 
-    topic = entry.content
+    topic = _load_research_topic(entry)
     logger.info("Starting %s research: %s", model, topic[:100], extra=ref_extra)
 
     # Mark as active
@@ -564,9 +595,20 @@ def main():
         # Preserve topic as first line, add report below
         entry.content = f"{topic}\n\n{result}"
         entry.status = 'done'
-        entry.save(update_fields=['content', 'status'])
 
         duration_sec = round(time.time() - start_time)
+        entry_data = entry.data if isinstance(entry.data, dict) else {}
+        entry_data.update({
+            'run_status': 'completed',
+            'run_exit_code': 0,
+            'run_completed_at': time.time(),
+            'run_duration_seconds': duration_sec,
+            'content_lines': len(entry.content.splitlines()),
+        })
+        entry_data.pop('run_error', None)
+        entry.data = entry_data
+        entry.save(update_fields=['content', 'status', 'data'])
+
         ref_extra.update({'run_status': 'completed', 'exit_code': 0,
                           'duration_sec': duration_sec})
         logger.info("%s research complete: %d chars, %ds",
@@ -587,7 +629,17 @@ def main():
                                 model, extra=ref_extra)
         entry.content = f"{topic}\n\nERROR: {error_msg}"
         entry.status = 'failed'
-        entry.save(update_fields=['content', 'status'])
+        entry_data = entry.data if isinstance(entry.data, dict) else {}
+        entry_data.update({
+            'run_status': 'failed',
+            'run_exit_code': 1,
+            'run_error': str(e),
+            'run_completed_at': time.time(),
+            'run_duration_seconds': duration_sec,
+            'content_lines': len(entry.content.splitlines()),
+        })
+        entry.data = entry_data
+        entry.save(update_fields=['content', 'status', 'data'])
 
         # Mark the model failed on base and run the terminal-check + synthesis
         # trigger: failed counts as done for synthesis purposes, so a failure
