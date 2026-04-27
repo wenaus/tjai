@@ -1183,7 +1183,7 @@ def dashboard(request):
     """Render the dashboard HTML page."""
     return render(request, 'tjai_app/dashboard.html', {
         'is_archive': request.GET.get('status') == 'archive',
-        'is_dialog': request.GET.get('context') in DIALOG_CONTEXTS,
+        'is_dialog': request.GET.get('view') == 'dialog',
         'is_trash': request.GET.get('deleted') == '1',
         'current_dialog_context': CURRENT_DIALOG_CONTEXT,
         'dialog_contexts_json': json.dumps(list(DIALOG_CONTEXTS)),
@@ -1528,6 +1528,9 @@ def dashboard_status(request):
     filter_tag = request.GET.get('tag')
     filter_kind = request.GET.get('kind')
     filter_context = request.GET.get('context')
+    dialog_view = request.GET.get('view') == 'dialog'
+    filter_client = request.GET.get('client')
+    filter_model = request.GET.get('model')
     filter_machine = request.GET.get('machine')
     filter_status = request.GET.get('status')
     filter_date = request.GET.get('date')  # YYYY-MM-DD, filter entries to this day
@@ -1537,7 +1540,7 @@ def dashboard_status(request):
     exclude_contexts = [c for c in request.GET.get('exclude_context', '').split(',') if c]
 
     # Exclude dialog contexts from the default dashboard view.
-    if not filter_context:
+    if not filter_context and not dialog_view:
         for ctx in DIALOG_CONTEXTS:
             if ctx not in exclude_contexts:
                 exclude_contexts.append(ctx)
@@ -1554,7 +1557,10 @@ def dashboard_status(request):
 
     if filter_kind:
         base_qs = base_qs.filter(kind=filter_kind)
-    if filter_context:
+    if dialog_view:
+        dialog_ids = Tag.objects.filter(tag_name=DIALOG_TAG).values_list('entry_id', flat=True)
+        base_qs = base_qs.filter(id__in=dialog_ids)
+    elif filter_context:
         base_qs = base_qs.filter(context_id=filter_context)
     if exclude_contexts:
         base_qs = base_qs.exclude(context_id__in=exclude_contexts)
@@ -1569,6 +1575,10 @@ def dashboard_status(request):
                 base_qs = base_qs.filter(id__in=tagged_ids)
     if filter_machine:
         base_qs = base_qs.filter(data__hostname=filter_machine)
+    if filter_client:
+        base_qs = base_qs.filter(data__client=filter_client)
+    if filter_model:
+        base_qs = base_qs.filter(data__model=filter_model)
     if request.GET.get('public') == '1':
         base_qs = base_qs.filter(data__access='public').exclude(context_id__in=['poetry', 'recipe'])
     if request.GET.get('with_relations') == '1':
@@ -1576,13 +1586,13 @@ def dashboard_status(request):
 
     # Daily counts for dialog mode — single raw SQL query for speed
     daily_counts = None
-    if filter_context and offset == 0:
+    if (filter_context or dialog_view) and offset == 0:
         try:
             tz = get_app_tz()
             now_local = datetime.now(tz=tz)
             cutoff_ts = (now_local - timedelta(days=14)).timestamp()
             tz_name = str(tz)
-            count_contexts = list(DIALOG_CONTEXTS) if filter_context in DIALOG_CONTEXTS else [filter_context]
+            count_contexts = list(DIALOG_CONTEXTS) if dialog_view or filter_context in DIALOG_CONTEXTS else [filter_context]
             from django.db import connection
             with connection.cursor() as cursor:
                 cursor.execute("""
@@ -1596,7 +1606,7 @@ def dashboard_status(request):
                 """, [tz_name, count_contexts, cutoff_ts])
                 daily_counts = [{'date': row[0].isoformat(), 'count': row[1]} for row in cursor.fetchall()]
         except Exception:
-            logger.exception("daily_counts query failed for context=%s", filter_context)
+            logger.exception("daily_counts query failed for context=%s view_dialog=%s", filter_context, dialog_view)
 
     if filter_date:
         tz = get_app_tz()
@@ -1686,7 +1696,7 @@ def dashboard_status(request):
 
     # Inject recent ERROR-level logs as pseudo-entries (first page only),
     # sorted into proper time order with real entries
-    if offset == 0:
+    if offset == 0 and not dialog_view:
         from django.utils import timezone as _tz
         error_cutoff = _tz.now() - timedelta(hours=24)
         error_logs = AppLog.objects.filter(
@@ -1778,6 +1788,18 @@ def dashboard_status(request):
         context_id__in=DIALOG_CONTEXTS
     ).values('kind').annotate(cnt=Count('id')).values_list('kind', 'cnt'))
 
+    dialog_clients = []
+    dialog_models = []
+    if dialog_view:
+        dialog_ids = Tag.objects.filter(tag_name=DIALOG_TAG).values_list('entry_id', flat=True)
+        dialog_qs = Entry.objects.filter(
+            id__in=dialog_ids,
+            deleted_at__isnull=True,
+            context_id__in=DIALOG_CONTEXTS,
+        )
+        dialog_clients = sorted({v for v in dialog_qs.values_list('data__client', flat=True) if v})
+        dialog_models = sorted({v for v in dialog_qs.values_list('data__model', flat=True) if v})
+
     return JsonResponse({
         'timestamp': timestamp,
         'context': context,
@@ -1796,6 +1818,8 @@ def dashboard_status(request):
         'machines': machines,
         'oldest_sync': {'machine': oldest_machine, 'age_min': sync_age_min} if oldest_machine else None,
         'daily_counts': daily_counts,
+        'dialog_clients': dialog_clients,
+        'dialog_models': dialog_models,
     })
 
 
@@ -1832,13 +1856,19 @@ def dashboard_search(request):
         qs = qs.filter(kind=filter_kind)
 
     filter_context = request.GET.get('context', '').strip()
-    if filter_context:
+    dialog_view = request.GET.get('view') == 'dialog'
+    filter_client = request.GET.get('client')
+    filter_model = request.GET.get('model')
+    if dialog_view:
+        dialog_ids = Tag.objects.filter(tag_name=DIALOG_TAG).values_list('entry_id', flat=True)
+        qs = qs.filter(id__in=dialog_ids)
+    elif filter_context:
         qs = qs.filter(context_id=filter_context)
 
     exclude_contexts = [c for c in request.GET.get('exclude_context', '').split(',') if c]
     # Mirror dashboard_status: exclude dialog contexts from search
     # results unless the user explicitly filters to that context.
-    if not filter_context:
+    if not filter_context and not dialog_view:
         for ctx in DIALOG_CONTEXTS:
             if ctx not in exclude_contexts:
                 exclude_contexts.append(ctx)
@@ -1846,6 +1876,10 @@ def dashboard_search(request):
         qs = qs.exclude(context_id__in=exclude_contexts)
     if request.GET.get('public') == '1':
         qs = qs.filter(data__access='public').exclude(context_id__in=['poetry', 'recipe'])
+    if filter_client:
+        qs = qs.filter(data__client=filter_client)
+    if filter_model:
+        qs = qs.filter(data__model=filter_model)
     if request.GET.get('with_relations') == '1':
         qs = qs.filter(id__in=_entry_ids_with_relations())
 

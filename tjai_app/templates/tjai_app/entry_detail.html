@@ -1038,7 +1038,7 @@
                         var modMs = new Date(modifiedIso).getTime();
                         var fromIso = new Date(modMs - 3600000).toISOString();
                         var toIso = new Date(modMs + 3600000).toISOString();
-                        dialogUrl = '/tjai/dashboard/?context=co-code&expand_dialog=1&from_time=' + encodeURIComponent(fromIso) + '&to_time=' + encodeURIComponent(toIso) + '#e-' + e.id;
+                        dialogUrl = '/tjai/dashboard/?view=dialog&expand_dialog=1&from_time=' + encodeURIComponent(fromIso) + '&to_time=' + encodeURIComponent(toIso) + '#e-' + e.id;
                     }
                     html += '<div style="margin-bottom:12px; padding:8px; border-left:3px solid ' + color + '">';
                     html += '<div style="margin-bottom:4px"><span class="dialog-time">' + ts + '</span> ';
