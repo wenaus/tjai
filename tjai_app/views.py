@@ -1122,6 +1122,80 @@ def api_delete_entry(request, entry_id):
     })
 
 
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_archive_entry(request, entry_id):
+    """Archive an entry by setting status='archive', including from Trash."""
+    include_deleted = request.GET.get('from_trash') == '1'
+    qs = Entry.objects.all() if include_deleted else Entry.objects.filter(deleted_at__isnull=True)
+    entry = qs.filter(id=entry_id).first()
+    if not entry:
+        return JsonResponse({"error": f"Entry '{entry_id}' not found"}, status=404)
+    if entry.status == 'archive' and entry.deleted_at is None:
+        return JsonResponse({"status": "ok", "archived": {"id": entry.id}, "noop": "already archived"})
+
+    from .models import snapshot_entry
+    snapshot_entry(entry, changed_by='archive')
+
+    now = time.time()
+    entry.deleted_at = None
+    entry.status = 'archive'
+    entry.timestamp_modified = now
+    entry.is_dirty = 1
+    entry.save(update_fields=['deleted_at', 'status', 'timestamp_modified', 'is_dirty'])
+
+    return JsonResponse({
+        "status": "ok",
+        "archived": {
+            "id": entry.id,
+            "content_preview": entry.content[:100] + '...' if len(entry.content) > 100 else entry.content,
+            "kind": entry.kind,
+            "context": entry.context.name if entry.context else None,
+        }
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_restore_entry(request, entry_id):
+    """Restore a trashed entry to the normal dashboard."""
+    entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=False).first()
+    if not entry:
+        return JsonResponse({"error": f"Entry '{entry_id}' not found in Trash"}, status=404)
+
+    from .models import snapshot_entry
+    snapshot_entry(entry, changed_by='restore')
+
+    now = time.time()
+    entry.deleted_at = None
+    entry.timestamp_modified = now
+    entry.is_dirty = 1
+    entry.save(update_fields=['deleted_at', 'timestamp_modified', 'is_dirty'])
+
+    return JsonResponse({
+        "status": "ok",
+        "restored": {
+            "id": entry.id,
+            "content_preview": entry.content[:100] + '...' if len(entry.content) > 100 else entry.content,
+            "kind": entry.kind,
+            "context": entry.context.name if entry.context else None,
+        }
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_empty_trash(request):
+    """Permanently delete all entries already in Trash."""
+    trashed = list(Entry.objects.filter(deleted_at__isnull=False).only('id'))
+    count = len(trashed)
+    for entry in trashed:
+        entry.tags.all().delete()
+        entry.versions.all().delete()
+        entry.delete()
+    return JsonResponse({"status": "ok", "deleted": count})
+
+
 def login_view(request):
     """Custom login page."""
     if request.user.is_authenticated:
@@ -1704,6 +1778,7 @@ def dashboard_status(request):
     include_error_logs = (
         offset == 0
         and not dialog_view
+        and not show_deleted
         and (not has_entry_filter or filter_kind == 'log')
     )
 

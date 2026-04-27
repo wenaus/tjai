@@ -243,7 +243,7 @@
         </div>
         {% endif %}
         <div class="panel panel-right" id="status-panel">
-            <div class="panel-header" style="display:flex; align-items:center;">{% if is_trash %}Trash{% elif is_archive %}Archive <a href="{% url 'versions_page' %}" style="color:#90caf9;font-size:12px;font-weight:normal;margin-left:12px">Item Versions</a>{% elif is_dialog %}<span id="dialog-panel-title">Dialog</span>{% else %}Status{% endif %}<span class="refresh-indicator"><span id="refresh-indicator"></span> <a href="{% url 'logout' %}" style="color:#999;margin-left:12px">Logout</a></span></div>
+            <div class="panel-header" style="display:flex; align-items:center;">{% if is_trash %}Trash <button id="empty-trash-btn" style="background:#8b0000;color:#fff;border:none;border-radius:3px;padding:1px 8px;margin-left:12px;cursor:pointer;font-size:11px;font-family:inherit">Empty Trash</button>{% elif is_archive %}Archive <a href="{% url 'versions_page' %}" style="color:#90caf9;font-size:12px;font-weight:normal;margin-left:12px">Item Versions</a>{% elif is_dialog %}<span id="dialog-panel-title">Dialog</span>{% else %}Status{% endif %}<span class="refresh-indicator"><span id="refresh-indicator"></span> <a href="{% url 'logout' %}" style="color:#999;margin-left:12px">Logout</a></span></div>
             <div id="status-fixed">Loading status...</div>
             <div id="dialog-chart" style="display:none; margin:8px 0; padding:8px; background:#222; border:1px solid #333; border-radius:4px; position:relative;">
                 <div style="display:flex; gap:12px;">
@@ -290,10 +290,22 @@
         // escapeHtml and linkifyContent provided by tjai-utils.js
         const dialogContexts = new Set({{ dialog_contexts_json|default:"[]"|safe }});
 
+        async function fetchJson(url, options = {}) {
+            const resp = await fetch(url, options);
+            const contentType = resp.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                const text = await resp.text();
+                const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 180);
+                throw new Error(`HTTP ${resp.status}: expected JSON, got ${contentType || 'unknown'} ${snippet}`);
+            }
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+            return data;
+        }
+
         async function fetchCalendar() {
             try {
-                const resp = await fetch('/tjai/api/dashboard/calendar');
-                const data = await resp.json();
+                const data = await fetchJson('/tjai/api/dashboard/calendar');
                 renderCalendar(data);
             } catch (e) {
                 document.getElementById('calendar-content').innerHTML = 'Error loading calendar';
@@ -304,8 +316,7 @@
             try {
                 const params = buildFilterParams();
                 const qs = params.length ? `?${params.join('&')}` : '';
-                const resp = await fetch(`/tjai/api/dashboard/status${qs}`);
-                const data = await resp.json();
+                const data = await fetchJson(`/tjai/api/dashboard/status${qs}`);
                 renderStatus(data);
             } catch (e) {
                 console.error('fetchStatus error:', e);
@@ -315,8 +326,7 @@
 
         async function fetchNamed() {
             try {
-                const resp = await fetch('/tjai/api/dashboard/named');
-                const data = await resp.json();
+                const data = await fetchJson('/tjai/api/dashboard/named');
                 renderNamed(data);
             } catch (e) {
                 document.getElementById('named-content').innerHTML = 'Error loading named entries';
@@ -331,8 +341,7 @@
         const entryBtn = document.getElementById('entry-btn');
         if (entryBtn) entryBtn.addEventListener('click', async () => {
             try {
-                const resp = await fetch('/tjai/api/diary/today', { method: 'POST' });
-                const data = await resp.json();
+                const data = await fetchJson('/tjai/api/diary/today', { method: 'POST' });
                 if (data.entry_id) window.location.href = '/tjai/entry/?entry_id=' + encodeURIComponent(data.entry_id) + '&edit=1';
             } catch (e) {
                 alert('Failed: ' + e.message);
@@ -342,8 +351,7 @@
         const createBtn = document.getElementById('create-entry-btn');
         if (createBtn) createBtn.addEventListener('click', async () => {
             try {
-                const resp = await fetch('/tjai/api/entry/create', { method: 'POST' });
-                const data = await resp.json();
+                const data = await fetchJson('/tjai/api/entry/create', { method: 'POST' });
                 if (data.id) window.location.href = '/tjai/entry/?uuid=' + data.id + '&edit=1';
             } catch (e) {
                 alert('Failed to create entry: ' + e.message);
@@ -725,8 +733,10 @@
         function renderEntryActions(entry, entryUrl, editUrl) {
             const options = ['<option value="">Action</option>', '<option value="open">open</option>'];
             if (entry.kind !== 'log') options.push('<option value="edit">edit</option>');
-            if (isArchiveMode) options.push('<option value="restore">restore</option>');
-            options.push('<option value="delete">delete</option>');
+            if (isArchiveMode || isTrashMode) options.push('<option value="restore">restore</option>');
+            if (isTrashMode && entry.kind !== 'log') options.push('<option value="archive">archive</option>');
+            const deleteLabel = entry.kind === 'log' ? 'delete' : (isTrashMode ? 'delete' : (isArchiveMode ? 'trash' : 'archive'));
+            options.push(`<option value="delete">${deleteLabel}</option>`);
             return `<select class="entry-action-select" data-eid="${dashAttr(entry.id)}" data-url="${dashAttr(entryUrl)}" data-edit-url="${dashAttr(editUrl)}">${options.join('')}</select>`;
         }
         function renderRelationButton(entry) {
@@ -1045,8 +1055,7 @@
                     const params = [`offset=${loadedEntryCount}`, ...buildFilterParams()];
                     url = `/tjai/api/dashboard/status?${params.join('&')}`;
                 }
-                const resp = await fetch(url);
-                const data = await resp.json();
+                const data = await fetchJson(url);
                 // search returns 'entries', status returns 'recent_entries'
                 const items = data.entries || data.recent_entries || [];
                 const newHtml = renderEntries(items, dashboardTimezone);
@@ -1156,13 +1165,21 @@
                 e.preventDefault();
                 e.stopPropagation();
                 const eid = delBtn.dataset.eid;
-                if (!confirm('Delete this entry?')) return;
+                const row = document.getElementById('e-' + eid);
+                const isLogEntry = row?.dataset.entryKind === 'log';
+                const actionLabel = isLogEntry ? 'Delete log entry' : (isTrashMode ? 'Permanently delete' : (isArchiveMode ? 'Move to Trash' : 'Archive'));
+                if (!confirm(`${actionLabel} this entry?`)) return;
                 delBtn.disabled = true;
                 delBtn.textContent = '...';
-                fetch(`/tjai/api/entry/${eid}${(isTrashMode || isArchiveMode) ? '?hard=1' : ''}`, {method: 'DELETE'})
-                .then(r => r.json()).then(data => {
+                const url = isLogEntry
+                    ? `/tjai/api/entry/${eid}`
+                    : isTrashMode
+                    ? `/tjai/api/entry/${eid}?hard=1`
+                    : (isArchiveMode ? `/tjai/api/entry/${eid}` : `/tjai/api/entry/${eid}/archive`);
+                const method = isLogEntry || isArchiveMode || isTrashMode ? 'DELETE' : 'POST';
+                fetchJson(url, {method})
+                .then(data => {
                     if (data.status === 'ok') {
-                        const row = document.getElementById('e-' + eid);
                         if (row) row.remove();
                     } else {
                         delBtn.disabled = false;
@@ -1182,9 +1199,7 @@
             detail.dataset.loading = '1';
             detail.textContent = 'Loading relations...';
             try {
-                const resp = await fetch(`/tjai/api/entry/${btn.dataset.eid}/relations`);
-                const data = await resp.json();
-                if (!resp.ok) throw new Error(data.error || 'relation fetch failed');
+                const data = await fetchJson(`/tjai/api/entry/${btn.dataset.eid}/relations`);
                 detail.innerHTML = renderRelations(data.relations || [], btn.dataset.eid);
                 detail.dataset.loaded = '1';
             } catch (err) {
@@ -1225,9 +1240,24 @@
             const row = document.getElementById('e-' + select.dataset.eid);
             if (action === 'open') window.location.href = select.dataset.url;
             else if (action === 'edit') window.location.href = select.dataset.editUrl;
+            else if (action === 'restore' && isTrashMode) runEntryPostAction(select.dataset.eid, `/tjai/api/entry/${select.dataset.eid}/restore`, 'Restore');
+            else if (action === 'archive' && isTrashMode) runEntryPostAction(select.dataset.eid, `/tjai/api/entry/${select.dataset.eid}/archive?from_trash=1`, 'Archive');
             else if (action === 'restore') row?.querySelector('.restore-btn')?.click();
             else if (action === 'delete') row?.querySelector('.search-del-btn')?.click();
         });
+        async function runEntryPostAction(eid, url, label) {
+            const row = document.getElementById('e-' + eid);
+            try {
+                const data = await fetchJson(url, {method: 'POST'});
+                if (data.status === 'ok') {
+                    if (row) row.remove();
+                } else {
+                    alert(`${label} failed: ${data.error || 'unknown'}`);
+                }
+            } catch (err) {
+                alert(`${label} failed: ${err.message}`);
+            }
+        }
         document.getElementById('recent-entries').addEventListener('scroll', function() {
             if (this.scrollHeight - this.scrollTop - this.clientHeight < 200) {
                 loadMoreEntries();
@@ -1242,8 +1272,7 @@
             try {
                 const sort = document.querySelector('input[name="search-sort"]:checked').value;
                 const params = [`q=${encodeURIComponent(query)}`, `sort=${sort}`, `offset=0`, ...buildFilterParams()];
-                const resp = await fetch(`/tjai/api/dashboard/search?${params.join('&')}`);
-                const data = await resp.json();
+                const data = await fetchJson(`/tjai/api/dashboard/search?${params.join('&')}`);
                 const items = data.entries || [];
                 loadedEntryCount = items.length;
                 hasMoreEntries = !!data.has_more;
@@ -1278,8 +1307,7 @@
                 return;
             }
             try {
-                const resp = await fetch(`/tjai/api/dashboard/status?${params.join('&')}`);
-                const data = await resp.json();
+                const data = await fetchJson(`/tjai/api/dashboard/status?${params.join('&')}`);
                 dashboardTimezone = data.timezone || dashboardTimezone;
                 const entries = data.recent_entries || [];
                 loadedEntryCount = entries.length;
@@ -1556,6 +1584,27 @@
         const isDialogMode = {{ is_dialog|yesno:"true,false" }};
         const isTrashMode = {{ is_trash|yesno:"true,false" }};
         const isSimplifiedMode = isArchiveMode || isDialogMode || isTrashMode;
+
+        const emptyTrashBtn = document.getElementById('empty-trash-btn');
+        if (emptyTrashBtn) emptyTrashBtn.addEventListener('click', async function(e) {
+            e.preventDefault();
+            if (!confirm('Permanently delete every entry in Trash?')) return;
+            emptyTrashBtn.disabled = true;
+            emptyTrashBtn.textContent = 'Emptying...';
+            try {
+                const data = await fetchJson('/tjai/api/trash/empty', {method: 'POST'});
+                document.getElementById('entries-list').innerHTML = '';
+                loadedEntryCount = 0;
+                hasMoreEntries = false;
+                totalEntryCount = 0;
+                document.getElementById('entries-label').innerHTML = `Trash emptied <span style="color:#8a8a8a">(${data.deleted || 0} deleted)</span>`;
+            } catch (err) {
+                alert('Empty Trash failed: ' + err.message);
+            } finally {
+                emptyTrashBtn.textContent = 'Empty Trash';
+                emptyTrashBtn.disabled = false;
+            }
+        });
 
         async function refresh() {
             const start = performance.now();
