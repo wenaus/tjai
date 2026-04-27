@@ -20,6 +20,7 @@ from django.db import connection
 from django.db.models import Count
 from tjai_app.db_log_handler import DbLogHandler
 from tjai_app.models import Entry, Context, TagStats, Machine, SysConfig, AppLog
+from tjai_app.tjai_utils import safe_truncate
 
 logger = logging.getLogger('system_health')
 logger.setLevel(logging.INFO)
@@ -496,7 +497,7 @@ def collect_web_apps():
                 }
         except Exception as e:
             results[label] = {
-                'status': str(e)[:80],
+                'status': safe_truncate(str(e), 80),
                 'ok': False,
             }
     return results
@@ -557,7 +558,7 @@ def collect_tjai():
         action_info = {
             'id': str(a.id),
             'entry_id': action_id,
-            'content': a.content[:60],
+            'content': safe_truncate(a.content, 60),
             'trigger': data.get('trigger', '?'),
             'interval_h': data.get('interval_hours', 24),
             'last_run_min': round((now - last_run) / 60, 1) if last_run else None,

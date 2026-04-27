@@ -29,6 +29,7 @@ from django.db.models import Count
 
 from tjai_app.db_log_handler import DbLogHandler
 from tjai_app.models import Entry, AppLog, Tag
+from tjai_app.tjai_utils import safe_truncate
 
 from datetime import timezone
 UTC = timezone.utc
@@ -184,7 +185,7 @@ def collect_agents(since_ts):
         action_id = extra.get('action_id')
         if not action_id:
             logger.warning("agent_complete log missing action_id: %s",
-                           log.message[:100])
+                           safe_truncate(log.message, 100))
             continue
         if action_id not in action_stats:
             action_stats[action_id] = {
@@ -248,7 +249,7 @@ def collect_logs(since_ts):
     if error_msgs:
         notes['recent_errors'] = [
             {'time': ts.strftime('%H:%M'), 'source': src,
-             'message': msg[:200]}
+             'message': safe_truncate(msg, 200)}
             for ts, src, msg in error_msgs
         ]
 

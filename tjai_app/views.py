@@ -5,6 +5,7 @@ import re
 import time
 import uuid
 from datetime import datetime, timedelta
+from collections import Counter
 
 logger = logging.getLogger(__name__)
 
@@ -51,17 +52,26 @@ def _fix_md_list_spacing(text):
 # "PR #<N>: <title>" — truncated the 2026-04-23 daily synopsis mid-render.
 # None of these tags have any legitimate place in rendered tjai entry content,
 # so escaping them is side-effect-free across every markdown render path.
-_HAZARD_TAGS_RE = re.compile(
-    r'</?(?:title|script|style|textarea|iframe|noscript|noembed|noframes|xmp|plaintext)\b[^>]*>',
-    re.IGNORECASE,
-)
+_RAW_HTML_HAZARD_TAGS = {
+    'html', 'head', 'body', 'base', 'link', 'meta', 'title', 'script',
+    'style', 'textarea', 'iframe', 'noscript', 'noembed', 'noframes',
+    'xmp', 'plaintext',
+}
+_RAW_HTML_HAZARD_PREFIXES = {
+    tag[:n]
+    for tag in _RAW_HTML_HAZARD_TAGS
+    for n in range(3, len(tag) + 1)
+}
+_RAW_HTML_TAG_RE = re.compile(r'</?([A-Za-z][A-Za-z0-9:-]*)(?:\s[^>\n]*)?>?', re.IGNORECASE)
 
 
-def _neutralize_hazard_tags(html):
-    return _HAZARD_TAGS_RE.sub(
-        lambda m: m.group(0).replace('<', '&lt;').replace('>', '&gt;'),
-        html,
-    )
+def _neutralize_raw_html_hazards(text):
+    def repl(match):
+        tag = match.group(1).lower()
+        if tag not in _RAW_HTML_HAZARD_PREFIXES:
+            return match.group(0)
+        return match.group(0).replace('<', '&lt;').replace('>', '&gt;')
+    return _RAW_HTML_TAG_RE.sub(repl, text)
 
 
 def _render_markdown(text, extensions=None):
@@ -72,8 +82,9 @@ def _render_markdown(text, extensions=None):
     if not text:
         return ''
     exts = extensions if extensions is not None else ['nl2br', 'tables', 'fenced_code']
-    html = markdown.markdown(_fix_md_list_spacing(text), extensions=exts, tab_length=2)
-    return _neutralize_hazard_tags(html)
+    safe_text = _neutralize_raw_html_hazards(text)
+    html = markdown.markdown(_fix_md_list_spacing(safe_text), extensions=exts, tab_length=2)
+    return _neutralize_raw_html_hazards(html)
 
 from .tjai_utils import fmt_datetime, fmt_date, fmt_time, fmt_duration, fmt_ago, get_app_tz
 from django.contrib.auth import authenticate, login, logout
@@ -84,7 +95,7 @@ from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.db.models.functions import Lower
 from django.http import Http404
 from django.conf import settings as django_settings
@@ -1175,6 +1186,46 @@ def dashboard(request):
     })
 
 
+def _relation_counts_for_entry_ids(entry_ids):
+    """Return relation counts for current-page entries using grouped queries."""
+    counts = Counter()
+    if not entry_ids:
+        return counts
+    for row in Relation.objects.filter(entry1_id__in=entry_ids).values('entry1_id').annotate(n=Count('id')):
+        counts[row['entry1_id']] += row['n']
+    for row in Relation.objects.filter(entry2_id__in=entry_ids).values('entry2_id').annotate(n=Count('id')):
+        counts[row['entry2_id']] += row['n']
+    return counts
+
+
+def _expanded_relation_ids(request, entry_ids):
+    """Return URL-expanded relation ids that are present on this page."""
+    page_ids = {str(eid) for eid in entry_ids}
+    requested = {
+        rel_id for rel_id in request.GET.get('rel', '').split(',')
+        if rel_id
+    }
+    return requested & page_ids
+
+
+def _relations_for_expanded_entry_ids(expanded_ids):
+    """Fetch relation detail only for rows the dashboard will render expanded."""
+    if not expanded_ids:
+        return {}
+    from . import services
+    return {
+        entry_id: services._get_relations_for_entry(entry_id, max_content_length=120)
+        for entry_id in expanded_ids
+    }
+
+
+def _entry_ids_with_relations():
+    """Return a queryset of entry ids that appear on either side of a relation."""
+    return Entry.objects.filter(
+        Q(relations_as_entry1__isnull=False) | Q(relations_as_entry2__isnull=False)
+    ).values_list('id', flat=True).distinct()
+
+
 @login_required
 def versions_page(request):
     """Flat reverse-chron list of all entry versions."""
@@ -1514,6 +1565,8 @@ def dashboard_status(request):
         base_qs = base_qs.filter(data__hostname=filter_machine)
     if request.GET.get('public') == '1':
         base_qs = base_qs.filter(data__access='public').exclude(context_id__in=['poetry', 'recipe'])
+    if request.GET.get('with_relations') == '1':
+        base_qs = base_qs.filter(id__in=_entry_ids_with_relations())
 
     # Daily counts for dialog mode — single raw SQL query for speed
     daily_counts = None
@@ -1574,6 +1627,9 @@ def dashboard_status(request):
     tags_by_entry = {}
     for t in Tag.objects.filter(entry_id__in=entry_ids):
         tags_by_entry.setdefault(t.entry_id, []).append(t.tag_name)
+    relation_counts = _relation_counts_for_entry_ids(entry_ids)
+    expanded_relation_ids = _expanded_relation_ids(request, entry_ids)
+    expanded_relations = _relations_for_expanded_entry_ids(expanded_relation_ids)
 
     recent_entries = []
     app_tz = get_app_tz()
@@ -1614,6 +1670,9 @@ def dashboard_status(request):
             'event_date': event_date_epoch,
             'event_date_display': event_date_display,
             'hostname': data.get('hostname') if data else None,
+            'metadata': data or {},
+            'relation_count': relation_counts.get(e.id, 0),
+            'relations': expanded_relations.get(str(e.id)),
             'tags': missing_tags,
             'all_tags': entry_tags,
         })
@@ -1778,6 +1837,8 @@ def dashboard_search(request):
         qs = qs.exclude(context_id__in=exclude_contexts)
     if request.GET.get('public') == '1':
         qs = qs.filter(data__access='public').exclude(context_id__in=['poetry', 'recipe'])
+    if request.GET.get('with_relations') == '1':
+        qs = qs.filter(id__in=_entry_ids_with_relations())
 
     filter_tag = request.GET.get('tag')
     if filter_tag:
@@ -1832,6 +1893,9 @@ def dashboard_search(request):
     tags_by_entry = {}
     for t in Tag.objects.filter(entry_id__in=entry_ids):
         tags_by_entry.setdefault(t.entry_id, []).append(t.tag_name)
+    relation_counts = _relation_counts_for_entry_ids(entry_ids)
+    expanded_relation_ids = _expanded_relation_ids(request, entry_ids)
+    expanded_relations = _relations_for_expanded_entry_ids(expanded_relation_ids)
 
     result = []
     for e in entries:
@@ -1853,6 +1917,9 @@ def dashboard_search(request):
             'nickname': data.get('nickname') if data else None,
             'event_date': data.get('event_date') if data else None,
             'hostname': data.get('hostname') if data else None,
+            'metadata': data or {},
+            'relation_count': relation_counts.get(e.id, 0),
+            'relations': expanded_relations.get(str(e.id)),
             'tags': missing_tags,
             'all_tags': entry_tags,
         })
@@ -1887,6 +1954,19 @@ def dashboard_named(request):
         })
 
     return JsonResponse({'entries': result})
+
+
+@login_required
+def api_entry_relations(request, entry_id):
+    """Return relations for one entry, fetched lazily from dashboard rows."""
+    entry = Entry.objects.filter(id=str(entry_id), deleted_at__isnull=True).first()
+    if not entry:
+        return JsonResponse({'error': 'Entry not found'}, status=404)
+    from . import services
+    return JsonResponse({
+        'entry_id': str(entry.id),
+        'relations': services._get_relations_for_entry(str(entry.id), max_content_length=120),
+    })
 
 
 @login_required

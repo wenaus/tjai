@@ -338,7 +338,8 @@ async def get_dialog(
 
     Returns:
         List of dialog turns ordered chronologically, each containing:
-        timestamp, role (user/assistant), client, model, hostname, content.
+        timestamp, role (user/assistant), speaker, speaker_type
+        (human/ai/unknown), client, model, hostname, content.
     """
     return await sync_to_async(services.get_dialog)(
         host=host, start_date=start_date, end_date=end_date,

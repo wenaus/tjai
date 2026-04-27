@@ -10,6 +10,7 @@ from pathlib import Path
 
 import bootstrap  # noqa: F401 - Django setup
 from synopsis_utils import main_section
+from tjai_app.tjai_utils import safe_truncate
 
 DATA_DIR = Path(__file__).resolve().parent.parent / 'data' / 'health-digest'
 
@@ -121,7 +122,7 @@ def _format_health_snapshot(metrics, notes):
         for err in recent_errors[:10]:
             lines.append(
                 f'- [{err["time"]}] {err["source"]}: '
-                f'{err["message"][:120]}')
+                f'{safe_truncate(err["message"], 120)}')
     lines.append('')
 
     # --- Processes ---

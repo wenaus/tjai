@@ -100,6 +100,48 @@
             margin: 4px 0 4px 16px;
             line-height: 1.4;
         }
+        .entry-meta { margin-top: 2px; margin-left: 34px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+        .entry-badge {
+            color: #b0bec5;
+            background: #242424;
+            border: 1px solid #3a3a3a;
+            border-radius: 3px;
+            padding: 0 4px;
+            font-size: 11px;
+            white-space: nowrap;
+        }
+        .entry-action-select {
+            color: #80deea;
+            background: #1b2b2e;
+            border: 1px solid #32737c;
+            border-radius: 3px;
+            padding: 0 3px;
+            cursor: pointer;
+            font-size: 11px;
+            font-family: inherit;
+            height: 18px;
+        }
+        .relation-btn {
+            color: #d98a73;
+            background: #2b201e;
+            border: 1px solid #6f3d32;
+            border-radius: 3px;
+            padding: 0 4px;
+            font-size: 11px;
+            font-family: inherit;
+            cursor: pointer;
+            height: 18px;
+        }
+        .relation-btn:hover { background: #3a2723; color: #f0a08c; }
+        .relation-detail {
+            flex-basis: 100%;
+            margin-top: 2px;
+            color: #b0bec5;
+            font-size: 11px;
+        }
+        .relation-detail a { color: #90caf9; }
+        .relation-line { margin: 1px 0; }
+        .entry-hidden-action { display: none; }
         .entry-time {
             color: #d8a070;
         }
@@ -631,6 +673,102 @@
             });
         })();
 
+        function dashAttr(value) {
+            return escapeHtml(value ?? '').replace(/"/g, '&quot;');
+        }
+        function dashBadge(label, value, cls = '') {
+            if (value === undefined || value === null || value === '') return '';
+            return `<span class="entry-badge ${cls}">${escapeHtml(label)}=${linkifyEntryReferences(escapeHtml(String(value)))}</span>`;
+        }
+        function dashLooksLikeEpoch(key, value) {
+            if (typeof value !== 'number' && !/^\d+(\.\d+)?$/.test(String(value))) return false;
+            if (!/(^|_)(time|date|timestamp|created|modified)(_|$)/i.test(key)) return false;
+            const n = Number(value);
+            return n > 946684800 && n < 4102444800;
+        }
+        function dashFormatEpoch(value) {
+            return new Date(Number(value) * 1000).toLocaleString('en-US', {
+                timeZone: dashboardTimezone,
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+            });
+        }
+        function dashPreview(key, value) {
+            if (value === undefined || value === null || value === '') return '';
+            if (dashLooksLikeEpoch(key, value)) return dashFormatEpoch(value);
+            let s;
+            if (Array.isArray(value)) s = value.join(',');
+            else if (typeof value === 'object') s = JSON.stringify(value);
+            else s = String(value);
+            if (!key.includes('entry_id') && s.length > 50) s = s.slice(0, 50) + '...';
+            return s;
+        }
+        function dashEntryIdBadge(label, value) {
+            if (value === undefined || value === null || value === '') return '';
+            const ref = String(value);
+            return `<span class="entry-badge">${escapeHtml(label)}=<a href="${entryRefUrl(ref)}" style="color:#90caf9">${escapeHtml(ref)}</a></span>`;
+        }
+        function renderEntryActions(entry, entryUrl, editUrl) {
+            const options = ['<option value="">Action</option>', '<option value="open">open</option>'];
+            if (entry.kind !== 'log') options.push('<option value="edit">edit</option>');
+            if (isArchiveMode) options.push('<option value="restore">restore</option>');
+            options.push('<option value="delete">delete</option>');
+            return `<select class="entry-action-select" data-eid="${dashAttr(entry.id)}" data-url="${dashAttr(entryUrl)}" data-edit-url="${dashAttr(editUrl)}">${options.join('')}</select>`;
+        }
+        function renderRelationButton(entry) {
+            const n = entry.relation_count || 0;
+            if (!n) return '';
+            const expanded = expandedRelations.has(entry.id);
+            const detailHtml = entry.relations
+                ? renderRelations(entry.relations, entry.id)
+                : 'Loading relations...';
+            const placeholder = expanded
+                ? `<div class="relation-detail" data-loaded="${entry.relations ? '1' : '0'}">${detailHtml}</div>`
+                : '';
+            return `<button class="relation-btn" data-eid="${dashAttr(entry.id)}">Relations=${n}</button>${placeholder}`;
+        }
+        function renderEntryMeta(entry, entryUrl, editUrl) {
+            const bits = [];
+            bits.push(renderEntryActions(entry, entryUrl, editUrl));
+            bits.push(renderRelationButton(entry));
+            const metadata = entry.metadata || {};
+            const skip = new Set(['event_date']);
+            const priority = ['entry_id', 'nickname', 'hostname', 'format', 'status', 'priority', 'access'];
+            const keys = [];
+            for (const k of priority) if (Object.prototype.hasOwnProperty.call(metadata, k)) keys.push(k);
+            for (const k of Object.keys(metadata).sort()) {
+                if (!keys.includes(k)) keys.push(k);
+            }
+            for (const key of keys) {
+                if (skip.has(key)) continue;
+                const value = dashPreview(key, metadata[key]);
+                if (!value) continue;
+                if (key.includes('entry_id')) bits.push(dashEntryIdBadge(key, value));
+                else bits.push(dashBadge(key, value));
+            }
+            return bits.filter(Boolean).join('');
+        }
+        function renderRelations(relations, currentEntryId) {
+            if (!relations || !relations.length) return '<span style="color:#8a8a8a">No relations</span>';
+            return relations.map(r => {
+                const other = r.other_entry || {};
+                const data = other.data || {};
+                const ref = data.entry_id || other.id || '';
+                const label = data.entry_id || other.name || (other.id ? other.id.substring(0, 8) : 'entry');
+                const title = other.content || label;
+                const hasTitleUrl = /https?:\/\//.test(title) || /\[.*\]\(.*\)/.test(title);
+                const otherLink = hasTitleUrl
+                    ? `<a href="${entryRefUrl(ref)}" style="color:#d98a73">entry</a> ${linkifyContent(escapeHtml(title))}`
+                    : `<a href="${entryRefUrl(ref)}">${escapeHtml(title)}</a>`;
+                const lhs = r.entry1_id === currentEntryId ? 'this' : otherLink;
+                const rhs = r.entry1_id === currentEntryId ? otherLink : 'this';
+                return `<div class="relation-line">${lhs} <span style="color:#d98a73">=&gt; ${escapeHtml(r.relation_type)} =&gt;</span> ${rhs}</div>`;
+            }).join('');
+        }
+
         function renderEntries(entries, tz) {
             let html = '';
             for (const entry of entries) {
@@ -676,12 +814,15 @@
                 }
                 if (entry.kind !== 'log') {
                     const editUrl = entryUrl + (entryUrl.includes('?') ? '&' : '?') + 'edit=1';
-                    line += ` <a href="${editUrl}" style="background:#2a6e3f;color:#fff;border:none;border-radius:3px;padding:1px 8px;margin-left:8px;cursor:pointer;font-size:11px;font-family:inherit;text-decoration:none">edit</a>`;
+                    line += ` <a href="${editUrl}" class="entry-hidden-action entry-edit-link" style="background:#2a6e3f;color:#fff;border:none;border-radius:3px;padding:1px 8px;margin-left:8px;cursor:pointer;font-size:11px;font-family:inherit;text-decoration:none">edit</a>`;
                 }
                 if (isArchiveMode) {
-                    line += ` <button class="restore-btn" data-eid="${entry.id}" style="background:#2a6e3f;color:#fff;border:none;border-radius:3px;padding:1px 8px;margin-left:8px;cursor:pointer;font-size:11px;font-family:inherit">Restore</button>`;
+                    line += ` <button class="restore-btn entry-hidden-action" data-eid="${entry.id}" style="background:#2a6e3f;color:#fff;border:none;border-radius:3px;padding:1px 8px;margin-left:8px;cursor:pointer;font-size:11px;font-family:inherit">Restore</button>`;
                 }
-                line += ` <button class="search-del-btn" data-eid="${entry.id}" style="background:#8b0000;color:#fff;border:none;border-radius:3px;padding:1px 8px;margin-left:8px;cursor:pointer;font-size:11px;font-family:inherit" title="Delete">X</button>`;
+                line += ` <button class="search-del-btn entry-hidden-action" data-eid="${entry.id}" style="background:#8b0000;color:#fff;border:none;border-radius:3px;padding:1px 8px;margin-left:8px;cursor:pointer;font-size:11px;font-family:inherit" title="Delete">X</button>`;
+                const editUrl = entryUrl + (entryUrl.includes('?') ? '&' : '?') + 'edit=1';
+                const meta = renderEntryMeta(entry, entryUrl, editUrl);
+                if (meta) line += `<div class="entry-meta">${meta}</div>`;
 
                 // Build plain-text copy line: matches what's displayed, preserves markdown links
                 let plain = `=== ${tsStr} [${kindAbbr}]`;
@@ -694,6 +835,14 @@
                 html += `<div class="entry" id="e-${entry.id}" style="margin-left:0" data-context="${entry.context || ''}" data-machine="${entry.hostname || ''}" data-kind="${entry.kind || ''}" data-tags="${(entry.all_tags || entry.tags || []).join(',')}" data-content="${escapeHtml(entry.content)}" data-plain="${escapeHtml(plain)}" data-entry-kind="${entry.kind || ''}">${line}</div>`;
             }
             return html;
+        }
+        function restoreExpandedRelations(root = document) {
+            for (const id of expandedRelations) {
+                for (const btn of root.querySelectorAll('.relation-btn')) {
+                    if (btn.dataset.eid !== id) continue;
+                    ensureRelationsLoaded(btn);
+                }
+            }
         }
 
         let dashboardTimezone = 'America/New_York';
@@ -714,6 +863,8 @@
         let cachedDailyCounts = null;
         let excludedContexts = new Set();
         let activePublic = false;
+        let activeWithRelations = false;
+        let expandedRelations = new Set();
         let isFilterActive = false;
 
         function syncStateToUrl() {
@@ -729,6 +880,8 @@
             if (activeFromTime) params.set('from_time', activeFromTime);
             if (activeToTime) params.set('to_time', activeToTime);
             if (expandDialog) params.set('expand_dialog', '1');
+            if (activeWithRelations) params.set('with_relations', '1');
+            if (expandedRelations.size > 0) params.set('rel', [...expandedRelations].sort().join(','));
             const searchVal = document.getElementById('entry-search').value.trim();
             if (searchVal && isSearchActive) params.set('search', searchVal);
             const qs = params.toString();
@@ -751,7 +904,10 @@
             activeFromTime = params.get('from_time') || null;
             activeToTime = params.get('to_time') || null;
             expandDialog = params.get('expand_dialog') === '1';
-            isFilterActive = !!(activeTags.size > 0 || activeKind || activeContext || activeMachine || activeStatus || activePublic || activeDate || activeFromTime || activeToTime || excludedContexts.size > 0);
+            activeWithRelations = params.get('with_relations') === '1';
+            const rel = params.get('rel');
+            if (rel) rel.split(',').filter(Boolean).forEach(id => expandedRelations.add(id));
+            isFilterActive = !!(activeTags.size > 0 || activeKind || activeContext || activeMachine || activeStatus || activePublic || activeWithRelations || activeDate || activeFromTime || activeToTime || excludedContexts.size > 0);
             const searchParam = params.get('search');
             if (searchParam) {
                 document.getElementById('entry-search').value = searchParam;
@@ -778,6 +934,8 @@
             if (activeFromTime) params.push(`from_time=${encodeURIComponent(activeFromTime)}`);
             if (activeToTime) params.push(`to_time=${encodeURIComponent(activeToTime)}`);
             if (expandDialog) params.push('expand_dialog=1');
+            if (activeWithRelations) params.push('with_relations=1');
+            if (expandedRelations.size > 0) params.push(`rel=${encodeURIComponent([...expandedRelations].sort().join(','))}`);
             if (isTrashMode) params.push('deleted=1');
             return params;
         }
@@ -870,6 +1028,7 @@
                 const items = data.entries || data.recent_entries || [];
                 const newHtml = renderEntries(items, dashboardTimezone);
                 document.getElementById('entries-list').insertAdjacentHTML('beforeend', newHtml);
+                restoreExpandedRelations(document.getElementById('entries-list'));
                 loadedEntryCount += items.length;
                 hasMoreEntries = data.has_more;
                 if (data.total_count) totalEntryCount = data.total_count;
@@ -914,6 +1073,18 @@
 
         // Infinite scroll on entries container
         document.getElementById('recent-entries').addEventListener('click', function(e) {
+            const actionSelect = e.target.closest('.entry-action-select');
+            if (actionSelect) {
+                e.stopPropagation();
+                return;
+            }
+            const relationBtn = e.target.closest('.relation-btn');
+            if (relationBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleRelations(relationBtn);
+                return;
+            }
             const tagDel = e.target.closest('.tag-del');
             if (tagDel) {
                 e.preventDefault();
@@ -983,6 +1154,57 @@
                 return;
             }
         });
+        async function loadRelationDetail(btn, detail) {
+            if (detail.dataset.loaded === '1' || detail.dataset.loading === '1') return;
+            detail.dataset.loading = '1';
+            detail.textContent = 'Loading relations...';
+            try {
+                const resp = await fetch(`/tjai/api/entry/${btn.dataset.eid}/relations`);
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || 'relation fetch failed');
+                detail.innerHTML = renderRelations(data.relations || [], btn.dataset.eid);
+                detail.dataset.loaded = '1';
+            } catch (err) {
+                detail.innerHTML = `<span style="color:#ef5350">Relations failed: ${escapeHtml(err.message)}</span>`;
+            } finally {
+                detail.dataset.loading = '0';
+            }
+        }
+        function ensureRelationsLoaded(btn) {
+            const meta = btn.closest('.entry-meta');
+            let detail = meta.querySelector('.relation-detail');
+            if (!detail) {
+                detail = document.createElement('div');
+                detail.className = 'relation-detail';
+                btn.insertAdjacentElement('afterend', detail);
+            }
+            loadRelationDetail(btn, detail);
+        }
+        async function toggleRelations(btn, opts = {}) {
+            const updateUrl = opts.updateUrl !== false;
+            const meta = btn.closest('.entry-meta');
+            let detail = meta.querySelector('.relation-detail');
+            if (detail) {
+                detail.remove();
+                expandedRelations.delete(btn.dataset.eid);
+                if (updateUrl) syncStateToUrl();
+                return;
+            }
+            expandedRelations.add(btn.dataset.eid);
+            if (updateUrl) syncStateToUrl();
+            ensureRelationsLoaded(btn);
+        }
+        document.getElementById('recent-entries').addEventListener('change', function(e) {
+            const select = e.target.closest('.entry-action-select');
+            if (!select || !select.value) return;
+            const action = select.value;
+            select.value = '';
+            const row = document.getElementById('e-' + select.dataset.eid);
+            if (action === 'open') window.location.href = select.dataset.url;
+            else if (action === 'edit') window.location.href = select.dataset.editUrl;
+            else if (action === 'restore') row?.querySelector('.restore-btn')?.click();
+            else if (action === 'delete') row?.querySelector('.search-del-btn')?.click();
+        });
         document.getElementById('recent-entries').addEventListener('scroll', function() {
             if (this.scrollHeight - this.scrollTop - this.clientHeight < 200) {
                 loadMoreEntries();
@@ -1009,6 +1231,7 @@
                     : `${totalEntryCount} results`;
                 document.getElementById('entries-label').innerHTML = `Search: "${escapeHtml(query)}"${filterNote} <span style="color:#8a8a8a">(${countStr})</span>`;
                 document.getElementById('entries-list').innerHTML = renderEntries(items, dashboardTimezone);
+                restoreExpandedRelations(document.getElementById('entries-list'));
             } catch (err) {
                 document.getElementById('entries-list').innerHTML = `<div style="color:#f44">Search error: ${escapeHtml(err.message)}</div>`;
             }
@@ -1041,6 +1264,7 @@
                 totalEntryCount = data.total_count || entries.length;
                 document.getElementById('entries-label').innerHTML = entriesLabel();
                 document.getElementById('entries-list').innerHTML = renderEntries(entries, dashboardTimezone);
+                restoreExpandedRelations(document.getElementById('entries-list'));
                 highlightAvailableTags(entries);
             } catch (err) {
                 console.error('Filter fetch failed:', err);
@@ -1147,6 +1371,8 @@
                 + `<label style="cursor:pointer">Expand dialog <input type="checkbox" id="expand-toggle" ${expandDialog ? 'checked' : ''} style="${cbStyle}"></label>`
                 + `&nbsp;&nbsp;&nbsp;`
                 + `<label style="cursor:pointer">Public <input type="checkbox" id="public-filter" ${activePublic ? 'checked' : ''} style="${cbStyle}"></label>`
+                + `&nbsp;&nbsp;&nbsp;`
+                + `<label style="cursor:pointer;color:#d98a73">With relations <input type="checkbox" id="relations-filter" ${activeWithRelations ? 'checked' : ''} style="${cbStyle};accent-color:#d98a73"></label>`
                 + `</div>`;
 
             // Machines
@@ -1217,6 +1443,7 @@
                 isFilterActive = buildFilterParams().length > 0;
                 document.getElementById('entries-label').innerHTML = entriesLabel();
                 document.getElementById('entries-list').innerHTML = renderEntries(entries, dashboardTimezone);
+                restoreExpandedRelations(document.getElementById('entries-list'));
                 // Highlight tags that co-occur with selected tags
                 highlightAvailableTags(entries);
                 scrollToHash();
@@ -1361,6 +1588,14 @@
                 return;
             }
 
+            const relationsCheck = e.target.closest('#relations-filter');
+            if (relationsCheck) {
+                activeWithRelations = relationsCheck.checked;
+                syncStateToUrl();
+                fetchFilteredEntries();
+                return;
+            }
+
             const machineLink = e.target.closest('.machine-link');
             if (machineLink) { e.preventDefault(); toggleFilter('machine', machineLink.dataset.machine, 'machine-link'); return; }
 
@@ -1420,6 +1655,7 @@
             activeContext = null;
             activeStatus = null;
             activePublic = false;
+            activeWithRelations = false;
             activeDate = null;
             excludedContexts.clear();
             isFilterActive = false;
@@ -1539,6 +1775,16 @@
         document.addEventListener('copy', function(e) {
             const sel = window.getSelection();
             if (!sel.rangeCount) return;
+            for (let i = 0; i < sel.rangeCount; i++) {
+                const range = sel.getRangeAt(i);
+                for (const meta of document.querySelectorAll('.entry-meta')) {
+                    try {
+                        if (range.intersectsNode(meta)) return;
+                    } catch (err) {
+                        // Ignore detached nodes; fall through to entry-aware copy.
+                    }
+                }
+            }
 
             const entryDivs = document.querySelectorAll('.entry[id^="e-"]');
             const selected = [];

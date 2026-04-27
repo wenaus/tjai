@@ -42,6 +42,7 @@ urlpatterns = [
     path("api/dashboard/status", views.dashboard_status, name="dashboard_status"),
     path("api/dashboard/search", views.dashboard_search, name="dashboard_search"),
     path("api/dashboard/named", views.dashboard_named, name="dashboard_named"),
+    path("api/entry/<uuid:entry_id>/relations", views.api_entry_relations, name="api_entry_relations"),
     path("synopsis/", views.daily_synopsis, name="daily_synopsis"),
     path("api/synopsis/dates", views.daily_synopsis_data, name="daily_synopsis_data"),
     path("api/synopsis/content", views.daily_synopsis_content, name="daily_synopsis_content"),

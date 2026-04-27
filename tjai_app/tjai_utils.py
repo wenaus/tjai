@@ -12,11 +12,16 @@ Canonical formats:
   fmt_ago:      "5m ago", "3h 15m ago"
 """
 
+import re
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 _DEFAULT_TZ = ZoneInfo('America/New_York')
+_VOID_HTML_TAGS = {
+    'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link',
+    'meta', 'param', 'source', 'track', 'wbr',
+}
 
 # Cached timezone — refreshed every 5 minutes
 _tz_cache = {'tz': None, 'expires': 0}
@@ -113,3 +118,76 @@ def fmt_ago(ts, tz=None):
     if seconds < 0:
         seconds = 0
     return fmt_duration(seconds) + ' ago'
+
+
+def safe_truncate(text, max_chars, suffix='...'):
+    """Truncate text without leaving broken HTML/XML-style markup.
+
+    The returned string is at most max_chars including suffix. If the cut
+    point would land between '<' and '>', or inside an unclosed element, back
+    up to before that tag so diagnostics cannot emit fragments like '</hea'
+    or leave a raw '<title>' region open.
+    """
+    if text is None:
+        return ''
+    text = str(text)
+    if max_chars is None or len(text) <= max_chars:
+        return text
+    max_chars = int(max_chars)
+    if max_chars <= 0:
+        return ''
+
+    suffix = str(suffix)
+    if len(suffix) >= max_chars:
+        return suffix[:max_chars]
+
+    cut = max_chars - len(suffix)
+    safe_cut = _safe_tag_cut_point(text, cut)
+    return text[:safe_cut].rstrip() + suffix
+
+
+def _safe_tag_cut_point(text, cut):
+    """Return a cut point that does not split or leave open tags."""
+    while True:
+        adjusted = _back_out_of_partial_tag(text, cut)
+        adjusted = _back_out_of_unclosed_tag(text, adjusted)
+        if adjusted == cut:
+            return cut
+        cut = adjusted
+
+
+def _back_out_of_partial_tag(text, cut):
+    last_lt = text.rfind('<', 0, cut)
+    last_gt = text.rfind('>', 0, cut)
+    if last_lt <= last_gt or not _is_markup_start(text, last_lt):
+        return cut
+    return last_lt
+
+
+def _back_out_of_unclosed_tag(text, cut):
+    stack = []
+    tag_re = re.compile(r'<(/?)([A-Za-z][A-Za-z0-9:-]*)(?:\s[^>]*)?(/?)>')
+    for match in tag_re.finditer(text[:cut]):
+        tag = match.group(2).lower()
+        if tag in _VOID_HTML_TAGS or match.group(3):
+            continue
+        if match.group(1):
+            for i in range(len(stack) - 1, -1, -1):
+                if stack[i][0] == tag:
+                    del stack[i:]
+                    break
+        else:
+            stack.append((tag, match.start()))
+    if not stack:
+        return cut
+    return stack[-1][1]
+
+
+def _is_markup_start(text, lt_index):
+    if lt_index < 0:
+        return False
+    next_char_idx = lt_index + 1
+    if next_char_idx >= len(text):
+        return True
+    next_char = text[next_char_idx]
+    return next_char.isalpha() or next_char in '/!?'

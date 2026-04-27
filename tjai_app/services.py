@@ -17,7 +17,7 @@ from django.db.models import Q
 
 from .models import Entry, Context, Tag, SysConfig, Relation
 from .tagger import tag_bookmark
-from .tjai_utils import fmt_datetime, get_app_tz
+from .tjai_utils import fmt_datetime, get_app_tz, safe_truncate
 from tj.commands.journal import parse_time
 from tj.date_utils import parse_date_filter
 
@@ -676,12 +676,22 @@ def get_dialog(host, start_date=None, end_date=None, max_content_length=200):
     turns = []
     for e in qs:
         data = e.data if isinstance(e.data, dict) else {}
+        role = data.get('role', 'unknown')
+        speaker_type = 'human' if role == 'user' else 'ai' if role == 'assistant' else 'unknown'
+        if speaker_type == 'human':
+            speaker = 'Torre'
+        elif speaker_type == 'ai':
+            speaker = data.get('client') or 'AI'
+        else:
+            speaker = 'Unknown'
         content = e.content
         if max_content_length and len(content) > max_content_length:
-            content = content[:max_content_length] + '…'
+            content = safe_truncate(content, max_content_length, suffix='…')
         turns.append({
             'timestamp': datetime.fromtimestamp(e.timestamp_created, tz=tz).isoformat(),
-            'role': data.get('role', 'unknown'),
+            'role': role,
+            'speaker': speaker,
+            'speaker_type': speaker_type,
             'client': data.get('client', ''),
             'model': data.get('model', ''),
             'model_provider': data.get('model_provider', ''),
