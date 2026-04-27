@@ -54,7 +54,8 @@ def fetch_dialog(date_str):
     start_ts = make_aware(datetime.combine(target, datetime.min.time()), tz).timestamp()
     end_ts = make_aware(datetime.combine(next_day, datetime.min.time()), tz).timestamp()
 
-    dialog_ids = Tag.objects.filter(tag_name='ccdialog').values_list('entry_id', flat=True)
+    from tjai_app.dialog_context import DIALOG_TAG
+    dialog_ids = Tag.objects.filter(tag_name=DIALOG_TAG).values_list('entry_id', flat=True)
 
     entries = Entry.objects.filter(
         id__in=dialog_ids,

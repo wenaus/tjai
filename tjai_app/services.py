@@ -15,6 +15,7 @@ from django.utils import timezone
 
 from django.db.models import Q
 
+from .dialog_context import DIALOG_TAG
 from .models import Entry, Context, Tag, SysConfig, Relation
 from .tagger import tag_bookmark
 from .tjai_utils import fmt_datetime, get_app_tz, safe_truncate
@@ -659,7 +660,7 @@ def get_dialog(host, start_date=None, end_date=None, max_content_length=200):
     if not start_date:
         return {"error": "start_date is required"}
 
-    dialog_ids = Tag.objects.filter(tag_name='ccdialog').values_list('entry_id', flat=True)
+    dialog_ids = Tag.objects.filter(tag_name=DIALOG_TAG).values_list('entry_id', flat=True)
     qs = Entry.objects.filter(
         id__in=dialog_ids,
         deleted_at__isnull=True,

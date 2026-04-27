@@ -17,6 +17,7 @@ import sys
 import time
 
 import bootstrap  # noqa: F401 - Django setup
+from tjai_app.dialog_context import DIALOG_CONTEXTS, DIALOG_TAG
 from tjai_app.action_runner import (
     get_due_actions, get_next_scheduled_time, execute_action, write_heartbeat,
     update_last_run, logger, process_failure_details,
@@ -227,7 +228,7 @@ def _check_entry_flood():
         timestamp_created__gte=cutoff,
         deleted_at__isnull=True,
     ).exclude(
-        context_id='claude-code',
+        context_id__in=DIALOG_CONTEXTS,
     ).values_list('content', flat=True)
 
     # Build word sets from first 200 chars of each entry
@@ -636,7 +637,7 @@ def _check_assessment_backfill(flag_key, action_entry_id):
         next_day = candidate + timedelta(days=1)
         start_ts = make_aware(datetime.combine(candidate, datetime.min.time()), tz).timestamp()
         end_ts = make_aware(datetime.combine(next_day, datetime.min.time()), tz).timestamp()
-        dialog_ids = Tag.objects.filter(tag_name='ccdialog').values_list('entry_id', flat=True)
+        dialog_ids = Tag.objects.filter(tag_name=DIALOG_TAG).values_list('entry_id', flat=True)
         has_dialog = Entry.objects.filter(
             id__in=dialog_ids,
             deleted_at__isnull=True,

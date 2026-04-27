@@ -18,6 +18,7 @@ import bootstrap  # noqa: F401 - Django setup
 
 from django.db import connection
 from django.db.models import Count
+from tjai_app.dialog_context import DIALOG_CONTEXTS
 from tjai_app.db_log_handler import DbLogHandler
 from tjai_app.models import Entry, Context, TagStats, Machine, SysConfig, AppLog
 from tjai_app.tjai_utils import safe_truncate
@@ -129,13 +130,14 @@ def collect_postgres():
         table_sizes = {r[0]: r[1] for r in cur.fetchall()}
 
         # Split entries table into dialog vs non-dialog
+        dialog_contexts = list(DIALOG_CONTEXTS)
         cur.execute("""
             SELECT
-                COALESCE(SUM(pg_column_size(e.*)) FILTER (WHERE e.context = %s), 0),
-                COALESCE(SUM(pg_column_size(e.*)) FILTER (WHERE e.context IS DISTINCT FROM %s), 0)
+                COALESCE(SUM(pg_column_size(e.*)) FILTER (WHERE e.context = ANY(%s)), 0),
+                COALESCE(SUM(pg_column_size(e.*)) FILTER (WHERE e.context IS NULL OR e.context <> ALL(%s)), 0)
             FROM entries e
             WHERE e.deleted_at IS NULL
-        """, ['claude-code', 'claude-code'])
+        """, [dialog_contexts, dialog_contexts])
         dialog_bytes, entries_bytes = cur.fetchone()
 
         entries_total = table_sizes.get('entries', 0)

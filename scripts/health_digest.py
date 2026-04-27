@@ -28,6 +28,7 @@ from django.db import connection
 from django.db.models import Count
 
 from tjai_app.db_log_handler import DbLogHandler
+from tjai_app.dialog_context import DIALOG_CONTEXTS
 from tjai_app.models import Entry, AppLog, Tag
 from tjai_app.tjai_utils import safe_truncate
 
@@ -282,7 +283,8 @@ def collect_entries(since_ts):
 def collect_dialog(since_ts):
     """Dialog turn counts by source.
 
-    CC dialog turns live with context='claude-code' (and tag 'ccdialog');
+    Co-development dialog turns live in dialog contexts (currently
+    'co-code', historically 'claude-code') and carry tag 'ccdialog';
     they do not carry a data.source field. This is the canonical
     discriminator used across the rest of the codebase (services.py,
     views.py SQL). A prior data.source='mcp'|'claude_code' filter
@@ -295,7 +297,7 @@ def collect_dialog(since_ts):
     metrics['dialog_cc_turns_24h'] = Entry.objects.filter(
         timestamp_created__gte=since_ts,
         deleted_at__isnull=True,
-        context__name='claude-code',
+        context__name__in=DIALOG_CONTEXTS,
     ).count()
 
     metrics['dialog_tg_turns_24h'] = Entry.objects.filter(

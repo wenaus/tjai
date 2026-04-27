@@ -100,6 +100,10 @@
             margin: 4px 0 4px 16px;
             line-height: 1.4;
         }
+        .calendar-detail-link {
+            color: inherit;
+            text-decoration: none;
+        }
         .entry-meta { margin-top: 2px; margin-left: 34px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
         .entry-badge {
             color: #b0bec5;
@@ -284,6 +288,7 @@
         }
 
         // escapeHtml and linkifyContent provided by tjai-utils.js
+        const dialogContexts = new Set({{ dialog_contexts_json|default:"[]"|safe }});
 
         async function fetchCalendar() {
             try {
@@ -472,19 +477,24 @@
 
                 // Use server-provided time_display (Eastern), add local time if different
                 let timeStr = '';
+                let copyPrefix = '';
                 if (entry.time_display) {
                     let localSuffix = '';
+                    let localSuffixText = '';
                     const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
                     if (localTz !== 'America/New_York') {
                         const evD = new Date(entry.event_date * 1000);
                         const localTime = evD.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12:false});
                         if (localTime !== entry.time_display) {
                             localSuffix = ` <span style="color:#8a8a8a">(${localTime})</span>`;
+                            localSuffixText = ` (${localTime})`;
                         }
                     }
                     timeStr = `<span class="entry-time">${entry.time_display}</span>${localSuffix} `;
+                    copyPrefix = `${entry.time_display}${localSuffixText} `;
                 } else if (!isAnnual && !clockType && !entry.data?._placeholder && entry.context !== 'diary' && !isDailyEntry) {
                     timeStr = `<span class="entry-time" style="color:#8a8a8a">All day</span> `;
+                    copyPrefix = 'All day ';
                 }
 
                 // Countdown for next upcoming event (only if it's today)
@@ -516,7 +526,8 @@
                     contentHtml = `<span class="${contentClass}">${linkifyContent(escapeHtml(firstLine))}</span>`;
                 }
                 const calEntryUrl = calEid && calEid.startsWith('daily-') ? `/tjai/synopsis/?entry_id=${encodeURIComponent(calEid)}` : calEid ? `/tjai/entry/?entry_id=${encodeURIComponent(calEid)}` : `/tjai/entry/?uuid=${entry.id}`;
-                html += `<div class="entry"><a href="${calEntryUrl}" style="color:inherit;text-decoration:none">${timeStr}${countdownStr}${contentHtml}</a></div>`;
+                const copyLine = copyPrefix + entry.content.split('\n')[0];
+                html += `<div class="entry calendar-entry" data-copy-line="${dashAttr(copyLine)}"><a class="calendar-detail-link" href="${dashAttr(calEntryUrl)}">${timeStr}</a>${countdownStr}${contentHtml}</div>`;
             }
 
             document.getElementById('calendar-content').innerHTML = html || 'No upcoming events';
@@ -557,7 +568,7 @@
 
         function updateDialogChart() {
             const el = document.getElementById('dialog-chart');
-            if (activeContext !== 'claude-code') { el.style.display = 'none'; return; }
+            if (!dialogContexts.has(activeContext)) { el.style.display = 'none'; return; }
             el.style.display = '';
             if (_dialogChartDrawn) return;
             if (_dialogChartData) { _renderBothCharts(_dialogChartData); return; }
@@ -1784,6 +1795,39 @@
                         // Ignore detached nodes; fall through to entry-aware copy.
                     }
                 }
+            }
+
+            const calendarRows = document.querySelectorAll('.calendar-entry[data-copy-line]');
+            const selectedCalendar = [];
+            const selectedCalendarHtml = [];
+            for (const row of calendarRows) {
+                if (sel.containsNode(row, true)) {
+                    const rowRange = document.createRange();
+                    rowRange.selectNodeContents(row);
+                    for (let i = 0; i < sel.rangeCount; i++) {
+                        const range = sel.getRangeAt(i);
+                        if (range.compareBoundaryPoints(Range.END_TO_START, rowRange) <= 0 ||
+                            range.compareBoundaryPoints(Range.START_TO_END, rowRange) >= 0) {
+                            continue;
+                        }
+                        const clipped = range.cloneRange();
+                        if (clipped.compareBoundaryPoints(Range.START_TO_START, rowRange) < 0) clipped.setStart(rowRange.startContainer, rowRange.startOffset);
+                        if (clipped.compareBoundaryPoints(Range.END_TO_END, rowRange) > 0) clipped.setEnd(rowRange.endContainer, rowRange.endOffset);
+                        const holder = document.createElement('div');
+                        holder.appendChild(clipped.cloneContents());
+                        selectedCalendarHtml.push(holder.innerHTML);
+                        selectedCalendar.push(clipped.toString());
+                    }
+                }
+            }
+            if (selectedCalendar.length > 0) {
+                const plain = selectedCalendar.map(s => s.trim()).filter(Boolean).join('\n');
+                const html = selectedCalendarHtml.filter(Boolean).join('<br>');
+                e.clipboardData.setData('text/plain', plain);
+                e.clipboardData.setData('text/html', html);
+                e.preventDefault();
+                flashNotice('Copied calendar selection with links');
+                return;
             }
 
             const entryDivs = document.querySelectorAll('.entry[id^="e-"]');

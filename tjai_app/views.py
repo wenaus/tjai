@@ -7,6 +7,8 @@ import uuid
 from datetime import datetime, timedelta
 from collections import Counter
 
+from .dialog_context import CURRENT_DIALOG_CONTEXT, DIALOG_CONTEXTS, DIALOG_TAG
+
 logger = logging.getLogger(__name__)
 
 _LIST_RE = re.compile(r'[-*+] |\d+\. ')
@@ -1181,8 +1183,10 @@ def dashboard(request):
     """Render the dashboard HTML page."""
     return render(request, 'tjai_app/dashboard.html', {
         'is_archive': request.GET.get('status') == 'archive',
-        'is_dialog': request.GET.get('context') == 'claude-code',
+        'is_dialog': request.GET.get('context') in DIALOG_CONTEXTS,
         'is_trash': request.GET.get('deleted') == '1',
+        'current_dialog_context': CURRENT_DIALOG_CONTEXT,
+        'dialog_contexts_json': json.dumps(list(DIALOG_CONTEXTS)),
     })
 
 
@@ -1532,9 +1536,11 @@ def dashboard_status(request):
     expand_dialog = request.GET.get('expand_dialog') == '1'
     exclude_contexts = [c for c in request.GET.get('exclude_context', '').split(',') if c]
 
-    # Exclude claude-code (dialog) from default dashboard view
-    if not filter_context and 'claude-code' not in exclude_contexts:
-        exclude_contexts.append('claude-code')
+    # Exclude dialog contexts from the default dashboard view.
+    if not filter_context:
+        for ctx in DIALOG_CONTEXTS:
+            if ctx not in exclude_contexts:
+                exclude_contexts.append(ctx)
 
     show_deleted = request.GET.get('deleted') == '1'
     if show_deleted:
@@ -1576,17 +1582,18 @@ def dashboard_status(request):
             now_local = datetime.now(tz=tz)
             cutoff_ts = (now_local - timedelta(days=14)).timestamp()
             tz_name = str(tz)
+            count_contexts = list(DIALOG_CONTEXTS) if filter_context in DIALOG_CONTEXTS else [filter_context]
             from django.db import connection
             with connection.cursor() as cursor:
                 cursor.execute("""
                     SELECT (to_timestamp(timestamp_modified) AT TIME ZONE %s)::date AS day,
                            count(*) AS cnt
                     FROM entries
-                    WHERE context = %s AND deleted_at IS NULL
+                    WHERE context = ANY(%s) AND deleted_at IS NULL
                           AND (status IS NULL OR status != 'archive')
                           AND timestamp_modified >= %s
                     GROUP BY day ORDER BY day DESC
-                """, [tz_name, filter_context, cutoff_ts])
+                """, [tz_name, count_contexts, cutoff_ts])
                 daily_counts = [{'date': row[0].isoformat(), 'count': row[1]} for row in cursor.fetchall()]
         except Exception:
             logger.exception("daily_counts query failed for context=%s", filter_context)
@@ -1768,7 +1775,7 @@ def dashboard_status(request):
     kind_counts = dict(Entry.objects.filter(
         deleted_at__isnull=True,
     ).exclude(status='archive').exclude(
-        context_id='claude-code'
+        context_id__in=DIALOG_CONTEXTS
     ).values('kind').annotate(cnt=Count('id')).values_list('kind', 'cnt'))
 
     return JsonResponse({
@@ -1829,10 +1836,12 @@ def dashboard_search(request):
         qs = qs.filter(context_id=filter_context)
 
     exclude_contexts = [c for c in request.GET.get('exclude_context', '').split(',') if c]
-    # Mirror dashboard_status: exclude claude-code (dialog) from search
+    # Mirror dashboard_status: exclude dialog contexts from search
     # results unless the user explicitly filters to that context.
-    if not filter_context and 'claude-code' not in exclude_contexts:
-        exclude_contexts.append('claude-code')
+    if not filter_context:
+        for ctx in DIALOG_CONTEXTS:
+            if ctx not in exclude_contexts:
+                exclude_contexts.append(ctx)
     if exclude_contexts:
         qs = qs.exclude(context_id__in=exclude_contexts)
     if request.GET.get('public') == '1':
@@ -3438,7 +3447,7 @@ def relate_to_view(request, entry_uuid):
     entries = Entry.objects.filter(
         deleted_at__isnull=True
     ).exclude(status='archive').exclude(
-        context_id='claude-code'
+        context_id__in=DIALOG_CONTEXTS
     ).exclude(id=entry_uuid).exclude(
         id__in=already_related
     ).order_by('-timestamp_modified')
@@ -3979,10 +3988,12 @@ def api_dialog_daily_counts(request):
                 SELECT (to_timestamp(timestamp_modified) AT TIME ZONE %s)::date AS day,
                        count(*) AS cnt
                 FROM entries
-                WHERE context = 'claude-code' AND deleted_at IS NULL
+                WHERE id IN (
+                    SELECT entry_id FROM tags WHERE tag_name = %s
+                ) AND deleted_at IS NULL
                       AND (status IS NULL OR status != 'archive')
                 GROUP BY day ORDER BY day
-            """, [str(tz)])
+            """, [str(tz), DIALOG_TAG])
             rows = [{'date': row[0].isoformat(), 'count': row[1]}
                     for row in cursor.fetchall()]
         return JsonResponse({'daily_counts': rows})
@@ -4018,7 +4029,7 @@ def api_dialog(request):
         turns = int(request.GET.get("turns", 20))
         hostname = request.GET.get("hostname", "").strip()
         entry_ids = Tag.objects.filter(
-            tag_name='ccdialog'
+            tag_name=DIALOG_TAG
         ).values_list('entry_id', flat=True)
         qs = Entry.objects.filter(
             id__in=entry_ids,
@@ -4098,17 +4109,26 @@ def api_dialog(request):
                         entry_data['entry_id'] = f'{source_eid}:{slug}'
                     extra_tags.append('research-subagent')
 
+    Context.objects.get_or_create(
+        name=CURRENT_DIALOG_CONTEXT,
+        defaults={
+            'title': 'Co-development dialog',
+            'description': 'AI pair-programming and co-development dialog across clients',
+            'timestamp_created': now,
+            'timestamp_modified': now,
+        },
+    )
     entry = Entry.objects.create(
         id=str(uuid.uuid7()),
         content=content,
         kind='memory',
-        context_id='claude-code',
+        context_id=CURRENT_DIALOG_CONTEXT,
         timestamp_created=now,
         timestamp_modified=now,
         is_dirty=0,
         data=entry_data,
     )
-    Tag.objects.create(tag_name='ccdialog', entry=entry)
+    Tag.objects.create(tag_name=DIALOG_TAG, entry=entry)
     for tag in extra_tags:
         Tag.objects.create(tag_name=tag, entry=entry)
 
