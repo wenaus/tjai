@@ -233,7 +233,8 @@
         </script>
         {% endif %}
         <div style="margin-top: 8px;">
-            <span class="delete-link" id="deleteBtn">delete</span>
+            <span class="delete-link" id="archiveBtn" style="color:#d8a070">archive</span>
+            <span class="delete-link" id="trashBtn" style="margin-left:12px">trash</span>
         </div>
     </div>
 
@@ -341,6 +342,19 @@
         var csrfToken = "{{ csrf_token }}";
         var saveUrl = "{% url 'api_entry_save' entry.id %}";
         var deleteUrl = "{% url 'api_delete_entry' entry.id %}";
+        var archiveUrl = "{% url 'api_archive_entry' entry.id %}";
+        var fallbackListUrl = "{% url 'dashboard' %}";
+        function returnToOriginList() {
+            if (document.referrer) {
+                try {
+                    var ref = new URL(document.referrer);
+                    if (ref.origin === window.location.origin && ref.pathname.indexOf('/tjai/entry/') !== 0) {
+                        return ref.pathname + ref.search + ref.hash;
+                    }
+                } catch(e) {}
+            }
+            return fallbackListUrl;
+        }
         var cm = null;
 
         // Public toggle — immediate save, uses current editor content if editing
@@ -760,21 +774,43 @@
             });
         }
 
-        var deleting = false;
-        function doDelete() {
-            if (deleting) return;
-            if (!confirm('Delete this entry? This cannot be undone.')) return;
-            deleting = true;
-            fetch(deleteUrl, {
-                method: 'DELETE',
+        var entryActionRunning = false;
+        function runEntryAction(label, url, method, confirmText, doneUrl) {
+            if (entryActionRunning) return;
+            if (confirmText && !confirm(confirmText)) return;
+            entryActionRunning = true;
+            fetch(url, {
+                method: method,
                 headers: {'X-CSRFToken': csrfToken},
             }).then(function(r) { return r.json(); }).then(function(data) {
                 if (data.status === 'ok') {
-                    location.href = "{% url 'dashboard' %}";
+                    location.href = doneUrl;
                 } else {
-                    alert('Delete failed: ' + (data.error || 'unknown'));
+                    entryActionRunning = false;
+                    alert(label + ' failed: ' + (data.error || 'unknown'));
                 }
-            }).catch(function(err) { alert('Delete failed: ' + err); });
+            }).catch(function(err) {
+                entryActionRunning = false;
+                alert(label + ' failed: ' + err);
+            });
+        }
+        function doArchive() {
+            runEntryAction(
+                'Archive',
+                archiveUrl,
+                'POST',
+                null,
+                returnToOriginList()
+            );
+        }
+        function doTrash() {
+            runEntryAction(
+                'Trash',
+                deleteUrl,
+                'DELETE',
+                'Move this entry to Trash?',
+                returnToOriginList()
+            );
         }
 
         // Autosave state — MUST be before startEdit can be called
@@ -796,7 +832,8 @@
         document.getElementById('editBtn').addEventListener('click', startEdit);
         document.getElementById('saveBtn').addEventListener('click', doSave);
         document.getElementById('cancelBtn').addEventListener('click', cancelEdit);
-        document.getElementById('deleteBtn').addEventListener('click', doDelete);
+        document.getElementById('archiveBtn').addEventListener('click', doArchive);
+        document.getElementById('trashBtn').addEventListener('click', doTrash);
         document.getElementById('relateBtn').addEventListener('click', function() {
             window.open('/tjai/relate/{{ entry.id }}/', '_blank');
         });
