@@ -701,23 +701,34 @@
         }
         function dashLooksLikeEpoch(key, value) {
             if (typeof value !== 'number' && !/^\d+(\.\d+)?$/.test(String(value))) return false;
-            if (!/(^|_)(time|date|timestamp|created|modified)(_|$)/i.test(key)) return false;
             const n = Number(value);
             return n > 946684800 && n < 4102444800;
         }
-        function dashFormatEpoch(value) {
-            return new Date(Number(value) * 1000).toLocaleString('en-US', {
+        function dashLooksLikeIsoTime(key, value) {
+            if (typeof value !== 'string') return false;
+            if (!/(^|_)(time|date|timestamp|created|modified|last_run|run)(_|$)/i.test(key)) return false;
+            return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value);
+        }
+        function dashFormatDate(date) {
+            const parts = new Intl.DateTimeFormat('en-US', {
                 timeZone: dashboardTimezone,
                 month: '2-digit',
                 day: '2-digit',
                 hour: '2-digit',
                 minute: '2-digit',
                 hour12: false,
-            });
+            }).formatToParts(date);
+            const p = {};
+            parts.forEach(x => p[x.type] = x.value);
+            return `${p.month}/${p.day}/${p.hour}:${p.minute}`;
+        }
+        function dashFormatEpoch(value) {
+            return dashFormatDate(new Date(Number(value) * 1000));
         }
         function dashPreview(key, value) {
             if (value === undefined || value === null || value === '') return '';
             if (dashLooksLikeEpoch(key, value)) return dashFormatEpoch(value);
+            if (dashLooksLikeIsoTime(key, value)) return dashFormatDate(new Date(value));
             let s;
             if (Array.isArray(value)) s = value.join(',');
             else if (typeof value === 'object') s = JSON.stringify(value);
