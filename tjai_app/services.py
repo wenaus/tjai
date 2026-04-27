@@ -1525,7 +1525,8 @@ def get_entry_versions(entry_id, version=None, age=None, max_content_length=0):
              at least that old.
         max_content_length: Truncate content (0 = full).
 
-    Returns single version (if version or age specified) or list of all versions.
+    Returns single version (if version or age specified) or a dict containing
+    all versions.
     """
     from .models import EntryVersion, Entry
     import time as _time
@@ -1562,11 +1563,12 @@ def get_entry_versions(entry_id, version=None, age=None, max_content_length=0):
             return {"error": f"No version at least {age} old"}
         return _format_version(v, max_content_length)
 
-    # No filter — return list of all versions (metadata only, content truncated)
+    # No filter — return all versions wrapped in a dict. A bare empty list
+    # becomes an empty MCP content response, which clients reject.
     result = []
     for v in versions.values('id', 'version_num', 'content', 'data', 'changed_by', 'timestamp')[:50]:
         result.append(_format_version(v, max_content_length if max_content_length else 100))
-    return result
+    return {"versions": result, "count": len(result)}
 
 
 def _format_version(v, max_content_length):

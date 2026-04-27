@@ -3331,6 +3331,8 @@ def api_entry_save(request, entry_id):
     entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
     if not entry:
         return JsonResponse({'error': 'Entry not found'}, status=404)
+    from .models import EntryVersion
+    version_count_before = EntryVersion.objects.filter(entry_id=entry.id).count()
     # Conflict detection: reject if entry was modified since client's known timestamp
     expected_ts = body_peek.get('expected_ts')
     conflict = False
@@ -3448,6 +3450,17 @@ def api_entry_save(request, entry_id):
     if not metadata_only:
         entry.timestamp_modified = time.time()
     entry.save()
+    created_version = None
+    latest_version = EntryVersion.objects.filter(entry_id=entry.id).order_by('-version_num').first()
+    if latest_version and EntryVersion.objects.filter(entry_id=entry.id).count() > version_count_before:
+        created_version = {
+            'id': latest_version.id,
+            'version_num': latest_version.version_num,
+            'datetime': fmt_datetime(latest_version.timestamp),
+            'changed_by': latest_version.changed_by,
+            'line_count': latest_version.content.count('\n') + 1 if latest_version.content else 0,
+            'content_preview': latest_version.content[:120].replace('\n', ' ') if latest_version.content else '',
+        }
     data_dict = entry.data if isinstance(entry.data, dict) else None
     if data_dict and data_dict.get('entry_id'):
         url = f'/tjai/entry/?entry_id={data_dict["entry_id"]}'
@@ -3458,6 +3471,8 @@ def api_entry_save(request, entry_id):
     else:
         url = f'/tjai/entry/?uuid={entry.id}'
     resp = {'ok': True, 'url': url, 'timestamp_modified': entry.timestamp_modified}
+    if created_version:
+        resp['version'] = created_version
     if conflict:
         resp['conflict'] = True
     return JsonResponse(resp)

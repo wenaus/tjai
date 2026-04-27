@@ -38,7 +38,7 @@ get_entry_versions(entry_id, version=None, age=None, max_content_length=0)
 - `age="7d"` — most recent version at least 7 days old
 
 **List all versions:**
-- Omit both `version` and `age` — returns up to 50 versions (newest first) with truncated content
+- Omit both `version` and `age` — returns `{"versions": [...], "count": N}` with up to 50 versions (newest first) with truncated content
 
 **Example: detect changes in @Underway**
 ```

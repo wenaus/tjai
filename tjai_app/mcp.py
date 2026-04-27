@@ -1026,7 +1026,7 @@ async def get_entry_versions(
     version: int = None,
     age: str = None,
     max_content_length: int = 0,
-):
+) -> dict:
     """
     Get version history for an entry.
 
@@ -1047,8 +1047,8 @@ async def get_entry_versions(
 
     Returns:
         Single version dict (if version or age specified) with: version_num, content,
-        data, changed_by, timestamp. Or list of all versions (newest first, max 50)
-        with truncated content for overview.
+        data, changed_by, timestamp. Or {"versions": [...], "count": N} for the
+        all-versions overview, newest first, max 50, with truncated content.
         Returns {"error": "..."} if entry or version not found.
     """
     return await sync_to_async(services.get_entry_versions)(

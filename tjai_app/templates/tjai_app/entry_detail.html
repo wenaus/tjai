@@ -242,15 +242,21 @@
     <div id="version-history" style="margin-top: 16px;"></div>
     <script>
     (function() {
-        var versions = JSON.parse('{{ versions_json|escapejs }}');
+        window._entryVersions = JSON.parse('{{ versions_json|escapejs }}');
+        function renderVersionHistory() {
+        var versions = window._entryVersions || [];
         var hasLocal = false;
         try { hasLocal = !!localStorage.getItem('tjai-autosave-{{ entry.id }}'); } catch(e) {}
-        if (!versions.length && !hasLocal) return;
         var el = document.getElementById('version-history');
         var html = '<div style="border-top: 1px solid #333; padding-top: 12px;">';
         html += '<div style="color:#8a8a8a; margin-bottom: 8px; font-size: 12px;">Version History (' + versions.length + ')';
         if (versions.length > 1) html += ' <button onclick="purgeVersions()" style="background:#333;color:#e0e0e0;border:1px solid #555;padding:2px 8px;border-radius:3px;cursor:pointer;font-family:inherit;font-size:11px;margin-left:8px">Purge</button>';
         html += '</div>';
+        if (!versions.length && !hasLocal) {
+            html += '<div style="color:#aaa;font-size:12px;">No versions recorded for this entry.</div></div>';
+            el.innerHTML = html;
+            return;
+        }
         html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
         html += '<tr style="color:#8a8a8a;text-align:left;"><th style="padding:3px 8px">V</th><th style="padding:3px 8px">Date</th><th style="padding:3px 8px">By</th><th style="padding:3px 8px">Lines</th><th style="padding:3px 8px">Preview</th><th style="padding:3px 8px"></th></tr>';
         // localStorage backup row — rendered live, updated by autosave
@@ -287,6 +293,22 @@
         }
         html += '</table></div>';
         el.innerHTML = html;
+        try {
+            var localData = JSON.parse(localStorage.getItem('tjai-autosave-{{ entry.id }}'));
+            if (localData && localData.content && window._updateLocalVersionRow) window._updateLocalVersionRow(localData);
+        } catch(e) {}
+        }
+        window._addEntryVersion = function(version) {
+            if (!version) return;
+            var versions = window._entryVersions || [];
+            for (var i = 0; i < versions.length; i++) {
+                if (versions[i].id === version.id) return;
+            }
+            versions.unshift(version);
+            window._entryVersions = versions;
+            renderVersionHistory();
+        };
+        renderVersionHistory();
     })();
     function restoreFromLocal() {
         try {
@@ -957,6 +979,7 @@
                     return;  // Don't update baseline on conflict
                 }
                 if (data.ok) {
+                    if (data.version && window._addEntryVersion) window._addEntryVersion(data.version);
                     _isFirstAutosave = false;  // Only clear after confirmed success
                     _lastSavedContent = content;
                     _serverTimestamp = data.timestamp_modified || _serverTimestamp;
