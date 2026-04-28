@@ -10,6 +10,9 @@
     <script src="/tjai/static/tjai/turndown-7.2.0.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/theme/material-darker.min.css">
+    {% if content_format == 'xml' %}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    {% endif %}
     <style>
         body {
             font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
@@ -76,14 +79,52 @@
         .CodeMirror-focused .CodeMirror-selected { background: #264f78 !important; }
         /* Code blocks: light pink in both display and edit */
         .content pre, .content code { color: #f0c0c0; }
+        .content pre.language-markup {
+            background: #151515;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 12px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+        .content pre.language-markup code {
+            color: inherit;
+            white-space: pre-wrap;
+        }
         .cm-s-material-darker .cm-comment { color: #f0c0c0 !important; }
         .rel-section { margin-top: 12px; }
         .rel-section h3 { color: #e0e0e0; margin-bottom: 6px; font-weight: normal; }
-        .rel-row { display: flex; align-items: baseline; gap: 8px; padding: 3px 0; }
+        .rel-item {
+            display: grid;
+            grid-template-columns: max-content 80px minmax(0, 1fr);
+            column-gap: 8px;
+            row-gap: 3px;
+            padding: 5px 0;
+        }
+        .rel-row { display: contents; }
         .rel-row .rel-type { color: #e0e0e0; min-width: 80px; }
         .rel-row .rel-link { color: #90caf9; }
         .rel-row .rel-link:hover { text-decoration: underline; }
         .rel-row .rel-kind { padding: 1px 4px; border-radius: 2px; background: #2a2a3a; color: #e0e0e0; }
+        .rel-meta {
+            grid-column: 3;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            align-items: center;
+        }
+        .rel-badge {
+            color: #b0bec5;
+            background: #242424;
+            border: 1px solid #3a3a3a;
+            border-radius: 3px;
+            padding: 0 4px;
+            font-size: 11px;
+            white-space: nowrap;
+        }
+        .rel-badge .meta-id { color: #daa520; }
+        .rel-badge .meta-tag { color: #9ccc65; }
+        .rel-badge .meta-context { color: #ce93d8; }
         .dialog-speaker { font-size: 11px; min-width: 50px; }
         .dialog-time { color: #e0e0e0; white-space: nowrap; }
     </style>
@@ -154,6 +195,7 @@
                 <option value="">auto</option>
                 <option value="md"{% if explicit_format and content_format == 'md' %} selected{% endif %}>md</option>
                 <option value="txt"{% if explicit_format and content_format == 'txt' %} selected{% endif %}>txt</option>
+                <option value="xml"{% if explicit_format and content_format == 'xml' %} selected{% endif %}>xml</option>
             </select>
         </div>
         <textarea id="editor" style="background:#1a1a1a;color:#e0e0e0;border:none;display:none;">{{ entry.content }}</textarea>
@@ -342,6 +384,10 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/mode/markdown/markdown.min.js"></script>
+    {% if content_format == 'xml' %}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
+    {% endif %}
     <script>
         var originalContent = "{{ entry.content|escapejs }}";
         var restoreContent = {% if restore_version_content is not None %}"{{ restore_version_content|escapejs }}"{% else %}null{% endif %};
@@ -394,7 +440,7 @@
         });
 
         // linkifyContent provided by tjai-utils.js
-        document.getElementById('first-line').innerHTML = linkifyContent("{{ first_line|escapejs }}");
+        document.getElementById('first-line').innerHTML = linkifyContent(escapeHtml("{{ first_line|escapejs }}"));
 
         var baseTitle = document.title;
         function startEdit() {
@@ -1028,6 +1074,25 @@
                 if (data && data.entry_id) return '/tjai/entry/' + data.entry_id + '/';
                 return '/tjai/entry/?uuid=' + id;
             }
+            function relationMeta(other) {
+                var od = other.data || {};
+                var parts = [];
+                function badge(html) { parts.push('<span class="rel-badge">' + html + '</span>'); }
+                if (od.entry_id) badge('<span class="meta-id">entry_id=' + esc(od.entry_id) + '</span>');
+                else if (other.id) badge('<span class="meta-id">uuid=' + esc(other.id) + '</span>');
+                if (other.kind) badge('kind=' + esc(other.kind));
+                if (other.context) badge('<span class="meta-context">=' + esc(other.context) + '</span>');
+                if (other.name) badge('@' + esc(other.name));
+                if (other.priority !== undefined && other.priority !== null) badge('p=' + esc(other.priority));
+                if (other.status) badge('s=' + esc(other.status));
+                if (od.format) badge('format=' + esc(od.format));
+                if (other.tags && other.tags.length) {
+                    for (var i = 0; i < other.tags.length; i++) {
+                        badge('<span class="meta-tag">:' + esc(other.tags[i]) + '</span>');
+                    }
+                }
+                return parts.join('');
+            }
             // timeAgo removed — server provides modified_display
 
             // Group relations by kind
@@ -1069,10 +1134,14 @@
                     // Extract title from markdown link [title](url)
                     var mdMatch = firstLine.match(/^\[([^\]]+)\]\(.*\)$/);
                     if (mdMatch) firstLine = mdMatch[1];
+                    html += '<div class="rel-item">';
                     html += '<div class="rel-row">';
                     html += '<span class="dialog-time">' + (other.modified_display || '') + '</span>';
                     html += '<span class="rel-type">' + esc(rel.relation_type) + '</span>';
                     html += '<a class="rel-link" href="' + entryUrl(other.id, od) + '">' + esc(firstLine) + '</a>';
+                    html += '</div>';
+                    var metaLine = relationMeta(other);
+                    if (metaLine) html += '<div class="rel-meta">' + metaLine + '</div>';
                     html += '</div>';
                 }
                 html += '</div>';

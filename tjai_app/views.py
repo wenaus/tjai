@@ -88,6 +88,24 @@ def _render_markdown(text, extensions=None):
     html = markdown.markdown(_fix_md_list_spacing(safe_text), extensions=exts, tab_length=2)
     return _neutralize_raw_html_hazards(html)
 
+
+_XML_LIKE_RE = re.compile(
+    r'^\s*<(?:(?:rule|instruction|why|when|task-notification|system|profile)\b|[A-Za-z][A-Za-z0-9:_-]*[\s>/])',
+    re.IGNORECASE,
+)
+
+
+def _looks_xml_like(text):
+    return bool(text and _XML_LIKE_RE.match(text))
+
+
+def _render_xml_code(text):
+    if not text:
+        return ''
+    from django.utils.html import escape
+    escaped = escape(text)
+    return f'<pre class="language-markup"><code class="language-markup">{escaped}</code></pre>'
+
 from .tjai_utils import fmt_datetime, fmt_date, fmt_time, fmt_duration, fmt_ago, get_app_tz
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
@@ -3152,30 +3170,35 @@ def entry_detail(request, entry_id=None):
     # Determine content format: explicit data.format overrides auto-detection
     fmt = (data.get('format') if data else None)
     if not fmt:
-        if entry.context_id == 'recipe':
+        if _looks_xml_like(entry.content):
+            fmt = 'xml'
+        elif entry.context_id == 'recipe':
             fmt = 'txt'
         else:
             fmt = 'md'
-    md_exts = ['nl2br', 'tables', 'fenced_code'] if fmt == 'txt' else ['tables', 'fenced_code']
-    content_html = _render_markdown(body_text, extensions=md_exts)
-    # [[wiki-links]] first — before bare URL linkification
-    def _wiki_link(m):
-        ref = m.group(1)
-        if ref.startswith('http://') or ref.startswith('https://'):
-            return f'<a href="{ref}">{ref}</a>'
-        if ref.startswith('@'):
-            name = ref[1:]
-            return f'<a href="/tjai/entry/?name={name}">{ref}</a>'
-        return f'<a href="/tjai/entry/?entry_id={ref}">{ref}</a>'
-    content_html = re.sub(r'\[\[([^\]]+)\]\]', _wiki_link, content_html)
-    # Linkify bare URLs not already in anchor tags
-    content_html = re.sub(
-        r'(?<!["\'>])(https?://[^\s<]+)',
-        r'<a href="\1">\1</a>',
-        content_html
-    )
-    # External links open in new tab
-    content_html = content_html.replace('<a href="http', '<a target="_blank" href="http')
+    if fmt == 'xml':
+        content_html = _render_xml_code(entry.content)
+    else:
+        md_exts = ['nl2br', 'tables', 'fenced_code'] if fmt == 'txt' else ['tables', 'fenced_code']
+        content_html = _render_markdown(body_text, extensions=md_exts)
+        # [[wiki-links]] first — before bare URL linkification
+        def _wiki_link(m):
+            ref = m.group(1)
+            if ref.startswith('http://') or ref.startswith('https://'):
+                return f'<a href="{ref}">{ref}</a>'
+            if ref.startswith('@'):
+                name = ref[1:]
+                return f'<a href="/tjai/entry/?name={name}">{ref}</a>'
+            return f'<a href="/tjai/entry/?entry_id={ref}">{ref}</a>'
+        content_html = re.sub(r'\[\[([^\]]+)\]\]', _wiki_link, content_html)
+        # Linkify bare URLs not already in anchor tags
+        content_html = re.sub(
+            r'(?<!["\'>])(https?://[^\s<]+)',
+            r'<a href="\1">\1</a>',
+            content_html
+        )
+        # External links open in new tab
+        content_html = content_html.replace('<a href="http', '<a target="_blank" href="http')
     first_line = lines[0] if lines else ''
     if entry.context_id == 'poetry':
         content_lines = entry.content.split('\n')
@@ -3416,10 +3439,10 @@ def api_entry_save(request, entry_id):
     if 'status' in data:
         sv = (data['status'] or '').strip() if isinstance(data['status'], str) else None
         entry.status = sv or None
-    # Content format: md/txt/None (auto)
+    # Content format: md/txt/xml/None (auto)
     fmt_changed = False
     if 'format' in data:
-        fmt_val = data['format'] if data['format'] in ('md', 'txt') else None
+        fmt_val = data['format'] if data['format'] in ('md', 'txt', 'xml') else None
         if not isinstance(entry.data, dict):
             entry.data = {}
         if fmt_val:
