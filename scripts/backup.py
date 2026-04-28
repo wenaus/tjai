@@ -3,9 +3,10 @@
 
 Creates a dated directory under ~/tjai-backups/server/YYYY-MM-DD/
 containing:
-  - tjai-db.sql.gz   PostgreSQL database dump (compressed)
+  - *-db.sql.gz      PostgreSQL database dumps (compressed)
   - env-www.env      /var/www/tjai/.env
   - env-home.env     ~/.env
+  - env-*.env        Production env files for apps with database credentials
   - data/            /var/www/tjai/data/ (history files etc.)
   - etaverse.conf    Apache site configuration
 
@@ -19,69 +20,128 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 LOCAL_BACKUP_DIR = Path.home() / 'tjai-backups' / 'server'
 RCLONE_DEST = 'dropbox:tjai-backups/server'
 TJAI_WWW = Path('/var/www/tjai')
 APACHE_CONF = Path('/etc/apache2/sites-enabled/etaverse.conf')
 
-DB_NAME = 'tjai'
-DB_USER = 'tjai'
-DB_HOST = 'localhost'
+DB_DUMPS = [
+    {
+        'label': 'tjai',
+        'env_path': TJAI_WWW / '.env',
+        'url_key': 'DJANGO_DATABASE_URL',
+        'default_name': 'tjai',
+        'default_user': 'tjai',
+    },
+    {
+        'label': 'corun',
+        'env_path': Path('/var/www/corun-ai/src/.env'),
+        'prefix': 'CORUN_DB_',
+        'default_name': 'corun',
+        'default_user': 'corun',
+    },
+    {
+        'label': 'swf-remote',
+        'env_path': Path('/var/www/swf-remote/src/.env'),
+        'prefix': 'SWF_REMOTE_DB_',
+        'default_name': 'swf_remote',
+        'default_user': 'swf_remote',
+    },
+    {
+        'label': 'etaverse',
+        'env_path': Path('/var/www/etaverse-data/.env'),
+        'prefix': 'ETAVERSE_DB_',
+        'pass_key': 'ETAVERSE_DB_PASS',
+        'default_name': 'etaverse',
+        'default_user': 'etaverse',
+    },
+    {
+        'label': 'primus',
+        'env_path': Path('/var/www/primus/.env'),
+        'url_key': 'DJANGO_DATABASE_URL',
+        'default_name': 'primus',
+        'default_user': 'primus',
+    },
+    {
+        'label': 'pax-eden',
+        'env_path': Path('/var/www/pax-eden/.env'),
+        'url_key': 'DJANGO_DATABASE_URL',
+        'default_name': 'pax_eden',
+        'default_user': 'pax_eden',
+    },
+]
+
+ENV_FILES = [
+    (TJAI_WWW / '.env', 'env-www.env'),
+    (Path.home() / '.env', 'env-home.env'),
+    (Path('/var/www/corun-ai/src/.env'), 'env-corun.env'),
+    (Path('/var/www/swf-remote/src/.env'), 'env-swf-remote.env'),
+    (Path('/var/www/etaverse-data/.env'), 'env-etaverse.env'),
+    (Path('/var/www/primus/.env'), 'env-primus.env'),
+    (Path('/var/www/pax-eden/.env'), 'env-pax-eden.env'),
+]
 
 
-def get_db_password():
-    """Read DB password from production .env."""
-    env_path = TJAI_WWW / '.env'
+def read_env_file(env_path):
+    """Read a KEY=VALUE env file without expanding or logging secrets."""
+    env_path = Path(env_path)
+    env_vars = {}
     if not env_path.exists():
-        print(f"ERROR: {env_path} not found", file=sys.stderr)
-        return None
+        return env_vars
     for line in env_path.read_text().splitlines():
         line = line.strip()
-        if 'DATABASE_URL=' in line:
-            # postgres://user:pass@host:port/db
-            try:
-                return line.split('://')[1].split(':')[1].split('@')[0]
-            except (IndexError, ValueError):
-                pass
-        if line.startswith('DB_PASSWORD=') or line.startswith('PGPASSWORD='):
-            return line.split('=', 1)[1].strip().strip("'\"")
-    print("ERROR: Could not find DB password in .env", file=sys.stderr)
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        if line.startswith('export '):
+            line = line[len('export '):].strip()
+        key, value = line.split('=', 1)
+        env_vars[key.strip()] = value.strip().strip("'\"")
+    return env_vars
+
+
+def parse_db_url(db_url):
+    """Return dbname, user, password, host from a postgres URL."""
+    parsed = urlparse(db_url)
+    dbname = parsed.path.lstrip('/')
+    return {
+        'dbname': unquote(dbname),
+        'dbuser': unquote(parsed.username or ''),
+        'dbpass': unquote(parsed.password or ''),
+        'dbhost': parsed.hostname or 'localhost',
+    }
+
+
+def db_config_from_env(spec):
+    """Build pg_dump connection config from an app's production env file."""
+    env_vars = read_env_file(spec['env_path'])
+    if not env_vars:
+        print(f"  Skipping {spec['label']}: env file not found: {spec['env_path']}", file=sys.stderr)
+        return None
+
+    url_key = spec.get('url_key')
+    if url_key and env_vars.get(url_key):
+        cfg = parse_db_url(env_vars[url_key])
+        if cfg['dbname'] and cfg['dbuser'] and cfg['dbpass']:
+            return cfg
+
+    prefix = spec.get('prefix', '')
+    pass_key = spec.get('pass_key') or f'{prefix}PASSWORD'
+    cfg = {
+        'dbname': env_vars.get(f'{prefix}NAME', spec['default_name']),
+        'dbuser': env_vars.get(f'{prefix}USER', spec['default_user']),
+        'dbpass': env_vars.get(pass_key, ''),
+        'dbhost': env_vars.get(f'{prefix}HOST', 'localhost'),
+    }
+    if cfg['dbpass']:
+        return cfg
+
+    print(f"  Skipping {spec['label']}: no database password found in {spec['env_path']}", file=sys.stderr)
     return None
 
 
-def backup_postgres(backup_dir):
-    """pg_dump the tjai database, gzipped."""
-    dest = backup_dir / 'tjai-db.sql.gz'
-    password = get_db_password()
-    if not password:
-        return False
-
-    env = os.environ.copy()
-    env['PGPASSWORD'] = password
-
-    try:
-        dump = subprocess.run(
-            ['pg_dump', '-U', DB_USER, '-h', DB_HOST, DB_NAME],
-            capture_output=True, env=env, timeout=120,
-        )
-        if dump.returncode != 0:
-            print(f"ERROR: pg_dump failed: {dump.stderr.decode()}", file=sys.stderr)
-            return False
-
-        import gzip
-        with gzip.open(dest, 'wb') as f:
-            f.write(dump.stdout)
-
-        size_mb = dest.stat().st_size / (1024 * 1024)
-        print(f"  DB dump: {dest.name} ({size_mb:.1f} MB)")
-        return True
-    except subprocess.TimeoutExpired:
-        print("ERROR: pg_dump timed out after 120s", file=sys.stderr)
-        return False
-
-
-def backup_local_db(backup_dir, dbname, dbuser, dbpass, label):
+def backup_local_db(backup_dir, dbname, dbuser, dbpass, label, dbhost='localhost'):
     """pg_dump a local database, gzipped."""
     dest = backup_dir / f'{label}-db.sql.gz'
     env = os.environ.copy()
@@ -89,7 +149,7 @@ def backup_local_db(backup_dir, dbname, dbuser, dbpass, label):
 
     try:
         dump = subprocess.run(
-            ['pg_dump', '-U', dbuser, '-h', 'localhost', dbname],
+            ['pg_dump', '-U', dbuser, '-h', dbhost, dbname],
             capture_output=True, env=env, timeout=120,
         )
         if dump.returncode != 0:
@@ -171,27 +231,21 @@ def main():
     print(f"Backing up to {backup_dir}")
 
     ok = True
-    ok = backup_postgres(backup_dir) and ok
-    # Backup corun-ai and swf-remote databases (read passwords from their .env)
-    for label, env_path, prefix in [
-        ('corun', Path('/var/www/corun-ai/src/.env'), 'CORUN_DB_'),
-        ('swf-remote', Path('/var/www/swf-remote/src/.env'), 'SWF_REMOTE_DB_'),
-    ]:
-        env_vars = {}
-        if env_path.exists():
-            for line in env_path.read_text().splitlines():
-                if '=' in line and not line.startswith('#'):
-                    k, v = line.split('=', 1)
-                    env_vars[k.strip()] = v.strip().strip("'\"")
-        dbname = env_vars.get(f'{prefix}NAME', label.replace('-', '_'))
-        dbuser = env_vars.get(f'{prefix}USER', dbname)
-        dbpass = env_vars.get(f'{prefix}PASSWORD', '')
-        if dbpass:
-            ok = backup_local_db(backup_dir, dbname, dbuser, dbpass, label) and ok
-        else:
-            print(f"  Skipping {label}: no password found in {env_path}", file=sys.stderr)
-    copy_file(TJAI_WWW / '.env', backup_dir, 'env-www.env')
-    copy_file(Path.home() / '.env', backup_dir, 'env-home.env')
+    for spec in DB_DUMPS:
+        cfg = db_config_from_env(spec)
+        if not cfg:
+            ok = False
+            continue
+        ok = backup_local_db(
+            backup_dir,
+            cfg['dbname'],
+            cfg['dbuser'],
+            cfg['dbpass'],
+            spec['label'],
+            cfg['dbhost'],
+        ) and ok
+    for src, dest_name in ENV_FILES:
+        copy_file(src, backup_dir, dest_name)
     copy_dir(TJAI_WWW / 'data', backup_dir, 'data')
     copy_apache_conf(backup_dir)
 

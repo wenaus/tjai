@@ -150,7 +150,9 @@ def collect_backups(since_ts):
         metrics['backup_dump_mb'] = 0
         metrics['backup_gz_mb'] = 0
 
-    expected = ['env-www.env', 'env-home.env', 'etaverse.conf']
+    expected = ['env-www.env', 'env-home.env', 'env-corun.env',
+                'env-swf-remote.env', 'env-etaverse.env',
+                'env-primus.env', 'env-pax-eden.env', 'etaverse.conf']
     metrics['backup_config_ok'] = 1 if all(
         (latest / f).exists() for f in expected) else 0
 

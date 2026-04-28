@@ -445,7 +445,10 @@ def collect_backups():
             except Exception:
                 day_info['raw_mb'] = None
             # Check other expected files
-            expected = ['env-www.env', 'env-home.env', 'etaverse.conf']
+            expected = ['env-www.env', 'env-home.env', 'env-corun.env',
+                        'env-swf-remote.env', 'env-etaverse.env',
+                        'env-primus.env', 'env-pax-eden.env',
+                        'etaverse.conf']
             day_info['files_ok'] = all((day_dir / f).exists() for f in expected)
             data_dir = day_dir / 'data'
             day_info['data_files'] = sum(1 for _ in data_dir.rglob('*') if _.is_file()) if data_dir.is_dir() else 0
@@ -459,7 +462,10 @@ def collect_backups():
     # Keep 'latest' for backward compat with health assessment
     latest_dir = day_dirs[0]
     expected_files = ['tjai-db.sql.gz', 'corun-db.sql.gz', 'swf-remote-db.sql.gz',
-                      'env-www.env', 'env-home.env', 'etaverse.conf']
+                      'etaverse-db.sql.gz', 'primus-db.sql.gz',
+                      'pax-eden-db.sql.gz', 'env-www.env', 'env-home.env',
+                      'env-corun.env', 'env-swf-remote.env', 'env-etaverse.env',
+                      'env-primus.env', 'env-pax-eden.env', 'etaverse.conf']
     found = {}
     for name in expected_files:
         p = latest_dir / name

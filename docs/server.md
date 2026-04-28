@@ -111,9 +111,10 @@ Automated daily backup to Dropbox (`~/Dropbox/tjai-backups/server/YYYY-MM-DD/`).
 
 | Item | Filename | Source |
 |------|----------|--------|
-| PostgreSQL | `tjai-db.sql.gz` | `pg_dump`, gzip |
+| PostgreSQL | `tjai-db.sql.gz`, `corun-db.sql.gz`, `swf-remote-db.sql.gz`, `etaverse-db.sql.gz`, `primus-db.sql.gz`, `pax-eden-db.sql.gz` | `pg_dump`, gzip |
 | Production secrets | `env-www.env` | `/var/www/tjai/.env` |
 | Personal API keys | `env-home.env` | `~/.env` |
+| App env files | `env-corun.env`, `env-swf-remote.env`, `env-etaverse.env`, `env-primus.env`, `env-pax-eden.env` | Production env files used to read database credentials |
 | Data files | `data/` | `/var/www/tjai/data/` |
 | Apache config | `etaverse.conf` | `/etc/apache2/sites-enabled/etaverse.conf` |
 

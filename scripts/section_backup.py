@@ -43,7 +43,10 @@ def build(since_ts, target_date):
                 raw_mb = round(raw_size / (1024 * 1024), 1)
             except Exception:
                 raw_mb = '?'
-            expected = ['env-www.env', 'env-home.env', 'etaverse.conf']
+            expected = ['env-www.env', 'env-home.env', 'env-corun.env',
+                        'env-swf-remote.env', 'env-etaverse.env',
+                        'env-primus.env', 'env-pax-eden.env',
+                        'etaverse.conf']
             config_ok = all((day_dir / f).exists() for f in expected)
             data_dir = day_dir / 'data'
             data_files = (
