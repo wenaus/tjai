@@ -36,6 +36,7 @@ SUBAGENT_POLL_SECONDS = 300
 SUBAGENT_STABLE_SECONDS = 600
 MAX_RETRIES = 3
 RETRY_BACKOFF_MINUTES = [15, 60, 240]  # 15min, 1h, 4h
+RESEARCH_MIN_REPORT_CHARS = 1000
 
 
 def _count_subagent_entries(source_entry_id):
@@ -215,6 +216,22 @@ def _clear_retry(action_id):
         action.save(update_fields=['data'])
 
 
+def _research_completion_error(action_id, entry):
+    """Return a failure reason when a Claude research run produced no report."""
+    if action_id != 'research-agent' or not entry:
+        return None
+    data = entry.data if isinstance(entry.data, dict) else {}
+    if data.get('source') != 'multimodel' or data.get('model') != 'claude':
+        return None
+    content = (entry.content or '').strip()
+    if len(content) >= RESEARCH_MIN_REPORT_CHARS:
+        return None
+    return (
+        "Claude research completed without a usable report "
+        f"({len(content)} chars; minimum {RESEARCH_MIN_REPORT_CHARS})."
+    )
+
+
 def main():
     if len(sys.argv) < 2:
         logger.error("Usage: agent_complete.py <action_entry_id> [exit_code]")
@@ -260,7 +277,8 @@ def main():
     # Scan output for error indicators even on exit_code=0.
     # An agent that exits 0 but says "authentication failed" is not a success.
     ERROR_PHRASES = ('authentication failed', 'mcp tools aren\'t available',
-                     'failed to connect', 'connection refused')
+                     'failed to connect', 'connection refused',
+                     'http connection closed after')
     output_has_error = any(p in stderr_content.lower() for p in ERROR_PHRASES)
     if output_has_error and exit_code == 0:
         status = 'failed'
@@ -268,17 +286,32 @@ def main():
         logger.error("%s: exit_code=0 but output contains errors, marking failed",
                      action_id, extra=ref_extra)
 
-    stderr_summary = f"\n{stderr_content}" if stderr_content else ''
-    log_fn = logger.error if status == 'failed' else logger.info
-    log_fn("%s: exit_code=%d, status=%s%s", action_id, exit_code, status,
-           stderr_summary, extra=ref_extra)
-
     # On timeout, wait for subagents before finalizing
     subagent_count = 0
     if exit_code == 124 and current_entry:
         subagent_count = _wait_for_subagents(action_id, current_entry, ref_extra)
 
     now = time.time()  # Refresh after possible wait
+
+    # Fetch current entry before final status so artifact quality can affect it.
+    entry = None
+    if current_entry:
+        entry = Entry.objects.filter(
+            id=current_entry, deleted_at__isnull=True
+        ).first()
+
+    completion_error = None
+    if status == 'completed':
+        completion_error = _research_completion_error(action_id, entry)
+        if completion_error:
+            status = 'failed'
+            ref_extra['run_status'] = status
+            logger.error("%s: %s", action_id, completion_error, extra=ref_extra)
+
+    stderr_summary = f"\n{stderr_content}" if stderr_content else ''
+    log_fn = logger.error if status == 'failed' else logger.info
+    log_fn("%s: exit_code=%d, status=%s%s", action_id, exit_code, status,
+           stderr_summary, extra=ref_extra)
 
     SysConfig.objects.update_or_create(
         key=f'agent_{action_id}_status',
@@ -306,6 +339,8 @@ def main():
         error_msg = f"Agent exited {exit_code}"
         if output_has_error:
             error_msg = f"Agent output contains errors (exit {exit_code})"
+        if completion_error:
+            error_msg = completion_error
         if stderr_content:
             error_msg += f": {stderr_content[-200:]}"
         SysConfig.objects.update_or_create(
@@ -324,13 +359,6 @@ def main():
         # Clear retry state on success
         _clear_retry(action_id)
 
-    # Fetch current entry once for run result + post-processing
-    entry = None
-    if current_entry:
-        entry = Entry.objects.filter(
-            id=current_entry, deleted_at__isnull=True
-        ).first()
-
     # Write structured run result to the current entry's data field
     if entry:
         try:
@@ -345,7 +373,11 @@ def main():
             data['run_exit_code'] = exit_code
             if subagent_count:
                 data['subagent_count'] = subagent_count
-            if exit_code not in (0, 124) and stderr_content:
+            if completion_error:
+                data['run_error'] = completion_error
+                if stderr_content:
+                    data['run_error'] += f"\n\nCaptured agent output:\n{stderr_content}"
+            elif status == 'failed' and stderr_content:
                 data['run_error'] = stderr_content[-200:]
             elif 'run_error' in data:
                 del data['run_error']
@@ -354,10 +386,10 @@ def main():
             # reach the final step.  Successful or timed-out runs are "done".
             update_fields = ['data']
             if action_id == 'research-agent':
-                if exit_code in (0, 124):
+                if status == 'completed':
                     entry.status = 'done'
                 else:
-                    entry.status = 'blocked'
+                    entry.status = 'failed'
                 update_fields.append('status')
             entry.data = data
             entry.save(update_fields=update_fields)
@@ -366,13 +398,13 @@ def main():
                          action_id, e, extra=ref_extra)
 
     # Post-process synthesis entries: convert plain source report references to md links
-    if current_entry and exit_code in (0, 124):
+    if current_entry and status == 'completed':
         _linkify_synthesis_sources(current_entry)
 
     # Post-process daily-history: extract digested history to file for KozyKorner.
     # If the AI agent completed but didn't write the History section, schedule
     # a single retry after 5 minutes.
-    if action_id == 'daily-history' and exit_code in (0, 124):
+    if action_id == 'daily-history' and status == 'completed':
         try:
             from tjai_app.services import get_timezone
             from datetime import datetime
@@ -449,7 +481,7 @@ def main():
             logger.error("picks-agent: post-check failed: %s", e)
 
     # Post-process ideation: set entry_id on log, append link to synopsis
-    if action_id == 'ideation-agent' and exit_code in (0, 124):
+    if action_id == 'ideation-agent' and status == 'completed':
         try:
             from datetime import datetime
             from tjai_app.services import get_timezone
@@ -544,7 +576,7 @@ def main():
             logger.error("ideation-agent: failed to post-process ideation: %s", e)
 
     # Post-process assessment: normalize field names (legacy MCP path)
-    if action_id == 'llm-assessment-mcp' and exit_code in (0, 124):
+    if action_id == 'llm-assessment-mcp' and status == 'completed':
         try:
             from normalize_assessment import normalize_date
             assessed_date = None
@@ -560,7 +592,7 @@ def main():
 
     # Research-agent post-processing: model completion first, then queue drain.
     # Order matters — synthesis must set next_target before queue drain overwrites it.
-    if action_id == 'research-agent' and exit_code in (0, 124):
+    if action_id == 'research-agent' and status == 'completed':
         # Update base entry tracking and check whether all dispatched models are done
         if entry:
             entry_data = entry.data if isinstance(entry.data, dict) else {}
@@ -580,7 +612,7 @@ def main():
     # Claude failure on multimodel entry: mark model as failed and run the
     # terminal-check + synthesis-trigger path, so a failure that is the last
     # remaining model still fires synthesis (failed == done for trigger).
-    if action_id == 'research-agent' and exit_code not in (0, 124) and entry:
+    if action_id == 'research-agent' and status == 'failed' and entry:
         entry_data = entry.data if isinstance(entry.data, dict) else {}
         if entry_data.get('source') == 'multimodel' and entry_data.get('model'):
             try:

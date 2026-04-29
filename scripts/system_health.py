@@ -449,13 +449,16 @@ def collect_backups():
                         'env-swf-remote.env', 'env-etaverse.env',
                         'env-primus.env', 'env-pax-eden.env',
                         'etaverse.conf']
-            day_info['files_ok'] = all((day_dir / f).exists() for f in expected)
+            missing = [f for f in expected if not (day_dir / f).exists()]
+            day_info['files_ok'] = not missing
+            day_info['missing_files'] = missing
             data_dir = day_dir / 'data'
             day_info['data_files'] = sum(1 for _ in data_dir.rglob('*') if _.is_file()) if data_dir.is_dir() else 0
         else:
             day_info['gz_mb'] = None
             day_info['raw_mb'] = None
             day_info['files_ok'] = False
+            day_info['missing_files'] = ['tjai-db.sql.gz']
             day_info['data_files'] = 0
         result['recent'].append(day_info)
 

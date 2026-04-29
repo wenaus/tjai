@@ -47,10 +47,18 @@ Error handling: Tools return {"error": "message"} on validation failures.
 Always check for "error" key in response before processing results.
 """
 
+import json
+
 from asgiref.sync import sync_to_async
+from django.core.serializers.json import DjangoJSONEncoder
 from mcp_server import mcp_server as mcp
 
 from . import services
+
+
+def _json_text(value) -> str:
+    """Return MCP-safe JSON text, including for empty lists."""
+    return json.dumps(value, cls=DjangoJSONEncoder, ensure_ascii=False)
 
 
 @mcp.tool()
@@ -389,7 +397,7 @@ async def search_entries(
     end_date: str = None,
     max_content_length: int = 200,
     order_by: str = 'time',
-) -> list:
+) -> str:
     """
     Full-text search across entries.
 
@@ -422,12 +430,13 @@ async def search_entries(
         again with a larger offset to continue.
         Returns {"error": "..."} if parameters are invalid.
     """
-    return await sync_to_async(services.search_entries)(
+    result = await sync_to_async(services.search_entries)(
         query=query, kind=kind, context=context, limit=limit, offset=offset,
         start_date=start_date, end_date=end_date,
         max_content_length=max_content_length,
         order_by=order_by,
     )
+    return _json_text(result)
 
 
 @mcp.tool()

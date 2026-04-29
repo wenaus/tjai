@@ -435,13 +435,14 @@
                 html += '<div style="color:#ef5350">No backups yet</div>';
             } else {
                 html += `<div style="color:#999;margin-bottom:8px">Live DB: ${pg.db_size_mb} MB (with overheads) &mdash; ${bk.total_days} days archived &mdash; <a href="/tjai/agent-log/?ref=server-backup" style="color:#90caf9">logs</a></div>`;
-                html += '<table style="max-width:600px"><tr><th>Date</th><th style="text-align:right">Dump</th><th style="text-align:right">Compressed</th><th style="text-align:right">Data</th><th style="text-align:right">Config</th></tr>';
+                html += '<table style="width:100%"><tr><th>Date</th><th style="text-align:right">Dump</th><th style="text-align:right">Compressed</th><th style="text-align:right">Data</th><th style="text-align:left;min-width:420px">Config</th></tr>';
                 for (const day of bk.recent) {
                     const dump = day.raw_mb !== null && day.raw_mb !== undefined ? day.raw_mb + ' MB' : '<span style="color:#ef5350">MISSING</span>';
                     const gz = day.gz_mb !== null && day.gz_mb !== undefined ? day.gz_mb + ' MB' : '';
                     const dataFiles = day.data_files > 0 ? day.data_files + ' files' : '<span style="color:#ef5350">0</span>';
-                    const cfg = day.files_ok ? '<span style="color:#9ccc65">&#10003;</span>' : '<span style="color:#ef5350">&#10007;</span>';
-                    html += `<tr><td>${day.date}</td><td class="num">${dump}</td><td class="num">${gz}</td><td class="num">${dataFiles}</td><td class="num">${cfg}</td></tr>`;
+                    const missing = day.missing_files || [];
+                    const cfg = day.files_ok ? '<span style="color:#9ccc65">&#10003;</span>' : `<span style="color:#d8b45d">missing: ${missing.join(', ')}</span>`;
+                    html += `<tr><td>${day.date}</td><td class="num">${dump}</td><td class="num">${gz}</td><td class="num">${dataFiles}</td><td style="text-align:left;min-width:420px">${cfg}</td></tr>`;
                 }
                 html += '</table>';
             }
