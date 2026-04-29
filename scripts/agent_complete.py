@@ -89,6 +89,25 @@ def _link_subagent_reports(entry, source_entry_id, ref_extra):
     return len(reports)
 
 
+def _clear_research_subagent_names(source_entry_id, ref_extra):
+    """Research subagent reports use data.entry_id links, never @names."""
+    if not source_entry_id:
+        return 0
+
+    qs = Entry.objects.filter(
+        data__source_entry_id=source_entry_id,
+        deleted_at__isnull=True,
+        tags__tag_name='research-subagent',
+        name__isnull=False,
+    ).exclude(name='')
+
+    count = qs.update(name=None)
+    if count:
+        logger.info("Cleared @names from %d research subagent reports for %s",
+                    count, source_entry_id, extra=ref_extra)
+    return count
+
+
 def _wait_for_subagents(action_id, current_entry, ref_extra):
     """On timeout, wait for subagent reports to finish arriving.
 
@@ -154,6 +173,7 @@ def _wait_for_subagents(action_id, current_entry, ref_extra):
 
     # Link all subagent reports to the research entry
     final_count = _link_subagent_reports(entry, source_entry_id, ref_extra)
+    _clear_research_subagent_names(source_entry_id, ref_extra)
     return final_count
 
 
@@ -400,6 +420,17 @@ def main():
     # Post-process synthesis entries: convert plain source report references to md links
     if current_entry and status == 'completed':
         _linkify_synthesis_sources(current_entry)
+
+    # Post-process research-agent products: AI-created research reports are
+    # addressed by data.entry_id and tags, not by @name.
+    if action_id == 'research-agent' and entry:
+        try:
+            entry_data = entry.data if isinstance(entry.data, dict) else {}
+            _clear_research_subagent_names(
+                entry_data.get('entry_id'), ref_extra)
+        except Exception as e:
+            logger.error("%s: failed to clear research subagent names: %s",
+                         action_id, e, extra=ref_extra)
 
     # Post-process daily-history: extract digested history to file for KozyKorner.
     # If the AI agent completed but didn't write the History section, schedule
