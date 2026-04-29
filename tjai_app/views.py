@@ -4,6 +4,7 @@ import os
 import re
 import time
 import uuid
+from html import escape as html_escape, unescape as html_unescape
 from datetime import datetime, timedelta
 from collections import Counter
 
@@ -87,6 +88,60 @@ def _render_markdown(text, extensions=None):
     safe_text = _neutralize_raw_html_hazards(text)
     html = markdown.markdown(_fix_md_list_spacing(safe_text), extensions=exts, tab_length=2)
     return _neutralize_raw_html_hazards(html)
+
+
+_BARE_URL_RE = re.compile(r'https?://[^\s<]+')
+_HTML_TAG_RE = re.compile(r'(<[^>]+>)')
+_LINKIFY_SKIP_TAGS = {'a', 'code', 'pre', 'script', 'style'}
+
+
+def _linkify_rendered_html(html):
+    """Linkify bare URLs in rendered HTML text nodes.
+
+    Regexing the whole HTML string misses common cases such as
+    ``<li>https://example.com/</li>`` if the regex excludes URLs preceded by
+    ``>`` to avoid href attributes. Splitting tags keeps attributes untouched
+    and lets us skip anchors/code blocks explicitly.
+    """
+    if not html:
+        return ''
+    parts = _HTML_TAG_RE.split(html)
+    stack = []
+    out = []
+
+    def linkify_text(text):
+        def repl(match):
+            url = match.group(0)
+            suffix = ''
+            while url and url[-1] in '.,;:!?':
+                suffix = url[-1] + suffix
+                url = url[:-1]
+            href = html_escape(html_unescape(url), quote=True)
+            return f'<a target="_blank" href="{href}">{url}</a>{suffix}'
+        return _BARE_URL_RE.sub(repl, text)
+
+    for part in parts:
+        if not part:
+            continue
+        if part.startswith('<'):
+            close = re.match(r'</\s*([A-Za-z0-9:-]+)', part)
+            if close:
+                tag = close.group(1).lower()
+                for i in range(len(stack) - 1, -1, -1):
+                    if stack[i] == tag:
+                        del stack[i:]
+                        break
+                out.append(part)
+                continue
+            open_tag = re.match(r'<\s*([A-Za-z0-9:-]+)\b', part)
+            if open_tag and not part.rstrip().endswith('/>'):
+                stack.append(open_tag.group(1).lower())
+            out.append(part)
+        elif any(tag in _LINKIFY_SKIP_TAGS for tag in stack):
+            out.append(part)
+        else:
+            out.append(linkify_text(part))
+    return ''.join(out)
 
 
 _XML_LIKE_RE = re.compile(
@@ -3191,13 +3246,8 @@ def entry_detail(request, entry_id=None):
                 return f'<a href="/tjai/entry/?name={name}">{ref}</a>'
             return f'<a href="/tjai/entry/?entry_id={ref}">{ref}</a>'
         content_html = re.sub(r'\[\[([^\]]+)\]\]', _wiki_link, content_html)
-        # Linkify bare URLs not already in anchor tags
-        content_html = re.sub(
-            r'(?<!["\'>])(https?://[^\s<]+)',
-            r'<a href="\1">\1</a>',
-            content_html
-        )
-        # External links open in new tab
+        content_html = _linkify_rendered_html(content_html)
+        # External markdown links open in new tab; bare URLs are handled above.
         content_html = content_html.replace('<a href="http', '<a target="_blank" href="http')
     first_line = lines[0] if lines else ''
     if entry.context_id == 'poetry':
