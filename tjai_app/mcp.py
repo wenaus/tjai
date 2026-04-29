@@ -13,7 +13,7 @@ Available tools:
     get_todos         - Retrieve todo items with filtering options
     get_memories      - Get memory entries. Call unfiltered to see general activity
     get_bookmarks     - Get saved bookmark entries (URLs)
-    search_entries    - Full-text search across all entries
+    search_entries    - Search/list entries with optional full-text query and filters
     get_named_entries - Get entries by @name, or list all named entries
     get_entry         - Get a single entry by ID
     get_entry_by_entry_id - Find entry by human-readable entry_id
@@ -43,6 +43,11 @@ Contexts group entries by project or topic. Most tools accept a context paramete
 to filter results. Use get_ai_guidance(context) before starting work on any
 project to get project-specific instructions.
 
+MCP output compatibility: Read tools whose natural result is a list return
+JSON text rather than a top-level MCP array, so empty results are delivered as
+the literal string "[]" instead of zero content blocks. Parse the returned text
+as JSON before processing.
+
 Error handling: Tools return {"error": "message"} on validation failures.
 Always check for "error" key in response before processing results.
 """
@@ -67,7 +72,7 @@ async def get_calendar(
     end_date: str = None,
     context: str = None,
     days: int = None,
-) -> list:
+) -> str:
     """
     Get calendar/journal entries within a date range.
 
@@ -93,13 +98,14 @@ async def get_calendar(
         - 15:00 Team meeting
     Always include the URL after the title when present.
     """
-    return await sync_to_async(services.get_calendar)(
+    result = await sync_to_async(services.get_calendar)(
         start_date=start_date, end_date=end_date, context=context, days=days,
     )
+    return _json_text(result)
 
 
 @mcp.tool()
-async def get_profile() -> list:
+async def get_profile() -> str:
     """
     Get all profile entries about the user.
 
@@ -113,11 +119,12 @@ async def get_profile() -> list:
         List of profile entries ordered by most recently modified, each containing:
         id, content, context, kind, created, modified, tags.
     """
-    return await sync_to_async(services.get_profile)()
+    result = await sync_to_async(services.get_profile)()
+    return _json_text(result)
 
 
 @mcp.tool()
-async def get_ai_guidance(context: str = None, location_name: str = None) -> list:
+async def get_ai_guidance(context: str = None, location_name: str = None) -> str:
     """
     Get AI guidance entries - behavioral instructions for AI assistants.
 
@@ -151,13 +158,14 @@ async def get_ai_guidance(context: str = None, location_name: str = None) -> lis
         created, modified, tags. When location_name is supplied, the
         machine-specific entry (or an info notice if absent) is appended.
     """
-    return await sync_to_async(services.get_ai_guidance)(
+    result = await sync_to_async(services.get_ai_guidance)(
         context=context, location_name=location_name
     )
+    return _json_text(result)
 
 
 @mcp.tool()
-async def list_contexts() -> list:
+async def list_contexts() -> str:
     """
     List all available contexts (projects/topics).
 
@@ -171,7 +179,8 @@ async def list_contexts() -> list:
         name (identifier), title (display name, may be null),
         description (may be null), entry_count (number of non-deleted entries).
     """
-    return await sync_to_async(services.list_contexts)()
+    result = await sync_to_async(services.list_contexts)()
+    return _json_text(result)
 
 
 @mcp.tool()
@@ -252,7 +261,7 @@ async def get_todos(
     status: str = None,
     include_done: bool = False,
     max_content_length: int = 200,
-) -> list:
+) -> str:
     """
     Get todo/task entries.
 
@@ -274,10 +283,11 @@ async def get_todos(
         kind, created, modified, and optional priority, status, tags.
         Returns {"error": "..."} if status parameter is invalid.
     """
-    return await sync_to_async(services.get_todos)(
+    result = await sync_to_async(services.get_todos)(
         context=context, status=status, include_done=include_done,
         max_content_length=max_content_length,
     )
+    return _json_text(result)
 
 
 @mcp.tool()
@@ -287,7 +297,7 @@ async def get_memories(
     start_date: str = None,
     end_date: str = None,
     max_content_length: int = 200,
-) -> list:
+) -> str:
     """
     Get memory entries - general notes and information.
 
@@ -314,10 +324,11 @@ async def get_memories(
         - CONTENT
     Group by context if multiple contexts present.
     """
-    return await sync_to_async(services.get_memories)(
+    result = await sync_to_async(services.get_memories)(
         context=context, limit=limit, start_date=start_date, end_date=end_date,
         max_content_length=max_content_length,
     )
+    return _json_text(result)
 
 
 @mcp.tool()
@@ -326,7 +337,7 @@ async def get_dialog(
     start_date: str = None,
     end_date: str = None,
     max_content_length: int = 200,
-) -> list:
+) -> str:
     """
     Get AI assistant dialog turns for a host and time range.
 
@@ -349,10 +360,11 @@ async def get_dialog(
         timestamp, role (user/assistant), speaker, speaker_type
         (human/ai/unknown), client, model, hostname, content.
     """
-    return await sync_to_async(services.get_dialog)(
+    result = await sync_to_async(services.get_dialog)(
         host=host, start_date=start_date, end_date=end_date,
         max_content_length=max_content_length,
     )
+    return _json_text(result)
 
 
 @mcp.tool()
@@ -362,7 +374,7 @@ async def get_bookmarks(
     start_date: str = None,
     end_date: str = None,
     max_content_length: int = 200,
-) -> list:
+) -> str:
     """
     Get saved bookmark entries (URLs).
 
@@ -380,15 +392,16 @@ async def get_bookmarks(
         List of bookmark entries ordered by modification date (newest first),
         each containing: id, content, kind, context, created, modified, tags.
     """
-    return await sync_to_async(services.get_bookmarks)(
+    result = await sync_to_async(services.get_bookmarks)(
         context=context, limit=limit, start_date=start_date, end_date=end_date,
         max_content_length=max_content_length,
     )
+    return _json_text(result)
 
 
 @mcp.tool()
 async def search_entries(
-    query: str,
+    query: str = None,
     kind: str = None,
     context: str = None,
     limit: int = 50,
@@ -399,13 +412,17 @@ async def search_entries(
     order_by: str = 'time',
 ) -> str:
     """
-    Full-text search across entries.
+    Search or list entries.
 
-    Uses PostgreSQL full-text search with stemming, relevance ranking, and
-    Google-style query syntax (quoted phrases, -exclusions).
+    When query is non-empty, uses PostgreSQL full-text search with stemming,
+    relevance ranking, and Google-style syntax (quoted phrases, -exclusions).
+    When query is omitted or empty, lists entries matching the structured
+    filters only. This is the correct mode for requests like "recent goals" or
+    "todos modified last night" where invented keywords would create false
+    negatives.
 
     Args:
-        query: Search terms. Supports Google-style syntax: quoted phrases
+        query: Optional search terms. Supports Google-style syntax: quoted phrases
                ("streaming workflow"), exclusions (-test), and boolean AND/OR.
                Stemming is automatic: "computing" matches "computed", "computation".
         kind: Filter to specific entry type: memory, todo, journal, profile,
@@ -421,7 +438,8 @@ async def search_entries(
                            Default: 200. Set 0 for full content. Use get_entry() for
                            full content of specific entries.
         order_by: Sort order. 'time' (default) = newest first by modification date.
-                  'rank' = best match first by search relevance.
+                  'rank' = best match first by search relevance and requires a
+                  non-empty query. 'size' = longest content first.
 
     Returns:
         List of matching entries, each containing: id, content (preview), kind,
@@ -444,7 +462,7 @@ async def get_named_entries(
     name: str = None,
     context: str = None,
     max_content_length: int = 200,
-) -> list | dict:
+) -> str:
     """
     Get entries that have an @name assigned.
 
@@ -462,9 +480,10 @@ async def get_named_entries(
         If name omitted: list of all named entries, sorted alphabetically by name.
         Returns {"error": "..."} if named entry not found.
     """
-    return await sync_to_async(services.get_named_entries)(
+    result = await sync_to_async(services.get_named_entries)(
         name=name, context=context, max_content_length=max_content_length,
     )
+    return _json_text(result)
 
 
 @mcp.tool()
@@ -977,7 +996,7 @@ async def delete_relation(relation_id: str) -> dict:
 
 
 @mcp.tool()
-async def get_relations(entry_id: str, max_content_length: int = 200) -> list:
+async def get_relations(entry_id: str, max_content_length: int = 200) -> str:
     """
     Get all relations for an entry.
 
@@ -994,7 +1013,10 @@ async def get_relations(entry_id: str, max_content_length: int = 200) -> list:
         relation_type, created, modified, data, and "other_entry".
         Returns {"error": "..."} if entry not found.
     """
-    return await sync_to_async(services.get_relations)(entry_id=entry_id, max_content_length=max_content_length)
+    result = await sync_to_async(services.get_relations)(
+        entry_id=entry_id, max_content_length=max_content_length
+    )
+    return _json_text(result)
 
 
 @mcp.tool()

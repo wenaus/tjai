@@ -723,32 +723,38 @@ def get_bookmarks(context=None, limit=50, start_date=None, end_date=None, max_co
     return [_format_entry(entry, max_content_length=max_content_length) for entry in qs]
 
 
-def search_entries(query, kind=None, context=None, limit=50, offset=0, start_date=None, end_date=None, max_content_length=200, order_by='time'):
-    if not query:
-        return {"error": "query is required"}
+def search_entries(query=None, kind=None, context=None, limit=50, offset=0, start_date=None, end_date=None, max_content_length=200, order_by='time'):
     if kind is not None and kind not in VALID_KINDS:
         return {"error": f"Invalid kind '{kind}'. Must be one of: {', '.join(VALID_KINDS)}"}
     if not isinstance(limit, int) or limit < 1:
         return {"error": f"limit must be a positive integer, got {limit}"}
     if not isinstance(offset, int) or offset < 0:
         return {"error": f"offset must be a non-negative integer, got {offset}"}
+    if order_by not in ('time', 'rank', 'size'):
+        return {"error": "order_by must be one of: time, rank, size"}
 
-    from django.contrib.postgres.search import SearchQuery, SearchRank
+    query = (query or '').strip()
+    if not query and order_by == 'rank':
+        return {"error": "order_by='rank' requires a non-empty query"}
 
-    # Full-text search with relevance ranking (replaces icontains substring match)
-    # Uses websearch_to_tsquery for Google-style syntax: quoted phrases, -exclusions
-    try:
-        search_query = SearchQuery(query, search_type='websearch', config='english')
-    except Exception:
-        # Fallback for malformed queries
-        search_query = SearchQuery(query, config='english')
+    qs = Entry.objects.filter(deleted_at__isnull=True).select_related('context').prefetch_related('tags')
 
-    qs = Entry.objects.filter(
-        search_vector=search_query,
-        deleted_at__isnull=True,
-    ).annotate(
-        rank=SearchRank('search_vector', search_query, normalization=1, cover_density=True),
-    ).select_related('context').prefetch_related('tags')
+    if query:
+        from django.contrib.postgres.search import SearchQuery, SearchRank
+
+        # Full-text search with relevance ranking (replaces icontains substring match)
+        # Uses websearch_to_tsquery for Google-style syntax: quoted phrases, -exclusions.
+        try:
+            search_query = SearchQuery(query, search_type='websearch', config='english')
+        except Exception:
+            # Fallback for malformed queries
+            search_query = SearchQuery(query, config='english')
+
+        qs = qs.filter(
+            search_vector=search_query,
+        ).annotate(
+            rank=SearchRank('search_vector', search_query, normalization=1, cover_density=True),
+        )
 
     if kind:
         qs = qs.filter(kind=kind)
@@ -763,7 +769,7 @@ def search_entries(query, kind=None, context=None, limit=50, offset=0, start_dat
         qs = qs.order_by('-rank', '-timestamp_modified')
     elif order_by == 'size':
         from django.db.models.functions import Length
-        qs = qs.annotate(content_len=Length('content')).order_by('-content_len')
+        qs = qs.annotate(content_len=Length('content')).order_by('-content_len', '-timestamp_modified')
     else:
         qs = qs.order_by('-timestamp_modified')
     qs = qs[offset:offset + limit]

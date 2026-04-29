@@ -168,7 +168,9 @@ Tools:
 - get_memories(context, limit, start_date, end_date): Get memory entries.
   Call unfiltered to see recent activity.
 - get_bookmarks(context, limit, start_date, end_date): Get saved bookmarks.
-- search_entries(query, kind, context, limit): Full-text search across entries.
+- search_entries(query, kind, context, limit): Search or list entries. Omit
+  query for structured listing/filtering by kind, context, or date. Use
+  order_by='rank' only with a non-empty query.
 - get_named_entries(name, context): Get entries by @name, or list all named.
 - get_entry(entry_id): Get a single entry by UUID.
 - get_entry_by_entry_id(entry_id): Find entry by human-readable entry_id.

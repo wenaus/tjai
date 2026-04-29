@@ -87,19 +87,19 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "search_entries",
-        "description": "Full-text search across entries.",
+        "description": "Search or list entries with optional full-text query and structured filters.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "Search term (case-insensitive)."},
-                "kind": {"type": "string", "description": "Filter by type: memory, todo, journal, profile, ai, bookmark."},
+                "query": {"type": "string", "description": "Optional search terms. Omit for structured listing/filtering by kind, context, or date."},
+                "kind": {"type": "string", "description": "Filter by type: memory, todo, journal, profile, ai, bookmark, list, action, goal."},
                 "context": {"type": "string", "description": "Filter to this context."},
                 "start_date": {"type": "string", "description": "Start of date range. Supports YYYYMMDD, 'yesterday', '3d', 'monday', etc. Default: 7 days ago."},
                 "end_date": {"type": "string", "description": "End of date range. Default: now."},
                 "limit": {"type": "integer", "description": "Maximum results. Default: 50."},
                 "offset": {"type": "integer", "description": "Zero-based result offset for pagination. Default: 0. Use offset + limit for the next page."},
+                "order_by": {"type": "string", "description": "Sort order: time (default), rank (requires query), or size."},
             },
-            "required": ["query"],
         },
     },
     {
@@ -224,12 +224,12 @@ def get_bookmarks(context=None, start_date=None, end_date=None, limit=50):
     )
 
 
-def search_entries(query, kind=None, context=None, start_date=None, end_date=None, limit=50, offset=0):
+def search_entries(query=None, kind=None, context=None, start_date=None, end_date=None, limit=50, offset=0, order_by='time'):
     if start_date is None:
         start_date = '7d'
     return services.search_entries(
         query=query, kind=kind, context=context, limit=limit, offset=offset,
-        start_date=start_date, end_date=end_date,
+        start_date=start_date, end_date=end_date, order_by=order_by,
     )
 
 
