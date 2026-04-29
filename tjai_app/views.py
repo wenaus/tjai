@@ -4620,21 +4620,21 @@ def api_research_data(request):
     # claim index was scoped to source='multimodel' and went blind to
     # codoc jobs, so a busy worker rendered as 'idle'.
     #
-    # Index A — worker_entries_by_base: per-research-topic display. Only
+    # Index A — model_entries_by_base: per-research-topic display. Only
     # research sub-entries have base_entry_id + model on their data, so
-    # this is correctly scoped to source='multimodel'.
+    # this is correctly scoped to source='multimodel'. Remote-worker
+    # fields are attached when present.
     #
     # Index B — claims_by_machine_cap / claims_by_cap: WORKER health.
     # A remote worker is busy iff it holds ANY active claim, regardless
     # of which subsystem staged the work. This query must be scoped
     # ONLY by worker_target (and not-deleted), never by source.
-    worker_entries_by_base = {}
+    model_entries_by_base = {}
     claims_by_machine = {}  # machine_id -> all claims it holds (any cap)
 
     # Index A: research-only, for per-topic breakdown.
     for sub in Entry.objects.filter(
         data__source='multimodel',
-        data__worker_target__isnull=False,
         deleted_at__isnull=True,
     ):
         sd = sub.data if isinstance(sub.data, dict) else {}
@@ -4655,8 +4655,10 @@ def api_research_data(request):
             'worker_claimed_by': claimed_by,
             'base_entry_id': beid,
             'sub_status': sub.status,
+            'entry_id': sd.get('entry_id'),
+            'run_error': sd.get('run_error'),
         }
-        worker_entries_by_base.setdefault(beid, []).append(info)
+        model_entries_by_base.setdefault(beid, []).append(info)
 
     # Index B: ALL active remote-worker entries, source-agnostic. This
     # must include codoc/external submissions or the worker-health
@@ -4726,8 +4728,14 @@ def api_research_data(request):
             item['worker_claimed_at'] = data.get('worker_claimed_at')
         # Attach remote-worker sub-entry info if any
         beid = data.get('entry_id')
-        if beid and beid in worker_entries_by_base:
-            item['workers'] = worker_entries_by_base[beid]
+        if beid and beid in model_entries_by_base:
+            item['workers'] = model_entries_by_base[beid]
+            for sub in model_entries_by_base[beid]:
+                model = sub.get('model')
+                run_error = sub.get('run_error')
+                if model and run_error:
+                    item[f'{model}_error'] = run_error
+                    item[f'{model}_subentry_id'] = sub.get('entry_id')
         items.append(item)
 
     # Worker health — derived PER MACHINE, not per capability.

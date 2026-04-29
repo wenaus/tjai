@@ -97,10 +97,6 @@
             padding: 8px 12px;
             margin-bottom: 6px;
             border-left: 3px solid #333;
-            transition: opacity 0.2s;
-        }
-        .pick-item.archived {
-            opacity: 0.4;
         }
         .pick-item.kept {
             border-left-color: #4caf50;
@@ -115,9 +111,6 @@
         }
         .pick-title a:hover {
             text-decoration: underline;
-        }
-        .pick-item.archived .pick-title a {
-            color: #666;
         }
         .pick-item.kept .pick-title a {
             color: #81c784;
@@ -276,8 +269,8 @@
                 // Fully processed with nothing kept — skip entirely
                 if (allDone && keptCount === 0) continue;
 
-                // Which picks to show: if fully processed, only kept items
-                const visiblePicks = allDone ? picks.filter(p => p.kept) : picks;
+                // Archived picks leave the triage view; kept picks remain visible.
+                const visiblePicks = picks.filter(p => p.kept || !p.archived);
 
                 html += `<div class="run-block" data-run="${esc(runId)}">`;
                 html += '<div class="run-header">';
@@ -297,7 +290,6 @@
 
                 for (const pick of visiblePicks) {
                     const classes = ['pick-item'];
-                    if (pick.archived) classes.push('archived');
                     if (pick.kept) classes.push('kept');
 
                     html += `<div class="${classes.join(' ')}" id="pick-${pick.id}">`;
@@ -381,7 +373,7 @@
             pick.archived = true;
             updatePick(id, 'archived', true);
             const el = document.getElementById('pick-' + id);
-            if (el) el.classList.add('archived');
+            if (el) el.remove();
             updateGlobalStats();
             updateRunHeaders();
         }
@@ -457,7 +449,7 @@
                     if (!p.kept) {
                         p.archived = true;
                         const el = document.getElementById('pick-' + p.id);
-                        if (el) el.classList.add('archived');
+                        if (el) el.remove();
                     }
                 }
             }
@@ -477,7 +469,7 @@
                     block.remove();
                     continue;
                 }
-                // Fully processed with kept items — hide archived, keep the kept visible
+                // Fully processed with kept items — remove any legacy archived nodes.
                 if (allDone) {
                     block.querySelectorAll('.pick-item.archived').forEach(el => el.remove());
                 }

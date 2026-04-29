@@ -168,6 +168,11 @@
             el.textContent = s;
             return el.innerHTML;
         }
+        function shortError(s) {
+            if (!s) return '';
+            const first = String(s).split('\n')[0].trim();
+            return first.length > 220 ? first.slice(0, 217) + '...' : first;
+        }
 
         // timeAgo, fmtDate removed — server provides _ago and _display fields
 
@@ -568,6 +573,24 @@
                     meta += ` · Completed ${item.modified_ago}`;
                 }
                 html += `<div class="item-meta">${meta}</div>`;
+                if (item.source !== 'multimodel') {
+                    const models = data.models || [];
+                    const failures = [];
+                    for (const m of models) {
+                        const st = item[m + '_status'];
+                        const err = item[m + '_error'];
+                        if ((st === 'failed' || st === 'blocked') && err) {
+                            const subId = item[m + '_subentry_id'];
+                            const link = subId
+                                ? `<a href="${entryUrl('', subId)}" style="color:#ef9a9a">${esc(m)}</a>`
+                                : `<span style="color:#ef9a9a">${esc(m)}</span>`;
+                            failures.push(`${link}: ${esc(shortError(err))}`);
+                        }
+                    }
+                    if (failures.length) {
+                        html += `<div class="item-meta" style="color:#ef5350">Failed branches — ${failures.join(' · ')}</div>`;
+                    }
+                }
                 html += '</div>';
             }
 

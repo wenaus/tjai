@@ -912,6 +912,7 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
 
     # Create entries and dispatch — uniform loop, all models
     launch_failures = []
+    claude_proc_launched = False
     for model in models_to_run:
         # Capture rerun state BEFORE we overwrite {model}_status below —
         # UI-initiated reruns skip the flex tier on gemini (user is waiting).
@@ -962,6 +963,7 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
                 action.data = data
                 action.save(update_fields=['data'])
                 dispatch_ai(action, target_date=None)
+                claude_proc_launched = True
                 entry.status = 'active'
                 entry.save(update_fields=['status'])
                 base_data[f'{model}_status'] = 'active'
@@ -1048,7 +1050,7 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
 
     # True iff a local claude subprocess was launched — the only case where
     # agent_complete.py will later clear research-agent sysconfig status.
-    return 'claude' in models_to_run
+    return claude_proc_launched
 
 
 def update_last_run(action):

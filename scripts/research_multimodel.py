@@ -146,9 +146,9 @@ def _call_gemini(prompt, initial_tier='flex'):
     First attempt uses `initial_tier` ('flex' by default for scheduled
     runs — 50% cost saving on latency-tolerant background work; 'standard'
     for UI-initiated reruns where the user is waiting). Under high demand
-    Flex capacity returns 503 UNAVAILABLE; on that specific error we retry
-    at the Standard tier with 5 / 20 / 60 minute backoff. Any non-503 error
-    is raised immediately.
+    Flex capacity and transient server/deadline failures are retried at the
+    Standard tier with 5 / 20 / 60 minute backoff. Non-transient errors are
+    raised immediately.
     """
     from google import genai
     from google.genai import types
@@ -197,9 +197,13 @@ def _call_gemini(prompt, initial_tier='flex'):
             return response.text
         except Exception as e:
             msg = str(e)
-            if '503' in msg or 'UNAVAILABLE' in msg:
+            retryable = any(token in msg for token in (
+                '500', '502', '503', '504',
+                'INTERNAL', 'UNAVAILABLE', 'DEADLINE_EXCEEDED',
+            ))
+            if retryable:
                 logger.warning(
-                    "Gemini %s-tier attempt %d/%d got 503 UNAVAILABLE: %s",
+                    "Gemini %s-tier attempt %d/%d got retryable error: %s",
                     tier, idx + 1, len(attempts), msg[:300],
                 )
                 last_err = e
@@ -207,7 +211,7 @@ def _call_gemini(prompt, initial_tier='flex'):
             raise
 
     raise RuntimeError(
-        f"Gemini 503 UNAVAILABLE after {len(attempts)} attempts "
+        f"Gemini retryable server error after {len(attempts)} attempts "
         f"({initial_tier} then standard×3, 5/20/60 min backoff): {last_err}"
     )
 

@@ -90,7 +90,7 @@ An AI-driven news curation system that researches tech/science/culture sources o
 
 - Picks grouped by run, reverse chronological
 - Each pick: title (link to article, opens new tab), source, precis, rationale
-- **Click title** — opens article, marks viewed/archived (goes grey)
+- **Click title** — opens article, marks viewed/archived and removes it from triage
 - **Thumbs up/down** — training signal in `data.thumbs`
 - **Keep** — lasting value (green accent), protected from Archive All
 - **ReadMe** — adds `:readme` tag, appears on ReadMe page
@@ -121,6 +121,7 @@ Entry(
 ### UI Behavior
 
 - Sticky run-date headers while scrolling
+- Archived/viewed picks are hidden from the triage list
 - Fully processed runs with no kept items disappear
 - Fully processed runs with kept items show only kept (archived removed)
 - Archive All at top and bottom of each run
@@ -142,11 +143,11 @@ Entry(
 2. Research page (`/tjai/research/`) shows the queue with status
 3. Click **Submit** (or **Submit All**). The research-agent action runs `_dispatch_research_3way` (`tjai_app/action_runner.py`), which dispatches each model in `RESEARCH_MODELS = ('claude','gemini','chatgpt','qwen','deepseek-flash','deepseek-pro')` via its own mechanism (gemma is currently off; remote-worker plumbing retained for re-enable):
    - **Claude** — detached Claude instance with research-optimized system prompt, spawning parallel subagents that search the web and write findings tagged `research-subagent`
-   - **Gemini** — `scripts/research_multimodel.py gemini` subprocess via the Gemini API (native grounding)
+   - **Gemini** — `scripts/research_multimodel.py gemini` subprocess via the Gemini API (native grounding); retryable Gemini server/deadline errors (`500`/`502`/`503`/`504`, `INTERNAL`, `UNAVAILABLE`, `DEADLINE_EXCEEDED`) fall back through standard-tier retries with bounded backoff
    - **ChatGPT** — `scripts/research_multimodel.py chatgpt` subprocess via the OpenAI Responses API (`CHATGPT_RESEARCH_MODEL`, default `gpt-5.5`) with hosted web search, high search context, and configurable reasoning/verbosity env vars
    - **Qwen** (and Gemma when re-enabled) — staged for the [remote worker pipeline](remote-workers.md) via the `REMOTE_WORKER_MODELS` mapping (`{'gemma': 'gemma4', 'qwen': 'qwen'}`). The prompt is written to a sub-entry with the mapped `worker_target`; the local research-agent then exits. `tj_agent` on the Mac Studio long-polls `/api/worker/poll`, claims the work, runs the locally-configured ollama model, and POSTs the result back. Adding another remote-worker research model is a one-line add to `REMOTE_WORKER_MODELS` + a matching entry in the Mac's `worker_models` config.
    - **DeepSeek-Flash / DeepSeek-Pro** — `scripts/research_multimodel.py deepseek-flash|deepseek-pro` subprocess via DeepSeek's Anthropic-compat endpoint (`https://api.deepseek.com/anthropic`, accessed with the `anthropic` SDK + `base_url` override; `DEEPSEEK_API_KEY` env var). The script exposes read-only tjai MCP tools (`get_*`, `list_*`, `search_*`) through a multi-turn `tool_use` / `tool_result` loop, then writes DeepSeek's final report text into the research entry.
-4. As each model finishes, `research_model_complete` updates the base entry's `{model}_status`. When **all dispatched models** are `done`, the base entry transitions to `done` and synthesis is dispatched
+4. As each model finishes, `research_model_complete` updates the base entry's `{model}_status`. When **all dispatched models** are terminal (`done`, `failed`, or legacy `blocked`), the base entry transitions to `done` and synthesis is dispatched
 5. **Synthesis** — Claude is dispatched again with the synthesis prompt and links to all per-model reports, producing the final merged analyst's brief
 6. Automatically chains to next pending item (priority order, then FIFO)
 
@@ -171,6 +172,7 @@ The activity dot reflects the system as a whole: green = something is actively w
 - **Stop** — soft stop (finish current, don't chain)
 - **Abort** — hard stop (kill local agent)
 - **Studies** link per item — subagent reports (Claude only)
+- Failed model branches show a compact error line on the base topic, with a link to the failed branch entry
 - Agent log link for debugging
 
 ### Studies Page (`/tjai/research/studies/`)
