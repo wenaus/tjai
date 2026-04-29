@@ -2154,6 +2154,7 @@ def dashboard_named(request):
             'content': lines[0] if lines else '',
             'context': entry.context_id,
             'timestamp': entry.timestamp_modified,
+            'modified_display': fmt_datetime(entry.timestamp_modified),
             'line_count': len([l for l in lines if l.strip()]),
         })
 

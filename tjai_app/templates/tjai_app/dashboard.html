@@ -197,6 +197,13 @@
             font-size: 12px;
         }
         .filter-clear:hover { background: #666; }
+        .sort-btn { color: #9a9a9a; opacity: 0.65; min-width: 28px; height: 22px; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; }
+        .sort-btn svg { width: 16px; height: 16px; display: block; }
+        .sort-btn.active {
+            color: #fff;
+            opacity: 1;
+            box-shadow: inset 0 -2px 0 #d8a070;
+        }
         .machine-link.active { background: #90caf9; color: #1a1a1a !important; padding: 1px 4px; border-radius: 3px; }
         .tag-link.active { background: #9ccc65; color: #1a1a1a !important; padding: 1px 4px; border-radius: 3px; }
         .kind-link.active { background: #daa520; color: #1a1a1a !important; padding: 1px 4px; border-radius: 3px; }
@@ -237,7 +244,7 @@
                 <div id="calendar-content">Loading calendar...</div>
             </div>
             <div id="named-section">
-                <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">Named Entries <span><button id="workday-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px;margin-right:4px" title="Today's workday entry">Workday</button><button onclick="window.location.href='/tjai/this-week/'" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px;margin-right:4px" title="This week's summary">Workweek</button><button id="create-entry-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px">Create Entry</button></span></div>
+                <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between"><span>Named Entries <button id="named-sort-alpha" class="filter-clear sort-btn active" title="Alphabetical sort">A↓Z</button><button id="named-sort-mod" class="filter-clear sort-btn" title="Modification time sort" style="margin-left:4px" aria-label="Modification time sort"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M12 6.5v5.8l4 2.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></span> <span><button id="workday-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px;margin-right:4px" title="Today's workday entry">Workday</button><button onclick="window.location.href='/tjai/this-week/'" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px;margin-right:4px" title="This week's summary">Workweek</button><button id="create-entry-btn" style="background:#2a6e3f;color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px">Create Entry</button></span></div>
                 <div id="named-content">Loading named...</div>
             </div>
         </div>
@@ -324,10 +331,14 @@
             }
         }
 
+        let namedSort = 'alpha';
+        let namedData = null;
+
         async function fetchNamed() {
             try {
                 const data = await fetchJson('/tjai/api/dashboard/named');
-                renderNamed(data);
+                namedData = data;
+                renderNamed();
             } catch (e) {
                 document.getElementById('named-content').innerHTML = 'Error loading named entries';
             }
@@ -370,17 +381,42 @@
             window.location.href = '/tjai/workday/' + _yyyymmdd(new Date()) + '/';
         });
 
-        function renderNamed(data) {
+        function setNamedSort(sort, updateUrl = true) {
+            namedSort = sort;
+            const alphaBtn = document.getElementById('named-sort-alpha');
+            const modBtn = document.getElementById('named-sort-mod');
+            if (alphaBtn) alphaBtn.classList.toggle('active', sort === 'alpha');
+            if (modBtn) modBtn.classList.toggle('active', sort === 'mod');
+            if (namedData) renderNamed();
+            if (updateUrl) syncStateToUrl();
+        }
+
+        function renderNamed() {
+            const data = namedData || {entries: []};
+            const entries = data.entries.slice();
+            if (namedSort === 'mod') {
+                entries.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+            } else {
+                entries.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, {sensitivity: 'base'}));
+            }
             let html = '';
-            for (const entry of data.entries) {
+            for (const entry of entries) {
                 const nameStr = `<span style="color:#c0d8f0;font-weight:bold">@${escapeHtml(entry.name)}</span>`;
                 const contextStr = entry.context ? ` <span style="color:#ce93d8">=${entry.context}</span>` : '';
                 const content = linkifyContent(escapeHtml(entry.content));
-                const lineCount = entry.line_count > 1 ? ` <span style="color:#8a8a8a">[${entry.line_count} lines]</span>` : '';
-                html += `<div class="entry"><a href="/tjai/entry/?name=${encodeURIComponent(entry.name)}&edit=1" style="color:inherit;text-decoration:none">${nameStr}${contextStr} ${content}${lineCount}</a></div>`;
+                const modified = entry.modified_display || '';
+                const meta = entry.line_count > 1 || modified
+                    ? ` <span style="color:#8a8a8a;font-size:11px">${entry.line_count > 1 ? `${entry.line_count} lines` : ''}${entry.line_count > 1 && modified ? ' ' : ''}${modified}</span>`
+                    : '';
+                html += `<div class="entry"><a href="/tjai/entry/?name=${encodeURIComponent(entry.name)}&edit=1" style="color:inherit;text-decoration:none">${nameStr}${contextStr} ${content}${meta}</a></div>`;
             }
             document.getElementById('named-content').innerHTML = html || 'No named entries';
         }
+
+        const namedSortAlphaBtn = document.getElementById('named-sort-alpha');
+        const namedSortModBtn = document.getElementById('named-sort-mod');
+        if (namedSortAlphaBtn) namedSortAlphaBtn.addEventListener('click', () => setNamedSort('alpha'));
+        if (namedSortModBtn) namedSortModBtn.addEventListener('click', () => setNamedSort('mod'));
 
         function renderCalendar(data) {
             let html = '';
@@ -920,6 +956,7 @@
             if (dialogView) params.set('view', 'dialog');
             if (activeWithRelations) params.set('with_relations', '1');
             if (expandedRelations.size > 0) params.set('rel', [...expandedRelations].sort().join(','));
+            if (!isSimplifiedMode && namedSort === 'mod') params.set('named_sort', namedSort);
             const searchVal = document.getElementById('entry-search').value.trim();
             if (searchVal && isSearchActive) params.set('search', searchVal);
             const qs = params.toString();
@@ -948,6 +985,9 @@
             activeWithRelations = params.get('with_relations') === '1';
             const rel = params.get('rel');
             if (rel) rel.split(',').filter(Boolean).forEach(id => expandedRelations.add(id));
+            const namedSortParam = params.get('named_sort');
+            namedSort = namedSortParam === 'mod' ? 'mod' : 'alpha';
+            setNamedSort(namedSort, false);
             isFilterActive = !!(dialogView || activeTags.size > 0 || activeKind || activeContext || activeClient || activeModel || activeMachine || activeStatus || activePublic || activeWithRelations || activeDate || activeFromTime || activeToTime || excludedContexts.size > 0);
             const searchParam = params.get('search');
             if (searchParam) {
