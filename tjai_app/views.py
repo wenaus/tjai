@@ -40,11 +40,18 @@ def _fix_md_list_spacing(text):
                     result[-1] = prev + ' ' + line.strip()
                     continue
 
+        lstripped = line.lstrip()
         if (i > 0
-                and _LIST_RE.match(line.lstrip())
+                and _LIST_RE.match(lstripped)
                 and lines[i - 1].strip()
                 and not _LIST_RE.match(lines[i - 1].lstrip())):
             result.append('')
+            # A lightly-indented list marker after a paragraph/heading is not
+            # a valid nested list. With tab_length=2, Python-Markdown renders
+            # it as a code block after the blank line; deindent it as the
+            # top-level list the author almost certainly intended.
+            if line != lstripped:
+                line = lstripped
         result.append(line)
     return '\n'.join(result)
 

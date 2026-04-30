@@ -51,6 +51,10 @@
         .diary-body ul, .diary-body ol { margin-left: 20px; margin-bottom: 8px; }
         .diary-body li { margin-bottom: 3px; }
         .diary-body p { margin-bottom: 8px; }
+        .diary-body p:has(+ ul),
+        .diary-body p:has(+ ol) { margin-bottom: 0; }
+        .diary-body p + ul,
+        .diary-body p + ol { margin-top: 0; }
         .diary-body code { background: #2a2a2a; padding: 1px 4px; border-radius: 2px; }
         .diary-body pre { background: #2a2a2a; padding: 8px; border-radius: 4px; overflow-x: auto; margin-bottom: 8px; }
         .diary-body strong { color: #fff; }

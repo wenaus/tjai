@@ -39,6 +39,18 @@
         .content {
             line-height: 1.5;
         }
+        .content p:has(+ ul),
+        .content p:has(+ ol) {
+            margin-bottom: 0;
+        }
+        .content p + ul,
+        .content p + ol {
+            margin-top: 0;
+        }
+        .content strong {
+            color: #d8b4ff;
+            font-weight: 700;
+        }
         a { color: #90caf9; text-decoration: none; }
         a:hover { text-decoration: underline; }
         .meta { color: #888; margin-top: 16px; padding-top: 12px; border-top: 1px solid #333; font-size: 12px; }
