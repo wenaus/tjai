@@ -3429,28 +3429,25 @@ def api_entry_save(request, entry_id):
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
     # Strip trailing whitespace from each line (common paste artifact)
     content = '\n'.join(line.rstrip() for line in content.split('\n'))
-    # For journal entries: parse leading YYYYMMDD/time spec from content
-    # (e.g. "20260407/9am ePIC streaming..." → event_date + stripped content)
+    # For journal entries: parse leading date/time specs from content.
+    # Date prefix: "20260407/9am ePIC streaming..." -> new date/time.
+    # Time-only prefix: "9am ePIC streaming..." -> update existing event time.
     if entry.kind == 'journal':
-        m = re.match(r'^(\d{8})(?:/(\S+))?\s+(.*)', content, re.DOTALL)
-        if m:
-            date_str, time_str, rest = m.group(1), m.group(2), m.group(3)
-            try:
-                from . import services
-                from datetime import datetime as _dt
-                parsed_date = _dt.strptime(date_str, '%Y%m%d')
-                hour, minute = 12, 0  # default noon
-                if time_str:
-                    from tj.commands.journal import parse_time
-                    hour, minute = parse_time(time_str)
-                tz = services.get_timezone()
-                dt = parsed_date.replace(hour=hour, minute=minute, tzinfo=tz)
+        try:
+            from . import services
+            from .journal_editor import parse_journal_editor_prefix
+            entry_data = entry.data if isinstance(entry.data, dict) else {}
+            content, event_ts = parse_journal_editor_prefix(
+                content,
+                entry_data.get('event_date'),
+                services.get_timezone(),
+            )
+            if event_ts is not None:
                 if not isinstance(entry.data, dict):
                     entry.data = {}
-                entry.data['event_date'] = dt.timestamp()
-                content = rest
-            except (ValueError, TypeError):
-                pass  # Not a valid date spec — leave content as-is
+                entry.data['event_date'] = event_ts
+        except (ValueError, TypeError, OverflowError, OSError):
+            pass  # Not a valid date/time prefix — leave content as-is
     old_content = entry.content
     entry.content = content
     if 'name' in data:
