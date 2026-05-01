@@ -50,6 +50,12 @@ as JSON before processing.
 
 Error handling: Tools return {"error": "message"} on validation failures.
 Always check for "error" key in response before processing results.
+
+Pagination contract: list-style read tools that accept `limit` and `offset`
+use `limit` as a page size, not a requirement. The hard maximum page size is
+500. If a returned list has exactly the requested limit, more results may
+exist; at your discretion, fetch the next page with `offset += limit` until a
+page returns fewer than the requested limit or the requested window is complete.
 """
 
 import json
@@ -59,6 +65,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from mcp_server import mcp_server as mcp
 
 from . import services
+from .services import DEFAULT_MAX_CONTENT_LENGTH
 
 
 def _json_text(value) -> str:
@@ -260,7 +267,7 @@ async def get_todos(
     context: str = None,
     status: str = None,
     include_done: bool = False,
-    max_content_length: int = 200,
+    max_content_length: int = DEFAULT_MAX_CONTENT_LENGTH,
 ) -> str:
     """
     Get todo/task entries.
@@ -294,9 +301,10 @@ async def get_todos(
 async def get_memories(
     context: str = None,
     limit: int = 50,
+    offset: int = 0,
     start_date: str = None,
     end_date: str = None,
-    max_content_length: int = 200,
+    max_content_length: int = DEFAULT_MAX_CONTENT_LENGTH,
 ) -> str:
     """
     Get memory entries - general notes and information.
@@ -311,7 +319,10 @@ async def get_memories(
 
     Args:
         context: Filter to memories in this context/project.
-        limit: Maximum results to return. Default: 50.
+        limit: Page size. Default: 50. Hard maximum: 500.
+               If the result count equals limit, more may exist.
+        offset: Zero-based result offset for pagination. Default: 0.
+                At your discretion, fetch the next page with offset += limit.
         start_date: Start of date range (YYYYMMDD, ISO format, or natural language
                     like '7d', 'yesterday', 'monday'). Default: no filtering.
         end_date: End of date range. Default: no filtering.
@@ -325,8 +336,8 @@ async def get_memories(
     Group by context if multiple contexts present.
     """
     result = await sync_to_async(services.get_memories)(
-        context=context, limit=limit, start_date=start_date, end_date=end_date,
-        max_content_length=max_content_length,
+        context=context, limit=limit, offset=offset, start_date=start_date,
+        end_date=end_date, max_content_length=max_content_length,
     )
     return _json_text(result)
 
@@ -336,7 +347,9 @@ async def get_dialog(
     host: str,
     start_date: str = None,
     end_date: str = None,
-    max_content_length: int = 200,
+    limit: int = None,
+    offset: int = 0,
+    max_content_length: int = DEFAULT_MAX_CONTENT_LENGTH,
 ) -> str:
     """
     Get AI assistant dialog turns for a host and time range.
@@ -352,7 +365,11 @@ async def get_dialog(
         start_date: Start of date range (YYYYMMDD, ISO format, or natural language
                     like '1d', '7d', 'yesterday', 'monday'). Required.
         end_date: End of date range. Optional — defaults to now.
-        max_content_length: Truncate content to this many chars. Default: 200.
+        limit: Optional page size. Hard maximum: 500. If omitted, returns all
+               matching dialog turns.
+        offset: Zero-based result offset for pagination. Default: 0.
+                Use with limit to fetch subsequent pages at your discretion.
+        max_content_length: Truncate content to this many chars. Default: 500.
                            Pass 0 for full content (use sparingly on large ranges).
 
     Returns:
@@ -362,7 +379,7 @@ async def get_dialog(
     """
     result = await sync_to_async(services.get_dialog)(
         host=host, start_date=start_date, end_date=end_date,
-        max_content_length=max_content_length,
+        limit=limit, offset=offset, max_content_length=max_content_length,
     )
     return _json_text(result)
 
@@ -371,9 +388,10 @@ async def get_dialog(
 async def get_bookmarks(
     context: str = None,
     limit: int = 50,
+    offset: int = 0,
     start_date: str = None,
     end_date: str = None,
-    max_content_length: int = 200,
+    max_content_length: int = DEFAULT_MAX_CONTENT_LENGTH,
 ) -> str:
     """
     Get saved bookmark entries (URLs).
@@ -383,7 +401,10 @@ async def get_bookmarks(
 
     Args:
         context: Filter to bookmarks in this context/project.
-        limit: Maximum results to return. Default: 50.
+        limit: Page size. Default: 50. Hard maximum: 500.
+               If the result count equals limit, more may exist.
+        offset: Zero-based result offset for pagination. Default: 0.
+                At your discretion, fetch the next page with offset += limit.
         start_date: Start of date range (YYYYMMDD, ISO format, or natural language
                     like '7d', 'yesterday', 'monday'). Default: no filtering.
         end_date: End of date range. Default: no filtering.
@@ -393,8 +414,8 @@ async def get_bookmarks(
         each containing: id, content, kind, context, created, modified, tags.
     """
     result = await sync_to_async(services.get_bookmarks)(
-        context=context, limit=limit, start_date=start_date, end_date=end_date,
-        max_content_length=max_content_length,
+        context=context, limit=limit, offset=offset, start_date=start_date,
+        end_date=end_date, max_content_length=max_content_length,
     )
     return _json_text(result)
 
@@ -408,7 +429,7 @@ async def search_entries(
     offset: int = 0,
     start_date: str = None,
     end_date: str = None,
-    max_content_length: int = 200,
+    max_content_length: int = DEFAULT_MAX_CONTENT_LENGTH,
     order_by: str = 'time',
 ) -> str:
     """
@@ -428,14 +449,15 @@ async def search_entries(
         kind: Filter to specific entry type: memory, todo, journal, profile,
               ai, bookmark, or list.
         context: Filter to entries in this context/project only.
-        limit: Maximum results to return. Default: 50. Set higher if needed.
+        limit: Page size. Default: 50. Hard maximum: 500.
+               If the result count equals limit, more may exist.
         offset: Zero-based result offset for pagination. Default: 0. To fetch
-                the next page, call again with offset += limit.
+                another page at your discretion, call again with offset += limit.
         start_date: Start of date range (YYYYMMDD, ISO format, or natural language
                     like '7d', 'yesterday', 'monday'). Default: no filtering.
         end_date: End of date range. Default: no filtering.
         max_content_length: Truncate content to this many characters (appends …).
-                           Default: 200. Set 0 for full content. Use get_entry() for
+                           Default: 500. Set 0 for full content. Use get_entry() for
                            full content of specific entries.
         order_by: Sort order. 'time' (default) = newest first by modification date.
                   'rank' = best match first by search relevance and requires a
@@ -461,7 +483,7 @@ async def search_entries(
 async def get_named_entries(
     name: str = None,
     context: str = None,
-    max_content_length: int = 200,
+    max_content_length: int = DEFAULT_MAX_CONTENT_LENGTH,
 ) -> str:
     """
     Get entries that have an @name assigned.
@@ -897,7 +919,7 @@ async def create_goal(
 
 
 @mcp.tool()
-async def get_goal(entry_id: str, max_content_length: int = 200) -> dict:
+async def get_goal(entry_id: str, max_content_length: int = DEFAULT_MAX_CONTENT_LENGTH) -> dict:
     """
     Get a goal entry with all its relations.
 
@@ -907,7 +929,7 @@ async def get_goal(entry_id: str, max_content_length: int = 200) -> dict:
     Args:
         entry_id: The UUID of the goal entry (required).
         max_content_length: Truncate related entry content to this many characters.
-                           Default: 200. Set 0 for full content.
+                           Default: 500. Set 0 for full content.
 
     Returns:
         Goal entry with all standard fields plus a "relations" list.
@@ -996,7 +1018,7 @@ async def delete_relation(relation_id: str) -> dict:
 
 
 @mcp.tool()
-async def get_relations(entry_id: str, max_content_length: int = 200) -> str:
+async def get_relations(entry_id: str, max_content_length: int = DEFAULT_MAX_CONTENT_LENGTH) -> str:
     """
     Get all relations for an entry.
 
@@ -1006,7 +1028,7 @@ async def get_relations(entry_id: str, max_content_length: int = 200) -> str:
     Args:
         entry_id: UUID of the entry (required).
         max_content_length: Truncate related entry content to this many characters.
-                           Default: 200. Set 0 for full content.
+                           Default: 500. Set 0 for full content.
 
     Returns:
         List of relations, each containing: id, entry1_id, entry2_id,
@@ -1024,7 +1046,7 @@ async def get_web(
     entry_id: str,
     depth: int = 2,
     kinds: list[str] = None,
-    max_content_length: int = 200,
+    max_content_length: int = DEFAULT_MAX_CONTENT_LENGTH,
 ) -> dict:
     """
     Traverse the relation graph from an entry, returning the connected subgraph.

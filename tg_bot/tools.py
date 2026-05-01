@@ -68,7 +68,8 @@ TOOL_DEFINITIONS = [
                 "context": {"type": "string", "description": "Filter to memories in this context."},
                 "start_date": {"type": "string", "description": "Start of date range. Supports YYYYMMDD, 'yesterday', '3d', 'monday', etc. Default: 7 days ago."},
                 "end_date": {"type": "string", "description": "End of date range. Default: now."},
-                "limit": {"type": "integer", "description": "Maximum results. Default: 50."},
+                "limit": {"type": "integer", "description": "Page size. Default: 50. Hard maximum: 500."},
+                "offset": {"type": "integer", "description": "Zero-based result offset for pagination. Default: 0. If a page returns exactly limit results, more may exist; at your discretion, fetch the next page with offset + limit."},
             },
         },
     },
@@ -81,7 +82,8 @@ TOOL_DEFINITIONS = [
                 "context": {"type": "string", "description": "Filter to bookmarks in this context."},
                 "start_date": {"type": "string", "description": "Start of date range. Supports YYYYMMDD, 'yesterday', '3d', 'monday', etc. Default: 7 days ago."},
                 "end_date": {"type": "string", "description": "End of date range. Default: now."},
-                "limit": {"type": "integer", "description": "Maximum results. Default: 50."},
+                "limit": {"type": "integer", "description": "Page size. Default: 50. Hard maximum: 500."},
+                "offset": {"type": "integer", "description": "Zero-based result offset for pagination. Default: 0. If a page returns exactly limit results, more may exist; at your discretion, fetch the next page with offset + limit."},
             },
         },
     },
@@ -96,8 +98,8 @@ TOOL_DEFINITIONS = [
                 "context": {"type": "string", "description": "Filter to this context."},
                 "start_date": {"type": "string", "description": "Start of date range. Supports YYYYMMDD, 'yesterday', '3d', 'monday', etc. Default: 7 days ago."},
                 "end_date": {"type": "string", "description": "End of date range. Default: now."},
-                "limit": {"type": "integer", "description": "Maximum results. Default: 50."},
-                "offset": {"type": "integer", "description": "Zero-based result offset for pagination. Default: 0. Use offset + limit for the next page."},
+                "limit": {"type": "integer", "description": "Page size. Default: 50. Hard maximum: 500."},
+                "offset": {"type": "integer", "description": "Zero-based result offset for pagination. Default: 0. If a page returns exactly limit results, more may exist; at your discretion, fetch the next page with offset + limit."},
                 "order_by": {"type": "string", "description": "Sort order: time (default), rank (requires query), or size."},
             },
         },
@@ -208,19 +210,21 @@ def get_todos(context=None, status=None, include_done=False):
     return services.get_todos(context=context, status=status, include_done=include_done)
 
 
-def get_memories(context=None, start_date=None, end_date=None, limit=50):
+def get_memories(context=None, start_date=None, end_date=None, limit=50, offset=0):
     if start_date is None:
         start_date = '7d'
     return services.get_memories(
-        context=context, limit=limit, start_date=start_date, end_date=end_date,
+        context=context, limit=limit, offset=offset,
+        start_date=start_date, end_date=end_date,
     )
 
 
-def get_bookmarks(context=None, start_date=None, end_date=None, limit=50):
+def get_bookmarks(context=None, start_date=None, end_date=None, limit=50, offset=0):
     if start_date is None:
         start_date = '7d'
     return services.get_bookmarks(
-        context=context, limit=limit, start_date=start_date, end_date=end_date,
+        context=context, limit=limit, offset=offset,
+        start_date=start_date, end_date=end_date,
     )
 
 

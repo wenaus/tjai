@@ -165,10 +165,10 @@ Tools:
 - get_calendar(start_date, end_date, context, days): Get calendar entries
   for a date range. Dates in ISO or YYYYMMDD format.
 - list_contexts(): List all projects/topics to discover what contexts exist.
-- get_memories(context, limit, start_date, end_date): Get memory entries.
+- get_memories(context, limit, offset, start_date, end_date): Get memory entries.
   Call unfiltered to see recent activity.
-- get_bookmarks(context, limit, start_date, end_date): Get saved bookmarks.
-- search_entries(query, kind, context, limit): Search or list entries. Omit
+- get_bookmarks(context, limit, offset, start_date, end_date): Get saved bookmarks.
+- search_entries(query, kind, context, limit, offset): Search or list entries. Omit
   query for structured listing/filtering by kind, context, or date. Use
   order_by='rank' only with a non-empty query.
 - get_named_entries(name, context): Get entries by @name, or list all named.
@@ -205,7 +205,13 @@ goal (organizing nodes of the knowledge graph).
 Valid statuses: active, done, blocked, archive. Priority: positive integers (1=highest).
 
 Error handling: All tools return {"error": "message"} on validation failures.
-Always check for "error" key in response before processing results.""",
+Always check for "error" key in response before processing results.
+
+Pagination: For read tools that accept limit and offset, limit is a page size,
+not a requirement. The hard maximum page size is 500. If a returned list has
+exactly the requested limit, more results may exist; at your discretion, fetch
+the next page with offset += limit until a page returns fewer than the requested
+limit or the requested window is complete.""",
 }
 
 # MCP endpoint path (empty string since we mount at /mcp/ in urls.py)

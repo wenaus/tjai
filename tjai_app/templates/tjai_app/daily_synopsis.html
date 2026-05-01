@@ -213,10 +213,27 @@
         let todayKey = '';
         let selectedEntryId = null;
 
+        async function fetchJson(url, options = {}, timeoutMs = 15000) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                const resp = await fetch(url, {...options, signal: controller.signal});
+                let data = {};
+                try {
+                    data = await resp.json();
+                } catch (e) {
+                    data = {error: `Invalid JSON response (HTTP ${resp.status})`};
+                }
+                if (!resp.ok && !data.error) data.error = `HTTP ${resp.status}`;
+                return {resp, data};
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+
         async function fetchDates() {
             try {
-                const resp = await fetch('/tjai/api/synopsis/dates');
-                const data = await resp.json();
+                const {data} = await fetchJson('/tjai/api/synopsis/dates');
                 if (data.error) {
                     document.getElementById('date-list').innerHTML = `<div class="error">${data.error}</div>`;
                     return;
@@ -238,7 +255,8 @@
                     selectDate(found ? target : allDates[0].entry_id);
                 }
             } catch (e) {
-                document.getElementById('date-list').innerHTML = '<div class="error">Error loading dates</div>';
+                const msg = e.name === 'AbortError' ? 'Timed out loading dates' : `Error loading dates: ${e.message}`;
+                document.getElementById('date-list').innerHTML = `<div class="error">${msg}</div>`;
             }
         }
 
@@ -272,8 +290,7 @@
             });
             document.getElementById('synopsis-panel').innerHTML = '<div class="loading">Loading...</div>';
             try {
-                const resp = await fetch(`/tjai/api/synopsis/content?entry_id=${encodeURIComponent(entryId)}`);
-                const data = await resp.json();
+                const {data} = await fetchJson(`/tjai/api/synopsis/content?entry_id=${encodeURIComponent(entryId)}`);
                 if (data.error) {
                     document.getElementById('synopsis-panel').innerHTML = `<div class="error">${data.error}</div>`;
                     return;
@@ -317,12 +334,11 @@
             btn.disabled = true;
             btn.textContent = 'Requesting...';
             try {
-                const resp = await fetch('/tjai/api/synopsis/rerun', {
+                const {resp, data} = await fetchJson('/tjai/api/synopsis/rerun', {
                     method: 'POST',
                     headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded'},
                     body: 'entry_id=' + encodeURIComponent(entryId),
                 });
-                const data = await resp.json();
                 if (!resp.ok || data.error) {
                     btn.textContent = 'Failed';
                     alert('Rerun failed: ' + (data.error || 'Unknown error'));
@@ -335,9 +351,8 @@
                     attempts++;
                     if (attempts > 120) { clearInterval(poll); btn.textContent = 'Timeout'; return; }
                     try {
-                        const cr = await fetch(`/tjai/api/synopsis/content?entry_id=${encodeURIComponent(entryId)}`);
+                        const {resp: cr, data: cd} = await fetchJson(`/tjai/api/synopsis/content?entry_id=${encodeURIComponent(entryId)}`);
                         if (cr.ok) {
-                            const cd = await cr.json();
                             // Check if content has grown beyond just the header
                             if (cd.content_html && cd.content_html.length > 100) {
                                 clearInterval(poll);

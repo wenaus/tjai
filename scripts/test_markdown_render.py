@@ -14,7 +14,12 @@ import django  # noqa: E402
 
 django.setup()
 
-from tjai_app.views import _render_markdown  # noqa: E402
+from tjai_app.views import _fix_md_list_spacing, _render_markdown  # noqa: E402
+
+
+def assert_equal(actual, expected, label):
+    if actual != expected:
+        raise AssertionError(f"{label}: expected {expected!r}, got {actual!r}")
 
 
 def assert_contains(text, needle, label):
@@ -35,6 +40,41 @@ def main():
     )
     assert_contains(html, '<a href="https://mail.google.com/mail/u/0/#inbox/FMfcgzQgLXtGkgCfQRvnlJcMbhnbLJGd">Sakib thread</a>', "indented list link")
     assert_not_contains(html, "<pre><code>", "indented list should not become code block")
+
+    source = (
+        "They have a lot of documents.\n"
+        "  - [google form to track PWG requests for new datasets](https://docs.google.com/forms/d/12sAZTWfw8F-Ze9Ln2CbYjy_sYB6RKt3tsZ0zTxZLH9M/edit)\n"
+        "  - [overview tracking document](https://docs.google.com/spreadsheets/d/1BJeq3AYwefNC9m3palH6T0SHMxmRmHpOzLTSa_6SZIU/edit?usp=sharing)"
+    )
+    normalized = _fix_md_list_spacing(source)
+    assert_equal(
+        normalized,
+        "They have a lot of documents.\n\n"
+        "- [google form to track PWG requests for new datasets](https://docs.google.com/forms/d/12sAZTWfw8F-Ze9Ln2CbYjy_sYB6RKt3tsZ0zTxZLH9M/edit)\n"
+        "- [overview tracking document](https://docs.google.com/spreadsheets/d/1BJeq3AYwefNC9m3palH6T0SHMxmRmHpOzLTSa_6SZIU/edit?usp=sharing)",
+        "same-indented list block normalization",
+    )
+    html = _render_markdown(source, extensions=["tables", "fenced_code"])
+    assert_contains(html, '<li><a href="https://docs.google.com/forms/d/12sAZTWfw8F-Ze9Ln2CbYjy_sYB6RKt3tsZ0zTxZLH9M/edit">google form to track PWG requests for new datasets</a></li>', "first sibling list item")
+    assert_contains(html, '<li><a href="https://docs.google.com/spreadsheets/d/1BJeq3AYwefNC9m3palH6T0SHMxmRmHpOzLTSa_6SZIU/edit?usp=sharing">overview tracking document</a></li>', "second sibling list item")
+    assert_not_contains(html, "new datasets</a><ul>", "second same-indent item should not nest under first")
+
+    source = (
+        "Documents\n"
+        "  - first\n"
+        "  - second\n"
+        "    - second child"
+    )
+    normalized = _fix_md_list_spacing(source)
+    assert_equal(
+        normalized,
+        "Documents\n\n- first\n- second\n  - second child",
+        "relative nested indentation survives block normalization",
+    )
+    html = _render_markdown(source, extensions=["tables", "fenced_code"])
+    assert_contains(html, "<li>first</li>", "first sibling before nested item")
+    assert_contains(html, "<li>second<ul>", "second item has nested child")
+    assert_contains(html, "<li>second child</li>", "nested child survives")
 
     html = _render_markdown(
         "Intro paragraph\n"
@@ -57,6 +97,12 @@ def main():
         extensions=["tables", "fenced_code"],
     )
     assert_contains(html, "<li>parent item wrapped continuation</li>", "wrapped list continuation still rejoins")
+
+    html = _render_markdown(
+        "- parent item with **bold text**",
+        extensions=["tables", "fenced_code"],
+    )
+    assert_contains(html, "<strong>bold text</strong>", "bold text inside list item renders")
 
     print("markdown render tests passed")
 

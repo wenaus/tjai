@@ -24,6 +24,24 @@ from tj.date_utils import parse_date_filter
 
 VALID_KINDS = ('memory', 'todo', 'journal', 'profile', 'ai', 'bookmark', 'list', 'action', 'goal')
 VALID_STATUSES = ('active', 'done', 'blocked', 'archive', 'failed')
+DEFAULT_MAX_CONTENT_LENGTH = 500
+MAX_RESULT_LIMIT = 500
+
+
+def _validate_result_limit(limit):
+    if limit is None:
+        return None
+    if not isinstance(limit, int) or limit < 1:
+        return {"error": f"limit must be a positive integer, got {limit}"}
+    if limit > MAX_RESULT_LIMIT:
+        return {"error": f"limit must be <= {MAX_RESULT_LIMIT}, got {limit}"}
+    return None
+
+
+def _validate_offset(offset):
+    if not isinstance(offset, int) or offset < 0:
+        return {"error": f"offset must be a non-negative integer, got {offset}"}
+    return None
 
 
 def _parse_date(date_str):
@@ -583,7 +601,7 @@ def copy_calendar_entry(entry_id, event_date, event_time=None):
     return _format_entry(entry)
 
 
-def get_todos(context=None, status=None, include_done=False, max_content_length=200):
+def get_todos(context=None, status=None, include_done=False, max_content_length=DEFAULT_MAX_CONTENT_LENGTH):
     if status is not None and status not in VALID_STATUSES:
         return {"error": f"Invalid status '{status}'. Must be one of: {', '.join(VALID_STATUSES)}"}
 
@@ -603,7 +621,7 @@ def get_todos(context=None, status=None, include_done=False, max_content_length=
     return [_format_entry(entry, max_content_length=max_content_length) for entry in qs]
 
 
-def get_goals(context=None, status=None, include_done=False, max_content_length=200):
+def get_goals(context=None, status=None, include_done=False, max_content_length=DEFAULT_MAX_CONTENT_LENGTH):
     """Get all goal entries with relation counts."""
     if status is not None and status not in VALID_STATUSES:
         return {"error": f"Invalid status '{status}'. Must be one of: {', '.join(VALID_STATUSES)}"}
@@ -634,9 +652,13 @@ def get_goals(context=None, status=None, include_done=False, max_content_length=
     return goals
 
 
-def get_memories(context=None, limit=50, start_date=None, end_date=None, max_content_length=200):
-    if not isinstance(limit, int) or limit < 1:
-        return {"error": f"limit must be a positive integer, got {limit}"}
+def get_memories(context=None, limit=50, offset=0, start_date=None, end_date=None, max_content_length=DEFAULT_MAX_CONTENT_LENGTH):
+    err = _validate_result_limit(limit)
+    if err:
+        return err
+    err = _validate_offset(offset)
+    if err:
+        return err
 
     qs = Entry.objects.filter(
         kind='memory',
@@ -650,15 +672,21 @@ def get_memories(context=None, limit=50, start_date=None, end_date=None, max_con
     if err:
         return err
 
-    qs = qs.order_by('-timestamp_modified')[:limit]
+    qs = qs.order_by('-timestamp_modified')[offset:offset + limit]
     return [_format_entry(entry, max_content_length=max_content_length) for entry in qs]
 
 
-def get_dialog(host, start_date=None, end_date=None, max_content_length=200):
+def get_dialog(host, start_date=None, end_date=None, limit=None, offset=0, max_content_length=DEFAULT_MAX_CONTENT_LENGTH):
     if not host:
         return {"error": "host is required (e.g. 'ec2dev', 'MacbookPro', or 'all')"}
     if not start_date:
         return {"error": "start_date is required"}
+    err = _validate_result_limit(limit)
+    if err:
+        return err
+    err = _validate_offset(offset)
+    if err:
+        return err
 
     dialog_ids = Tag.objects.filter(tag_name=DIALOG_TAG).values_list('entry_id', flat=True)
     qs = Entry.objects.filter(
@@ -673,6 +701,10 @@ def get_dialog(host, start_date=None, end_date=None, max_content_length=200):
         return err
 
     qs = qs.order_by('timestamp_created')
+    if limit is not None:
+        qs = qs[offset:offset + limit]
+    elif offset:
+        qs = qs[offset:]
     tz = get_app_tz()
     turns = []
     for e in qs:
@@ -703,9 +735,13 @@ def get_dialog(host, start_date=None, end_date=None, max_content_length=200):
     return turns
 
 
-def get_bookmarks(context=None, limit=50, start_date=None, end_date=None, max_content_length=200):
-    if not isinstance(limit, int) or limit < 1:
-        return {"error": f"limit must be a positive integer, got {limit}"}
+def get_bookmarks(context=None, limit=50, offset=0, start_date=None, end_date=None, max_content_length=DEFAULT_MAX_CONTENT_LENGTH):
+    err = _validate_result_limit(limit)
+    if err:
+        return err
+    err = _validate_offset(offset)
+    if err:
+        return err
 
     qs = Entry.objects.filter(
         kind='bookmark',
@@ -719,17 +755,19 @@ def get_bookmarks(context=None, limit=50, start_date=None, end_date=None, max_co
     if err:
         return err
 
-    qs = qs.order_by('-timestamp_modified')[:limit]
+    qs = qs.order_by('-timestamp_modified')[offset:offset + limit]
     return [_format_entry(entry, max_content_length=max_content_length) for entry in qs]
 
 
-def search_entries(query=None, kind=None, context=None, limit=50, offset=0, start_date=None, end_date=None, max_content_length=200, order_by='time'):
+def search_entries(query=None, kind=None, context=None, limit=50, offset=0, start_date=None, end_date=None, max_content_length=DEFAULT_MAX_CONTENT_LENGTH, order_by='time'):
     if kind is not None and kind not in VALID_KINDS:
         return {"error": f"Invalid kind '{kind}'. Must be one of: {', '.join(VALID_KINDS)}"}
-    if not isinstance(limit, int) or limit < 1:
-        return {"error": f"limit must be a positive integer, got {limit}"}
-    if not isinstance(offset, int) or offset < 0:
-        return {"error": f"offset must be a non-negative integer, got {offset}"}
+    err = _validate_result_limit(limit)
+    if err:
+        return err
+    err = _validate_offset(offset)
+    if err:
+        return err
     if order_by not in ('time', 'rank', 'size'):
         return {"error": "order_by must be one of: time, rank, size"}
 
@@ -792,7 +830,7 @@ def get_entry(entry_id):
     return result
 
 
-def get_named_entries(name=None, context=None, max_content_length=200):
+def get_named_entries(name=None, context=None, max_content_length=DEFAULT_MAX_CONTENT_LENGTH):
     """Get entries that have a @name. If name given, return that specific entry."""
     qs = Entry.objects.filter(
         deleted_at__isnull=True,
@@ -1333,7 +1371,7 @@ def create_goal(content, context=None, name=None, tags=None,
     )
 
 
-def get_goal(entry_id, max_content_length=200):
+def get_goal(entry_id, max_content_length=DEFAULT_MAX_CONTENT_LENGTH):
     """Get a goal entry with all its relations and tagged entries.
 
     Returns relations (from the relations table) and tagged_entries
@@ -1448,7 +1486,7 @@ def delete_relation(relation_id):
     return {"deleted": True, "relation": result}
 
 
-def get_relations(entry_id, max_content_length=200):
+def get_relations(entry_id, max_content_length=DEFAULT_MAX_CONTENT_LENGTH):
     """Get all relations for an entry."""
     if not entry_id:
         return {"error": "entry_id is required"}
@@ -1458,7 +1496,7 @@ def get_relations(entry_id, max_content_length=200):
     return _get_relations_for_entry(entry_id, max_content_length=max_content_length)
 
 
-def get_web(entry_id, depth=2, kinds=None, max_content_length=200):
+def get_web(entry_id, depth=2, kinds=None, max_content_length=DEFAULT_MAX_CONTENT_LENGTH):
     """Traverse the relation graph from an entry, returning the connected subgraph.
 
     BFS traversal up to `depth` hops. Explores all edges regardless of entry kind,

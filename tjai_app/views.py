@@ -13,7 +13,38 @@ from .dialog_context import CURRENT_DIALOG_CONTEXT, DIALOG_CONTEXTS, DIALOG_TAG
 logger = logging.getLogger(__name__)
 
 _LIST_RE = re.compile(r'[-*+] |\d+\. ')
+_LIST_MARKER_RE = re.compile(r'^(\s*)([-*+] |\d+\. )')
 _BLOCK_RE = re.compile(r'^(\s*)([-*+] |\d+\. |#{1,6} |```)')
+
+def _deindent_paragraph_list_blocks(lines):
+    """Normalize indented list blocks that start after paragraph text."""
+    result = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        marker = _LIST_MARKER_RE.match(line)
+        if (marker and marker.group(1) and i > 0
+                and lines[i - 1].strip()
+                and not _LIST_RE.match(lines[i - 1].lstrip())):
+            base_indent = len(marker.group(1))
+            if result and result[-1].strip():
+                result.append('')
+            while i < len(lines):
+                block_line = lines[i]
+                if not block_line.strip():
+                    result.append(block_line)
+                    i += 1
+                    continue
+                cur_indent = len(block_line) - len(block_line.lstrip())
+                if cur_indent < base_indent:
+                    break
+                result.append(block_line[base_indent:])
+                i += 1
+            continue
+        result.append(line)
+        i += 1
+    return result
+
 
 def _fix_md_list_spacing(text):
     """Fix two common markdown list issues:
@@ -24,7 +55,7 @@ def _fix_md_list_spacing(text):
        hard-wrapped and the continuation starts at column 0 (or below the
        list content indent), the markdown parser loses nesting context.
     """
-    lines = text.split('\n')
+    lines = _deindent_paragraph_list_blocks(text.split('\n'))
     result = []
     for i, line in enumerate(lines):
         # Rejoin broken list continuations: non-blank, non-block line whose
@@ -40,18 +71,11 @@ def _fix_md_list_spacing(text):
                     result[-1] = prev + ' ' + line.strip()
                     continue
 
-        lstripped = line.lstrip()
         if (i > 0
-                and _LIST_RE.match(lstripped)
+                and _LIST_RE.match(line.lstrip())
                 and lines[i - 1].strip()
                 and not _LIST_RE.match(lines[i - 1].lstrip())):
             result.append('')
-            # A lightly-indented list marker after a paragraph/heading is not
-            # a valid nested list. With tab_length=2, Python-Markdown renders
-            # it as a code block after the blank line; deindent it as the
-            # top-level list the author almost certainly intended.
-            if line != lstripped:
-                line = lstripped
         result.append(line)
     return '\n'.join(result)
 
