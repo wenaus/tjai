@@ -2189,7 +2189,9 @@ def dashboard_named(request):
             'line_count': len([l for l in lines if l.strip()]),
         })
 
-    return JsonResponse({'entries': result})
+    response = JsonResponse({'entries': result})
+    response['Cache-Control'] = 'no-store, max-age=0'
+    return response
 
 
 @login_required
@@ -4651,7 +4653,7 @@ def api_entry_content(request, entry_id):
     tags = list(Tag.objects.filter(entry_id=entry.id).values_list('tag_name', flat=True))
     data = entry.data if isinstance(entry.data, dict) else None
 
-    return JsonResponse({
+    response = JsonResponse({
         'id': str(entry.id),
         'content': entry.content,
         'kind': entry.kind,
@@ -4662,6 +4664,8 @@ def api_entry_content(request, entry_id):
         'tags': tags,
         'event_date': data.get('event_date') if data else None,
     })
+    response['Cache-Control'] = 'no-store, max-age=0'
+    return response
 
 
 @login_required

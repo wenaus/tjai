@@ -656,6 +656,8 @@
     const tg = window.Telegram?.WebApp;
     let authenticated = false;
     const loaded = {};  // track which tabs have loaded
+    let activeTab = 'cal';
+    let lastForegroundRefresh = 0;
     let ctxLevel = 'list';  // 'list' or 'entries'
 
     // --- Init ---
@@ -711,9 +713,16 @@
                 }
             });
         }
+
+        window.addEventListener('focus', refreshForegroundData);
+        window.addEventListener('pageshow', refreshForegroundData);
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) refreshForegroundData();
+        });
     }
 
     function switchTab(id) {
+        activeTab = id;
         document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === id));
         document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + id));
 
@@ -741,8 +750,8 @@
         if (existing) existing.remove();
     }
 
-    function loadTab(id) {
-        if (loaded[id]) return;
+    function loadTab(id, force) {
+        if (loaded[id] && !force) return;
         loaded[id] = true;
         if (id === 'cal') loadCalendar();
         else if (id === 'all') loadAll();
@@ -753,6 +762,16 @@
         else if (id === 'syn') loadSynopsis();
         else if (id === 'rss') loadRss();
         else if (id === 'research') loadResearch();
+    }
+
+    function refreshForegroundData() {
+        if (document.hidden) return;
+        if (document.getElementById('detail-edit-textarea')) return;
+        const now = Date.now();
+        if (now - lastForegroundRefresh < 3000) return;
+        lastForegroundRefresh = now;
+        loadTab(activeTab, true);
+        if (_detailEntry && _detailEntry.id) refreshOpenDetail(_detailEntry.id);
     }
 
     function showError(panelId, msg) {
@@ -771,7 +790,7 @@
             return;
         }
         try {
-            const resp = await fetch(`/tjai/api/entry/${entryId}/content`);
+            const resp = await fetch(`/tjai/api/entry/${entryId}/content?ts=${Date.now()}`, {cache: 'no-store'});
             if (!resp.ok) return;
             const data = await resp.json();
             const div = document.createElement('div');
@@ -904,7 +923,7 @@
     async function loadNamed() {
         const panel = document.getElementById('panel-named');
         try {
-            const resp = await fetch('/tjai/api/dashboard/named');
+            const resp = await fetch(`/tjai/api/dashboard/named?ts=${Date.now()}`, {cache: 'no-store'});
             const data = await resp.json();
             renderNamed(panel, data);
         } catch (e) {
@@ -1100,13 +1119,25 @@
         ov.innerHTML = '<div class="loading">Loading...</div>';
         document.body.appendChild(ov);
         try {
-            const resp = await fetch(`/tjai/api/entry/${entryId}/content`);
+            const resp = await fetch(`/tjai/api/entry/${entryId}/content?ts=${Date.now()}`, {cache: 'no-store'});
             if (!resp.ok) { closeDetail(); return; }
             const data = await resp.json();
             _detailEntry = data;
             renderDetail(data);
         } catch (e) {
             closeDetail();
+        }
+    }
+
+    async function refreshOpenDetail(entryId) {
+        try {
+            const resp = await fetch(`/tjai/api/entry/${entryId}/content?ts=${Date.now()}`, {cache: 'no-store'});
+            if (!resp.ok) return;
+            const data = await resp.json();
+            _detailEntry = data;
+            renderDetail(data);
+        } catch (e) {
+            showToast('Refresh failed');
         }
     }
 
