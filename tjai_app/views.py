@@ -1204,6 +1204,10 @@ def api_delete_entry(request, entry_id):
 
     entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
     if not entry:
+        entry = Entry.objects.filter(
+            data__entry_id=entry_id, deleted_at__isnull=True
+        ).first()
+    if not entry:
         return JsonResponse({"error": f"Entry '{entry_id}' not found or already deleted"}, status=404)
 
     from .models import snapshot_entry
@@ -1233,6 +1237,8 @@ def api_archive_entry(request, entry_id):
     include_deleted = request.GET.get('from_trash') == '1'
     qs = Entry.objects.all() if include_deleted else Entry.objects.filter(deleted_at__isnull=True)
     entry = qs.filter(id=entry_id).first()
+    if not entry:
+        entry = qs.filter(data__entry_id=entry_id).first()
     if not entry:
         return JsonResponse({"error": f"Entry '{entry_id}' not found"}, status=404)
     if entry.status == 'archive' and entry.deleted_at is None:
@@ -4678,8 +4684,438 @@ def picks(request):
 
 @login_required
 def research_page(request):
-    """Render the research queue page."""
+    """Render the compact research topic list page."""
+    return render(request, 'tjai_app/research_list.html')
+
+
+@login_required
+def research_list_page(request):
+    """Render the compact research topic list page."""
+    return render(request, 'tjai_app/research_list.html')
+
+
+@login_required
+def research_legacy_page(request):
+    """Render the legacy research queue page."""
     return render(request, 'tjai_app/research.html')
+
+
+@login_required
+def research_detail_page(request, detail_entry_id=None):
+    """Render one research topic's full detail page."""
+    return render(request, 'tjai_app/research_detail.html', {
+        'detail_entry_id': detail_entry_id or '',
+    })
+
+
+def _research_summary_text(content, limit=420):
+    lines = [line.strip() for line in (content or '').splitlines()]
+    raw_title = next((line for line in lines if line), 'Untitled research topic')
+    title = _research_clean_title(raw_title)
+    body_lines = []
+    seen_title = False
+    for line in lines:
+        if not seen_title:
+            if line == raw_title:
+                seen_title = True
+            continue
+        if line:
+            body_lines.append(line)
+        elif body_lines:
+            break
+    description = _research_plain_summary(' '.join(body_lines))
+    if len(description) > limit:
+        description = description[:limit - 3].rstrip() + '...'
+    return title, description
+
+
+def _research_plain_summary(text):
+    text = re.sub(r'^#{1,6}\s+', '', text or '')
+    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)
+    text = re.sub(r'\*([^*]+)\*', r'\1', text)
+    text = re.sub(r'`([^`]+)`', r'\1', text)
+    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+    return re.sub(r'\s+', ' ', text).strip()
+
+
+def _research_clean_title(title):
+    return re.sub(r'^#{1,6}\s+', '', title or '').strip() or 'Untitled research topic'
+
+
+def _research_title_and_territory(content):
+    lines = (content or '').splitlines()
+    title_index = None
+    title = 'Untitled research topic'
+    for idx, line in enumerate(lines):
+        if line.strip():
+            title_index = idx
+            title = _research_clean_title(line.strip())
+            break
+    if title_index is None:
+        return title, ''
+    territory = '\n'.join(lines[title_index + 1:]).strip()
+    return title, territory
+
+
+def _research_display_status(entry, data):
+    status = entry.status or data.get('status') or 'pending'
+    if status == 'pending' and data.get('source') == 'ideation-agent':
+        return 'proposed'
+    return status
+
+
+def _research_execution_info(entry, data):
+    info = []
+    if data.get('run_status'):
+        info.append(f"run {data.get('run_status')}")
+    if data.get('run_exit_code') is not None:
+        info.append(f"exit {data.get('run_exit_code')}")
+    if data.get('run_duration_seconds') is not None:
+        try:
+            info.append(fmt_duration(int(float(data.get('run_duration_seconds')))))
+        except (TypeError, ValueError):
+            info.append(f"{data.get('run_duration_seconds')}s")
+    if data.get('worker_target'):
+        info.append(f"worker target {data.get('worker_target')}")
+    if data.get('worker_machine_id'):
+        info.append(f"worker {data.get('worker_machine_id')}")
+    if data.get('worker_duration_sec') is not None:
+        try:
+            info.append(f"worker {fmt_duration(int(float(data.get('worker_duration_sec'))))}")
+        except (TypeError, ValueError):
+            info.append(f"worker {data.get('worker_duration_sec')}s")
+    if data.get('worker_claimed_by'):
+        info.append(f"claimed by {data.get('worker_claimed_by')}")
+    if data.get('worker_claimed_at'):
+        try:
+            info.append(f"claimed {fmt_datetime(float(data.get('worker_claimed_at')))}")
+        except (TypeError, ValueError):
+            pass
+    if data.get('worker_staged_at'):
+        try:
+            info.append(f"staged {fmt_datetime(float(data.get('worker_staged_at')))}")
+        except (TypeError, ValueError):
+            pass
+    if data.get('run_completed_at'):
+        try:
+            info.append(f"completed {fmt_datetime(float(data.get('run_completed_at')))}")
+        except (TypeError, ValueError):
+            pass
+    if data.get('content_lines') is not None:
+        info.append(f"{data.get('content_lines')} lines")
+    if data.get('run_error'):
+        info.append(f"error: {str(data.get('run_error')).splitlines()[0]}")
+    return info
+
+
+def _research_branch_status(entry, data):
+    status = entry.status or 'pending'
+    if (
+        status == 'active'
+        and data.get('source') == 'multimodel'
+        and data.get('worker_target')
+        and not data.get('worker_claimed_at')
+    ):
+        return 'staged'
+    return status
+
+
+@login_required
+def api_research_list(request):
+    """Return compact base research topics for the new list page."""
+    from .action_runner import RESEARCH_MODELS
+
+    def _int_param(name, default, min_value, max_value):
+        try:
+            value = int(request.GET.get(name, default))
+        except (TypeError, ValueError):
+            value = default
+        return max(min_value, min(max_value, value))
+
+    q = (request.GET.get('q') or '').strip().lower()
+    scope = request.GET.get('scope') or 'title'
+    if scope not in ('title', 'topic', 'bodies'):
+        scope = 'title'
+    status_param = request.GET.get('status') or 'open'
+    include_archived = status_param == 'all'
+    status_filter = set()
+    if status_param not in ('open', 'all'):
+        status_filter = {
+            s.strip() for s in status_param.split(',')
+            if s.strip()
+        }
+    offset = _int_param('offset', 0, 0, 100000)
+    limit = _int_param('limit', 100, 1, 300)
+
+    research_ids = Tag.objects.filter(
+        tag_name='research_topic'
+    ).values_list('entry_id', flat=True)
+    base_entries = list(Entry.objects.filter(
+        id__in=research_ids,
+        kind='memory',
+        deleted_at__isnull=True,
+    ).exclude(
+        data__source='multimodel'
+    ).order_by('-timestamp_modified'))
+
+    base_by_entry_id = {}
+    for entry in base_entries:
+        data = entry.data if isinstance(entry.data, dict) else {}
+        eid = data.get('entry_id')
+        if eid:
+            base_by_entry_id[eid] = entry
+
+    model_statuses = {}
+    subentry_counts = Counter()
+    researched_models = {}
+    model_errors = {}
+    synthesis_done = set()
+    for sub in Entry.objects.filter(
+        data__source='multimodel',
+        deleted_at__isnull=True,
+    ).only('id', 'status', 'data'):
+        data = sub.data if isinstance(sub.data, dict) else {}
+        beid = data.get('base_entry_id')
+        if not beid or beid not in base_by_entry_id:
+            continue
+        subentry_counts[beid] += 1
+        model = data.get('model')
+        if model:
+            status = sub.status or 'pending'
+            model_statuses.setdefault(beid, {})[model] = status
+            if model == 'synthesis':
+                if status == 'done':
+                    synthesis_done.add(beid)
+            else:
+                researched_models.setdefault(beid, []).append(model)
+            if data.get('run_error'):
+                model_errors.setdefault(beid, {})[model] = data.get('run_error')
+
+    body_matches = set()
+    if q and scope == 'bodies':
+        for sub in Entry.objects.filter(
+            data__source='multimodel',
+            deleted_at__isnull=True,
+        ).only('content', 'data'):
+            data = sub.data if isinstance(sub.data, dict) else {}
+            beid = data.get('base_entry_id')
+            if beid and beid in base_by_entry_id and q in (sub.content or '').lower():
+                body_matches.add(beid)
+
+    items = []
+    counts_by_status = Counter()
+    for entry in base_entries:
+        data = entry.data if isinstance(entry.data, dict) else {}
+        eid = data.get('entry_id') or ''
+        title, description = _research_summary_text(entry.content)
+        display_status = _research_display_status(entry, data)
+        counts_by_status[display_status] += 1
+
+        if status_filter and display_status not in status_filter:
+            continue
+        if not status_filter and not include_archived and display_status == 'archive':
+            continue
+        match_scope = None
+        if q:
+            title_match = q in title.lower()
+            topic_match = q in (entry.content or '').lower()
+            body_match = eid in body_matches
+            if scope == 'title' and not title_match:
+                continue
+            if scope == 'topic' and not topic_match:
+                continue
+            if scope == 'bodies' and not (topic_match or body_match):
+                continue
+            match_scope = 'body' if body_match and not topic_match else 'topic'
+            if title_match:
+                match_scope = 'title'
+
+        model_map = {}
+        for model in RESEARCH_MODELS:
+            model_map[model] = (
+                data.get(f'{model}_status')
+                or model_statuses.get(eid, {}).get(model)
+                or None
+            )
+        model_counts = Counter(v for v in model_map.values() if v)
+
+        items.append({
+            'id': str(entry.id),
+            'entry_id': eid,
+            'title': title,
+            'description': description,
+            'status': display_status,
+            'raw_status': entry.status,
+            'priority': entry.priority,
+            'source': data.get('source') or '',
+            'created': entry.timestamp_created,
+            'created_display': fmt_datetime(entry.timestamp_created),
+            'modified': entry.timestamp_modified,
+            'modified_display': fmt_datetime(entry.timestamp_modified),
+            'modified_ago': fmt_ago(entry.timestamp_modified),
+            'models': model_map,
+            'model_counts': dict(model_counts),
+            'model_errors': model_errors.get(eid, {}),
+            'researched_models': sorted(set(researched_models.get(eid, []))),
+            'synthesis_done': eid in synthesis_done or data.get('synthesis_done') is True,
+            'subentry_count': subentry_counts.get(eid, 0),
+            'match_scope': match_scope,
+            'detail_entry_id': f'{eid}_detail',
+            'detail_url': f'/tjai/research-detail/{eid}_detail/',
+            'entry_url': f'/tjai/entry/?entry_id={eid}',
+            'studies_url': f'/tjai/research/studies/?entry_id={eid}',
+        })
+
+    total_filtered = len(items)
+    page_items = items[offset:offset + limit]
+    response = JsonResponse({
+        'items': page_items,
+        'models': list(RESEARCH_MODELS),
+        'stats': {
+            'topics': len(base_entries),
+            'filtered': total_filtered,
+            'returned': len(page_items),
+            'offset': offset,
+            'limit': limit,
+            'has_more': offset + limit < total_filtered,
+            'counts_by_status': dict(counts_by_status),
+        },
+    })
+    response['Cache-Control'] = 'no-store, max-age=0'
+    return response
+
+
+@login_required
+def api_research_detail(request):
+    """Return one research topic with full territory, branches, and synthesis."""
+    from .action_runner import RESEARCH_MODELS
+
+    entry_id_param = request.GET.get('entry_id')
+    if entry_id_param and entry_id_param.endswith('_detail'):
+        entry_id_param = entry_id_param[:-len('_detail')]
+    research_ids = Tag.objects.filter(
+        tag_name='research_topic'
+    ).values_list('entry_id', flat=True)
+    qs = Entry.objects.filter(
+        id__in=research_ids,
+        kind='memory',
+        deleted_at__isnull=True,
+    ).exclude(
+        data__source='multimodel'
+    )
+    if entry_id_param:
+        entry = qs.filter(data__entry_id=entry_id_param).first()
+    else:
+        return JsonResponse({'error': 'entry_id required'}, status=400)
+    if not entry:
+        return JsonResponse({'error': 'Research topic not found'}, status=404)
+
+    data = entry.data if isinstance(entry.data, dict) else {}
+    eid = data.get('entry_id') or ''
+    title, territory = _research_title_and_territory(entry.content)
+    _, description = _research_summary_text(entry.content)
+    agent_current_entry = SysConfig.objects.filter(
+        key='agent_research-agent_entry'
+    ).values_list('value', flat=True).first()
+    agent_status = SysConfig.objects.filter(
+        key='agent_research-agent_status'
+    ).values_list('value', flat=True).first()
+    branch_by_model = {}
+
+    branches = []
+    synthesis = None
+    study_ids = Tag.objects.filter(
+        tag_name='research-subagent'
+    ).values_list('entry_id', flat=True)
+    studies_count = Entry.objects.filter(
+        id__in=study_ids,
+        deleted_at__isnull=True,
+        data__source_uuid=str(entry.id),
+    ).count()
+    subentries = Entry.objects.filter(
+        data__source='multimodel',
+        data__base_entry_id=eid,
+        deleted_at__isnull=True,
+    ).order_by('timestamp_created')
+    for sub in subentries:
+        sdata = sub.data if isinstance(sub.data, dict) else {}
+        model = sdata.get('model') or ''
+        display_status = _research_branch_status(sub, sdata)
+        item = {
+            'id': str(sub.id),
+            'entry_id': sdata.get('entry_id') or '',
+            'model': model,
+            'status': display_status,
+            'raw_status': sub.status or 'pending',
+            'source': sdata.get('source') or '',
+            'content': sub.content,
+            'content_html': _render_markdown(sub.content),
+            'content_chars': len(sub.content or ''),
+            'modified_ago': fmt_ago(sub.timestamp_modified),
+            'modified_display': fmt_datetime(sub.timestamp_modified),
+            'created_display': fmt_datetime(sub.timestamp_created),
+            'run_error': sdata.get('run_error') or '',
+            'execution_info': _research_execution_info(sub, sdata),
+            'worker_target': sdata.get('worker_target') or '',
+            'worker_staged_at': sdata.get('worker_staged_at'),
+            'worker_claimed_at': sdata.get('worker_claimed_at'),
+            'worker_claimed_by': sdata.get('worker_claimed_by') or '',
+            'entry_url': f"/tjai/entry/?entry_id={sdata.get('entry_id') or ''}",
+        }
+        if model == 'synthesis':
+            synthesis = item
+        else:
+            branches.append(item)
+            if model:
+                branch_by_model[model] = item
+
+    model_statuses = {}
+    model_errors = {}
+    for model in RESEARCH_MODELS:
+        model_statuses[model] = (
+            (branch_by_model.get(model) or {}).get('status')
+            or data.get(f'{model}_status')
+        )
+        if (branch_by_model.get(model) or {}).get('run_error'):
+            model_errors[model] = branch_by_model[model]['run_error']
+
+    response = JsonResponse({
+        'topic': {
+            'id': str(entry.id),
+            'entry_id': eid,
+            'title': title,
+            'description': description,
+            'territory': territory,
+            'territory_html': _render_markdown(territory or entry.content),
+            'content': entry.content,
+            'content_html': _render_markdown(entry.content),
+            'status': _research_display_status(entry, data),
+            'raw_status': entry.status,
+            'priority': entry.priority,
+            'source': data.get('source') or '',
+            'created_display': fmt_datetime(entry.timestamp_created),
+            'modified_display': fmt_datetime(entry.timestamp_modified),
+            'modified_ago': fmt_ago(entry.timestamp_modified),
+            'detail_entry_id': f'{eid}_detail',
+            'entry_url': f'/tjai/entry/?entry_id={eid}',
+            'studies_url': f'/tjai/research/studies/?entry_id={eid}',
+            'studies_count': studies_count,
+            'agent_running_here': agent_status == 'running' and agent_current_entry == str(entry.id),
+        },
+        'models': list(RESEARCH_MODELS),
+        'model_statuses': model_statuses,
+        'model_errors': model_errors,
+        'agent': {
+            'status': agent_status or 'idle',
+            'current_entry': agent_current_entry or '',
+            'running': agent_status == 'running',
+            'running_here': agent_status == 'running' and agent_current_entry == str(entry.id),
+        },
+        'branches': branches,
+        'synthesis': synthesis,
+    })
+    response['Cache-Control'] = 'no-store, max-age=0'
+    return response
 
 
 @login_required
@@ -5351,9 +5787,16 @@ def api_research_restage_subentry(request):
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
     sub_uuid = body.get('uuid')
-    if not sub_uuid:
-        return JsonResponse({'error': 'uuid required'}, status=400)
-    sub = Entry.objects.filter(id=sub_uuid, deleted_at__isnull=True).first()
+    sub_entry_id = body.get('entry_id')
+    if not sub_uuid and not sub_entry_id:
+        return JsonResponse({'error': 'entry_id required'}, status=400)
+    sub = None
+    if sub_entry_id:
+        sub = Entry.objects.filter(
+            data__entry_id=sub_entry_id, deleted_at__isnull=True,
+        ).first()
+    if not sub and sub_uuid:
+        sub = Entry.objects.filter(id=sub_uuid, deleted_at__isnull=True).first()
     if not sub:
         return JsonResponse({'error': 'sub-entry not found'}, status=404)
     sd = sub.data if isinstance(sub.data, dict) else {}
@@ -5623,13 +6066,24 @@ def research_studies(request):
 def api_research_studies(request):
     """Return subagent entries for a specific research topic."""
     topic_uuid = request.GET.get('uuid', '').strip()
-    if not topic_uuid:
-        return JsonResponse({'error': 'uuid required'}, status=400)
+    topic_entry_id = request.GET.get('entry_id', '').strip()
+    if topic_entry_id.endswith('_detail'):
+        topic_entry_id = topic_entry_id[:-len('_detail')]
+    if not topic_uuid and not topic_entry_id:
+        return JsonResponse({'error': 'entry_id required'}, status=400)
 
     # Get the parent research entry for display info
-    parent = Entry.objects.filter(
-        id=topic_uuid, deleted_at__isnull=True,
-    ).first()
+    parent = None
+    if topic_entry_id:
+        parent = Entry.objects.filter(
+            data__entry_id=topic_entry_id, deleted_at__isnull=True,
+        ).first()
+        if parent:
+            topic_uuid = str(parent.id)
+    if not parent and topic_uuid:
+        parent = Entry.objects.filter(
+            id=topic_uuid, deleted_at__isnull=True,
+        ).first()
     parent_info = None
     if parent:
         pdata = parent.data if isinstance(parent.data, dict) else {}

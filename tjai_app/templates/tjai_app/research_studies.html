@@ -105,6 +105,7 @@
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const topicUuid = urlParams.get('uuid') || '';
+        const topicEntryId = urlParams.get('entry_id') || '';
         const topicName = urlParams.get('name') || '';
 
         if (topicName) {
@@ -126,13 +127,16 @@
         }
 
         async function fetchStudies() {
-            if (!topicUuid) {
+            if (!topicUuid && !topicEntryId) {
                 document.getElementById('content').innerHTML =
-                    '<div class="error">No topic UUID specified</div>';
+                    '<div class="error">No topic entry_id specified</div>';
                 return;
             }
             try {
-                const resp = await fetch(`/tjai/api/research/studies?uuid=${encodeURIComponent(topicUuid)}`);
+                const p = new URLSearchParams();
+                if (topicEntryId) p.set('entry_id', topicEntryId);
+                else p.set('uuid', topicUuid);
+                const resp = await fetch('/tjai/api/research/studies?' + p.toString());
                 const data = await resp.json();
                 if (data.error) {
                     document.getElementById('content').innerHTML =

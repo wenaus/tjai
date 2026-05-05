@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/tjai/static/tjai/favicon.svg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>tjai Research Detail</title>
+    <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 14px;
+            background: #181818;
+            color: #e4e4e4;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        html { scroll-padding-top: 84px; }
+        #top-menu {
+            max-width: 100vw;
+            overflow-x: auto;
+        }
+        a { color: #90caf9; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        button {
+            min-height: 32px;
+            background: #303030;
+            color: #90caf9;
+            border: 1px solid #5d8db5;
+            border-radius: 4px;
+            padding: 5px 10px;
+            cursor: pointer;
+            font: inherit;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+        button:hover { background: #1f3547; }
+        button:disabled { color: #6a6a6a; border-color: #444; background: #252525; cursor: default; }
+        .danger { color: #ef9a9a; border-color: #b85d5d; }
+        .danger:hover { background: #402424; }
+        .page-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 10px 24px;
+            background: #222;
+            border-bottom: 1px solid #333;
+            font-size: 13px;
+            max-width: 100vw;
+        }
+        .page-header .spacer { margin-left: auto; }
+        #header-status { min-width: 0; overflow-wrap: anywhere; }
+        .content {
+            width: 100vw;
+            max-width: 1180px;
+            padding: 20px 24px 48px;
+        }
+        h1 { font-size: 22px; line-height: 1.3; margin-bottom: 8px; }
+        h2 { font-size: 15px; margin: 24px 0 10px; color: #f0f0f0; }
+        h3 { font-size: 14px; margin: 18px 0 8px; color: #f0f0f0; }
+        .section { margin-top: 24px; scroll-margin-top: 84px; }
+        .section-bar {
+            width: 100%;
+            padding: 7px 10px;
+            background: #243038;
+            border-left: 4px solid #6fa8dc;
+            color: #f0f0f0;
+            font-weight: 700;
+            letter-spacing: 0;
+        }
+        .section-meta {
+            color: #a6a6a6;
+            font-size: 12px;
+            line-height: 1.55;
+            padding: 6px 0 8px 14px;
+        }
+        .meta { color: #a6a6a6; font-size: 12px; line-height: 1.55; }
+        h1, .meta, .section-meta, .exec-info, .markdown-body {
+            overflow-wrap: anywhere;
+        }
+        .status {
+            display: inline-block;
+            min-width: 78px;
+            text-align: center;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-right: 8px;
+        }
+        .status-proposed { background: #3a2f16; color: #ffd180; }
+        .status-pending { background: #1a3a5c; color: #90caf9; }
+        .status-active, .status-running, .status-staged { background: rgba(255, 213, 79, 0.15); color: #ffd54f; }
+        .status-done { background: #1a3c1a; color: #9ccc65; }
+        .status-failed, .status-blocked { background: rgba(239, 83, 80, 0.15); color: #ef9a9a; }
+        .status-archive { background: #333; color: #aaa; }
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 14px;
+            margin-bottom: 18px;
+            align-items: center;
+        }
+        .actions + .section { margin-top: 0; }
+        .model-controls {
+            display: block;
+            margin: 14px 0 24px;
+            padding: 12px 0 2px;
+            border-top: 1px solid #303030;
+        }
+        .model-checks,
+        .model-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 12px;
+            align-items: center;
+        }
+        .model-checks {
+            margin-bottom: 12px;
+        }
+        .model-control {
+            cursor: pointer;
+            font-size: 13px;
+            color: #b0bec5;
+            white-space: nowrap;
+        }
+        .model-control.done { color: #9ccc65; }
+        .model-control.active, .model-control.staged, .model-control.launching { color: #ffd54f; }
+        .model-control.failed, .model-control.blocked { color: #ef9a9a; }
+        .model-control input { margin-right: 4px; vertical-align: middle; }
+        .action-link {
+            display: inline-flex;
+            align-items: center;
+            min-height: 32px;
+            padding: 5px 10px;
+            border: 1px solid #456d8f;
+            border-radius: 4px;
+            background: #242c32;
+            white-space: nowrap;
+        }
+        .action-link:hover {
+            background: #1f3547;
+            text-decoration: none;
+        }
+        .exec-summary { margin: 0; }
+        .exec-row {
+            display: grid;
+            grid-template-columns: 150px 100px minmax(0, 1fr) auto;
+            gap: 12px;
+            padding: 7px 0;
+            border-top: 1px solid #282828;
+            align-items: start;
+        }
+        .exec-row > * { min-width: 0; }
+        .exec-name { font-weight: 700; }
+        .exec-info { color: #c7c7c7; line-height: 1.45; }
+        .toc {
+            padding: 0;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .toc .section-meta,
+        .toc-list {
+            padding-left: 14px;
+        }
+        .toc-list { list-style: none; margin: 0; padding-bottom: 8px; }
+        .toc-list li { margin: 2px 0; }
+        .toc-sublist { list-style: none; margin: 3px 0 0 18px; padding: 0; }
+        .toc-sublist li { margin: 2px 0; }
+        .markdown-body {
+            line-height: 1.55;
+            color: #d7d7d7;
+            border-bottom: 1px solid #303030;
+            padding: 14px 0;
+        }
+        .markdown-body p { margin: 0 0 12px; }
+        .markdown-body h1,
+        .markdown-body h2,
+        .markdown-body h3 {
+            margin: 18px 0 8px;
+            color: #f0f0f0;
+        }
+        .markdown-body h1 { font-size: 19px; }
+        .markdown-body h2 { font-size: 17px; }
+        .markdown-body h3 { font-size: 15px; }
+        .markdown-body ul,
+        .markdown-body ol {
+            margin: 8px 0 12px 24px;
+            padding-left: 14px;
+        }
+        .markdown-body li { margin: 4px 0; }
+        .markdown-body code {
+            background: #252525;
+            color: #f0f0f0;
+            padding: 1px 4px;
+            border-radius: 3px;
+        }
+        .markdown-body pre {
+            overflow-x: auto;
+            background: #101010;
+            border: 1px solid #333;
+            padding: 10px;
+            margin: 10px 0 14px;
+        }
+        .markdown-body blockquote {
+            border-left: 3px solid #456d8f;
+            color: #c8c8c8;
+            padding-left: 12px;
+            margin: 10px 0 14px;
+        }
+        .markdown-body table {
+            border-collapse: collapse;
+            margin: 10px 0 14px;
+        }
+        .markdown-body th,
+        .markdown-body td {
+            border: 1px solid #3a3a3a;
+            padding: 5px 8px;
+        }
+        .result-block {
+            margin-top: 18px;
+            scroll-margin-top: 84px;
+        }
+        .end-bar {
+            width: 100%;
+            margin-top: 28px;
+            padding: 8px 10px;
+            background: #243038;
+            border-left: 4px solid #6fa8dc;
+            color: #d8d8d8;
+            font-weight: 700;
+            text-align: center;
+        }
+        .error-text { color: #ef9a9a; line-height: 1.45; white-space: pre-wrap; }
+        .loading, .empty, .error { padding: 26px 0; color: #a0a0a0; }
+        .error { color: #ef9a9a; }
+        @media (max-width: 760px) {
+            .page-header, .actions { flex-wrap: wrap; }
+            .page-header .spacer { display: none; }
+            .actions,
+            .model-checks,
+            .model-buttons {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            h1 {
+                font-size: 18px;
+                line-height: 1.35;
+            }
+            h1, .meta, .section-meta, .exec-info, .markdown-body {
+                width: min(280px, calc(100vw - 72px)) !important;
+                max-width: min(280px, calc(100vw - 72px)) !important;
+                word-break: break-word;
+            }
+            .exec-row { grid-template-columns: 1fr; gap: 4px; }
+        }
+    </style>
+</head>
+<body>
+    {% with current_page="research" %}{% include "tjai_app/_menu.html" %}{% endwith %}
+    <div class="page-header">
+        <a href="/tjai/research/">Research List</a>
+        <a href="/tjai/research-legacy/">Legacy Research Page</a>
+        <span class="spacer"></span>
+        <span id="header-status" class="meta">Loading...</span>
+    </div>
+    <main class="content" id="content">
+        <div class="loading">Loading research detail...</div>
+    </main>
+
+    <script>
+        const routeDetailEntryId = '{{ detail_entry_id|escapejs }}';
+        const query = new URLSearchParams(window.location.search);
+        const detailEntryId = routeDetailEntryId || query.get('entry_id') || '';
+        let currentTopic = null;
+        let currentDetail = null;
+
+        function esc(s) {
+            if (!s) return '';
+            const el = document.createElement('span');
+            el.textContent = s;
+            return el.innerHTML;
+        }
+
+        function getCsrf() {
+            const c = document.cookie.match(/csrftoken=([^;]+)/);
+            return c ? c[1] : '';
+        }
+
+        async function loadDetail() {
+            if (!detailEntryId) {
+                document.getElementById('content').innerHTML =
+                    '<div class="error">No research detail entry_id specified.</div>';
+                return;
+            }
+            try {
+                const p = new URLSearchParams({entry_id: detailEntryId});
+                const resp = await fetch('/tjai/api/research/detail?' + p.toString(), {cache: 'no-store'});
+                const data = await resp.json();
+                if (!resp.ok || data.error) throw new Error(data.error || 'Load failed');
+                currentTopic = data.topic;
+                currentDetail = data;
+                render(data);
+            } catch (e) {
+                document.getElementById('content').innerHTML = '<div class="error">' + esc(e.message) + '</div>';
+            }
+        }
+
+        function render(data) {
+            const topic = data.topic || {};
+            const status = topic.status || 'pending';
+            document.title = 'tjai Research Detail: ' + (topic.title || detailEntryId);
+            document.getElementById('header-status').textContent =
+                `${topic.detail_entry_id || detailEntryId} · modified ${topic.modified_display || ''}`;
+            document.getElementById('content').innerHTML = `
+                <h1>${esc(topic.title)}</h1>
+                <div>
+                    <span class="status status-${esc(status)}">${esc(status)}</span>
+                    <span class="meta">${esc(topic.detail_entry_id || detailEntryId)}</span>
+                </div>
+                <div class="meta">Topic: <a href="${esc(topic.entry_url)}">${esc(topic.entry_id || '')}</a> · created ${esc(topic.created_display || '')} · modified ${esc(topic.modified_display || '')}${topic.source ? ' · source ' + esc(topic.source) : ''}</div>
+                <div class="actions">
+                    <a class="action-link" href="${esc(topic.entry_url)}">Edit topic</a>
+                    ${topic.studies_count > 0 ? `<a class="action-link" href="${esc(topic.studies_url)}">Subagent studies (${esc(topic.studies_count)})</a>` : ''}
+                    ${topic.agent_running_here ? '<button type="button" class="danger" onclick="abortAgent(this)">Abort</button>' : ''}
+                    <button type="button" onclick="archiveTopic(this)">Archive</button>
+                    <button type="button" class="danger" onclick="deleteTopic(this)">Delete</button>
+                </div>
+                ${researchControlsHtml(data)}
+                ${executionSummaryHtml(data.synthesis, data.branches || [])}
+                ${tocHtml(data.synthesis, data.branches || [])}
+                <section class="section" id="territory">
+                    <div class="section-bar">Territory</div>
+                    <div class="section-meta">Full topic territory from <a href="${esc(topic.entry_url)}">${esc(topic.entry_id || '')}</a></div>
+                    <div class="markdown-body">${topic.territory_html || esc(topic.territory || topic.content || '')}</div>
+                </section>
+                ${synthesisHtml(data.synthesis)}
+                <section class="section" id="model-research">
+                    <div class="section-bar">Model Research</div>
+                    <div class="section-meta">${esc((data.branches || []).length)} model reports</div>
+                    ${branchHtml(data.branches || [])}
+                </section>
+                <div class="end-bar">End of Research Detail</div>
+            `;
+            scrollToHashTarget();
+        }
+
+        function researchControlsHtml(data) {
+            const topic = data.topic || {};
+            const statuses = data.model_statuses || {};
+            const models = data.models || [];
+            const agent = data.agent || {};
+            const disabled = agent.running ? ' disabled' : '';
+            const checks = models.map(model => {
+                const st = statuses[model] || 'not-run';
+                const cls = ['done', 'active', 'staged', 'launching', 'failed', 'blocked'].includes(st) ? st : '';
+                return `<label class="model-control ${cls}"><input type="checkbox" class="model-rerun-cb" value="${esc(model)}"${disabled}>${esc(model)}${st ? ' (' + esc(st) + ')' : ''}</label>`;
+            }).join('');
+            const note = agent.running
+                ? `<span class="meta">${agent.running_here ? 'Research agent is running this topic; Abort is available above.' : 'Research agent is running another topic; controls are disabled.'}</span>`
+                : '';
+            return `
+                <div class="model-controls">
+                    <div class="model-checks">${checks}</div>
+                    <div class="model-buttons">
+                        <button type="button" onclick="rerunModels(this)"${disabled}>Rerun selections</button>
+                        <button type="button" onclick="synthesizeItem(this)"${disabled}>Synthesize</button>
+                        <button type="button" onclick="rerunItem(this)"${disabled}>Resubmit</button>
+                        <button type="button" onclick="submitItem(this)"${disabled}>Submit</button>
+                        ${note}
+                    </div>
+                </div>
+            `;
+        }
+
+        function executionSummaryHtml(synthesis, branches) {
+            const rows = [];
+            if (synthesis) rows.push(executionRowHtml('synthesis', synthesis));
+            for (const branch of (branches || [])) {
+                rows.push(executionRowHtml(branch.model || branch.entry_id || 'model', branch));
+            }
+            return `
+                <section class="section exec-summary" id="execution">
+                    <div class="section-bar">Execution</div>
+                    <div class="section-meta">Status and run metadata for synthesis and model reports</div>
+                    ${rows.length ? rows.join('') : '<div class="empty">No execution records yet.</div>'}
+                </section>
+            `;
+        }
+
+        function executionRowHtml(label, item) {
+            const info = (item.execution_info || []).length
+                ? item.execution_info.map(esc).join(' · ')
+                : `created ${esc(item.created_display || '')} · modified ${esc(item.modified_display || '')}`;
+            const restage = restageButtonHtml(item);
+            return `
+                <div class="exec-row">
+                    <div class="exec-name"><a href="${esc(item.entry_url)}">${esc(label)}</a></div>
+                    <div><span class="status status-${esc(item.status)}">${esc(item.status)}</span></div>
+                    <div class="exec-info">${info}</div>
+                    <div>${restage}</div>
+                </div>
+            `;
+        }
+
+        function restageButtonHtml(item) {
+            if (
+                item
+                && item.source === 'multimodel'
+                && item.worker_target
+                && item.status === 'staged'
+                && item.entry_id
+            ) {
+                return `<button type="button" onclick="restageSubentry('${esc(item.entry_id)}', this)">Restage</button>`;
+            }
+            return '';
+        }
+
+        function tocHtml(synthesis, branches) {
+            const branchLinks = (branches || []).map(branch => {
+                const label = branch.model || branch.entry_id || 'branch';
+                return `<li><a href="#branch-${anchorId(label)}">${esc(label)}</a></li>`;
+            }).join('');
+            return `
+                <nav class="section toc" id="contents">
+                    <div class="section-bar">Contents</div>
+                    <div class="section-meta">Jump links for this research detail</div>
+                    <ul class="toc-list">
+                        <li><a href="#execution">Execution</a></li>
+                        <li><a href="#territory">Territory</a></li>
+                        <li><a href="#synthesis">Synthesis</a></li>
+                        <li>
+                            <a href="#model-research">Model Research</a>
+                            <ul class="toc-sublist">
+                                ${branchLinks || '<li class="meta">No model reports yet</li>'}
+                            </ul>
+                        </li>
+                    </ul>
+                </nav>
+            `;
+        }
+
+        function anchorId(s) {
+            return String(s || 'section').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'section';
+        }
+
+        function scrollToHashTarget() {
+            if (!window.location.hash) return;
+            const id = decodeURIComponent(window.location.hash.slice(1));
+            window.requestAnimationFrame(() => {
+                const el = document.getElementById(id);
+                if (el) el.scrollIntoView({block: 'start'});
+            });
+        }
+
+        function synthesisHtml(synthesis) {
+            if (!synthesis) {
+                return `
+                    <section class="section" id="synthesis">
+                        <div class="section-bar">Synthesis</div>
+                        <div class="section-meta">No synthesis entry yet</div>
+                        <div class="empty">No synthesis entry yet.</div>
+                    </section>
+                `;
+            }
+            return `
+                <section class="section" id="synthesis">
+                    <div class="section-bar">Synthesis</div>
+                    <div class="section-meta">
+                        <a href="${esc(synthesis.entry_url)}">${esc(synthesis.entry_id || 'synthesis')}</a>
+                        · ${esc(synthesis.content_chars)} chars
+                        · modified ${esc(synthesis.modified_display || '')}
+                        <span class="status status-${esc(synthesis.status)}">${esc(synthesis.status)}</span>
+                    </div>
+                    ${synthesis.run_error ? '<div class="error-text">' + esc(synthesis.run_error) + '</div>' : ''}
+                    <div class="markdown-body">${synthesis.content_html || esc(synthesis.content || '')}</div>
+                </section>
+            `;
+        }
+
+        function branchHtml(branches) {
+            if (!branches.length) return '<div class="empty">No model research entries yet.</div>';
+            return branches.map(branch => `
+                <section class="result-block" id="branch-${anchorId(branch.model || branch.entry_id)}">
+                    <div class="section-bar">${esc(branch.model || branch.entry_id)}</div>
+                    <div class="section-meta">
+                        <a href="${esc(branch.entry_url)}">${esc(branch.entry_id || '')}</a>
+                        · ${esc(branch.content_chars)} chars
+                        · modified ${esc(branch.modified_display || '')}
+                        <span class="status status-${esc(branch.status)}">${esc(branch.status)}</span>
+                    </div>
+                    ${branch.run_error ? '<div class="error-text">' + esc(branch.run_error) + '</div>' : ''}
+                    <div class="markdown-body">${branch.content_html || esc(branch.content || '')}</div>
+                </section>
+            `).join('');
+        }
+
+        async function submitItem(btn) {
+            if (!currentTopic || !currentTopic.entry_id) return;
+            btn.disabled = true;
+            btn.textContent = 'Submitting...';
+            try {
+                const resp = await fetch('/tjai/api/research/run', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                    body: JSON.stringify({entry_id: currentTopic.entry_id}),
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.error) throw new Error(data.error || 'Submit failed');
+                btn.textContent = 'Queued';
+                setTimeout(loadDetail, 1200);
+            } catch (e) {
+                btn.textContent = e.message;
+                setTimeout(loadDetail, 2500);
+            }
+        }
+
+        async function rerunItem(btn) {
+            if (!currentTopic || !currentTopic.entry_id) return;
+            btn.disabled = true;
+            btn.textContent = 'Creating...';
+            try {
+                const resp = await fetch('/tjai/api/research/rerun', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                    body: JSON.stringify({entry_id: currentTopic.entry_id}),
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.error) throw new Error(data.error || 'Resubmit failed');
+                btn.textContent = data.new_entry_id || 'Created';
+                setTimeout(loadDetail, 1200);
+            } catch (e) {
+                btn.textContent = e.message;
+                setTimeout(loadDetail, 2500);
+            }
+        }
+
+        async function synthesizeItem(btn) {
+            if (!currentTopic || !currentTopic.entry_id) return;
+            if (!confirm('Dispatch synthesis for ' + currentTopic.entry_id + '?\n\nAny existing synthesis sub-entry is retired and regenerated.')) return;
+            btn.disabled = true;
+            btn.textContent = 'Dispatching...';
+            try {
+                const resp = await fetch('/tjai/api/research/synthesize', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                    body: JSON.stringify({entry_id: currentTopic.entry_id}),
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.error) throw new Error(data.error || 'Synthesize failed');
+                btn.textContent = 'Queued';
+                setTimeout(loadDetail, 1200);
+            } catch (e) {
+                btn.textContent = e.message;
+                setTimeout(loadDetail, 2500);
+            }
+        }
+
+        async function rerunModels(btn) {
+            if (!currentTopic || !currentTopic.entry_id) return;
+            const models = Array.from(document.querySelectorAll('.model-rerun-cb:checked')).map(cb => cb.value);
+            if (!models.length) { alert('Select at least one model'); return; }
+            btn.disabled = true;
+            btn.textContent = 'Rerunning...';
+            try {
+                const resp = await fetch('/tjai/api/research/rerun-models', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                    body: JSON.stringify({entry_id: currentTopic.entry_id, models: models}),
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.error) throw new Error(data.error || 'Rerun failed');
+                btn.textContent = 'Queued ' + models.join('+');
+                setTimeout(loadDetail, 1200);
+            } catch (e) {
+                btn.textContent = e.message;
+                setTimeout(loadDetail, 2500);
+            }
+        }
+
+        async function restageSubentry(entryId, btn) {
+            btn.disabled = true;
+            btn.textContent = 'Restaging...';
+            try {
+                const resp = await fetch('/tjai/api/research/restage-subentry', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                    body: JSON.stringify({entry_id: entryId}),
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.error) throw new Error(data.error || 'Restage failed');
+                btn.textContent = `Restaged (${data.prompt_chars} chars)`;
+                setTimeout(loadDetail, 1200);
+            } catch (e) {
+                btn.textContent = e.message;
+                setTimeout(loadDetail, 2500);
+            }
+        }
+
+        async function abortAgent(btn) {
+            btn.disabled = true;
+            btn.textContent = 'Aborting...';
+            try {
+                const resp = await fetch('/tjai/api/research/abort', {
+                    method: 'POST',
+                    headers: {'X-CSRFToken': getCsrf()},
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.error) throw new Error(data.error || 'Abort failed');
+                btn.textContent = 'Aborted';
+                setTimeout(loadDetail, 1200);
+            } catch (e) {
+                btn.textContent = e.message;
+                setTimeout(loadDetail, 2500);
+            }
+        }
+
+        async function archiveTopic(btn) {
+            if (!currentTopic || !currentTopic.entry_id) return;
+            btn.disabled = true;
+            btn.textContent = 'Archiving...';
+            try {
+                const resp = await fetch('/tjai/api/entry/' + encodeURIComponent(currentTopic.entry_id) + '/archive', {
+                    method: 'POST',
+                    headers: {'X-CSRFToken': getCsrf()},
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.error) throw new Error(data.error || 'Archive failed');
+                window.location.href = '/tjai/research/';
+            } catch (e) {
+                btn.textContent = e.message;
+                setTimeout(loadDetail, 2500);
+            }
+        }
+
+        async function deleteTopic(btn) {
+            if (!currentTopic || !currentTopic.entry_id) return;
+            if (!confirm('Delete this research topic?')) return;
+            btn.disabled = true;
+            btn.textContent = 'Deleting...';
+            try {
+                const resp = await fetch('/tjai/api/entry/' + encodeURIComponent(currentTopic.entry_id), {
+                    method: 'DELETE',
+                    headers: {'X-CSRFToken': getCsrf()},
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.error) throw new Error(data.error || 'Delete failed');
+                window.location.href = '/tjai/research/';
+            } catch (e) {
+                btn.textContent = e.message;
+                setTimeout(loadDetail, 2500);
+            }
+        }
+
+        loadDetail();
+    </script>
+</body>
+</html>
