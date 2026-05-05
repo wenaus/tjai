@@ -286,6 +286,7 @@ def pull_updates() -> int:
     cursor = conn.cursor()
 
     batch_num = 0
+    response = None
     while True:
         batch_num += 1
         response = client.pull(machine_id=machine_id, since=since, after_id=after_id)
@@ -312,10 +313,13 @@ def pull_updates() -> int:
         else:
             break
 
-    if total_count:
-        # Only advance last_sync_time when entries were actually received
+    if response is not None:
+        # A successful full pull means this client has seen the server state up
+        # to server_time. Advance even if entries were skipped locally as dirty
+        # or newer; otherwise the client can poll the same window forever.
         server_time = response.get("server_time", time.time())
         set_last_sync_time(server_time)
+    if total_count:
         logger.info(f"Pulled {total_count} entries in {batch_num} batch(es)")
     write_status(last_pull=time.time())
 
