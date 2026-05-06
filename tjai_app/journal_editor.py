@@ -20,7 +20,7 @@ def parse_journal_editor_prefix(content, current_event_ts, tz):
     if m:
         date_str, time_str, rest = m.group(1), m.group(2), m.group(3)
         parsed_date = datetime.strptime(date_str, '%Y%m%d')
-        hour, minute = (12, 0)
+        hour, minute = (0, 0)
         if time_str:
             hour, minute = parse_time(time_str)
         dt = parsed_date.replace(hour=hour, minute=minute, second=0, microsecond=0, tzinfo=tz)

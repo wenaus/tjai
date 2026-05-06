@@ -38,6 +38,15 @@ def main():
     dt = datetime.fromtimestamp(ts, tz)
     assert_equal((dt.year, dt.month, dt.day, dt.hour, dt.minute), (2026, 5, 1, 9, 0), "date/time timestamp")
 
+    content, ts = parse_journal_editor_prefix(
+        "20260620 [Bazaart](https://mackenzie.art/event/bazaart-2026/)",
+        current,
+        tz,
+    )
+    assert_equal(content, "[Bazaart](https://mackenzie.art/event/bazaart-2026/)", "date-only content")
+    dt = datetime.fromtimestamp(ts, tz)
+    assert_equal((dt.year, dt.month, dt.day, dt.hour, dt.minute), (2026, 6, 20, 0, 0), "date-only all-day timestamp")
+
     content, ts = parse_journal_editor_prefix("8:30am title without current date", None, tz)
     assert_equal(content, "8:30am title without current date", "time-only without date content")
     assert_equal(ts, None, "time-only without date timestamp")
