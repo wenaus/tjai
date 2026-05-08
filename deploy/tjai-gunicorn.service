@@ -7,11 +7,14 @@ Type=notify
 User=www-data
 Group=www-data
 WorkingDirectory=/var/www/tjai
+RuntimeDirectory=tjai
+RuntimeDirectoryMode=0755
 ExecStart=/var/www/tjai/.venv/bin/gunicorn tjai_project.wsgi_subpath:application \
     --bind 127.0.0.1:8002 \
     --workers 3 \
     --threads 4 \
     --timeout 120 \
+    --control-socket /run/tjai/gunicorn.ctl \
     --access-logfile - \
     --error-logfile -
 ExecReload=/bin/kill -s HUP $MAINPID

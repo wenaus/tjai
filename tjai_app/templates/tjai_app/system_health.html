@@ -184,6 +184,15 @@
             return n;
         }
 
+        function esc(v) {
+            return String(v === null || v === undefined ? '' : v)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         // fmtDuration for live-ticking banner timer
         function fmtDuration(sec) {
             if (sec == null || isNaN(sec)) return '';
@@ -425,6 +434,51 @@
             }
             if (Object.keys(wa).length === 0) html += '<div style="color:#999">No data</div>';
             html += '</div>';
+
+            // Gunicorn section
+            const gc = data.gunicorn || {};
+            if (gc.status) {
+                const gcCls = gc.status === 'green' ? 'metric-value' : gc.status === 'yellow' ? 'metric-warn' : 'metric-crit';
+                const gcDot = gc.status === 'green' ? '#9ccc65' : gc.status === 'yellow' ? '#ffd54f' : '#ef5350';
+                html += '<div class="section"><div class="section-title">Gunicorn</div>';
+                html += '<div class="metric-grid">';
+                html += metric('Status', `<span style="color:${gcDot}">&#9679;</span> ${esc(gc.status).toUpperCase()}`, gcCls);
+                html += metric('Arbiter', gc.arbiter && gc.arbiter.pid ? `PID ${gc.arbiter.pid}` : '-');
+                html += metric('Workers', `${gc.workers_current ?? '-'} / ${gc.workers_target ?? '-'}`);
+                html += metric('Worker Class', esc(gc.worker_class || '-'));
+                html += metric('Threads', gc.threads ?? '-');
+                html += metric('Timeout', gc.timeout !== undefined && gc.timeout !== null ? gc.timeout + 's' : '-');
+                html += metric('Reloads', gc.reloads ?? '-');
+                html += metric('Uptime', gc.uptime !== undefined && gc.uptime !== null ? fmtDuration(gc.uptime) : '-');
+                html += metric('Control Socket', gc.socket_exists ? esc(gc.socket) : 'missing', gc.socket_exists ? 'metric-value' : 'metric-crit');
+                html += '</div>';
+                for (const err of (gc.errors || [])) {
+                    html += `<div class="issue issue-red" style="margin-top:6px">${esc(err)}</div>`;
+                }
+                for (const warn of (gc.warnings || [])) {
+                    html += `<div class="issue issue-yellow" style="margin-top:6px">${esc(warn)}</div>`;
+                }
+                if (gc.workers && gc.workers.length > 0) {
+                    html += '<table style="margin-top:12px"><tr><th>PID</th><th>State</th><th style="text-align:right">Heartbeat</th><th style="text-align:right">CPU s</th><th style="text-align:right">Lifetime CPU</th><th style="text-align:right">RSS</th><th style="text-align:right">Threads</th></tr>';
+                    for (const w of gc.workers) {
+                        const hb = w.last_heartbeat !== null && w.last_heartbeat !== undefined ? w.last_heartbeat + 's' : '-';
+                        const cpuPct = w.cpu_percent_lifetime !== undefined ? w.cpu_percent_lifetime + '%' : '-';
+                        const cpuCls = w.cpu_percent_lifetime >= 80 ? 'metric-crit' : w.cpu_percent_lifetime >= 40 ? 'metric-warn' : '';
+                        const hbCls = w.last_heartbeat > 60 ? 'metric-warn' : '';
+                        html += `<tr><td>${w.pid}</td><td>${esc(w.state || '-')}</td><td class="num ${hbCls}">${hb}</td><td class="num">${w.cpu_seconds ?? '-'}</td><td class="num ${cpuCls}">${cpuPct}</td><td class="num">${w.rss_mb !== undefined ? w.rss_mb + ' MB' : '-'}</td><td class="num">${w.threads ?? '-'}</td></tr>`;
+                    }
+                    html += '</table>';
+                }
+                if (gc.pyspy_dumps && gc.pyspy_dumps.length > 0) {
+                    html += '<div style="margin-top:12px;margin-bottom:4px;color:#8a8a8a;font-size:12px">Recent py-spy Dumps</div>';
+                    html += '<table><tr><th>File</th><th style="text-align:right">Age</th><th style="text-align:right">Size</th></tr>';
+                    for (const d of gc.pyspy_dumps) {
+                        html += `<tr><td style="word-break:break-all">${esc(d.path)}</td><td class="num">${esc(d.modified_ago || '-')}</td><td class="num">${fmt(d.size_bytes)}</td></tr>`;
+                    }
+                    html += '</table>';
+                }
+                html += '</div>';
+            }
 
             // Backups section
             const bk = data.backups || {};

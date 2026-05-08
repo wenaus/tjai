@@ -6447,6 +6447,190 @@ def system_health(request):
     return render(request, 'tjai_app/system_health.html')
 
 
+GUNICORN_CONTROL_SOCKET = "/run/tjai/gunicorn.ctl"
+GUNICORN_PYSPY_DIR = "/var/log/tjai/pyspy"
+
+
+def _proc_stat(pid):
+    try:
+        raw = open(f"/proc/{pid}/stat", encoding="utf-8").read()
+        fields = raw.rsplit(") ", 1)[1].split()
+        return {
+            "state": fields[0],
+            "utime": int(fields[11]),
+            "stime": int(fields[12]),
+            "starttime": int(fields[19]),
+        }
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+def _proc_status(pid):
+    status = {}
+    try:
+        for line in open(f"/proc/{pid}/status", encoding="utf-8"):
+            key, _, val = line.partition(":")
+            status[key] = val.strip()
+    except OSError:
+        return {}
+    return status
+
+
+def _proc_metrics(pid):
+    stat = _proc_stat(pid)
+    status = _proc_status(pid)
+    if not stat and not status:
+        return {"alive": False}
+
+    metrics = {"alive": True}
+    if stat:
+        ticks = os.sysconf(os.sysconf_names["SC_CLK_TCK"])
+        cpu_seconds = (stat["utime"] + stat["stime"]) / ticks
+        metrics["state"] = stat["state"]
+        metrics["cpu_seconds"] = round(cpu_seconds, 2)
+        try:
+            uptime_seconds = float(open("/proc/uptime", encoding="utf-8").read().split()[0])
+            age_seconds = max(0.1, uptime_seconds - (stat["starttime"] / ticks))
+            metrics["age_seconds"] = round(age_seconds)
+            metrics["cpu_percent_lifetime"] = round(cpu_seconds / age_seconds * 100, 2)
+        except (OSError, ValueError, ZeroDivisionError):
+            pass
+
+    vmrss = status.get("VmRSS", "")
+    if vmrss.endswith(" kB"):
+        try:
+            metrics["rss_mb"] = round(int(vmrss[:-3].strip()) / 1024, 1)
+        except ValueError:
+            pass
+    threads = status.get("Threads")
+    if threads:
+        try:
+            metrics["threads"] = int(threads)
+        except ValueError:
+            pass
+    return metrics
+
+
+def _recent_pyspy_dumps(limit=5):
+    try:
+        entries = []
+        with os.scandir(GUNICORN_PYSPY_DIR) as it:
+            for entry in it:
+                if not entry.is_file() or not entry.name.endswith(".txt"):
+                    continue
+                st = entry.stat()
+                entries.append({
+                    "path": entry.path,
+                    "name": entry.name,
+                    "size_bytes": st.st_size,
+                    "modified": st.st_mtime,
+                    "modified_ago": fmt_ago(st.st_mtime),
+                })
+        return sorted(entries, key=lambda x: x["modified"], reverse=True)[:limit]
+    except OSError:
+        return []
+
+
+def _gunicorn_command(client, command):
+    try:
+        return client.send_command(command), None
+    except Exception as e:
+        return None, str(e)
+
+
+def _collect_gunicorn_health():
+    health = {
+        "socket": GUNICORN_CONTROL_SOCKET,
+        "socket_exists": os.path.exists(GUNICORN_CONTROL_SOCKET),
+        "status": "unknown",
+        "errors": [],
+        "warnings": [],
+        "workers": [],
+        "pyspy_dumps": _recent_pyspy_dumps(),
+    }
+
+    if not health["socket_exists"]:
+        health["status"] = "red"
+        health["errors"].append("gunicorn control socket is missing")
+        return health
+
+    try:
+        from gunicorn.ctl.client import ControlClient
+    except Exception as e:
+        health["status"] = "red"
+        health["errors"].append(f"gunicorn control client unavailable: {e}")
+        return health
+
+    try:
+        with ControlClient(GUNICORN_CONTROL_SOCKET, timeout=2.0) as client:
+            for key, command in (
+                ("all", "show all"),
+                ("stats", "show stats"),
+                ("config", "show config"),
+                ("listeners", "show listeners"),
+            ):
+                result, error = _gunicorn_command(client, command)
+                if error:
+                    health["errors"].append(f"{command}: {error}")
+                else:
+                    health[key] = result
+    except Exception as e:
+        health["status"] = "red"
+        health["errors"].append(f"control socket connection failed: {e}")
+        return health
+
+    all_info = health.get("all") or {}
+    stats = health.get("stats") or {}
+    config = health.get("config") or {}
+    health["arbiter"] = all_info.get("arbiter") or {}
+    arbiter_pid = health["arbiter"].get("pid") or stats.get("pid")
+    if arbiter_pid:
+        health["arbiter"].update(_proc_metrics(arbiter_pid))
+
+    workers = all_info.get("web_workers") or []
+    enriched_workers = []
+    hot_workers = 0
+    stale_workers = 0
+    for worker in workers:
+        pid = worker.get("pid")
+        item = dict(worker)
+        if pid:
+            item.update(_proc_metrics(pid))
+            if item.get("cpu_percent_lifetime", 0) >= 80:
+                hot_workers += 1
+        heartbeat = worker.get("last_heartbeat")
+        if heartbeat is not None and heartbeat > 60:
+            stale_workers += 1
+        enriched_workers.append(item)
+    health["workers"] = enriched_workers
+
+    target = stats.get("workers_target") or config.get("workers")
+    current = stats.get("workers_current") or len(enriched_workers)
+    health["workers_current"] = current
+    health["workers_target"] = target
+    health["worker_class"] = config.get("worker_class")
+    health["threads"] = config.get("threads")
+    health["timeout"] = config.get("timeout")
+    health["reloads"] = stats.get("reloads")
+    health["uptime"] = stats.get("uptime")
+
+    if target and current != target:
+        health["warnings"].append(f"worker count {current} != target {target}")
+    if stale_workers:
+        health["warnings"].append(f"{stale_workers} worker heartbeat(s) stale")
+    if hot_workers:
+        health["warnings"].append(f"{hot_workers} worker(s) lifetime CPU >= 80%")
+
+    if health["errors"]:
+        health["status"] = "red"
+    elif health["warnings"]:
+        health["status"] = "yellow"
+    else:
+        health["status"] = "green"
+
+    return health
+
+
 @login_required
 def api_system_status(request):
     """Return health status + agent status — lightweight poll for menu colors."""
@@ -6673,6 +6857,15 @@ def api_system_data(request):
     ]
 
     data['watchdog'] = wd_data
+
+    gunicorn_data = _collect_gunicorn_health()
+    data['gunicorn'] = gunicorn_data
+    issues = data.get('issues') or []
+    if gunicorn_data.get('status') == 'red':
+        issues.extend(gunicorn_data.get('errors', []))
+    elif gunicorn_data.get('status') == 'yellow':
+        issues.extend(gunicorn_data.get('warnings', []))
+    data['issues'] = issues
 
     # Cron jobs — parse the crontab file
     cron_path = os.path.join(django_settings.BASE_DIR, 'scripts', 'cron', 'crontab')

@@ -1,3 +1,4 @@
 -r base.txt
 gunicorn>=23.0.0
+py-spy>=0.4.2
 supervisor>=4.2.0

@@ -1,0 +1,16 @@
+[Unit]
+Description=tjai gunicorn py-spy watchdog
+After=network.target tjai-gunicorn.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/var/www/tjai/.venv/bin/python /var/www/tjai/scripts/gunicorn_pyspy_watchdog.py --threshold 80 --duration 60 --interval 10 --cooldown 600
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
