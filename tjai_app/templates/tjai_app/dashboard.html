@@ -518,6 +518,7 @@
                 // Entry ID for links
                 const calEid = entry.data && entry.data.entry_id;
                 const isDailyEntry = calEid?.startsWith('daily-');
+                const calEntryUrl = calEid && calEid.startsWith('daily-') ? `/tjai/synopsis/?entry_id=${encodeURIComponent(calEid)}` : calEid ? `/tjai/entry/?entry_id=${encodeURIComponent(calEid)}` : `/tjai/entry/?uuid=${entry.id}`;
 
                 // Use server-provided time_display (Eastern), add local time if different
                 let timeStr = '';
@@ -565,11 +566,13 @@
                         const descPreview = lines[1].substring(0, 40) + (lines[1].length > 40 || lines.length > 2 ? '...' : '');
                         contentHtml += `<br><span class="entry-content" style="margin-left:3em">${escapeHtml(descPreview)}</span>`;
                     }
+                } else if (isDailyEntry) {
+                    const label = entry.content.split('\n')[0] || 'Daily Synopsis';
+                    contentHtml = `<a class="${contentClass}" href="${dashAttr(calEntryUrl)}">${escapeHtml(label)}</a>`;
                 } else {
                     const firstLine = entry.content.split('\n')[0];
                     contentHtml = `<span class="${contentClass}">${linkifyContent(escapeHtml(firstLine))}</span>`;
                 }
-                const calEntryUrl = calEid && calEid.startsWith('daily-') ? `/tjai/synopsis/?entry_id=${encodeURIComponent(calEid)}` : calEid ? `/tjai/entry/?entry_id=${encodeURIComponent(calEid)}` : `/tjai/entry/?uuid=${entry.id}`;
                 const copyLine = copyPrefix + entry.content.split('\n')[0];
                 html += `<div class="entry calendar-entry" data-copy-line="${dashAttr(copyLine)}"><a class="calendar-detail-link" href="${dashAttr(calEntryUrl)}">${timeStr}</a>${countdownStr}${contentHtml}</div>`;
             }
