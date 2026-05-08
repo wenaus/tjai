@@ -1466,7 +1466,7 @@ def api_diary_entries(request):
                 return f'<a href="/tjai/entry/?name={ref[1:]}">{ref}</a>'
             return f'<a href="/tjai/entry/?entry_id={ref}">{ref}</a>'
         content_html = re.sub(r'\[\[([^\]]+)\]\]', _wl, content_html)
-        content_html = re.sub(r'(?<!["\'>])(https?://[^\s<]+)', r'<a href="\1">\1</a>', content_html)
+        content_html = _linkify_rendered_html(content_html)
         entry_id = data.get('entry_id', '')
         return {
             'id': str(entry.id),
@@ -2267,12 +2267,7 @@ def daily_synopsis_content(request):
     if not entry:
         return JsonResponse({'error': 'Synopsis not found'}, status=404)
 
-    content_html = _render_markdown(entry.content)
-    content_html = re.sub(
-        r'(?<!["\'>])(https?://[^\s<]+)',
-        r'<a href="\1" target="_blank">\1</a>',
-        content_html,
-    )
+    content_html = _linkify_rendered_html(_render_markdown(entry.content))
 
     return JsonResponse({'content_html': content_html, 'entry_id': entry_id})
 
@@ -2403,12 +2398,7 @@ def api_assessment_content(request):
         date_display = date_str
 
     # Render observations section (content after scored events table) as HTML
-    content_html = _render_markdown(entry.content)
-    content_html = re.sub(
-        r'(?<!["\'>])(https?://[^\s<]+)',
-        r'<a href="\1" target="_blank">\1</a>',
-        content_html,
-    )
+    content_html = _linkify_rendered_html(_render_markdown(entry.content))
 
     # Normalize field names — agents may use varying keys
     scores = data.get('scores', [])
@@ -2988,7 +2978,7 @@ def entry_public(request, entry_id=None):
             return f'<a href="/tjai/p/{ref[1:]}/">{ref}</a>'
         return f'<a href="/tjai/p/{ref}/">{ref}</a>'
     content_html = re.sub(r'\[\[([^\]]+)\]\]', _wiki_link_public, content_html)
-    content_html = re.sub(r'(?<!["\'>])(https?://[^\s<]+)', r'<a href="\1">\1</a>', content_html)
+    content_html = _linkify_rendered_html(content_html)
 
     # Rewrite internal /tjai/entry/ links to public /tjai/p/ URLs.
     # Collect non-public targets for a warning banner.
@@ -5049,7 +5039,7 @@ def api_research_detail(request):
             'raw_status': sub.status or 'pending',
             'source': sdata.get('source') or '',
             'content': sub.content,
-            'content_html': _render_markdown(sub.content),
+            'content_html': _linkify_rendered_html(_render_markdown(sub.content)),
             'content_chars': len(sub.content or ''),
             'modified_ago': fmt_ago(sub.timestamp_modified),
             'modified_display': fmt_datetime(sub.timestamp_modified),
@@ -5086,9 +5076,9 @@ def api_research_detail(request):
             'title': title,
             'description': description,
             'territory': territory,
-            'territory_html': _render_markdown(territory or entry.content),
+            'territory_html': _linkify_rendered_html(_render_markdown(territory or entry.content)),
             'content': entry.content,
-            'content_html': _render_markdown(entry.content),
+            'content_html': _linkify_rendered_html(_render_markdown(entry.content)),
             'status': _research_display_status(entry, data),
             'raw_status': entry.status,
             'priority': entry.priority,

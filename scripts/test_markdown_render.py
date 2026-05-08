@@ -14,7 +14,11 @@ import django  # noqa: E402
 
 django.setup()
 
-from tjai_app.views import _fix_md_list_spacing, _render_markdown  # noqa: E402
+from tjai_app.views import (  # noqa: E402
+    _fix_md_list_spacing,
+    _linkify_rendered_html,
+    _render_markdown,
+)
 
 
 def assert_equal(actual, expected, label):
@@ -103,6 +107,41 @@ def main():
         extensions=["tables", "fenced_code"],
     )
     assert_contains(html, "<strong>bold text</strong>", "bold text inside list item renders")
+
+    html = _linkify_rendered_html(_render_markdown(
+        "Links\n"
+        "- https://github.com/eic/corun-mcp-server\n"
+        "- already [linked](https://example.com/path?x=1&y=2)\n"
+        "- sentence https://example.org/test.",
+        extensions=["tables", "fenced_code"],
+    ))
+    assert_contains(
+        html,
+        '<a target="_blank" href="https://github.com/eic/corun-mcp-server">'
+        'https://github.com/eic/corun-mcp-server</a>',
+        "bare URL in list is linkified",
+    )
+    assert_contains(
+        html,
+        '<a href="https://example.com/path?x=1&amp;y=2">linked</a>',
+        "existing markdown link is preserved",
+    )
+    assert_contains(
+        html,
+        '<a target="_blank" href="https://example.org/test">'
+        'https://example.org/test</a>.',
+        "trailing sentence punctuation stays outside link",
+    )
+
+    html = _linkify_rendered_html(_render_markdown(
+        "```text\nhttps://example.com/code\n```",
+        extensions=["tables", "fenced_code"],
+    ))
+    assert_not_contains(
+        html,
+        '<a target="_blank" href="https://example.com/code">',
+        "bare URL in fenced code is not linkified",
+    )
 
     print("markdown render tests passed")
 
