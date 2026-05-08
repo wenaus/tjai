@@ -334,10 +334,10 @@ def get_ai_guidance(context=None, location_name=None):
     results = []
     for entry in qs:
         entry_context = entry.context.name if entry.context else None
-        if context:
-            if entry_context is None or entry_context == context:
+        if context is None:
+            if entry_context is None:
                 results.append(_format_entry(entry))
-        else:
+        elif entry_context is None or entry_context == context:
             results.append(_format_entry(entry))
 
     # Per-machine details entries are kind='memory' (facts about a machine, not

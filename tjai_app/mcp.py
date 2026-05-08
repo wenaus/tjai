@@ -146,7 +146,10 @@ async def get_ai_guidance(context: str = None, location_name: str = None) -> str
 
     Args:
         context: If provided, returns general guidance PLUS guidance specific
-                 to this context. If None, returns all guidance entries.
+                 to this context. If None, returns general guidance only
+                 (entries with no context). To enumerate context-specific
+                 guidance, call list_contexts() and then make per-context
+                 calls.
         location_name: If provided, additionally returns the machine-details
                  entry named `<location_name>_details` (kind='memory',
                  context=null, data.entry_id='<location_name>_details').
