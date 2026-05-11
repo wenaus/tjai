@@ -518,6 +518,7 @@
                 // Entry ID for links
                 const calEid = entry.data && entry.data.entry_id;
                 const isDailyEntry = calEid?.startsWith('daily-');
+                const isDiaryEntry = calEid?.startsWith('diary-');
                 const calEntryUrl = calEid && calEid.startsWith('daily-') ? `/tjai/synopsis/?entry_id=${encodeURIComponent(calEid)}` : calEid ? `/tjai/entry/?entry_id=${encodeURIComponent(calEid)}` : `/tjai/entry/?uuid=${entry.id}`;
 
                 // Use server-provided time_display (Eastern), add local time if different
@@ -568,6 +569,9 @@
                     }
                 } else if (isDailyEntry) {
                     const label = entry.content.split('\n')[0] || 'Daily Synopsis';
+                    contentHtml = `<a class="${contentClass}" href="${dashAttr(calEntryUrl)}">${escapeHtml(label)}</a>`;
+                } else if (isDiaryEntry) {
+                    const label = entry.content.split('\n')[0] || 'Diary';
                     contentHtml = `<a class="${contentClass}" href="${dashAttr(calEntryUrl)}">${escapeHtml(label)}</a>`;
                 } else {
                     const firstLine = entry.content.split('\n')[0];
