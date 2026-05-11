@@ -99,36 +99,88 @@
     if (!manifestResp.ok) throw new Error('manifest HTTP ' + manifestResp.status);
     const manifest = await manifestResp.json();
     const items = manifest.items || [];
+    let cached = 0;
     let done = 0;
     let failed = 0;
     let bytes = 0;
+    const missing = [];
 
     for (const item of items) {
+      if (await cacheHas(item)) {
+        cached++;
+      } else {
+        missing.push(item);
+      }
+    }
+
+    if (!missing.length) {
+      const stats = await cacheStats();
+      const meta = {
+        ts: Date.now(),
+        count: stats.count || cached,
+        failed: 0,
+        total: items.length,
+        bytes: previous.bytes || 0,
+        run_count: 0,
+        run_bytes: 0,
+        groups: manifest.groups || {},
+      };
+      writeMeta(meta);
+      renderStatus(statusEl, `offline cache: ${meta.count}/${meta.total} items, ${fmtBytes(meta.bytes)}, just now`);
+      return meta;
+    }
+
+    renderStatus(statusEl, `offline cache: ${cached}/${items.length} cached, adding ${missing.length}`);
+
+    for (const item of missing) {
       try {
         bytes += await cacheItem(item);
       } catch(e) {
         failed++;
       }
       done++;
-      if (done === 1 || done === items.length || done % 10 === 0) {
-        renderStatus(statusEl, `offline cache: ${done}/${items.length}, ${fmtBytes(bytes)}`);
+      if (done === 1 || done === missing.length || done % 10 === 0) {
+        renderStatus(statusEl, `offline cache: ${cached + done - failed}/${items.length}, ${fmtBytes(bytes)} added`);
       }
     }
 
+    const stats = await cacheStats();
+    const successCount = done - failed;
     const meta = {
       ts: Date.now(),
-      count: done - failed,
+      count: stats.count || successCount,
       failed: failed,
       total: items.length,
-      bytes: bytes,
+      bytes: (previous.bytes || 0) + bytes,
+      run_count: successCount,
+      run_bytes: bytes,
       groups: manifest.groups || {},
     };
+    if (successCount === 0 && previous.ts) {
+      meta.count = previous.count || 0;
+      meta.bytes = previous.bytes || 0;
+      meta.ts = previous.ts;
+    }
     writeMeta(meta);
-    renderStatus(
-      statusEl,
-      `offline cache: ${meta.count}/${meta.total} items, ${fmtBytes(bytes)}, just now${failed ? ', ' + failed + ' failed' : ''}`
-    );
+    const age = meta.ts === previous.ts ? `${fmtAge(meta.ts)} old` : 'just now';
+    renderStatus(statusEl, `offline cache: ${meta.count}/${meta.total} items, ${fmtBytes(meta.bytes)}, ${age}${failed ? ', ' + failed + ' failed' : ''}`);
     return meta;
+  }
+
+  async function cacheStats() {
+    if (!('caches' in window)) return {count: 0};
+    let count = 0;
+    for (const cacheName of [PAGE_CACHE, API_CACHE, STATIC_CACHE]) {
+      const cache = await caches.open(cacheName);
+      const requests = await cache.keys();
+      count += requests.length;
+    }
+    return {count};
+  }
+
+  async function cacheHas(item) {
+    const cache = await caches.open(cacheNameFor(item));
+    return !!(await cache.match(normalizedRequest(item.url)));
   }
 
   async function fetchJson(url) {
@@ -159,5 +211,6 @@
     readMeta,
     registerWorkers,
     warmManifest,
+    cacheStats,
   };
 })();
