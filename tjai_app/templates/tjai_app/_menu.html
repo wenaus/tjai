@@ -19,6 +19,7 @@
     {% if current_page == "archive" %}<span style="color:#e0e0e0">Archive</span>{% else %}<a href="{% url 'dashboard' %}?status=archive">Archive</a>{% endif %}
     {% if current_page == "trash" %}<span style="color:#e0e0e0">Trash</span>{% else %}<a href="{% url 'dashboard' %}?deleted=1">Trash</a>{% endif %}
     {% if current_page == "system" %}<span id="menu-system" style="color:{{ health_color }}">System</span>{% else %}<a id="menu-system" href="{% url 'system_health' %}" style="color:{{ health_color }}">System</a>{% endif %}
+    <span id="menu-offline-status" style="display:none;color:#ffd54f;margin-left:auto">offline</span>
 </div>
 <script>
 (function(){
@@ -40,6 +41,16 @@
     }
     poll();
     setInterval(poll, 60000);
+})();
+(function(){
+    const el = document.getElementById('menu-offline-status');
+    if (!el) return;
+    function update() {
+        el.style.display = navigator.onLine ? 'none' : '';
+    }
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    update();
 })();
 (function(){
     // Clean trailing whitespace from copied text before it hits the clipboard.

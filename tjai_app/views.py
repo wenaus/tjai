@@ -1505,9 +1505,15 @@ def api_offline_material_cache_manifest(request):
         'dashboard': 0,
         'diary': 0,
         'daily': 0,
+        'activity': 0,
+        'agents': 0,
+        'ai': 0,
         'goals': 0,
         'journals': 0,
         'named': 0,
+        'readme': 0,
+        'rss': 0,
+        'system': 0,
         'todos': 0,
         'relations': 0,
         'workday': 0,
@@ -1526,16 +1532,45 @@ def api_offline_material_cache_manifest(request):
     add('/tjai/diary/', 'Diary page', 'page', 'pages')
     add('/tjai/api/diary/entries', 'Diary entries API', 'api', 'diary')
     add('/tjai/dashboard/', 'Dashboard page', 'page', 'dashboard')
+    add('/tjai/dashboard/?view=dialog', 'Dialog dashboard page', 'page', 'dashboard')
+    add('/tjai/dashboard/?status=archive', 'Archive dashboard page', 'page', 'dashboard')
+    add('/tjai/dashboard/?deleted=1', 'Trash dashboard page', 'page', 'dashboard')
     add('/tjai/api/dashboard/calendar', 'Dashboard calendar API', 'api', 'dashboard')
     add('/tjai/api/dashboard/named', 'Dashboard named API', 'api', 'dashboard')
     add('/tjai/api/dashboard/status', 'Dashboard default status API', 'api', 'dashboard')
+    add('/tjai/api/dashboard/status?view=dialog', 'Dashboard dialog status API', 'api', 'dashboard')
+    add('/tjai/api/dashboard/status?status=archive', 'Dashboard archive status API', 'api', 'dashboard')
+    add('/tjai/api/dashboard/status?deleted=1', 'Dashboard trash status API', 'api', 'dashboard')
     add('/tjai/api/dialog/daily-counts', 'Dashboard dialog counts API', 'api', 'dashboard')
+    add('/tjai/assessment/', 'AI assessment page', 'page', 'ai')
+    for assessor in ('claude', 'gemini'):
+        add(f'/tjai/api/assessment/dates?assessor={assessor}', f'AI dates {assessor}', 'api', 'ai')
+        add(f'/tjai/api/assessment/dashboard?assessor={assessor}', f'AI dashboard {assessor}', 'api', 'ai')
+    add('/tjai/git/', 'Git page', 'page', 'activity')
+    add('/tjai/api/git/data', 'Git data API', 'api', 'activity')
+    add('/tjai/dev/', 'Dev page', 'page', 'activity')
+    add('/tjai/api/dev/data', 'Dev data API', 'api', 'activity')
+    add('/tjai/agent-log/', 'Agent log page', 'page', 'agents')
+    add('/tjai/api/agent-log?limit=200', 'Agent log API', 'api', 'agents')
+    add('/tjai/agent-queue/', 'Agent queue page', 'page', 'agents')
+    add('/tjai/api/agent-queue/data', 'Agent queue API', 'api', 'agents')
     add('/tjai/synopsis/', 'Daily synopsis page', 'page', 'pages')
     add('/tjai/api/synopsis/dates', 'Daily synopsis dates API', 'api', 'daily')
     add('/tjai/weekly/', 'Weekly page', 'page', 'pages')
     add('/tjai/this-week/', 'This workweek page', 'page', 'pages')
     add('/tjai/goals/', 'Goals page', 'page', 'goals')
     add('/tjai/api/goals/data?include_done=1', 'Goals API', 'api', 'goals')
+    add('/tjai/context/recipe/', 'Recipes page', 'page', 'pages')
+    add('/tjai/context/poetry/', 'Poetry page', 'page', 'pages')
+    add('/tjai/picks/', 'Picks page', 'page', 'readme')
+    add('/tjai/api/picks/data', 'Picks data API', 'api', 'readme')
+    add('/tjai/rss/', 'RSS page', 'page', 'rss')
+    add('/tjai/api/rss/data', 'RSS data API', 'api', 'rss')
+    add('/tjai/readme/', 'ReadMe page', 'page', 'readme')
+    add('/tjai/api/readme/data', 'ReadMe data API', 'api', 'readme')
+    add('/tjai/system/', 'System page', 'page', 'system')
+    add('/tjai/api/system/status', 'System menu status API', 'api', 'system')
+    add('/tjai/api/system/data', 'System data API', 'api', 'system')
 
     def add_entry_material(entry, group):
         data = entry.data if isinstance(entry.data, dict) else {}
@@ -1619,6 +1654,18 @@ def api_offline_material_cache_manifest(request):
             add(f'/tjai/synopsis/?entry_id={q}', eid + ' synopsis page', 'page', 'daily')
             add(f'/tjai/api/synopsis/content?entry_id={q}', eid, 'api', 'daily')
             add(f'/tjai/entry/?entry_id={q}', eid + ' entry', 'page', 'daily')
+
+    assessment_entries = Entry.objects.filter(
+        data__entry_id__startswith='assessment-',
+        kind='memory',
+        deleted_at__isnull=True,
+    ).exclude(data__entry_id__contains='-prompt').only('id', 'kind', 'data')
+    for entry in assessment_entries:
+        eid = (entry.data or {}).get('entry_id', '')
+        if eid:
+            q = quote(eid)
+            add(f'/tjai/api/assessment/content?entry_id={q}', eid + ' assessment data', 'api', 'ai')
+            add(f'/tjai/entry/?entry_id={q}', eid + ' entry', 'page', 'ai')
 
     work_entries = Entry.objects.filter(
         deleted_at__isnull=True,

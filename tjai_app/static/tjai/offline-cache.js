@@ -5,10 +5,23 @@
   const API_CACHE = `${CACHE_PREFIX}:api`;
   const STATIC_CACHE = `${CACHE_PREFIX}:static`;
   const SCOPES = [
+    '/tjai/agent-log/',
+    '/tjai/agent-queue/',
+    '/tjai/assessment/',
+    '/tjai/context/',
     '/tjai/dashboard/',
+    '/tjai/dev/',
     '/tjai/diary/',
     '/tjai/entry/',
+    '/tjai/git/',
+    '/tjai/goals/',
+    '/tjai/kind/',
+    '/tjai/picks/',
+    '/tjai/readme/',
+    '/tjai/rss/',
     '/tjai/synopsis/',
+    '/tjai/system/',
+    '/tjai/tag/',
     '/tjai/this-week/',
     '/tjai/weekly/',
     '/tjai/workday/',
@@ -59,11 +72,12 @@
   }
 
   async function cacheItem(item) {
-    const response = await fetch(item.url, {credentials: 'same-origin', cache: 'no-store'});
+    const request = normalizedRequest(item.url);
+    const response = await fetch(request, {cache: 'no-store'});
     if (!response.ok) throw new Error('HTTP ' + response.status);
     const bytes = (await response.clone().arrayBuffer()).byteLength;
     const cache = await caches.open(cacheNameFor(item));
-    await cache.put(item.url, response.clone());
+    await cache.put(request, response.clone());
     return bytes;
   }
 
@@ -118,16 +132,24 @@
   }
 
   async function fetchJson(url) {
+    const request = normalizedRequest(url);
     try {
-      const response = await fetch(url, {credentials: 'same-origin'});
+      const response = await fetch(request);
       if (!response.ok) throw new Error('HTTP ' + response.status);
       return await response.json();
     } catch(e) {
       const cache = await caches.open(API_CACHE);
-      const cached = await cache.match(url);
+      const cached = await cache.match(request);
       if (!cached) throw e;
       return await cached.json();
     }
+  }
+
+  function normalizedRequest(url) {
+    const u = new URL(url, window.location.origin);
+    u.searchParams.delete('_');
+    u.searchParams.delete('ts');
+    return new Request(u.toString(), {credentials: 'same-origin'});
   }
 
   window.TjaiOfflineCache = {

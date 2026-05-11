@@ -6,6 +6,7 @@ const API_CACHE = `${CACHE_PREFIX}:api`;
 const STATIC_ASSETS = [
   '/tjai/static/tjai/favicon.svg',
   '/tjai/static/tjai/menu.css',
+  '/tjai/static/tjai/offline-cache.js',
   '/tjai/static/tjai/tjai-utils.js',
   '/tjai/static/tjai/turndown-7.2.0.js',
   '/tjai/static/tjai/vendor/codemirror/5.65.18/codemirror.min.css',
@@ -70,27 +71,36 @@ self.addEventListener('fetch', (event) => {
 
 async function cacheFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
+  const cacheRequest = normalizedCacheRequest(request);
+  const cached = await cache.match(cacheRequest);
   if (cached) return cached;
 
   const response = await fetch(request);
   if (response.ok) {
-    cache.put(request, response.clone());
+    cache.put(cacheRequest, response.clone());
   }
   return response;
 }
 
 async function networkFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
+  const cacheRequest = normalizedCacheRequest(request);
   try {
     const response = await fetch(request);
     if (response.ok) {
-      cache.put(request, response.clone());
+      cache.put(cacheRequest, response.clone());
     }
     return response;
   } catch (err) {
-    const cached = await cache.match(request);
+    const cached = await cache.match(cacheRequest);
     if (cached) return cached;
     throw err;
   }
+}
+
+function normalizedCacheRequest(request) {
+  const url = new URL(request.url);
+  url.searchParams.delete('_');
+  url.searchParams.delete('ts');
+  return url.toString();
 }
