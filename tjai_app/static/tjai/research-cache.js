@@ -3,7 +3,7 @@
     const DB_VERSION = 1;
     const DETAIL_PREFIX = '/tjai/api/research/detail?entry_id=';
     const LIST_LIMIT = 300;
-    const PAGE_CACHE = 'tjai-research-shell-v1';
+    const PAGE_CACHE = 'tjai-research-shell-v2';
     let dbPromise = null;
     let refreshPromise = null;
     let statusEl = null;
@@ -156,6 +156,16 @@
         return {checked: urls.size, added, bytes};
     }
 
+    async function refreshShellPages() {
+        if (!('caches' in window)) return;
+        const cache = await caches.open(PAGE_CACHE);
+        for (const url of ['/tjai/research/', '/tjai/research-detail/']) {
+            const request = new Request(url, {credentials: 'same-origin'});
+            const response = await fetch(request, {cache: 'no-store'});
+            if (response.ok) await cache.put(request, response.clone());
+        }
+    }
+
     async function refreshAll() {
         if (refreshPromise) return refreshPromise;
         refreshPromise = doRefreshAll().finally(() => { refreshPromise = null; });
@@ -168,6 +178,7 @@
             return;
         }
         await setStatus('refreshing');
+        await refreshShellPages();
         const items = [];
         for (let offset = 0; ; offset += LIST_LIMIT) {
             const url = `/tjai/api/research/list?status=all&scope=title&offset=${offset}&limit=${LIST_LIMIT}`;

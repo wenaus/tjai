@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tjai-research-shell-v1';
+const CACHE_NAME = 'tjai-research-shell-v2';
 const SHELL_URLS = [
     '/tjai/research/',
     '/tjai/research-detail/',

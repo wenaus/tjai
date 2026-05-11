@@ -156,7 +156,7 @@ links from those payloads:
 - synthesis `entry_url`
 
 It checks Cache Storage first and fetches only missing linked entry pages into
-`tjai-research-shell-v1`. Already-cached detail payloads are still inspected so
+`tjai-research-shell-v2`. Already-cached detail payloads are still inspected so
 newly-added or previously-missed linked entry pages are filled in on later
 refreshes without refetching every detail payload.
 
