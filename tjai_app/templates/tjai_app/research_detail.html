@@ -110,13 +110,17 @@
             border-top: 1px solid #303030;
         }
         .model-checks,
-        .model-buttons {
+        .model-buttons,
+        .model-result-links {
             display: flex;
             flex-wrap: wrap;
             gap: 8px 12px;
             align-items: center;
         }
         .model-checks {
+            margin-bottom: 12px;
+        }
+        .model-result-links {
             margin-bottom: 12px;
         }
         .model-control {
@@ -240,7 +244,8 @@
             .page-header .spacer { display: none; }
             .actions,
             .model-checks,
-            .model-buttons {
+            .model-buttons,
+            .model-result-links {
                 flex-direction: column;
                 align-items: flex-start;
             }
@@ -352,6 +357,21 @@
             const models = data.models || [];
             const agent = data.agent || {};
             const disabled = agent.running ? ' disabled' : '';
+            const branchByModel = {};
+            for (const branch of (data.branches || [])) {
+                if (branch.model) branchByModel[branch.model] = branch;
+            }
+            const resultLinks = [];
+            for (const model of models) {
+                const branch = branchByModel[model];
+                if (!branch) continue;
+                const st = branch.status || statuses[model] || '';
+                resultLinks.push(`<a class="action-link" href="${esc(branch.entry_url)}">${esc(model)}${st ? ' (' + esc(st) + ')' : ''}</a>`);
+            }
+            if (data.synthesis) {
+                const st = data.synthesis.status || '';
+                resultLinks.push(`<a class="action-link" href="${esc(data.synthesis.entry_url)}">synthesis${st ? ' (' + esc(st) + ')' : ''}</a>`);
+            }
             const checks = models.map(model => {
                 const st = statuses[model] || 'not-run';
                 const cls = ['done', 'active', 'staged', 'launching', 'failed', 'blocked'].includes(st) ? st : '';
@@ -362,10 +382,10 @@
                 : '';
             return `
                 <div class="model-controls">
+                    ${resultLinks.length ? `<div class="model-result-links">${resultLinks.join('')}</div>` : ''}
                     <div class="model-checks">${checks}</div>
                     <div class="model-buttons">
                         <button type="button" onclick="rerunModels(this)"${disabled}>Rerun selections</button>
-                        <button type="button" onclick="synthesizeItem(this)"${disabled}>Synthesize</button>
                         <button type="button" onclick="rerunItem(this)"${disabled}>Resubmit</button>
                         <button type="button" onclick="submitItem(this)"${disabled}>Submit</button>
                         ${note}

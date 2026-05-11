@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mark an agent action as completed/failed in sysconfig, and handle queue drain.
+"""Mark an agent action as completed/failed in sysconfig.
 
 Called automatically after a tj agent claude process finishes.
 Usage: agent_complete.py <action_entry_id> [exit_code] [stderr_file]
@@ -621,8 +621,10 @@ def main():
         except Exception as e:
             logger.error("llm-assessment-mcp: normalize failed: %s", e)
 
-    # Research-agent post-processing: model completion first, then queue drain.
-    # Order matters — synthesis must set next_target before queue drain overwrites it.
+    # Research-agent post-processing: model completion handles the within-topic
+    # fanout lifecycle and triggers synthesis when all dispatched models finish.
+    # Cross-topic queue drain is intentionally disabled: running one research
+    # topic must not automatically start the next pending topic.
     if action_id == 'research-agent' and status == 'completed':
         # Update base entry tracking and check whether all dispatched models are done
         if entry:
@@ -638,7 +640,6 @@ def main():
                 except Exception as e:
                     logger.error("research_model_complete failed: %s", e,
                                  extra=ref_extra)
-        _research_queue_drain(now)
 
     # Claude failure on multimodel entry: mark model as failed and run the
     # terminal-check + synthesis-trigger path, so a failure that is the last
@@ -658,77 +659,9 @@ def main():
 
 
 
-def _research_queue_drain(now):
-    """Chain to the next pending research item, or stop if requested."""
-    # Check stop request
-    stop_req = SysConfig.objects.filter(key='research_stop_requested').first()
-    if stop_req and stop_req.value:
-        logger.info("research-agent: stop requested, not chaining")
-        stop_req.value = ''
-        stop_req.timestamp_modified = now
-        stop_req.save(update_fields=['value', 'timestamp_modified'])
-        return
-
-    # Find next pending PRIMARY research item (sorted by priority then FIFO)
-    # Derivatives (gemini, chatgpt, synthesis) all have data.source='multimodel'
-    research_ids = Tag.objects.filter(
-        tag_name='research_topic'
-    ).values_list('entry_id', flat=True)
-    from tjai_app.action_runner import RESEARCH_MODELS
-    qs = Entry.objects.filter(
-        id__in=research_ids,
-        kind='memory',
-        deleted_at__isnull=True,
-    ).exclude(
-        status='done'
-    ).exclude(
-        status='active'            # models already dispatched
-    ).exclude(
-        data__source='multimodel'
-    ).exclude(
-        data__has_key='run_status'     # skip already-researched entries
-    )
-    # Skip topics that have already been dispatched at least once —
-    # presence of any {model}_status means the topic has per-model state,
-    # which the drain has no mechanism to re-dispatch (reruns come via the
-    # explicit api_research_rerun path, not the drain).
-    for _m in RESEARCH_MODELS:
-        qs = qs.exclude(data__has_key=f'{_m}_status')
-    next_item = qs.order_by('priority', 'timestamp_created').first()
-
-    if not next_item:
-        logger.info("research-agent: queue empty, not chaining")
-        return
-
-    # Chain: set SPECIFIC TARGET so Claude doesn't have to guess
-    research_action = Entry.objects.filter(
-        kind='action', deleted_at__isnull=True,
-        data__entry_id='research-agent',
-    ).first()
-    if not research_action:
-        logger.error("research-agent: action entry not found, cannot chain")
-        return
-
-    data = research_action.data or {}
-    data['last_run'] = 0
-    data['next_target'] = (
-        f"SPECIFIC TARGET:\nEntry UUID: {next_item.id}\n"
-        f"Topic: {next_item.content}"
-    )
-    data['next_target_entry_id'] = str(next_item.id)
-    research_action.data = data
-    research_action.timestamp_modified = now
-    research_action.save(update_fields=['data', 'timestamp_modified'])
-
-    next_entry_id = (next_item.data or {}).get('entry_id', str(next_item.id)[:8])
-    logger.info("research-agent: chaining to %s — %s",
-                next_entry_id, next_item.content[:60])
-
-    # Wake action agent via sysconfig flag —
-    # execute_action will handle creating all 3 model entries and dispatching
-    SysConfig.objects.update_or_create(
-        key='action_agent_wake_requested',
-        defaults={'value': '1', 'timestamp_modified': now})
+def _research_queue_drain(_now):
+    """Legacy no-op: cross-topic research chaining is disabled."""
+    logger.info("research-agent: cross-topic queue drain disabled")
 
 
 def _linkify_synthesis_sources(current_entry_uuid):

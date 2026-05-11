@@ -120,12 +120,20 @@
             gap: 5px;
         }
         .model {
+            display: inline-flex;
+            align-items: center;
+            min-height: 24px;
             color: #b0bec5;
             background: #282828;
             border: 1px solid #3b3b3b;
             border-radius: 4px;
             padding: 2px 6px;
             font-size: 12px;
+            text-decoration: none;
+        }
+        .model:hover {
+            background: #1f3547;
+            text-decoration: none;
         }
         .model.done { color: #9ccc65; border-color: #406b40; }
         .model.active, .model.staged, .model.launching { color: #ffd54f; border-color: #6a5a25; }
@@ -318,11 +326,13 @@
             let modelHtml = researched.length
                 ? researched.map(model => {
                     const st = (item.models || {})[model] || 'done';
-                    return `<span class="model ${esc(st)}">${esc(model)}</span>`;
+                    const href = '/tjai/entry/?entry_id=' + encodeURIComponent(item.entry_id + '-' + model);
+                    return `<a class="model ${esc(st)}" href="${href}">${esc(model)}</a>`;
                 }).join('')
                 : '<span class="meta">No model branches yet</span>';
             if (item.synthesis_done) {
-                modelHtml += '<span class="model done">synthesis</span>';
+                const href = '/tjai/entry/?entry_id=' + encodeURIComponent(item.entry_id + '-synthesis');
+                modelHtml += `<a class="model done" href="${href}">synthesis</a>`;
             }
             return `
                 <section class="topic-row" data-id="${esc(item.id)}" data-entry-id="${esc(item.entry_id)}">

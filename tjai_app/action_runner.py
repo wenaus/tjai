@@ -1140,7 +1140,7 @@ def execute_action(action, target_date=None):
             return False
 
         # For research-agent: ensure target is set before dispatch.
-        # Queue drain sets it when chaining; for scheduled runs, look it up now.
+        # Scheduled runs pick the next pending primary topic here.
         if action_id == 'research-agent' and not data.get('next_target_entry_id'):
             research_ids = Tag.objects.filter(
                 tag_name='research_topic'

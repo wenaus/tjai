@@ -5551,7 +5551,8 @@ def api_research_run(request):
         )
         data['next_target_entry_id'] = str(target.id)
     else:
-        # Submit All: find the first pending item and use SPECIFIC TARGET
+        # Legacy "all" value now starts only the first pending item. Cross-topic
+        # chaining is disabled, so this never drains the remaining queue.
         research_ids = Tag.objects.filter(
             tag_name='research_topic'
         ).values_list('entry_id', flat=True)
@@ -5588,17 +5589,7 @@ def api_research_run(request):
             target_entry.data = tdata
             target_entry.save(update_fields=['data'])
 
-    # Single item: prevent queue drain from chaining to the next item
     now = time.time()
-    if entry_id != 'all':
-        SysConfig.objects.update_or_create(
-            key='research_stop_requested',
-            defaults={'value': '1', 'timestamp_modified': now})
-    else:
-        # Submit All: clear any previous stop request
-        SysConfig.objects.update_or_create(
-            key='research_stop_requested',
-            defaults={'value': '', 'timestamp_modified': now})
 
     # Force-run: set scheduled_time to now so scheduler sees it as due
     # (just setting last_run=0 fails when scheduled_time is in the future today)
@@ -5634,19 +5625,13 @@ def api_research_run(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_research_stop(request):
-    """Soft stop: finish current item, then don't continue to next."""
+    """Legacy soft stop: cross-topic chaining is already disabled."""
     status = SysConfig.objects.filter(
         key='agent_research-agent_status'
     ).values_list('value', flat=True).first()
     if status != 'running':
         return JsonResponse({'error': 'Research agent not running'}, status=409)
-
-    now = time.time()
-    SysConfig.objects.update_or_create(
-        key='research_stop_requested',
-        defaults={'value': '1', 'timestamp_modified': now},
-    )
-    return JsonResponse({'ok': True})
+    return JsonResponse({'ok': True, 'message': 'Cross-topic chaining is disabled'})
 
 
 @login_required
@@ -5753,11 +5738,6 @@ def api_research_rerun(request):
             edata['started_at'] = now
             new_entry.data = edata
             new_entry.save(update_fields=['data'])
-
-            # Single item: prevent queue drain chaining
-            SysConfig.objects.update_or_create(
-                key='research_stop_requested',
-                defaults={'value': '1', 'timestamp_modified': now})
 
             _wake_action_agent()
             # _dispatch_research_3way handles all enabled models when agent picks this up

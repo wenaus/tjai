@@ -141,7 +141,7 @@ Entry(
 
 1. Create a memory entry tagged `:research_topic` with topic description
 2. Research page (`/tjai/research/`) shows the queue with status
-3. Click **Submit** (or **Submit All**). The research-agent action runs `_dispatch_research_3way` (`tjai_app/action_runner.py`), which dispatches each model in `RESEARCH_MODELS = ('claude','gemini','chatgpt','qwen','deepseek-flash','deepseek-pro')` via its own mechanism (gemma is currently off; remote-worker plumbing retained for re-enable):
+3. Click **Submit** or **Run**. The research-agent action runs `_dispatch_research_3way` (`tjai_app/action_runner.py`), which dispatches each model in `RESEARCH_MODELS = ('claude','gemini','chatgpt','qwen','deepseek-flash','deepseek-pro')` via its own mechanism (gemma is currently off; remote-worker plumbing retained for re-enable):
    - **Claude** — detached Claude instance with research-optimized system prompt, spawning parallel subagents that search the web and write findings tagged `research-subagent`
    - **Gemini** — `scripts/research_multimodel.py gemini` subprocess via the Gemini API (native grounding); retryable Gemini server/deadline errors (`500`/`502`/`503`/`504`, `INTERNAL`, `UNAVAILABLE`, `DEADLINE_EXCEEDED`) fall back through standard-tier retries with bounded backoff
    - **ChatGPT** — `scripts/research_multimodel.py chatgpt` subprocess via the OpenAI Responses API (`CHATGPT_RESEARCH_MODEL`, default `gpt-5.5`) with hosted web search, high search context, and configurable reasoning/verbosity env vars
@@ -149,11 +149,12 @@ Entry(
    - **DeepSeek-Flash / DeepSeek-Pro** — `scripts/research_multimodel.py deepseek-flash|deepseek-pro` subprocess via DeepSeek's Anthropic-compat endpoint (`https://api.deepseek.com/anthropic`, accessed with the `anthropic` SDK + `base_url` override; `DEEPSEEK_API_KEY` env var). The script exposes read-only tjai MCP tools (`get_*`, `list_*`, `search_*`) through a multi-turn `tool_use` / `tool_result` loop, then writes DeepSeek's final report text into the research entry.
 4. As each model finishes, `research_model_complete` updates the base entry's `{model}_status`. When **all dispatched models** are terminal (`done`, `failed`, or legacy `blocked`), the base entry transitions to `done` and synthesis is dispatched
 5. **Synthesis** — Claude is dispatched again with the synthesis prompt and links to all per-model reports, producing the final merged analyst's brief
-6. Automatically chains to next pending item (priority order, then FIFO)
+6. Stops after the topic's synthesis. Starting another topic requires an
+   explicit Submit/Run or the next scheduled research-agent run.
 
 ### Scheduling and Ideation Handoff
 
-`research-agent` runs on a daily schedule (`scheduled_time: "0300"`, interval 24h). On each scheduled run it picks up the highest-priority pending `:research_topic` via its AI prompt, runs it, then self-chains through the remaining queue via `_research_queue_drain` in `scripts/agent_complete.py`. When the queue is empty, chaining stops until the next scheduled run.
+`research-agent` runs on a daily schedule (`scheduled_time: "0300"`, interval 24h). On each scheduled run it picks up the highest-priority pending `:research_topic` via its AI prompt and runs that single topic through all models and synthesis. Cross-topic chaining is disabled: `_research_queue_drain` in `scripts/agent_complete.py` is a legacy no-op, so the next pending topic waits for an explicit Submit/Run or the next scheduled research-agent run.
 
 **Ideation handoff:** `ideation-agent` runs daily at `0200` and creates new `:research_topic` entries from the day's material. Because research runs at `0300` — *after* ideation — ideation-created topics are auto-picked up the same morning. If you move research earlier than ideation, ideation-created topics will sit pending for a full 24 hours until the next research run. There is no separate auto-submit hook from ideation to research; the coupling is purely via scheduled-time ordering.
 
@@ -167,9 +168,9 @@ The page banner displays **three named, non-overlapping facts** so nothing reads
 
 The activity dot reflects the system as a whole: green = something is actively working anywhere, red = a worker is disconnected or holding a zombie claim, orange = work staged waiting for a worker, grey = idle.
 
-- **Submit** / **Submit All** — trigger research
+- **Submit** / **Run** — trigger one research topic
 - **Rerun selections** — selectively rerun specific models on a topic (e.g., just gemini)
-- **Stop** — soft stop (finish current, don't chain)
+- **Stop** — legacy soft stop control; cross-topic chaining is already disabled
 - **Abort** — hard stop (kill local agent)
 - **Studies** link per item — subagent reports (Claude only)
 - Failed model branches show a compact error line on the base topic, with a link to the failed branch entry
@@ -249,7 +250,7 @@ The remote-worker side has its own protocol — see [remote-workers.md](remote-w
 - `tjai_app/action_runner.py` — `_dispatch_research_3way` (per-model dispatch), `research_model_complete` (per-model completion + synthesis trigger), `_create_and_dispatch_synthesis`
 - `tjai_app/templates/tjai_app/research.html`, `research_studies.html`
 - `scripts/research_multimodel.py` — Gemini subprocess dispatcher
-- `scripts/agent_complete.py` — Claude post-completion + queue drain
+- `scripts/agent_complete.py` — Claude post-completion; cross-topic queue drain is disabled
 - `tj_agent/worker.py` — Remote worker loop (Mac side)
 
 ---
