@@ -1504,6 +1504,9 @@ def api_offline_material_cache_manifest(request):
         'pages': 0,
         'diary': 0,
         'daily': 0,
+        'goals': 0,
+        'todos': 0,
+        'relations': 0,
         'workday': 0,
         'workweek': 0,
         'highlights': 0,
@@ -1523,6 +1526,18 @@ def api_offline_material_cache_manifest(request):
     add('/tjai/api/synopsis/dates', 'Daily synopsis dates API', 'api', 'daily')
     add('/tjai/weekly/', 'Weekly page', 'page', 'pages')
     add('/tjai/this-week/', 'This workweek page', 'page', 'pages')
+    add('/tjai/goals/', 'Goals page', 'page', 'goals')
+    add('/tjai/api/goals/data?include_done=1', 'Goals API', 'api', 'goals')
+
+    def add_entry_material(entry, group):
+        data = entry.data if isinstance(entry.data, dict) else {}
+        eid = data.get('entry_id')
+        page_url = f'/tjai/entry/?entry_id={quote(eid)}' if eid else f'/tjai/entry/?uuid={entry.id}'
+        label = eid or str(entry.id)
+        add(page_url, label, 'page', group)
+        add(f'/tjai/api/entry/{entry.id}/relations', label + ' relations', 'api', 'relations')
+        if entry.kind == 'goal':
+            add(f'/tjai/api/goals/detail?id={entry.id}', label + ' goal detail', 'api', 'goals')
 
     underway = Entry.objects.filter(name='Underway', deleted_at__isnull=True).first()
     if underway:
@@ -1537,6 +1552,26 @@ def api_offline_material_cache_manifest(request):
     ).first()
     if highlights:
         add('/tjai/entry/?entry_id=work-hours-highlights', 'Work highlights', 'page', 'highlights')
+
+    goal_todo_entries = list(Entry.objects.filter(
+        kind__in=('goal', 'todo'),
+        deleted_at__isnull=True,
+    ).only('id', 'kind', 'data'))
+    for entry in goal_todo_entries:
+        add_entry_material(entry, 'goals' if entry.kind == 'goal' else 'todos')
+
+    goal_todo_ids = [str(entry.id) for entry in goal_todo_entries]
+    if goal_todo_ids:
+        relation_rows = Relation.objects.filter(
+            Q(entry1_id__in=goal_todo_ids) | Q(entry2_id__in=goal_todo_ids)
+        ).values_list('entry1_id', 'entry2_id')
+        related_ids = {entry_id for row in relation_rows for entry_id in row}
+        related_entries = Entry.objects.filter(
+            id__in=related_ids,
+            deleted_at__isnull=True,
+        ).only('id', 'kind', 'data')
+        for entry in related_entries:
+            add_entry_material(entry, 'relations')
 
     diary_entries = Entry.objects.filter(
         context_id='diary',
