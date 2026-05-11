@@ -1502,9 +1502,12 @@ def api_offline_material_cache_manifest(request):
     seen = set()
     groups = {
         'pages': 0,
+        'dashboard': 0,
         'diary': 0,
         'daily': 0,
         'goals': 0,
+        'journals': 0,
+        'named': 0,
         'todos': 0,
         'relations': 0,
         'workday': 0,
@@ -1522,6 +1525,11 @@ def api_offline_material_cache_manifest(request):
 
     add('/tjai/diary/', 'Diary page', 'page', 'pages')
     add('/tjai/api/diary/entries', 'Diary entries API', 'api', 'diary')
+    add('/tjai/dashboard/', 'Dashboard page', 'page', 'dashboard')
+    add('/tjai/api/dashboard/calendar', 'Dashboard calendar API', 'api', 'dashboard')
+    add('/tjai/api/dashboard/named', 'Dashboard named API', 'api', 'dashboard')
+    add('/tjai/api/dashboard/status', 'Dashboard default status API', 'api', 'dashboard')
+    add('/tjai/api/dialog/daily-counts', 'Dashboard dialog counts API', 'api', 'dashboard')
     add('/tjai/synopsis/', 'Daily synopsis page', 'page', 'pages')
     add('/tjai/api/synopsis/dates', 'Daily synopsis dates API', 'api', 'daily')
     add('/tjai/weekly/', 'Weekly page', 'page', 'pages')
@@ -1559,6 +1567,20 @@ def api_offline_material_cache_manifest(request):
     ).only('id', 'kind', 'data'))
     for entry in goal_todo_entries:
         add_entry_material(entry, 'goals' if entry.kind == 'goal' else 'todos')
+
+    named_entries = Entry.objects.filter(
+        deleted_at__isnull=True,
+        name__isnull=False,
+    ).exclude(name='').only('id', 'kind', 'data')
+    for entry in named_entries:
+        add_entry_material(entry, 'named')
+
+    journal_entries = Entry.objects.filter(
+        kind='journal',
+        deleted_at__isnull=True,
+    ).only('id', 'kind', 'data')
+    for entry in journal_entries:
+        add_entry_material(entry, 'journals')
 
     goal_todo_ids = [str(entry.id) for entry in goal_todo_entries]
     if goal_todo_ids:

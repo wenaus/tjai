@@ -5,6 +5,7 @@
   const API_CACHE = `${CACHE_PREFIX}:api`;
   const STATIC_CACHE = `${CACHE_PREFIX}:static`;
   const SCOPES = [
+    '/tjai/dashboard/',
     '/tjai/diary/',
     '/tjai/entry/',
     '/tjai/synopsis/',
