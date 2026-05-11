@@ -84,7 +84,7 @@ async function networkFirst(request, cacheName) {
     }
     return response;
   } catch (err) {
-    const cached = await cache.match(cacheRequest);
+    const cached = await matchCached(cache, cacheRequest);
     if (cached) return cached;
     throw err;
   }
@@ -95,4 +95,31 @@ function normalizedCacheRequest(request) {
   url.searchParams.delete('_');
   url.searchParams.delete('ts');
   return url.toString();
+}
+
+async function matchCached(cache, cacheRequest) {
+  const cached = await cache.match(cacheRequest);
+  if (cached) return cached;
+
+  for (const alternate of alternateCacheRequests(cacheRequest)) {
+    const alternateCached = await cache.match(alternate);
+    if (alternateCached) return alternateCached;
+  }
+  return null;
+}
+
+function alternateCacheRequests(cacheRequest) {
+  const url = new URL(cacheRequest);
+  const prefix = '/tjai/entry/';
+  if (!url.pathname.startsWith(prefix) || url.pathname === prefix || url.search) {
+    return [];
+  }
+
+  const ref = decodeURIComponent(url.pathname.slice(prefix.length).replace(/\/$/, ''));
+  if (!ref) return [];
+
+  const queryUrl = new URL('/tjai/entry/', url.origin);
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  queryUrl.searchParams.set(uuidRe.test(ref) ? 'uuid' : 'entry_id', ref);
+  return [queryUrl.toString()];
 }

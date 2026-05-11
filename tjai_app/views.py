@@ -1575,7 +1575,13 @@ def api_offline_material_cache_manifest(request):
     def add_entry_material(entry, group):
         data = entry.data if isinstance(entry.data, dict) else {}
         eid = data.get('entry_id')
-        page_url = f'/tjai/entry/?entry_id={quote(eid)}' if eid else f'/tjai/entry/?uuid={entry.id}'
+        if eid:
+            quoted_eid = quote(eid, safe='')
+            page_url = f'/tjai/entry/?entry_id={quoted_eid}'
+            add(f'/tjai/entry/{quoted_eid}/', eid, 'page', group)
+        else:
+            page_url = f'/tjai/entry/?uuid={entry.id}'
+            add(f'/tjai/entry/{entry.id}/', str(entry.id), 'page', group)
         label = eid or str(entry.id)
         add(page_url, label, 'page', group)
         add(f'/tjai/api/entry/{entry.id}/relations', label + ' relations', 'api', 'relations')
