@@ -50,7 +50,13 @@
             max-width: 100vw;
         }
         .page-header .spacer { margin-left: auto; }
-        #header-status { min-width: 0; overflow-wrap: anywhere; }
+        .page-header .header-right {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            min-width: 0;
+        }
+        #header-status, #offline-cache-status { min-width: 0; overflow-wrap: anywhere; }
         .content {
             width: 100vw;
             max-width: 1180px;
@@ -242,6 +248,12 @@
         @media (max-width: 760px) {
             .page-header, .actions { flex-wrap: wrap; }
             .page-header .spacer { display: none; }
+            .page-header .header-right {
+                width: 100%;
+                justify-content: space-between;
+                align-items: flex-start;
+                gap: 10px;
+            }
             .actions,
             .model-checks,
             .model-buttons,
@@ -268,12 +280,16 @@
         <a href="/tjai/research/">Research List</a>
         <a href="/tjai/research-legacy/">Legacy Research Page</a>
         <span class="spacer"></span>
-        <span id="header-status" class="meta">Loading...</span>
+        <span class="header-right">
+            <span id="header-status" class="meta">Loading...</span>
+            <span id="offline-cache-status" class="meta">cache loading</span>
+        </span>
     </div>
     <main class="content" id="content">
         <div class="loading">Loading research detail...</div>
     </main>
 
+    <script src="/tjai/static/tjai/research-cache.js"></script>
     <script>
         const routeDetailEntryId = '{{ detail_entry_id|escapejs }}';
         const query = new URLSearchParams(window.location.search);
@@ -304,11 +320,20 @@
                 const resp = await fetch('/tjai/api/research/detail?' + p.toString(), {cache: 'no-store'});
                 const data = await resp.json();
                 if (!resp.ok || data.error) throw new Error(data.error || 'Load failed');
+                await ResearchCache.cacheDetailData(data);
                 currentTopic = data.topic;
                 currentDetail = data;
                 render(data);
             } catch (e) {
-                document.getElementById('content').innerHTML = '<div class="error">' + esc(e.message) + '</div>';
+                try {
+                    const data = await ResearchCache.offlineDetail(detailEntryId);
+                    currentTopic = data.topic;
+                    currentDetail = data;
+                    render(data);
+                    ResearchCache.setStatus('offline');
+                } catch (cacheError) {
+                    document.getElementById('content').innerHTML = '<div class="error">' + esc(e.message) + '</div>';
+                }
             }
         }
 
@@ -317,7 +342,7 @@
             const status = topic.status || 'pending';
             document.title = 'tjai Research Detail: ' + (topic.title || detailEntryId);
             document.getElementById('header-status').textContent =
-                `${topic.detail_entry_id || detailEntryId} · modified ${topic.modified_display || ''}`;
+                `${topic.detail_entry_id || detailEntryId} · modified ${topic.modified_display || ''}${data.offline && data.cached_at ? ' · cached ' + new Date(data.cached_at).toLocaleString() : ''}`;
             document.getElementById('content').innerHTML = `
                 <h1>${esc(topic.title)}</h1>
                 <div>
@@ -366,11 +391,11 @@
                 const branch = branchByModel[model];
                 if (!branch) continue;
                 const st = branch.status || statuses[model] || '';
-                resultLinks.push(`<a class="action-link" href="${esc(branch.entry_url)}">${esc(model)}${st ? ' (' + esc(st) + ')' : ''}</a>`);
+                resultLinks.push(`<a class="action-link" href="#branch-${anchorId(model)}">${esc(model)}${st ? ' (' + esc(st) + ')' : ''}</a>`);
             }
             if (data.synthesis) {
                 const st = data.synthesis.status || '';
-                resultLinks.push(`<a class="action-link" href="${esc(data.synthesis.entry_url)}">synthesis${st ? ' (' + esc(st) + ')' : ''}</a>`);
+                resultLinks.push(`<a class="action-link" href="#synthesis">synthesis${st ? ' (' + esc(st) + ')' : ''}</a>`);
             }
             const checks = models.map(model => {
                 const st = statuses[model] || 'not-run';
@@ -673,6 +698,7 @@
             }
         }
 
+        ResearchCache.init({statusEl: document.getElementById('offline-cache-status')}).catch(console.warn);
         loadDetail();
     </script>
 </body>

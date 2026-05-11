@@ -176,6 +176,14 @@ The activity dot reflects the system as a whole: green = something is actively w
 - Failed model branches show a compact error line on the base topic, with a link to the failed branch entry
 - Agent log link for debugging
 
+The research list and detail pages maintain a passive local Chrome cache for
+offline reading. When the page is opened online, `/tjai/static/tjai/research-cache.js`
+refreshes all research list rows plus each detail payload into IndexedDB and
+registers `/tjai/research-sw.js` so the research shells load offline. Online
+responses always take priority; offline/fetch-failure rendering falls back to
+the cached payloads and shows cache age/size in the page header. Research
+actions remain live-server operations.
+
 ### Studies Page (`/tjai/research/studies/`)
 
 All subagent entries for a topic. Linked via `data.source_uuid`.

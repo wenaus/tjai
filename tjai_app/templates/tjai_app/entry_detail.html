@@ -8,10 +8,10 @@
     <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
     <script src="/tjai/static/tjai/tjai-utils.js"></script>
     <script src="/tjai/static/tjai/turndown-7.2.0.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/theme/material-darker.min.css">
+    <link rel="stylesheet" href="/tjai/static/tjai/vendor/codemirror/5.65.18/codemirror.min.css">
+    <link rel="stylesheet" href="/tjai/static/tjai/vendor/codemirror/5.65.18/theme/material-darker.min.css">
     {% if content_format == 'xml' %}
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <link rel="stylesheet" href="/tjai/static/tjai/vendor/prism/1.29.0/themes/prism-tomorrow.min.css">
     {% endif %}
     <style>
         body {
@@ -155,6 +155,7 @@
             <input type="checkbox" id="publicToggle" class="public-check" {% if is_public %}checked{% endif %}> public
         </label>
         <a id="publicLink" href="/tjai/p/{{ public_slug }}/" target="_blank" style="color:#9ccc65;margin-left:6px;font-size:12px;{% if not is_public %}display:none;{% endif %}" title="Open public page">link</a>
+        <span id="offline-entry-status" style="float:right;color:#888;font-size:11px;"></span>
     </div>
     <div id="version-label" style="color:#daa520; font-size: 12px; margin-bottom: 4px; display:none;"><span id="version-label-text"></span> <span id="autosave-inline" style="color:#888;"></span></div>
     {% if goal_note_url %}
@@ -394,13 +395,46 @@
     }
     </script>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/mode/markdown/markdown.min.js"></script>
+    <script src="/tjai/static/tjai/vendor/codemirror/5.65.18/codemirror.min.js"></script>
+    <script src="/tjai/static/tjai/vendor/codemirror/5.65.18/mode/markdown/markdown.min.js"></script>
     {% if content_format == 'xml' %}
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
+    <script src="/tjai/static/tjai/vendor/prism/1.29.0/prism.min.js"></script>
+    <script src="/tjai/static/tjai/vendor/prism/1.29.0/components/prism-markup.min.js"></script>
     {% endif %}
     <script>
+        (function() {
+            var statusEl = document.getElementById('offline-entry-status');
+            var pageKey = 'tjai-offline-page:' + window.location.pathname + window.location.search;
+            function ageText(ts) {
+                if (!ts) return '';
+                var seconds = Math.max(0, Math.round((Date.now() - ts) / 1000));
+                if (seconds < 60) return seconds + 's';
+                var minutes = Math.round(seconds / 60);
+                if (minutes < 60) return minutes + 'm';
+                var hours = Math.round(minutes / 60);
+                if (hours < 48) return hours + 'h';
+                return Math.round(hours / 24) + 'd';
+            }
+            function updateOfflineStatus() {
+                if (!statusEl) return;
+                if (navigator.onLine) {
+                    try { localStorage.setItem(pageKey, String(Date.now())); } catch(e) {}
+                    statusEl.textContent = '';
+                    return;
+                }
+                var cachedAt = 0;
+                try { cachedAt = parseInt(localStorage.getItem(pageKey) || '0', 10); } catch(e) {}
+                statusEl.textContent = cachedAt ? 'offline: cached ' + ageText(cachedAt) + ' ago' : 'offline';
+            }
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/tjai/offline-sw.js', {scope: '/tjai/entry/'})
+                    .catch(function() {});
+            }
+            window.addEventListener('online', updateOfflineStatus);
+            window.addEventListener('offline', updateOfflineStatus);
+            updateOfflineStatus();
+        })();
+
         var originalContent = "{{ entry.content|escapejs }}";
         var restoreContent = {% if restore_version_content is not None %}"{{ restore_version_content|escapejs }}"{% else %}null{% endif %};
         // Check for local store restore

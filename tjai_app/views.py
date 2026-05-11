@@ -195,7 +195,7 @@ def _render_xml_code(text):
 from .tjai_utils import fmt_datetime, fmt_date, fmt_time, fmt_duration, fmt_ago, get_app_tz
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
@@ -4696,6 +4696,30 @@ def research_detail_page(request, detail_entry_id=None):
     return render(request, 'tjai_app/research_detail.html', {
         'detail_entry_id': detail_entry_id or '',
     })
+
+
+def research_service_worker(request):
+    """Serve the research service worker at /tjai/ scope."""
+    sw_path = django_settings.BASE_DIR / 'tjai_app' / 'static' / 'tjai' / 'research-sw.js'
+    response = HttpResponse(
+        sw_path.read_text(),
+        content_type='application/javascript; charset=utf-8',
+    )
+    response['Service-Worker-Allowed'] = '/tjai/'
+    response['Cache-Control'] = 'no-cache'
+    return response
+
+
+def offline_service_worker(request):
+    """Serve the generic offline worker."""
+    sw_path = django_settings.BASE_DIR / 'tjai_app' / 'static' / 'tjai' / 'offline-sw.js'
+    response = HttpResponse(
+        sw_path.read_text(),
+        content_type='application/javascript; charset=utf-8',
+    )
+    response['Service-Worker-Allowed'] = '/tjai/'
+    response['Cache-Control'] = 'no-cache'
+    return response
 
 
 def _research_summary_text(content, limit=420):

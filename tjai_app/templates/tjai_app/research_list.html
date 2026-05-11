@@ -26,8 +26,14 @@
             border-bottom: 1px solid #333;
             font-size: 13px;
         }
-        .page-header .stats {
+        .page-header .header-right {
             margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            min-width: 0;
+        }
+        .page-header .stats {
             color: #a0a0a0;
             font-size: 12px;
         }
@@ -177,9 +183,16 @@
             .page-header {
                 flex-wrap: wrap;
             }
-            .page-header .stats {
+            .page-header .header-right {
                 width: 100%;
                 margin-left: 0;
+                justify-content: space-between;
+                align-items: flex-start;
+                gap: 10px;
+            }
+            .page-header .stats,
+            #offline-cache-status {
+                overflow-wrap: anywhere;
             }
         }
     </style>
@@ -188,7 +201,10 @@
     {% with current_page="research" %}{% include "tjai_app/_menu.html" %}{% endwith %}
     <div class="page-header">
         <a href="/tjai/research-legacy/">Legacy Research Page</a>
-        <span class="stats" id="stats">Loading...</span>
+        <span class="header-right">
+            <span class="stats" id="stats">Loading...</span>
+            <span class="meta" id="offline-cache-status">cache loading</span>
+        </span>
     </div>
     <form class="toolbar" id="search-form">
         <input id="query" type="search" autocomplete="off" placeholder="Search research topics">
@@ -219,6 +235,7 @@
         </div>
     </main>
 
+    <script src="/tjai/static/tjai/research-cache.js"></script>
     <script>
         const state = {
             offset: 0,
@@ -266,7 +283,13 @@
                 if (!resp.ok || data.error) throw new Error(data.error || 'Load failed');
                 render(data);
             } catch (e) {
-                document.getElementById('results').innerHTML = '<div class="error">' + esc(e.message) + '</div>';
+                try {
+                    const data = await ResearchCache.offlineList(params());
+                    render(data);
+                    ResearchCache.setStatus('offline');
+                } catch (cacheError) {
+                    document.getElementById('results').innerHTML = '<div class="error">' + esc(e.message) + '</div>';
+                }
             } finally {
                 state.loading = false;
             }
@@ -278,6 +301,7 @@
             state.latestStats = stats;
             state.lastRefreshAt = new Date();
             updateStatsText();
+            if (data.offline) ResearchCache.setStatus('offline');
 
             const items = data.items || [];
             if (!items.length) {
@@ -326,12 +350,12 @@
             let modelHtml = researched.length
                 ? researched.map(model => {
                     const st = (item.models || {})[model] || 'done';
-                    const href = '/tjai/entry/?entry_id=' + encodeURIComponent(item.entry_id + '-' + model);
+                    const href = item.detail_url + '#branch-' + anchorId(model);
                     return `<a class="model ${esc(st)}" href="${href}">${esc(model)}</a>`;
                 }).join('')
                 : '<span class="meta">No model branches yet</span>';
             if (item.synthesis_done) {
-                const href = '/tjai/entry/?entry_id=' + encodeURIComponent(item.entry_id + '-synthesis');
+                const href = item.detail_url + '#synthesis';
                 modelHtml += `<a class="model done" href="${href}">synthesis</a>`;
             }
             return `
@@ -350,6 +374,10 @@
                         <div class="meta">${meta}</div>
                     </div>
                 </section>`;
+        }
+
+        function anchorId(s) {
+            return String(s || 'section').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'section';
         }
 
         async function runTopic(entryId, btn) {
@@ -422,6 +450,7 @@
                 refreshList();
             });
         }
+        ResearchCache.init({statusEl: document.getElementById('offline-cache-status')}).catch(console.warn);
         refreshList();
         setInterval(() => refreshList(false), 30000);
         setInterval(updateStatsText, 1000);
