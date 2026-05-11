@@ -99,6 +99,7 @@
     if (!manifestResp.ok) throw new Error('manifest HTTP ' + manifestResp.status);
     const manifest = await manifestResp.json();
     const items = manifest.items || [];
+    const previousCount = previous.count || 0;
     let cached = 0;
     let done = 0;
     let failed = 0;
@@ -117,7 +118,7 @@
       const stats = await cacheStats();
       const meta = {
         ts: Date.now(),
-        count: stats.count || cached,
+        count: Math.max(stats.count || 0, cached, previousCount),
         failed: 0,
         total: items.length,
         bytes: previous.bytes || 0,
@@ -130,7 +131,8 @@
       return meta;
     }
 
-    renderStatus(statusEl, `offline cache: ${cached}/${items.length} cached, adding ${missing.length}`);
+    const visibleCached = Math.max(cached, previousCount);
+    renderStatus(statusEl, `offline cache: ${visibleCached}/${items.length} cached, adding ${missing.length}`);
 
     for (const item of missing) {
       try {
@@ -140,7 +142,7 @@
       }
       done++;
       if (done === 1 || done === missing.length || done % 10 === 0) {
-        renderStatus(statusEl, `offline cache: ${cached + done - failed}/${items.length}, ${fmtBytes(bytes)} added`);
+        renderStatus(statusEl, `offline cache: ${Math.max(visibleCached, cached + done - failed)}/${items.length}, ${fmtBytes(bytes)} added`);
       }
     }
 
@@ -148,7 +150,7 @@
     const successCount = done - failed;
     const meta = {
       ts: Date.now(),
-      count: stats.count || successCount,
+      count: Math.max(stats.count || 0, cached + successCount, previousCount),
       failed: failed,
       total: items.length,
       bytes: (previous.bytes || 0) + bytes,
@@ -180,7 +182,12 @@
 
   async function cacheHas(item) {
     const cache = await caches.open(cacheNameFor(item));
-    return !!(await cache.match(normalizedRequest(item.url)));
+    const normalized = normalizedUrl(item.url);
+    return !!(
+      await cache.match(normalized)
+      || await cache.match(new Request(normalized, {credentials: 'same-origin'}))
+      || await cache.match(item.url)
+    );
   }
 
   async function fetchJson(url) {
@@ -198,10 +205,14 @@
   }
 
   function normalizedRequest(url) {
+    return new Request(normalizedUrl(url), {credentials: 'same-origin'});
+  }
+
+  function normalizedUrl(url) {
     const u = new URL(url, window.location.origin);
     u.searchParams.delete('_');
     u.searchParams.delete('ts');
-    return new Request(u.toString(), {credentials: 'same-origin'});
+    return u.toString();
   }
 
   window.TjaiOfflineCache = {
