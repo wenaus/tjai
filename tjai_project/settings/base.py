@@ -40,7 +40,6 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.postgres",
-    "mcp_server",
     "tjai_app",
 ]
 
@@ -150,9 +149,10 @@ LOGGING = {
     },
 }
 
-# MCP (Model Context Protocol) Configuration
-DJANGO_MCP_GLOBAL_SERVER_CONFIG = {
+# MCP (Model Context Protocol) Configuration. Served by tjai_project.mcp_asgi.
+TJAI_MCP_SERVER_CONFIG = {
     "name": "tjai",
+    "stateless": True,
     "instructions": """tjai is a personal AI memory and task management system.
 
 Tools:
@@ -214,8 +214,6 @@ the next page with offset += limit until a page returns fewer than the requested
 limit or the requested window is complete.""",
 }
 
-# MCP endpoint path (empty string since we mount at /mcp/ in urls.py)
-DJANGO_MCP_ENDPOINT = ""
 
 # Telegram Mini App
 TELEGRAM_BOT_TOKEN = env("TELEGRAM_BOT_TOKEN", default="")

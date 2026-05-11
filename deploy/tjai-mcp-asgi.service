@@ -1,0 +1,22 @@
+[Unit]
+Description=tjai MCP ASGI server
+After=network.target postgresql.service
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/tjai
+Environment=DJANGO_SETTINGS_MODULE=tjai_project.settings.production
+ExecStart=/var/www/tjai/.venv/bin/uvicorn tjai_project.mcp_asgi:application \
+    --host 127.0.0.1 \
+    --port 8003 \
+    --workers 2 \
+    --timeout-graceful-shutdown 15
+Restart=on-failure
+RestartSec=5
+KillMode=mixed
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

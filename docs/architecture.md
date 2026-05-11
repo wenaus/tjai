@@ -103,6 +103,10 @@ LLM → Local MCP (tjai-agent) → Local SQLite (fast queries)
 - Knowledge graph: `create_goal`, `get_goal`, `create_relation`, `get_relations`, `get_web`
 - Context: `get_ai_guidance`, `get_profile`, `list_contexts`
 
+The production MCP endpoint is served by `tjai_project.mcp_asgi` as a
+standalone FastMCP ASGI service. It is isolated from the main gunicorn web pool
+and accepts only authenticated JSON POST request/response traffic.
+
 ### Benefits
 
 **Independence from LLM vendor:**

@@ -61,16 +61,50 @@ page returns fewer than the requested limit or the requested window is complete.
 import json
 
 from asgiref.sync import sync_to_async
+from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
-from mcp_server import mcp_server as mcp
+from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from . import services
 from .services import DEFAULT_MAX_CONTENT_LENGTH
 
 
+_mcp_config = settings.TJAI_MCP_SERVER_CONFIG
+_allowed_hosts = [
+    host
+    for host in settings.ALLOWED_HOSTS
+    if host and host != "*"
+] + [
+    "127.0.0.1",
+    "127.0.0.1:*",
+    "localhost",
+    "localhost:*",
+]
+mcp = FastMCP(
+    name=_mcp_config["name"],
+    instructions=_mcp_config["instructions"],
+    stateless_http=True,
+    json_response=True,
+    streamable_http_path="/",
+    transport_security=TransportSecuritySettings(allowed_hosts=_allowed_hosts),
+)
+
+
 def _json_text(value) -> str:
     """Return MCP-safe JSON text, including for empty lists."""
     return json.dumps(value, cls=DjangoJSONEncoder, ensure_ascii=False)
+
+
+@mcp.tool()
+async def get_server_instructions() -> str:
+    """
+    Get the tjai MCP server instructions.
+
+    Compatibility tool for clients and permissions lists that previously used
+    django-mcp-server's server-instruction helper.
+    """
+    return _mcp_config["instructions"]
 
 
 @mcp.tool()

@@ -3,11 +3,16 @@
 ## MCP Server
 
 The tjai MCP server endpoint is `https://etaverse.com/tjai/mcp/` (HTTP transport).
+Apache proxies this path to the standalone `tjai-mcp-asgi.service` FastMCP
+process, not the main Django/gunicorn web pool.
+See `docs/mcp.md` for server architecture, deployment, and verification.
 
 Authentication: bearer token. The server checks `Authorization: Bearer <token>`
 against the value in `SysConfig` row `mcp_bearer_token`. Same shared-secret
 pattern used by tjai's other API endpoints (gmail addon, dialog hooks, etc.).
 Requests without a valid token get HTTP 401/403 — `/tjai/mcp/` is not open.
+MCP is operated as finite JSON POST request/response only. Server-pushed MCP
+event streams are intentionally unsupported.
 
 claude.ai connectors are NOT supported. The endpoint is for personal MCP
 clients (Claude Code, custom tools) only.

@@ -2,6 +2,11 @@
 
 Production runs from `/var/www/tjai` on etaverse.com.
 
+The web app and MCP endpoint are separate services:
+
+- `tjai-gunicorn.service`: Django web/API app on `127.0.0.1:8002`
+- `tjai-mcp-asgi.service`: FastMCP ASGI endpoint on `127.0.0.1:8003`
+
 ## Shared Infrastructure
 
 tjai shares server infrastructure with primus. The following are in `primus/deploy/`:
@@ -32,6 +37,11 @@ tjai shares server infrastructure with primus. The following are in `primus/depl
    # Deploy
    ./update_from_dev.sh
 
+   # Install service files when provisioning a new host
+   sudo cp tjai-gunicorn.service tjai-mcp-asgi.service tjai-tgbot.service tjai-supervisord.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now tjai-gunicorn tjai-mcp-asgi tjai-tgbot tjai-supervisord
+
    # Create admin user
    ./setup_superuser.sh
    ```
@@ -44,6 +54,16 @@ After making changes in your dev checkout:
 ./deploy/update_from_dev.sh
 ```
 
+Apache must route MCP before the general `/tjai/` Django proxy so MCP cannot
+consume gunicorn workers:
+
+```apache
+ProxyPass        /tjai/mcp/ http://127.0.0.1:8003/
+ProxyPassReverse /tjai/mcp/ http://127.0.0.1:8003/
+ProxyPass        /tjai/mcp  http://127.0.0.1:8003/
+ProxyPassReverse /tjai/mcp  http://127.0.0.1:8003/
+```
+
 ## Verify Deployment
 
 ```bash
@@ -53,6 +73,9 @@ curl -s https://etaverse.com/tjai/api/health
 
 # Sync pull (empty DB)
 curl -s "https://etaverse.com/tjai/api/sync/pull?since=0"
+
+# MCP ASGI health check, local only
+curl -s http://127.0.0.1:8003/health
 ```
 
 ## API Endpoints

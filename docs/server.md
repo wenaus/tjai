@@ -11,7 +11,10 @@
 - **Static files:** `tjai_app/static/tjai/` → served via Apache Alias at `/tjai/static/`
 - **Python:** 3.14 (built from source at `/opt/python-3.14`)
 - **Web server:** gunicorn on port 8002, managed by systemd (`deploy/tjai-gunicorn.service`), runs as `www-data`
+- **MCP server:** standalone FastMCP/ASGI service on port 8003, managed by systemd (`deploy/tjai-mcp-asgi.service`), runs as `www-data`
 - **Action agent:** managed by supervisord (`deploy/supervisord.conf`), runs as `admin`
+
+MCP operations are documented in `docs/mcp.md`.
 
 ## Deploying
 
@@ -66,7 +69,7 @@ cd /home/admin/github/tjrepo/tjai
 | `/tjai/context/<name>/` | Browse entries in a context |
 | `/tjai/tag/<name>/` | Browse entries with a tag |
 | `/tjai/kind/<name>/` | Browse entries by type |
-| `/tjai/mcp/` | MCP server for AI assistants |
+| `/tjai/mcp/` | MCP server for AI assistants, proxied to standalone ASGI service |
 
 ### API
 

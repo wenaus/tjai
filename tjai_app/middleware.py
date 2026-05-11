@@ -28,6 +28,10 @@ class MCPAuthMiddleware:
         if not (request.path == mcp_path or request.path.startswith(mcp_path + "/")):
             return self.get_response(request)
 
+        transport_response = self._validate_transport(request)
+        if transport_response:
+            return transport_response
+
         auth_header = request.META.get("HTTP_AUTHORIZATION", "")
         if not auth_header.startswith("Bearer "):
             return JsonResponse({"error": "Authorization required"}, status=401)
@@ -45,3 +49,28 @@ class MCPAuthMiddleware:
             return JsonResponse({"error": "Invalid token"}, status=403)
 
         return self.get_response(request)
+
+    def _validate_transport(self, request):
+        """Keep MCP as finite JSON POST request/response; no GET/SSE streams."""
+        if request.method != "POST":
+            response = JsonResponse(
+                {
+                    "error": "MCP endpoint accepts POST JSON-RPC only",
+                    "allowed_methods": ["POST"],
+                },
+                status=405,
+            )
+            response["Allow"] = "POST"
+            return response
+
+        accept = request.META.get("HTTP_ACCEPT", "")
+        if any(
+            part.split(";", 1)[0].strip().lower() == "text/event-stream"
+            for part in accept.split(",")
+        ):
+            return JsonResponse(
+                {"error": "MCP server-pushed event streams are not supported"},
+                status=406,
+            )
+
+        return None

@@ -94,7 +94,7 @@ def dump_stack(
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     output_path = output_dir / f"{timestamp}-gunicorn-pid{pid}-cpu{cpu_percent:.0f}.txt"
 
-    command = [py_spy, "dump", "--pid", str(pid), "--native", "--threads"]
+    command = [py_spy, "dump", "--pid", str(pid), "--native"]
     started = datetime.now(UTC).isoformat(timespec="seconds")
     with output_path.open("w", encoding="utf-8") as out:
         out.write(f"timestamp: {started}\n")

@@ -130,6 +130,18 @@
         .model.done { color: #9ccc65; border-color: #406b40; }
         .model.active, .model.staged, .model.launching { color: #ffd54f; border-color: #6a5a25; }
         .model.failed, .model.blocked { color: #ef9a9a; border-color: #754040; }
+        .status-actions {
+            display: flex;
+            gap: 6px;
+            margin: 0 0 8px;
+            max-width: 162px;
+        }
+        .status-actions button {
+            flex: 1;
+            min-height: 26px;
+            padding: 2px 8px;
+            font-size: 12px;
+        }
         .loading, .empty, .error {
             padding: 26px 0;
             color: #a0a0a0;
@@ -216,6 +228,11 @@
             return el.innerHTML;
         }
 
+        function getCsrf() {
+            const c = document.cookie.match(/csrftoken=([^;]+)/);
+            return c ? c[1] : '';
+        }
+
         function params() {
             const p = new URLSearchParams();
             const q = document.getElementById('query').value.trim();
@@ -290,6 +307,13 @@
             const matched = item.match_scope ? `matched ${esc(item.match_scope)}` : '';
             const meta = [source, `${item.subentry_count || 0} branches`, `modified ${esc(item.modified_display || '')}`, matched]
                 .filter(Boolean).join(' · ');
+            const canRun = ['proposed', 'pending', 'failed', 'blocked'].includes(status);
+            const canArchive = status !== 'archive' && status !== 'active';
+            const actions = [
+                canRun ? `<button type="button" onclick="runTopic('${esc(item.entry_id)}', this)">Run</button>` : '',
+                canArchive ? `<button type="button" class="danger" onclick="archiveTopic('${esc(item.entry_id)}', this)">Archive</button>` : '',
+            ].filter(Boolean).join(' ');
+            const actionsHtml = actions ? `<div class="status-actions">${actions}</div>` : '';
             const researched = item.researched_models || [];
             let modelHtml = researched.length
                 ? researched.map(model => {
@@ -308,6 +332,7 @@
                     </div>
                     <div>
                         <span class="status ${statusClass}">${esc(status)}</span>
+                        ${actionsHtml}
                         <div class="models">${modelHtml}</div>
                     </div>
                     <div>
@@ -315,6 +340,46 @@
                         <div class="meta">${meta}</div>
                     </div>
                 </section>`;
+        }
+
+        async function runTopic(entryId, btn) {
+            if (!entryId) return;
+            btn.disabled = true;
+            const original = btn.textContent;
+            btn.textContent = 'Running...';
+            try {
+                const resp = await fetch('/tjai/api/research/run', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                    body: JSON.stringify({entry_id: entryId}),
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.error) throw new Error(data.error || 'Run failed');
+                btn.textContent = 'Queued';
+                setTimeout(() => refreshList(false), 1200);
+            } catch (e) {
+                btn.textContent = e.message;
+                setTimeout(() => { btn.disabled = false; btn.textContent = original; }, 2500);
+            }
+        }
+
+        async function archiveTopic(entryId, btn) {
+            if (!entryId) return;
+            btn.disabled = true;
+            const original = btn.textContent;
+            btn.textContent = 'Archiving...';
+            try {
+                const resp = await fetch('/tjai/api/entry/' + encodeURIComponent(entryId) + '/archive', {
+                    method: 'POST',
+                    headers: {'X-CSRFToken': getCsrf()},
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.error) throw new Error(data.error || 'Archive failed');
+                refreshList(false);
+            } catch (e) {
+                btn.textContent = e.message;
+                setTimeout(() => { btn.disabled = false; btn.textContent = original; }, 2500);
+            }
         }
 
         function prevPage() {

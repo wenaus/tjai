@@ -36,6 +36,9 @@ if [[ ! -f "$REQ_HASH_FILE" ]] || [[ "$(cat "$REQ_HASH_FILE")" != "$REQ_HASH" ]]
 else
   echo "Requirements unchanged, skipping pip install."
 fi
+if "$VENV/bin/python" -c "import importlib.metadata as m; m.version('django-mcp-server')" >/dev/null 2>&1; then
+  "$VENV/bin/pip" uninstall -y django-mcp-server
+fi
 echo "[${SECONDS}s] pip done"
 
 # migrate
@@ -61,6 +64,12 @@ popd >/dev/null
 #   sudo systemctl restart tjai-gunicorn
 sudo systemctl reload tjai-gunicorn
 echo "[${SECONDS}s] gunicorn reloaded (quick reload — if changes don't take effect, run: sudo systemctl restart tjai-gunicorn)"
+if systemctl cat tjai-mcp-asgi >/dev/null 2>&1; then
+  sudo systemctl restart tjai-mcp-asgi
+  echo "[${SECONDS}s] mcp asgi restarted"
+else
+  echo "[${SECONDS}s] tjai-mcp-asgi service not installed, skipping mcp restart"
+fi
 sudo systemctl restart tjai-tgbot
 echo "[${SECONDS}s] tgbot restarted"
 /var/www/tjai/.venv/bin/supervisorctl -c /var/www/tjai/deploy/supervisord.conf restart action-agent

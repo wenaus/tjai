@@ -4709,10 +4709,20 @@ def _research_summary_text(content, limit=420):
             if line == raw_title:
                 seen_title = True
             continue
-        if line:
-            body_lines.append(line)
-        elif body_lines:
-            break
+        if not line:
+            if body_lines:
+                break
+            continue
+        if re.match(r'^#{1,6}\s+', line):
+            continue
+        clean_line = _research_plain_summary(line)
+        if not clean_line:
+            continue
+        if re.match(r'^(territory|territory to explore|why now|status)\b[:.]?$', clean_line, re.IGNORECASE):
+            continue
+        if re.match(r'^status:\s*', clean_line, re.IGNORECASE):
+            continue
+        body_lines.append(line)
     description = _research_plain_summary(' '.join(body_lines))
     if len(description) > limit:
         description = description[:limit - 3].rstrip() + '...'
@@ -4899,6 +4909,19 @@ def api_research_list(request):
         eid = data.get('entry_id') or ''
         title, description = _research_summary_text(entry.content)
         display_status = _research_display_status(entry, data)
+
+        model_map = {}
+        for model in RESEARCH_MODELS:
+            model_map[model] = (
+                data.get(f'{model}_status')
+                or model_statuses.get(eid, {}).get(model)
+                or None
+            )
+        model_counts = Counter(v for v in model_map.values() if v)
+        if any(v in ('launching', 'active', 'staged', 'rerun') for v in model_map.values()):
+            display_status = 'active'
+        elif any(v == 'failed' for v in model_map.values()) and display_status in ('proposed', 'pending'):
+            display_status = 'failed'
         counts_by_status[display_status] += 1
 
         if status_filter and display_status not in status_filter:
@@ -4919,15 +4942,6 @@ def api_research_list(request):
             match_scope = 'body' if body_match and not topic_match else 'topic'
             if title_match:
                 match_scope = 'title'
-
-        model_map = {}
-        for model in RESEARCH_MODELS:
-            model_map[model] = (
-                data.get(f'{model}_status')
-                or model_statuses.get(eid, {}).get(model)
-                or None
-            )
-        model_counts = Counter(v for v in model_map.values() if v)
 
         items.append({
             'id': str(entry.id),
