@@ -7,6 +7,7 @@ import uuid
 from html import escape as html_escape, unescape as html_unescape
 from datetime import datetime, timedelta
 from collections import Counter
+from urllib.parse import quote
 
 from .dialog_context import CURRENT_DIALOG_CONTEXT, DIALOG_CONTEXTS, DIALOG_TAG
 
@@ -1492,6 +1493,96 @@ def api_diary_entries(request):
     result['diary_entries'] = [render_entry(e) for e in diary_qs]
 
     return JsonResponse(result)
+
+
+@login_required
+def api_offline_material_cache_manifest(request):
+    """Return first-class diary/daily/weekly URLs for passive offline caching."""
+    items = []
+    seen = set()
+    groups = {
+        'pages': 0,
+        'diary': 0,
+        'daily': 0,
+        'workday': 0,
+        'workweek': 0,
+        'highlights': 0,
+        'underway': 0,
+    }
+
+    def add(url, label, kind='api', group='pages'):
+        if not url or url in seen:
+            return
+        seen.add(url)
+        items.append({'url': url, 'label': label, 'type': kind, 'group': group})
+        groups[group] = groups.get(group, 0) + 1
+
+    add('/tjai/diary/', 'Diary page', 'page', 'pages')
+    add('/tjai/api/diary/entries', 'Diary entries API', 'api', 'diary')
+    add('/tjai/synopsis/', 'Daily synopsis page', 'page', 'pages')
+    add('/tjai/api/synopsis/dates', 'Daily synopsis dates API', 'api', 'daily')
+    add('/tjai/weekly/', 'Weekly page', 'page', 'pages')
+    add('/tjai/this-week/', 'This workweek page', 'page', 'pages')
+
+    underway = Entry.objects.filter(name='Underway', deleted_at__isnull=True).first()
+    if underway:
+        data = underway.data if isinstance(underway.data, dict) else {}
+        eid = data.get('entry_id')
+        url = f'/tjai/entry/?entry_id={quote(eid)}' if eid else f'/tjai/entry/?uuid={underway.id}'
+        add(url, '@Underway entry', 'page', 'underway')
+
+    highlights = Entry.objects.filter(
+        data__entry_id='work-hours-highlights',
+        deleted_at__isnull=True,
+    ).first()
+    if highlights:
+        add('/tjai/entry/?entry_id=work-hours-highlights', 'Work highlights', 'page', 'highlights')
+
+    diary_entries = Entry.objects.filter(
+        context_id='diary',
+        kind='journal',
+        deleted_at__isnull=True,
+        data__entry_id__startswith='diary-',
+    ).order_by('-timestamp_modified')[:1000]
+    for entry in diary_entries:
+        eid = (entry.data or {}).get('entry_id', '')
+        if eid:
+            add(f'/tjai/entry/?entry_id={quote(eid)}&edit=1', eid, 'page', 'diary')
+
+    daily_tag_ids = Tag.objects.filter(tag_name='daily').values_list('entry_id', flat=True)
+    daily_entries = Entry.objects.filter(
+        kind='journal',
+        deleted_at__isnull=True,
+        id__in=daily_tag_ids,
+    ).order_by('-data__event_date')
+    for entry in daily_entries:
+        eid = (entry.data or {}).get('entry_id', '')
+        if eid and eid.startswith('daily-'):
+            q = quote(eid)
+            add(f'/tjai/synopsis/?entry_id={q}', eid + ' synopsis page', 'page', 'daily')
+            add(f'/tjai/api/synopsis/content?entry_id={q}', eid, 'api', 'daily')
+            add(f'/tjai/entry/?entry_id={q}', eid + ' entry', 'page', 'daily')
+
+    work_entries = Entry.objects.filter(
+        deleted_at__isnull=True,
+        data__entry_id__regex=r'^(workday|workweek)_\d{8}$',
+    ).order_by('-data__entry_id')[:2000]
+    for entry in work_entries:
+        eid = (entry.data or {}).get('entry_id', '')
+        if not eid:
+            continue
+        group = 'workweek' if eid.startswith('workweek_') else 'workday'
+        add(f'/tjai/entry/?entry_id={quote(eid)}', eid, 'page', group)
+        if group == 'workweek':
+            add(f'/tjai/workweek/{eid.removeprefix("workweek_")}/', eid + ' route', 'page', group)
+        else:
+            add(f'/tjai/workday/{eid.removeprefix("workday_")}/', eid + ' route', 'page', group)
+
+    return JsonResponse({
+        'items': items,
+        'groups': groups,
+        'generated_at': time.time(),
+    })
 
 
 @login_required

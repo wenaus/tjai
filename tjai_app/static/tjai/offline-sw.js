@@ -60,7 +60,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (url.pathname.startsWith('/tjai/api/entry/')) {
+  if (url.pathname.startsWith('/tjai/api/')) {
     event.respondWith(networkFirst(request, API_CACHE));
     return;
   }

@@ -39,6 +39,7 @@ urlpatterns = [
     path("diary/", views.diary_page, name="diary_page"),
     path("versions/", views.versions_page, name="versions_page"),
     path("api/diary/entries", views.api_diary_entries, name="api_diary_entries"),
+    path("api/offline/material-cache-manifest", views.api_offline_material_cache_manifest, name="api_offline_material_cache_manifest"),
     path("api/dashboard/calendar", views.dashboard_calendar, name="dashboard_calendar"),
     path("api/dashboard/status", views.dashboard_status, name="dashboard_status"),
     path("api/dashboard/search", views.dashboard_search, name="dashboard_search"),
