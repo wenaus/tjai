@@ -26,6 +26,10 @@ function isResearchShell(pathname) {
         || pathname.startsWith('/tjai/research-detail/');
 }
 
+function isCachedEntryPage(pathname) {
+    return pathname === '/tjai/entry/' || pathname.startsWith('/tjai/entry/');
+}
+
 async function networkFirst(request, fallbackUrl) {
     const cache = await caches.open(CACHE_NAME);
     try {
@@ -66,6 +70,11 @@ self.addEventListener('fetch', event => {
             ? '/tjai/research-detail/'
             : '/tjai/research/';
         event.respondWith(networkFirst(event.request, fallback));
+        return;
+    }
+
+    if (event.request.mode === 'navigate' && isCachedEntryPage(url.pathname)) {
+        event.respondWith(networkFirst(event.request));
         return;
     }
 

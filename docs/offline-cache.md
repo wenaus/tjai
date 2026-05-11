@@ -140,6 +140,30 @@ Research cache:
 - `tjai_app/templates/tjai_app/research_detail.html`
 - `tjai_app/views.py` - research list/detail APIs and service worker view
 
+## Research Cache Behavior
+
+Opening the research list or a research detail page registers
+`/tjai/research-sw.js` and starts the passive research cache refresh.
+`research-cache.js` stores the research list manifest and each topic detail
+payload in IndexedDB database `tjai-research-cache`.
+
+Each topic detail payload includes the topic, all model branch reports, and the
+synthesis entry. The research warmer autodiscovers the individual entry page
+links from those payloads:
+
+- topic `entry_url`
+- each model branch `entry_url`
+- synthesis `entry_url`
+
+It checks Cache Storage first and fetches only missing linked entry pages into
+`tjai-research-shell-v1`. Already-cached detail payloads are still inspected so
+newly-added or previously-missed linked entry pages are filled in on later
+refreshes without refetching every detail payload.
+
+The research cache does not cache Claude subagent studies pages. Those are a
+separate drill-down view and are not part of the normal model-report/synthesis
+reading path.
+
 ## Verification
 
 Basic checks after changing the generic cache:

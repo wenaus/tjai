@@ -3,6 +3,7 @@
     const DB_VERSION = 1;
     const DETAIL_PREFIX = '/tjai/api/research/detail?entry_id=';
     const LIST_LIMIT = 300;
+    const PAGE_CACHE = 'tjai-research-shell-v1';
     let dbPromise = null;
     let refreshPromise = null;
     let statusEl = null;
@@ -83,7 +84,7 @@
         if (!statusEl) return;
         const meta = await storeGet('meta', 'summary').catch(() => null);
         const suffix = meta
-            ? `cache ${fmtAge(meta.cached_at)} · ${meta.items || 0} topics · ${fmtBytes(meta.bytes || 0)}`
+            ? `cache ${fmtAge(meta.cached_at)} · ${meta.items || 0} topics · ${meta.entry_pages || 0} report pages · ${fmtBytes(meta.bytes || 0)}`
             : 'cache empty';
         statusEl.textContent = text ? `${text} · ${suffix}` : suffix;
     }
@@ -116,7 +117,43 @@
         const topic = data && data.topic ? data.topic : null;
         if (!topic || !topic.detail_entry_id) return;
         await saveDetail(topic.detail_entry_id, data, topic.modified || null);
+        await cacheLinkedEntryPages(data);
         await recomputeSummary();
+    }
+
+    async function cachePageIfMissing(url) {
+        if (!url || !('caches' in window)) return {added: 0, bytes: 0};
+        const request = new Request(url, {credentials: 'same-origin'});
+        const cache = await caches.open(PAGE_CACHE);
+        const cached = await cache.match(request);
+        if (cached) return {added: 0, bytes: 0};
+
+        const response = await fetch(request, {cache: 'no-store'});
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const bytes = (await response.clone().arrayBuffer()).byteLength;
+        await cache.put(request, response.clone());
+        return {added: 1, bytes};
+    }
+
+    async function cacheLinkedEntryPages(data) {
+        const urls = new Set();
+        if (data.topic && data.topic.entry_url) urls.add(data.topic.entry_url);
+        if (data.synthesis && data.synthesis.entry_url) urls.add(data.synthesis.entry_url);
+        for (const branch of (data.branches || [])) {
+            if (branch.entry_url) urls.add(branch.entry_url);
+        }
+        let added = 0;
+        let bytes = 0;
+        for (const url of urls) {
+            try {
+                const result = await cachePageIfMissing(url);
+                added += result.added || 0;
+                bytes += result.bytes || 0;
+            } catch (e) {
+                console.warn('research cache entry page failed', url, e);
+            }
+        }
+        return {checked: urls.size, added, bytes};
     }
 
     async function refreshAll() {
@@ -146,6 +183,7 @@
         await storePut('meta', 'manifest', manifest);
 
         let done = 0;
+        let linkedPagesAdded = 0;
         const queue = items.slice();
         async function worker() {
             while (queue.length) {
@@ -153,18 +191,22 @@
                 const detailId = item.detail_entry_id || `${item.entry_id}_detail`;
                 const current = await storeGet('details', detailId).catch(() => null);
                 if (current && current.source_modified === item.modified) {
+                    const pageResult = await cacheLinkedEntryPages(current.data);
+                    linkedPagesAdded += pageResult.added || 0;
                     done += 1;
-                    if (done % 10 === 0) await setStatus(`cached ${done}/${items.length}`);
+                    if (done % 10 === 0) await setStatus(`cached ${done}/${items.length}${linkedPagesAdded ? ' · added ' + linkedPagesAdded + ' report pages' : ''}`);
                     continue;
                 }
                 try {
                     const detail = await fetchJson(DETAIL_PREFIX + encodeURIComponent(detailId));
                     await saveDetail(detailId, detail, item.modified);
+                    const pageResult = await cacheLinkedEntryPages(detail);
+                    linkedPagesAdded += pageResult.added || 0;
                 } catch (e) {
                     console.warn('research cache detail failed', detailId, e);
                 }
                 done += 1;
-                if (done % 5 === 0) await setStatus(`cached ${done}/${items.length}`);
+                if (done % 5 === 0) await setStatus(`cached ${done}/${items.length}${linkedPagesAdded ? ' · added ' + linkedPagesAdded + ' report pages' : ''}`);
             }
         }
         await Promise.all([worker(), worker(), worker()]);
@@ -175,14 +217,26 @@
     async function recomputeSummary() {
         const manifest = await storeGet('meta', 'manifest').catch(() => null);
         const details = await storeGetAll('details').catch(() => []);
+        const entryPages = await cachedEntryPageCount();
         const bytes = (manifest ? manifest.bytes || 0 : 0)
             + details.reduce((sum, rec) => sum + (rec.bytes || 0), 0);
         await storePut('meta', 'summary', {
             cached_at: Date.now(),
             items: manifest && manifest.items ? manifest.items.length : 0,
             details: details.length,
+            entry_pages: entryPages,
             bytes,
         });
+    }
+
+    async function cachedEntryPageCount() {
+        if (!('caches' in window)) return 0;
+        const cache = await caches.open(PAGE_CACHE);
+        const keys = await cache.keys();
+        return keys.filter(request => {
+            const url = new URL(request.url);
+            return url.pathname === '/tjai/entry/' || url.pathname.startsWith('/tjai/entry/');
+        }).length;
     }
 
     function displayStatus(item) {

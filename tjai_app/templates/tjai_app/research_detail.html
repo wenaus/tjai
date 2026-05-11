@@ -289,13 +289,20 @@
         <div class="loading">Loading research detail...</div>
     </main>
 
-    <script src="/tjai/static/tjai/research-cache.js"></script>
+    <script src="/tjai/static/tjai/research-cache.js?v=2"></script>
     <script>
         const routeDetailEntryId = '{{ detail_entry_id|escapejs }}';
         const query = new URLSearchParams(window.location.search);
-        const detailEntryId = routeDetailEntryId || query.get('entry_id') || '';
+        const detailEntryId = routeDetailEntryId || query.get('entry_id') || detailIdFromPath() || '';
         let currentTopic = null;
         let currentDetail = null;
+
+        function detailIdFromPath() {
+            const prefix = '/tjai/research-detail/';
+            if (!window.location.pathname.startsWith(prefix)) return '';
+            const value = window.location.pathname.slice(prefix.length).replace(/\/$/, '');
+            return value ? decodeURIComponent(value) : '';
+        }
 
         function esc(s) {
             if (!s) return '';
