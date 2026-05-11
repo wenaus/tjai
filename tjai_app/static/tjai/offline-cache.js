@@ -84,11 +84,9 @@
   async function warmManifest(options) {
     const statusEl = options && options.statusEl;
     const previous = readMeta();
-    if (previous.ts && previous.count) {
-      renderStatus(statusEl, `offline cache: ${previous.count} items, ${fmtBytes(previous.bytes || 0)}, ${fmtAge(previous.ts)} old`);
-    } else {
-      renderStatus(statusEl, 'offline cache: starting');
-    }
+    renderStatus(statusEl, previous.ts
+      ? `offline cache: checking; last observed ${previous.count || 0} items, ${fmtAge(previous.ts)} old`
+      : 'offline cache: checking');
 
     await registerWorkers();
 
@@ -99,26 +97,17 @@
     if (!manifestResp.ok) throw new Error('manifest HTTP ' + manifestResp.status);
     const manifest = await manifestResp.json();
     const items = manifest.items || [];
-    const previousCount = previous.count || 0;
-    let cached = 0;
+    const cacheIndex = await buildCacheIndex();
+    let cached = countCachedItems(items, cacheIndex);
     let done = 0;
     let failed = 0;
     let bytes = 0;
-    const missing = [];
-
-    for (const item of items) {
-      if (await cacheHas(item)) {
-        cached++;
-      } else {
-        missing.push(item);
-      }
-    }
+    const missing = items.filter((item) => !cacheIndex.get(cacheNameFor(item)).has(normalizedUrl(item.url)));
 
     if (!missing.length) {
-      const stats = await cacheStats();
       const meta = {
         ts: Date.now(),
-        count: Math.max(stats.count || 0, cached, previousCount),
+        count: cached,
         failed: 0,
         total: items.length,
         bytes: previous.bytes || 0,
@@ -127,30 +116,30 @@
         groups: manifest.groups || {},
       };
       writeMeta(meta);
-      renderStatus(statusEl, `offline cache: ${meta.count}/${meta.total} items, ${fmtBytes(meta.bytes)}, just now`);
+      renderStatus(statusEl, `offline cache: ${meta.count}/${meta.total} cached, just now`);
       return meta;
     }
 
-    const visibleCached = Math.max(cached, previousCount);
-    renderStatus(statusEl, `offline cache: ${visibleCached}/${items.length} cached, adding ${missing.length}`);
+    renderStatus(statusEl, `offline cache: ${cached}/${items.length} cached, adding ${missing.length}`);
 
     for (const item of missing) {
       try {
         bytes += await cacheItem(item);
+        cacheIndex.get(cacheNameFor(item)).add(normalizedUrl(item.url));
+        cached++;
       } catch(e) {
         failed++;
       }
       done++;
       if (done === 1 || done === missing.length || done % 10 === 0) {
-        renderStatus(statusEl, `offline cache: ${Math.max(visibleCached, cached + done - failed)}/${items.length}, ${fmtBytes(bytes)} added`);
+        renderStatus(statusEl, `offline cache: ${cached}/${items.length} cached, ${fmtBytes(bytes)} added`);
       }
     }
 
-    const stats = await cacheStats();
     const successCount = done - failed;
     const meta = {
       ts: Date.now(),
-      count: Math.max(stats.count || 0, cached + successCount, previousCount),
+      count: countCachedItems(items, cacheIndex),
       failed: failed,
       total: items.length,
       bytes: (previous.bytes || 0) + bytes,
@@ -158,14 +147,8 @@
       run_bytes: bytes,
       groups: manifest.groups || {},
     };
-    if (successCount === 0 && previous.ts) {
-      meta.count = previous.count || 0;
-      meta.bytes = previous.bytes || 0;
-      meta.ts = previous.ts;
-    }
     writeMeta(meta);
-    const age = meta.ts === previous.ts ? `${fmtAge(meta.ts)} old` : 'just now';
-    renderStatus(statusEl, `offline cache: ${meta.count}/${meta.total} items, ${fmtBytes(meta.bytes)}, ${age}${failed ? ', ' + failed + ' failed' : ''}`);
+    renderStatus(statusEl, `offline cache: ${meta.count}/${meta.total} cached, just now${bytes ? ', ' + fmtBytes(bytes) + ' added' : ''}${failed ? ', ' + failed + ' failed' : ''}`);
     return meta;
   }
 
@@ -180,14 +163,23 @@
     return {count};
   }
 
-  async function cacheHas(item) {
-    const cache = await caches.open(cacheNameFor(item));
-    const normalized = normalizedUrl(item.url);
-    return !!(
-      await cache.match(normalized)
-      || await cache.match(new Request(normalized, {credentials: 'same-origin'}))
-      || await cache.match(item.url)
-    );
+  async function buildCacheIndex() {
+    const index = new Map();
+    for (const cacheName of [PAGE_CACHE, API_CACHE, STATIC_CACHE]) {
+      const cache = await caches.open(cacheName);
+      const keys = await cache.keys();
+      index.set(cacheName, new Set(keys.map((request) => normalizedUrl(request.url))));
+    }
+    return index;
+  }
+
+  function countCachedItems(items, cacheIndex) {
+    let count = 0;
+    for (const item of items) {
+      const urls = cacheIndex.get(cacheNameFor(item));
+      if (urls && urls.has(normalizedUrl(item.url))) count++;
+    }
+    return count;
   }
 
   async function fetchJson(url) {
@@ -223,5 +215,6 @@
     registerWorkers,
     warmManifest,
     cacheStats,
+    buildCacheIndex,
   };
 })();
