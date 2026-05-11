@@ -263,7 +263,7 @@
             const el = document.getElementById('offline-material-cache-status');
             const meta = TjaiOfflineCache.readMeta();
             if (el && meta.ts) {
-                el.textContent = `offline cache: ${meta.count}/${meta.total || meta.count} items, ${TjaiOfflineCache.fmtBytes(meta.bytes || 0)}, ${TjaiOfflineCache.fmtAge(meta.ts)} old`;
+                el.textContent = `offline cache: check failed; last observed ${meta.count}/${meta.total || meta.count} items, ${TjaiOfflineCache.fmtAge(meta.ts)} old`;
             } else if (el) {
                 el.textContent = 'offline cache: failed: ' + e.message;
             }

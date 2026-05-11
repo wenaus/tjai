@@ -16,15 +16,7 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('activate', event => {
-    event.waitUntil(
-    caches.keys()
-            .then(keys => Promise.all(
-                keys
-                    .filter(key => key.startsWith('tjai-research-') && key !== CACHE_NAME)
-                    .map(key => caches.delete(key))
-            ))
-            .then(() => self.clients.claim())
-    );
+    event.waitUntil(self.clients.claim());
 });
 
 function isResearchShell(pathname) {
