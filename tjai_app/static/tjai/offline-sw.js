@@ -1,4 +1,4 @@
-const CACHE_PREFIX = 'tjai-offline-v1';
+const CACHE_PREFIX = 'tjai-offline-v2';
 const STATIC_CACHE = `${CACHE_PREFIX}:static`;
 const PAGE_CACHE = `${CACHE_PREFIX}:pages`;
 const API_CACHE = `${CACHE_PREFIX}:api`;
