@@ -88,6 +88,7 @@ if engine.endswith("sqlite3") or engine == "django.db.backends.sqlite3":
     raise ImproperlyConfigured(
         "SQLite is not supported. Configure Postgres in DJANGO_DATABASE_URL."
     )
+_db_cfg["CONN_HEALTH_CHECKS"] = True
 DATABASES = {"default": _db_cfg}
 
 # Static files

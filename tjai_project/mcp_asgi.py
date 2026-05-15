@@ -22,6 +22,8 @@ from starlette.routing import Mount
 
 django.setup()
 
+from django.db import OperationalError, connections  # noqa: E402
+
 from tjai_app.mcp import mcp  # noqa: E402
 from tjai_app.models import SysConfig  # noqa: E402
 
@@ -48,10 +50,20 @@ async def _send_json(send, status: int, value: dict[str, Any], headers=None) -> 
 
 @sync_to_async
 def _expected_token() -> str | None:
+    # Belt-and-suspenders to CONN_HEALTH_CHECKS: if the cached DB connection
+    # is dead, close all thread-local connections and retry once. Without
+    # this, a single dropped Postgres socket wedges this worker permanently
+    # (no Django request lifecycle here to reap stale conns).
     try:
         return SysConfig.objects.get(key="mcp_bearer_token").value
     except SysConfig.DoesNotExist:
         return None
+    except OperationalError:
+        connections.close_all()
+        try:
+            return SysConfig.objects.get(key="mcp_bearer_token").value
+        except SysConfig.DoesNotExist:
+            return None
 
 
 class MCPRequestGuard:
