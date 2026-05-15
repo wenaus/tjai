@@ -3637,21 +3637,6 @@ def api_entry_save(request, entry_id):
         return JsonResponse({'error': 'Entry not found'}, status=404)
     from .models import EntryVersion
     version_count_before = EntryVersion.objects.filter(entry_id=entry.id).count()
-    # Conflict detection: reject if entry was modified since client's known timestamp
-    expected_ts = body_peek.get('expected_ts')
-    conflict = False
-    if expected_ts:
-        server_ts = float(entry.timestamp_modified)
-        client_ts = float(expected_ts)
-        if server_ts - client_ts > 0.5:  # server is newer than what client knew
-            conflict = True
-            if body_peek.get('autosave'):
-                # Autosave: reject — don't silently overwrite external changes
-                return JsonResponse({
-                    'ok': False, 'conflict': True,
-                    'error': 'Entry modified elsewhere',
-                    'timestamp_modified': server_ts,
-                })
     try:
         data = json.loads(request.body)
         content = data.get('content', '')
@@ -3678,6 +3663,41 @@ def api_entry_save(request, entry_id):
                 entry.data['event_date'] = event_ts
         except (ValueError, TypeError, OverflowError, OSError):
             pass  # Not a valid date/time prefix — leave content as-is
+    # Inclusive editing: if the server has changed since the client's
+    # `expected_ts`, union the lines — keep client's content, append any
+    # non-blank server line not already in client. Even intentional client
+    # deletions get reverted in the merge case; redundant lines are easy to
+    # clean up, deleted bullets are not easy to recover.
+    merged = False
+    expected_ts = data.get('expected_ts')
+    if expected_ts:
+        try:
+            server_ts = float(entry.timestamp_modified)
+            client_ts = float(expected_ts)
+        except (TypeError, ValueError):
+            server_ts = client_ts = 0.0
+        if server_ts - client_ts > 0.5:
+            server_lines = (entry.content or '').splitlines()
+            client_lines = content.splitlines()
+            client_set = set(client_lines)
+            added = []
+            for line in server_lines:
+                if not line.strip():
+                    continue
+                if line in client_set:
+                    continue
+                # Autosave is plumbing — its fragment of an in-progress bullet
+                # is not a distinct contribution. If this server line is a
+                # prefix of any client line, it's a stale autosave snapshot
+                # of the same bullet, now finished. Drop it.
+                stripped = line.rstrip()
+                if any(cl != stripped and cl.startswith(stripped) for cl in client_lines):
+                    continue
+                added.append(line)
+                client_set.add(line)
+            if added:
+                merged = True
+                content = '\n'.join(client_lines + added)
     old_content = entry.content
     entry.content = content
     if 'name' in data:
@@ -3774,8 +3794,9 @@ def api_entry_save(request, entry_id):
     resp = {'ok': True, 'url': url, 'timestamp_modified': entry.timestamp_modified}
     if created_version:
         resp['version'] = created_version
-    if conflict:
-        resp['conflict'] = True
+    if merged:
+        resp['merged'] = True
+        resp['merged_content'] = entry.content
     return JsonResponse(resp)
 
 

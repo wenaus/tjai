@@ -159,7 +159,7 @@ def check_zombie_processes():
     return {'check': 'zombie_processes', 'status': 'ok', 'detail': ''}
 
 
-def check_entry_flood(window=1800, threshold=5):
+def check_entry_flood(window=1800, threshold=10):
     """Detect rapid creation of similar entries via Jaccard similarity.
 
     Clusters entries created in the last `window` seconds by word-set

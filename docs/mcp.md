@@ -47,6 +47,12 @@ tjai MCP is finite JSON request/response only:
   by streamable HTTP MCP clients. FastMCP is configured to answer with JSON.
 - Server-pushed MCP event streams are not used operationally.
 - FastMCP is configured with `stateless_http=True` and `json_response=True`.
+- An HTTP 202 response from FastMCP is normal and not a sign that SSE has
+  returned. The MCP streamable-HTTP transport returns 202 for client-to-server
+  notification frames such as `notifications/initialized` (the no-op
+  acknowledgement that follows a successful `initialize` handshake). Each fresh
+  client session produces one such 202 immediately after its first 200. This is
+  request/response, not a server-pushed event stream.
 
 The useful MCP surface is:
 

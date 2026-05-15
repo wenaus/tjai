@@ -823,11 +823,13 @@
             }
             cm.refresh();
             cm.focus();
+            _isVersionRestore = isRestore;
             if (typeof _startAutosave === 'function') _startAutosave();
         }
 
         function cancelEdit() {
             if (typeof _stopAutosave === 'function') _stopAutosave();
+            _isVersionRestore = false;
             document.title = baseTitle;
             document.getElementById('viewMode').style.display = 'block';
             document.getElementById('editMode').style.display = 'none';
@@ -839,8 +841,16 @@
         }
 
         function doSave() {
-            // Stop autosave before manual save to prevent race
+            // Stop autosave interval; wait for any in-flight autosave to
+            // settle so _serverTimestamp is current before we send (otherwise
+            // the manual save's expected_ts is stale relative to our own
+            // just-completed autosave, and the server triggers a union of
+            // the partial autosaved line with the final manual content).
             if (typeof _stopAutosave === 'function') _stopAutosave();
+            var pending = _autosaveInFlight || Promise.resolve();
+            pending.then(_doSaveNow, _doSaveNow);
+        }
+        function _doSaveNow() {
             var content = cm ? cm.getValue() : document.getElementById('editor').value;
             var name = document.getElementById('nameField').value.trim().replace(/^@/, '');
             var context = document.getElementById('contextField').value.trim().replace(/^=/, '');
@@ -857,9 +867,6 @@
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
                 body: JSON.stringify({content: content, name: name, context: context, format: fmt, tags: tags, entry_id: entryIdVal, kind: kind, priority: priority, status: status, access: isPublic ? 'public' : null, expected_ts: _serverTimestamp})
             }).then(function(r) { return r.json(); }).then(function(data) {
-                if (data.conflict) {
-                    alert('WARNING: Entry was modified elsewhere. Your save went through but may have overwritten other changes. Reload to check.');
-                }
                 if (data.ok) {
                     _lastSavedContent = content;
                     if (data.timestamp_modified) _serverTimestamp = data.timestamp_modified;
@@ -931,6 +938,10 @@
         var _isFirstAutosave = true;
         var _autosaveFailCount = 0;
         var _lastAutosaveTime = 0;
+        // Viewing/editing an old version: suppress autosave, localStorage
+        // write, and localStorage-union. Looking at v42 must never silently
+        // replace current. Only the explicit Save button does that.
+        var _isVersionRestore = false;
         setInterval(function() {
             if (!_lastAutosaveTime) return;
             var inline = document.getElementById('autosave-inline');
@@ -938,6 +949,25 @@
             var ago = Math.round((Date.now() - _lastAutosaveTime) / 1000);
             inline.textContent = '— autosaved ' + ago + 's ago';
         }, 1000);
+
+        // View-mode auto-refresh: when this entry is edited in another tab,
+        // a tab showing it in view mode reloads within ~10s. Silent. Skipped
+        // while this tab is editing.
+        var _viewBaselineTs = {{ entry.timestamp_modified }};
+        function _checkForRemoteChanges() {
+            if (_autosaveInterval) return;  // this tab is editing
+            fetch("{% url 'api_entry_content' entry.id %}", {cache: 'no-store'})
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data && data.timestamp && data.timestamp > _viewBaselineTs + 0.5) {
+                        location.reload();
+                    }
+                }).catch(function() {});
+        }
+        setInterval(_checkForRemoteChanges, 10000);
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible') _checkForRemoteChanges();
+        });
 
         document.getElementById('editBtn').addEventListener('click', startEdit);
         document.getElementById('saveBtn').addEventListener('click', doSave);
@@ -951,15 +981,30 @@
 
         function _startAutosave() {
             _isFirstAutosave = true;
-            // Check for locally saved content newer than server
-            try {
-                var local = JSON.parse(localStorage.getItem(_autosaveKey));
-                if (local && local.content !== _lastSavedContent && local.ts > _serverTimestamp) {
-                    if (confirm('Found locally saved edits from ' + new Date(local.ts * 1000).toLocaleString() + '. Restore?')) {
-                        cm.setValue(local.content);
+            // localStorage is a crash-recovery safety net. Only union its
+            // lines if they're NEWER than what's on the server — otherwise
+            // localStorage is just a stale memory of already-saved content
+            // and unioning it would resurrect lines you deleted-and-saved.
+            if (!_isVersionRestore) {
+                try {
+                    var local = JSON.parse(localStorage.getItem(_autosaveKey));
+                    if (local && local.content && local.ts > _serverTimestamp + 0.5) {
+                        var editorLines = cm.getValue().split('\n');
+                        var seen = {};
+                        for (var i = 0; i < editorLines.length; i++) seen[editorLines[i]] = true;
+                        var extras = [];
+                        var localLines = local.content.split('\n');
+                        for (var j = 0; j < localLines.length; j++) {
+                            var ll = localLines[j];
+                            if (ll.trim() && !seen[ll]) {
+                                extras.push(ll);
+                                seen[ll] = true;
+                            }
+                        }
+                        if (extras.length) cm.setValue(editorLines.concat(extras).join('\n'));
                     }
-                }
-            } catch(e) {}
+                } catch(e) {}
+            }
             _autosaveInterval = setInterval(_doAutosave, 10000);
             window.addEventListener('beforeunload', _onBeforeUnload);
         }
@@ -972,6 +1017,7 @@
 
         function _onBeforeUnload() {
             if (!cm) return;
+            if (_isVersionRestore) return;  // don't clobber localStorage with v42 content
             var content = cm.getValue();
             if (content === _lastSavedContent) return;
             // Always save to localStorage
@@ -1033,8 +1079,11 @@
             }
         }
 
+        var _autosaveInFlight = null;  // Promise of an in-flight autosave fetch, or null
         function _doAutosave() {
             if (!cm) return;
+            if (_isVersionRestore) return;  // looking at v42 must never autosave to current
+            if (_autosaveInFlight) return;  // previous autosave still in flight
             var content = cm.getValue();
             if (content === _lastSavedContent) return;
             // Always save to localStorage first
@@ -1054,7 +1103,7 @@
                 body.first_autosave = true;
             }
             // Server save with visible error reporting
-            fetch(saveUrl, {
+            _autosaveInFlight = fetch(saveUrl, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
                 body: JSON.stringify(body)
@@ -1062,17 +1111,17 @@
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 return r.json();
             }).then(function(data) {
-                if (data.conflict) {
-                    _showAutosaveStatus('CONFLICT: Entry modified elsewhere — reload to see current version', true);
-                    return;  // Don't update baseline on conflict
-                }
                 if (data.ok) {
                     if (data.version && window._addEntryVersion) window._addEntryVersion(data.version);
                     _isFirstAutosave = false;  // Only clear after confirmed success
-                    _lastSavedContent = content;
+                    // Inclusive merge: if server merged in lines from another
+                    // window, baseline is the merged content (not what we sent).
+                    // Editor view is intentionally not disturbed mid-typing;
+                    // merged bits appear on next reload.
+                    _lastSavedContent = data.merged ? data.merged_content : content;
                     _serverTimestamp = data.timestamp_modified || _serverTimestamp;
                     _autosaveFailCount = 0;
-                    _showAutosaveStatus('autosaved', false);
+                    _showAutosaveStatus(data.merged ? 'autosaved (merged)' : 'autosaved', false);
                 } else {
                     throw new Error(data.error || 'save failed');
                 }
@@ -1080,6 +1129,8 @@
                 _autosaveFailCount++;
                 if (wasFirstAutosave) _isFirstAutosave = true;  // Retry version snapshot
                 _showAutosaveStatus('AUTOSAVE FAILED: ' + err.message + ' (backup in localStorage)', true);
+            }).finally(function() {
+                _autosaveInFlight = null;
             });
         }
 
