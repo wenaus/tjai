@@ -155,6 +155,19 @@
         }
         .relate-bar .relate-count { color: #9ccc65; font-size: 12px; }
         .relate-bar .relate-status { font-size: 12px; }
+        .entry-action-select {
+            color: #80deea;
+            background: #1b2b2e;
+            border: 1px solid #32737c;
+            border-radius: 3px;
+            padding: 0 3px;
+            cursor: pointer;
+            font-size: 11px;
+            font-family: inherit;
+            height: 18px;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
     </style>
 </head>
 <body>
@@ -207,7 +220,7 @@
     {% endif %}
     {% for e in entries %}
     <div class="entry" data-tags="{{ e.all_tags_csv }}" data-ctx="{{ e.context_id|default:'(none)' }}" data-kind="{{ e.kind }}" data-name="{{ e.name|default:'' }}" {% if relate_to %}data-entry-uuid="{{ e.id }}"{% endif %}>
-        {% if relate_to %}<input type="checkbox" class="relate-check" data-uuid="{{ e.id }}">{% endif %}
+        {% if relate_to %}<input type="checkbox" class="relate-check" data-uuid="{{ e.id }}">{% else %}<select class="entry-action-select" data-eid="{{ e.id }}" data-url="{% url 'entry_detail' e.detail_slug %}" data-edit-url="{% url 'entry_detail' e.detail_slug %}?edit=1"><option value="">Action</option><option value="open">open</option>{% if e.kind != 'log' %}<option value="edit">edit</option>{% endif %}<option value="archive">archive</option><option value="trash">trash</option></select>{% endif %}
         <a href="{% url 'entry_detail' e.detail_slug %}" {% if relate_to %}target="_blank"{% endif %}>
             <span class="entry-num">===</span>
             <span class="timestamp">{{ e.date_display }}</span>
@@ -490,6 +503,45 @@
             } else {
                 el.textContent = content;
             }
+        });
+
+        // Per-row action menu — open/edit navigate; archive POSTs; trash DELETEs (soft).
+        document.addEventListener('change', function(ev) {
+            var sel = ev.target.closest('.entry-action-select');
+            if (!sel || !sel.value) return;
+            var action = sel.value;
+            sel.value = '';
+            var eid = sel.dataset.eid;
+            if (action === 'open') { window.location.href = sel.dataset.url; return; }
+            if (action === 'edit') { window.location.href = sel.dataset.editUrl; return; }
+            var url, method, label;
+            if (action === 'archive') {
+                url = '/tjai/api/entry/' + eid + '/archive';
+                method = 'POST';
+                label = 'Archive';
+            } else if (action === 'trash') {
+                url = '/tjai/api/entry/' + eid;
+                method = 'DELETE';
+                label = 'Trash';
+            } else {
+                return;
+            }
+            var row = sel.closest('.entry');
+            sel.disabled = true;
+            fetch(url, {method: method, headers: {'X-CSRFToken': '{{ csrf_token }}'}})
+                .then(function(r) { return r.json().catch(function() { return {}; }).then(function(d) { return {status: r.status, data: d}; }); })
+                .then(function(res) {
+                    if (res.status >= 200 && res.status < 300 && (!res.data.error)) {
+                        if (row) row.remove();
+                    } else {
+                        sel.disabled = false;
+                        alert(label + ' failed: ' + (res.data.error || ('HTTP ' + res.status)));
+                    }
+                })
+                .catch(function(err) {
+                    sel.disabled = false;
+                    alert(label + ' failed: ' + err.message);
+                });
         });
 
         // --- Relate mode ---

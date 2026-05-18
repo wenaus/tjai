@@ -791,6 +791,7 @@
             if (isTrashMode && entry.kind !== 'log') options.push('<option value="archive">archive</option>');
             const deleteLabel = entry.kind === 'log' ? 'delete' : (isTrashMode ? 'delete' : (isArchiveMode ? 'trash' : 'archive'));
             options.push(`<option value="delete">${deleteLabel}</option>`);
+            if (!isArchiveMode && !isTrashMode && entry.kind !== 'log') options.push('<option value="trash">trash</option>');
             return `<select class="entry-action-select" data-eid="${dashAttr(entry.id)}" data-url="${dashAttr(entryUrl)}" data-edit-url="${dashAttr(editUrl)}">${options.join('')}</select>`;
         }
         function renderRelationButton(entry) {
@@ -1225,8 +1226,6 @@
                 const eid = delBtn.dataset.eid;
                 const row = document.getElementById('e-' + eid);
                 const isLogEntry = row?.dataset.entryKind === 'log';
-                const actionLabel = isLogEntry ? 'Delete log entry' : (isTrashMode ? 'Permanently delete' : (isArchiveMode ? 'Move to Trash' : 'Archive'));
-                if (!confirm(`${actionLabel} this entry?`)) return;
                 delBtn.disabled = true;
                 delBtn.textContent = '...';
                 const url = isLogEntry
@@ -1302,7 +1301,23 @@
             else if (action === 'archive' && isTrashMode) runEntryPostAction(select.dataset.eid, `/tjai/api/entry/${select.dataset.eid}/archive?from_trash=1`, 'Archive');
             else if (action === 'restore') row?.querySelector('.restore-btn')?.click();
             else if (action === 'delete') row?.querySelector('.search-del-btn')?.click();
+            else if (action === 'trash') {
+                runEntryDeleteAction(select.dataset.eid, `/tjai/api/entry/${select.dataset.eid}`, 'Trash');
+            }
         });
+        async function runEntryDeleteAction(eid, url, label) {
+            const row = document.getElementById('e-' + eid);
+            try {
+                const data = await fetchJson(url, {method: 'DELETE'});
+                if (data.status === 'ok') {
+                    if (row) row.remove();
+                } else {
+                    alert(`${label} failed: ${data.error || 'unknown'}`);
+                }
+            } catch (err) {
+                alert(`${label} failed: ${err.message}`);
+            }
+        }
         async function runEntryPostAction(eid, url, label) {
             const row = document.getElementById('e-' + eid);
             try {
