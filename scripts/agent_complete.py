@@ -669,6 +669,33 @@ def main():
                 logger.error("%s: research_model_complete(failed) failed: %s",
                              action_id, e, extra=ref_extra)
 
+    # Synthesis completion: propagate to base. A topic is not "done" until
+    # its synthesis sub-entry is done — research_model_complete leaves the
+    # base 'active' through the multi-model phase precisely so this block
+    # can finalize it.
+    if action_id == 'research-agent' and entry:
+        entry_data = entry.data if isinstance(entry.data, dict) else {}
+        if (entry_data.get('source') == 'multimodel'
+                and entry_data.get('model') == 'synthesis'):
+            base_uuid = entry_data.get('base_uuid')
+            if base_uuid:
+                try:
+                    base = Entry.objects.filter(
+                        id=base_uuid, deleted_at__isnull=True,
+                    ).first()
+                    if base:
+                        base.status = 'done' if status == 'completed' else 'failed'
+                        base.save(update_fields=['status'])
+                        logger.info(
+                            "Base %s marked %s after synthesis completion",
+                            (base.data or {}).get('entry_id', base.id),
+                            base.status,
+                        )
+                except Exception as e:
+                    logger.error(
+                        "Failed to propagate synthesis status to base: %s",
+                        e, extra=ref_extra)
+
 
 
 

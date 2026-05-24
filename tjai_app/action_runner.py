@@ -728,14 +728,12 @@ def research_model_complete(model_entry, terminal_status='done'):
         all_terminal = bool(dispatched) and all(
             s in ('done', 'failed', 'blocked') for s in statuses.values())
 
-        if all_terminal:
-            base.status = 'done'
-
+        # Base.status remains 'active' even when all models are terminal:
+        # synthesis is the final phase and the topic is not "done" until
+        # synthesis finishes (see agent_complete.py synthesis-completion
+        # block, which flips base.status when the synth sub-entry completes).
         base.data = base_data
-        update_fields = ['data']
-        if all_terminal:
-            update_fields.append('status')
-        base.save(update_fields=update_fields)
+        base.save(update_fields=['data'])
 
     logger.info("Updated base %s: %s_status=%s", base_entry_id, model, terminal_status)
 

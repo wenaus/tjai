@@ -5112,8 +5112,12 @@ def api_research_list(request):
             base_by_entry_id[eid] = entry
 
     model_statuses = {}
-    # Per-topic queue position (1-based) from research-agent's pending_runs.
+    # Per-topic queue position (1-based) and item kind from research-agent's
+    # pending_runs. Kind distinguishes 'run'/'rerun' (the topic itself is
+    # queued) from 'synthesize' (the topic is done research, its synthesis
+    # is queued).
     queued_position_by_eid = {}
+    queued_kind_by_eid = {}
     ra = Entry.objects.filter(
         kind='action', deleted_at__isnull=True,
         data__entry_id='research-agent',
@@ -5124,6 +5128,7 @@ def api_research_list(request):
             eid = item.get('entry_id')
             if eid and eid not in queued_position_by_eid:
                 queued_position_by_eid[eid] = idx
+                queued_kind_by_eid[eid] = item.get('kind') or 'run'
 
     subentry_counts = Counter()
     researched_models = {}
@@ -5228,6 +5233,7 @@ def api_research_list(request):
             'synthesis_done': eid in synthesis_done or data.get('synthesis_done') is True,
             'synthesis_status': synthesis_status_by_eid.get(eid),
             'queued_position': queued_position_by_eid.get(eid),
+            'queued_kind': queued_kind_by_eid.get(eid),
             'subentry_count': subentry_counts.get(eid, 0),
             'match_scope': match_scope,
             'detail_entry_id': f'{eid}_detail',

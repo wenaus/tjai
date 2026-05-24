@@ -342,10 +342,14 @@
             const meta = [source, `${item.subentry_count || 0} branches`, `modified ${esc(item.modified_display || '')}`, matched]
                 .filter(Boolean).join(' · ');
             const queuedPos = item.queued_position;
+            const queuedKind = item.queued_kind;
             const canRun = ['proposed', 'pending', 'failed', 'blocked'].includes(status);
             const canArchive = status !== 'archive' && status !== 'active';
+            const queuedBtnLabel = queuedKind === 'synthesize'
+                ? 'Synth Queued'
+                : `Queued #${queuedPos}`;
             const runBtn = queuedPos
-                ? `<button type="button" disabled>Queued #${queuedPos}</button>`
+                ? `<button type="button" disabled>${queuedBtnLabel}</button>`
                 : (canRun ? `<button type="button" onclick="runTopic('${esc(item.entry_id)}', this)">Run</button>` : '');
             const actions = [
                 runBtn,
