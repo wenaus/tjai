@@ -5771,13 +5771,12 @@ def api_research_run(request):
         logger.error("api_research_run: research-agent action entry not found in DB")
         return JsonResponse({'error': 'research-agent action not found'}, status=404)
 
-    # Check if already running
+    # Check if already running — if so, queue the request instead of rejecting.
+    # The queue drains after the running agent completes (agent_complete.py).
     status = SysConfig.objects.filter(
         key='agent_research-agent_status'
     ).values_list('value', flat=True).first()
-    if status == 'running':
-        logger.warning("api_research_run: research agent already running, rejecting")
-        return JsonResponse({'error': 'Research agent already running'}, status=409)
+    is_busy = (status == 'running')
 
     data = research_action.data or {}
 
@@ -5789,6 +5788,11 @@ def api_research_run(request):
         if not target:
             logger.error("api_research_run: no entry with data.entry_id=%r", entry_id)
             return JsonResponse({'error': f'Research entry not found: {entry_id}'}, status=404)
+        if is_busy:
+            from .research_queue import enqueue
+            pos = enqueue('run', str(target.id), entry_id)
+            return JsonResponse({'ok': True, 'queued': True, 'position': pos,
+                                 'entry_id': entry_id}, status=202)
         if target.status == 'active':
             return JsonResponse({'error': 'Research already in progress for this entry'}, status=409)
         data['next_target'] = (
@@ -5817,6 +5821,12 @@ def api_research_run(request):
         ).order_by('priority', 'timestamp_created').first()
         if not first_item:
             return JsonResponse({'error': 'No pending research items'}, status=400)
+        if is_busy:
+            from .research_queue import enqueue
+            pos = enqueue('run', str(first_item.id),
+                          (first_item.data or {}).get('entry_id') or str(first_item.id))
+            return JsonResponse({'ok': True, 'queued': True, 'position': pos,
+                                 'entry_id': 'all'}, status=202)
         data['next_target'] = (
             f"SPECIFIC TARGET:\nEntry UUID: {first_item.id}\n"
             f"Topic: {first_item.content}"
@@ -6085,12 +6095,11 @@ def api_research_rerun_models(request):
     if not entry_id:
         return JsonResponse({'error': 'entry_id required'}, status=400)
 
-    # Check if agent is already running
+    # If busy, queue the rerun request — drains after the running agent completes.
     status_val = SysConfig.objects.filter(
         key='agent_research-agent_status'
     ).values_list('value', flat=True).first()
-    if status_val == 'running':
-        return JsonResponse({'error': 'Research agent already running'}, status=409)
+    is_busy = (status_val == 'running')
 
     from .action_runner import RESEARCH_MODELS
     valid_models = set(RESEARCH_MODELS)
@@ -6103,6 +6112,12 @@ def api_research_rerun_models(request):
     ).first()
     if not base:
         return JsonResponse({'error': f'Entry not found: {entry_id}'}, status=404)
+
+    if is_busy:
+        from .research_queue import enqueue
+        pos = enqueue('rerun', str(base.id), entry_id, models=models)
+        return JsonResponse({'ok': True, 'queued': True, 'position': pos,
+                             'entry_id': entry_id, 'models': models}, status=202)
 
     # Set selected models to 'rerun', delete their old entries
     base_data = base.data if isinstance(base.data, dict) else {}
@@ -6201,14 +6216,19 @@ def api_research_synthesize(request):
     status_val = SysConfig.objects.filter(
         key='agent_research-agent_status'
     ).values_list('value', flat=True).first()
-    if status_val == 'running':
-        return JsonResponse({'error': 'Research agent already running'}, status=409)
+    is_busy = (status_val == 'running')
 
     base = Entry.objects.filter(
         data__entry_id=entry_id, deleted_at__isnull=True,
     ).first()
     if not base:
         return JsonResponse({'error': f'Entry not found: {entry_id}'}, status=404)
+
+    if is_busy:
+        from .research_queue import enqueue
+        pos = enqueue('synthesize', str(base.id), entry_id)
+        return JsonResponse({'ok': True, 'queued': True, 'position': pos,
+                             'entry_id': entry_id}, status=202)
 
     from .action_runner import RESEARCH_MODELS, _create_and_dispatch_synthesis
 

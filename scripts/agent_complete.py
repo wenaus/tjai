@@ -340,6 +340,19 @@ def main():
         key=f'agent_{action_id}_completed',
         defaults={'value': str(now), 'timestamp_modified': now})
 
+    # Drain any queued research requests that piled up while this agent was
+    # running. drain_after_complete() is a no-op if the agent is somehow
+    # still 'running' (e.g. a sibling process), and pops at most one item
+    # per call so the next completion drains the next item.
+    if action_id == 'research-agent':
+        try:
+            from tjai_app.research_queue import drain_after_complete
+            drained = drain_after_complete()
+            if drained:
+                logger.info("research-queue drained: %s", drained)
+        except Exception as e:
+            logger.error("research-queue drain failed: %s", e, extra=ref_extra)
+
     # Update last_activity from the tracking entry's final timestamp.
     tracking_uuid = SysConfig.objects.filter(
         key=f'agent_{action_id}_tracking'
