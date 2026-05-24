@@ -45,23 +45,31 @@ def is_running() -> bool:
 def enqueue(kind: str, target_uuid: str, entry_id: str,
             models: Optional[list] = None) -> int:
     """Append a request to the research-agent's pending-runs queue.
-    Returns 1-based queue position of the inserted item."""
-    ra = _research_action()
-    if not ra:
-        raise RuntimeError("research-agent action entry not found")
-    data = ra.data if isinstance(ra.data, dict) else {}
-    queue = list(data.get('pending_runs') or [])
-    item = {'kind': kind, 'target_uuid': str(target_uuid),
-            'entry_id': entry_id, 'queued_at': time.time()}
-    if models is not None:
-        item['models'] = list(models)
-    queue.append(item)
-    data['pending_runs'] = queue
-    ra.data = data
-    ra.save(update_fields=['data'])
+    Returns 1-based queue position of the inserted item.
+
+    Uses select_for_update so concurrent producers can't lose items via
+    read-modify-write races on the pending_runs JSON list."""
+    with transaction.atomic():
+        ra = Entry.objects.select_for_update().filter(
+            kind='action', deleted_at__isnull=True,
+            data__entry_id='research-agent',
+        ).first()
+        if not ra:
+            raise RuntimeError("research-agent action entry not found")
+        data = ra.data if isinstance(ra.data, dict) else {}
+        queue = list(data.get('pending_runs') or [])
+        item = {'kind': kind, 'target_uuid': str(target_uuid),
+                'entry_id': entry_id, 'queued_at': time.time()}
+        if models is not None:
+            item['models'] = list(models)
+        queue.append(item)
+        data['pending_runs'] = queue
+        ra.data = data
+        ra.save(update_fields=['data'])
+        position = len(queue)
     logger.info("research-queue: enqueued kind=%s entry_id=%s position=%d",
-                kind, entry_id, len(queue))
-    return len(queue)
+                kind, entry_id, position)
+    return position
 
 
 def queue_length() -> int:
@@ -133,11 +141,14 @@ def dispatch_run(target_entry: Entry) -> tuple[bool, dict]:
     data['next_target_entry_id'] = str(target_entry.id)
 
     target_uuid = str(target_entry.id)
-    # Record start time on target for duration tracking
+    # Mark target active immediately so the topic doesn't briefly render the
+    # Run button between drain and agent pick-up — and stamp started_at for
+    # duration tracking.
     tdata = target_entry.data or {}
     tdata['started_at'] = time.time()
     target_entry.data = tdata
-    target_entry.save(update_fields=['data'])
+    target_entry.status = 'active'
+    target_entry.save(update_fields=['data', 'status'])
 
     now = time.time()
     original_scheduled = data.get('scheduled_time')
@@ -252,15 +263,28 @@ def dispatch_synthesize(target_entry: Entry) -> tuple[bool, dict]:
 # transitions out of 'running'.
 # ---------------------------------------------------------------------------
 
-def drain_after_complete() -> Optional[dict]:
-    """Pop one queued item and dispatch it. Returns the dispatched item or
-    None if the queue is empty.
+def drain_if_idle() -> Optional[dict]:
+    """Pop and dispatch one queued item iff the research-agent is idle.
+    No-op when the agent is running — agent_complete will drain on finish.
 
-    Safe no-op if the agent is somehow still 'running' (caller's
-    responsibility to invoke only after the status transition)."""
+    Used by producers (API endpoints, in-band auto-synthesis, scheduled
+    picker) right after enqueueing so a first item lands on next_target
+    without waiting for the next agent_complete signal. The clobber bug
+    fix lives here: producers no longer write next_target themselves;
+    they enqueue and let this helper invoke the single-writer drain."""
     if is_running():
-        logger.warning("research-queue: drain called while still running, deferring")
         return None
+    return drain_after_complete()
+
+
+def consume_one() -> Optional[dict]:
+    """Pop the queue head and dispatch it via dispatch_run/rerun/synthesize.
+    No safety guards — caller is responsible for ensuring the dispatch is
+    safe (no clobber of unconsumed next_target, not already in-flight).
+
+    Used by drain_after_complete after its guards, and by the scheduled
+    picker (which is the running agent itself, so the standard is_running
+    guard would self-block)."""
     item = _pop_one()
     if not item:
         return None
@@ -274,10 +298,9 @@ def drain_after_complete() -> Optional[dict]:
     if not target:
         logger.warning("research-queue: queued target %s gone, dropping",
                        target_uuid)
-        # Recurse to try the next item
-        return drain_after_complete()
+        return consume_one()
 
-    logger.info("research-queue: draining kind=%s entry_id=%s remaining=%d",
+    logger.info("research-queue: consuming kind=%s entry_id=%s remaining=%d",
                 kind, entry_id_hr, queue_length())
 
     if kind == 'run':
@@ -288,11 +311,30 @@ def drain_after_complete() -> Optional[dict]:
         ok, info = dispatch_synthesize(target)
     else:
         logger.error("research-queue: unknown kind %r, dropping", kind)
-        return drain_after_complete()
+        return consume_one()
 
     if not ok:
         logger.warning("research-queue: dispatch failed for %s: %s",
                        entry_id_hr, info)
-        # Don't recurse on dispatch failure — that path may have side effects
-        # that should be inspected. The next manual click will drain.
     return {'kind': kind, 'entry_id': entry_id_hr, 'ok': ok, 'info': info}
+
+
+def drain_after_complete() -> Optional[dict]:
+    """Pop one queued item and dispatch it. Returns the dispatched item or
+    None if the queue is empty (or drain is deferred).
+
+    Defers in two cases:
+      1. Agent is still 'running' (SysConfig says so).
+      2. next_target_entry_id is set on the research-agent action — meaning
+         a prior dispatch_* wrote it and dispatch_ai hasn't consumed/cleared
+         it yet. Popping now would call dispatch_* again and clobber the
+         unconsumed next_target. The next agent_complete will retry drain
+         after dispatch_ai clears it."""
+    if is_running():
+        logger.warning("research-queue: drain called while still running, deferring")
+        return None
+    ra = _research_action()
+    if ra and (ra.data or {}).get('next_target_entry_id'):
+        logger.info("research-queue: drain deferred — next_target unconsumed")
+        return None
+    return consume_one()

@@ -761,19 +761,13 @@ def research_model_complete(model_entry, terminal_status='done'):
         base.data = base_data
         base.save(update_fields=['data'])
 
-    existing = Entry.objects.filter(
-        data__entry_id=synth_entry_id, deleted_at__isnull=True,
-    ).first()
-    if existing:
-        # Rerun path: an older synthesis is still live from the prior run.
-        # Retire it now so the new dispatch can create a fresh entry under
-        # the same slug; the old one stays visible up to this moment.
-        existing.deleted_at = time.time()
-        existing.save(update_fields=['deleted_at'])
-        logger.info("Retired prior synthesis %s for regeneration", synth_entry_id)
-
-    logger.info("All models terminal for %s — triggering synthesis", base_entry_id)
-    _create_and_dispatch_synthesis(base_entry_id, base, synth_entry_id)
+    # Enqueue synthesis as a 'synthesize' item. Drain (dispatch_synthesize)
+    # is the single writer to next_target, and it retires any prior
+    # synthesis sub-entry inside its transaction — no need to do it here.
+    from .research_queue import enqueue, drain_if_idle
+    logger.info("All models terminal for %s — enqueuing synthesis", base_entry_id)
+    enqueue('synthesize', str(base.id), base_entry_id)
+    drain_if_idle()
 
 
 def _create_and_dispatch_synthesis(base_entry_id, base_entry, synth_entry_id):
@@ -1141,6 +1135,8 @@ def execute_action(action, target_date=None):
 
         # For research-agent: ensure target is set before dispatch.
         # Scheduled runs pick the next pending primary topic here.
+        # Deposit-uniformity: the picker enqueues, then drains immediately
+        # to write next_target via the single drain → dispatch_run path.
         if action_id == 'research-agent' and not data.get('next_target_entry_id'):
             research_ids = Tag.objects.filter(
                 tag_name='research_topic'
@@ -1159,16 +1155,19 @@ def execute_action(action, target_date=None):
                 data__has_key='run_status'     # skip already-researched entries
             ).order_by('priority', 'timestamp_created').first()
             if next_primary:
+                from .research_queue import enqueue, consume_one
                 np_data = next_primary.data if isinstance(next_primary.data, dict) else {}
                 np_eid = np_data.get('entry_id', str(next_primary.id)[:8])
-                data['next_target'] = (
-                    f"SPECIFIC TARGET:\nEntry UUID: {next_primary.id}\n"
-                    f"Topic: {next_primary.content}"
-                )
-                data['next_target_entry_id'] = str(next_primary.id)
-                action.data = data
-                action.save(update_fields=['data'])
-                logger.info("Research scheduled run — set target: %s", np_eid)
+                enqueue('run', str(next_primary.id), np_eid)
+                # We're inside the research-agent's own execution.
+                # drain_after_complete would self-block (is_running=True was
+                # set by execute_action). consume_one skips guards because
+                # the picker is the running agent's own consumer.
+                consumed = consume_one()
+                action.refresh_from_db(fields=['data'])
+                data = action.data or {}
+                logger.info("Research scheduled run — consumed: %s",
+                            consumed.get('entry_id') if consumed else None)
 
         # For research-agent on primary topics: create all 3 model entries
         # and dispatch in parallel.  _dispatch_research_3way handles everything

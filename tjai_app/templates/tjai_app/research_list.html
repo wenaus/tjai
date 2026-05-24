@@ -144,6 +144,7 @@
         .model.done { color: #9ccc65; border-color: #406b40; }
         .model.active, .model.staged, .model.launching { color: #ffd54f; border-color: #6a5a25; }
         .model.failed, .model.blocked { color: #ef9a9a; border-color: #754040; }
+        .model.pending { color: #90caf9; border-color: #2a5078; }
         .status-actions {
             display: flex;
             gap: 6px;
@@ -235,6 +236,7 @@
         </div>
     </main>
 
+    <script src="/tjai/static/tjai/tjai-utils.js"></script>
     <script src="/tjai/static/tjai/research-cache.js?v=3"></script>
     <script>
         const state = {
@@ -339,10 +341,14 @@
             const matched = item.match_scope ? `matched ${esc(item.match_scope)}` : '';
             const meta = [source, `${item.subentry_count || 0} branches`, `modified ${esc(item.modified_display || '')}`, matched]
                 .filter(Boolean).join(' · ');
+            const queuedPos = item.queued_position;
             const canRun = ['proposed', 'pending', 'failed', 'blocked'].includes(status);
             const canArchive = status !== 'archive' && status !== 'active';
+            const runBtn = queuedPos
+                ? `<button type="button" disabled>Queued #${queuedPos}</button>`
+                : (canRun ? `<button type="button" onclick="runTopic('${esc(item.entry_id)}', this)">Run</button>` : '');
             const actions = [
-                canRun ? `<button type="button" onclick="runTopic('${esc(item.entry_id)}', this)">Run</button>` : '',
+                runBtn,
                 canArchive ? `<button type="button" class="danger" onclick="archiveTopic('${esc(item.entry_id)}', this)">Archive</button>` : '',
             ].filter(Boolean).join(' ');
             const actionsHtml = actions ? `<div class="status-actions">${actions}</div>` : '';
@@ -354,9 +360,17 @@
                     return `<a class="model ${esc(st)}" href="${href}">${esc(model)}</a>`;
                 }).join('')
                 : '<span class="meta">No model branches yet</span>';
+            // Synthesis chip — always show once any model has been kicked off.
+            // Color alone conveys state (blue=pending, yellow=active, green=done, red=failed).
             if (item.synthesis_done) {
                 const href = item.detail_url + '#synthesis';
                 modelHtml += `<a class="model done" href="${href}">synthesis</a>`;
+            } else if (item.synthesis_status && item.synthesis_status !== 'done') {
+                const href = item.detail_url + '#synthesis';
+                modelHtml += `<a class="model ${esc(item.synthesis_status)}" href="${href}">synthesis</a>`;
+            } else if (researched.length > 0) {
+                const href = item.detail_url + '#synthesis';
+                modelHtml += `<a class="model pending" href="${href}">synthesis</a>`;
             }
             return `
                 <section class="topic-row" data-id="${esc(item.id)}" data-entry-id="${esc(item.entry_id)}">
@@ -393,9 +407,16 @@
                 });
                 const data = await resp.json();
                 if (!resp.ok || data.error) throw new Error(data.error || 'Run failed');
-                btn.textContent = 'Queued';
-                setTimeout(() => refreshList(false), 1200);
+                if (data.queued) {
+                    flashNotice(`Agent is busy — queued at position ${data.position}. Will dispatch when current run finishes.`, '#ffd54f');
+                    btn.textContent = `Queued #${data.position}`;
+                } else {
+                    flashNotice(`Dispatched: ${entryId}`);
+                    btn.textContent = 'Dispatched';
+                }
+                setTimeout(() => refreshList(false), 1800);
             } catch (e) {
+                flashNotice(e.message, '#e57373');
                 btn.textContent = e.message;
                 setTimeout(() => { btn.disabled = false; btn.textContent = original; }, 2500);
             }

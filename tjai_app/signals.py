@@ -32,7 +32,7 @@ def snapshot_entry_before_save(sender, instance, **kwargs):
     # change frequently and are not worth versioning.
     _OPERATIONAL_KEYS = {
         'last_run', 'retry_after', 'retry_count', 'scheduled_time_config',
-        'next_target', 'next_target_entry_id',
+        'next_target', 'next_target_entry_id', 'pending_runs',
         'run_status', 'run_completed_at', 'run_exit_code', 'run_duration_seconds',
         'run_error', 'subagent_count', 'started_at',
     }

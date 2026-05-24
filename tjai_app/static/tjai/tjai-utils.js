@@ -101,6 +101,35 @@ function fmtDuration(sec) {
 }
 
 /**
+ * Centered auto-dismiss toast. Single shared #tjai-flash node — repeated
+ * calls update the message and reset the timer.
+ *
+ * @param {string} msg   Message text.
+ * @param {string} [color]  Border/text color hex (default '#9ccc65' green).
+ *                          Use '#ffd54f' for queued/info, '#ef9a9a' for error.
+ */
+function flashNotice(msg, color) {
+    color = color || '#9ccc65';
+    var box = document.getElementById('tjai-flash');
+    if (!box) {
+        box = document.createElement('div');
+        box.id = 'tjai-flash';
+        box.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#2a2a3a;padding:14px 28px;border-radius:6px;font-size:15px;z-index:9999;transition:opacity 0.5s;pointer-events:none;box-shadow:0 4px 24px rgba(0,0,0,0.5);max-width:80vw;text-align:center';
+        document.body.appendChild(box);
+    }
+    box.style.color = color;
+    box.style.border = '1px solid ' + color;
+    box.textContent = msg;
+    box.style.opacity = '1';
+    box.style.display = 'block';
+    clearTimeout(box._timer);
+    box._timer = setTimeout(function () {
+        box.style.opacity = '0';
+        setTimeout(function () { box.style.display = 'none'; }, 500);
+    }, 3500);
+}
+
+/**
  * Ensure copy events put text/html on the clipboard.
  *
  * Chrome's default copy serialization does not always populate the text/html

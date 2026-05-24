@@ -5112,10 +5112,24 @@ def api_research_list(request):
             base_by_entry_id[eid] = entry
 
     model_statuses = {}
+    # Per-topic queue position (1-based) from research-agent's pending_runs.
+    queued_position_by_eid = {}
+    ra = Entry.objects.filter(
+        kind='action', deleted_at__isnull=True,
+        data__entry_id='research-agent',
+    ).first()
+    if ra:
+        pending = (ra.data or {}).get('pending_runs') or []
+        for idx, item in enumerate(pending, start=1):
+            eid = item.get('entry_id')
+            if eid and eid not in queued_position_by_eid:
+                queued_position_by_eid[eid] = idx
+
     subentry_counts = Counter()
     researched_models = {}
     model_errors = {}
     synthesis_done = set()
+    synthesis_status_by_eid = {}
     for sub in Entry.objects.filter(
         data__source='multimodel',
         deleted_at__isnull=True,
@@ -5132,6 +5146,7 @@ def api_research_list(request):
             if model == 'synthesis':
                 if status == 'done':
                     synthesis_done.add(beid)
+                synthesis_status_by_eid[beid] = status
             else:
                 researched_models.setdefault(beid, []).append(model)
             if data.get('run_error'):
@@ -5165,6 +5180,9 @@ def api_research_list(request):
             )
         model_counts = Counter(v for v in model_map.values() if v)
         if any(v in ('launching', 'active', 'staged', 'rerun') for v in model_map.values()):
+            display_status = 'active'
+        elif synthesis_status_by_eid.get(eid) in ('launching', 'active', 'staged'):
+            # Models done, synthesis in flight — topic is NOT done yet.
             display_status = 'active'
         elif any(v == 'failed' for v in model_map.values()) and display_status in ('proposed', 'pending'):
             display_status = 'failed'
@@ -5208,6 +5226,8 @@ def api_research_list(request):
             'model_errors': model_errors.get(eid, {}),
             'researched_models': sorted(set(researched_models.get(eid, []))),
             'synthesis_done': eid in synthesis_done or data.get('synthesis_done') is True,
+            'synthesis_status': synthesis_status_by_eid.get(eid),
+            'queued_position': queued_position_by_eid.get(eid),
             'subentry_count': subentry_counts.get(eid, 0),
             'match_scope': match_scope,
             'detail_entry_id': f'{eid}_detail',
@@ -5762,7 +5782,8 @@ def api_research_run(request):
         logger.error("api_research_run: no entry_id in request body")
         return JsonResponse({'error': 'entry_id required'}, status=400)
 
-    # Find research-agent action entry
+    # Find research-agent action entry (presence check; producers never write
+    # next_target — drain does, via dispatch_run).
     research_action = Entry.objects.filter(
         kind='action', deleted_at__isnull=True,
         data__entry_id='research-agent',
@@ -5771,38 +5792,19 @@ def api_research_run(request):
         logger.error("api_research_run: research-agent action entry not found in DB")
         return JsonResponse({'error': 'research-agent action not found'}, status=404)
 
-    # Check if already running — if so, queue the request instead of rejecting.
-    # The queue drains after the running agent completes (agent_complete.py).
-    status = SysConfig.objects.filter(
-        key='agent_research-agent_status'
-    ).values_list('value', flat=True).first()
-    is_busy = (status == 'running')
-
-    data = research_action.data or {}
-
     if entry_id != 'all':
-        # Specific item: look up by data.entry_id (human-readable identifier)
         target = Entry.objects.filter(
             data__entry_id=entry_id, deleted_at__isnull=True
         ).first()
         if not target:
             logger.error("api_research_run: no entry with data.entry_id=%r", entry_id)
             return JsonResponse({'error': f'Research entry not found: {entry_id}'}, status=404)
-        if is_busy:
-            from .research_queue import enqueue
-            pos = enqueue('run', str(target.id), entry_id)
-            return JsonResponse({'ok': True, 'queued': True, 'position': pos,
-                                 'entry_id': entry_id}, status=202)
         if target.status == 'active':
             return JsonResponse({'error': 'Research already in progress for this entry'}, status=409)
-        data['next_target'] = (
-            f"SPECIFIC TARGET:\nEntry UUID: {target.id}\n"
-            f"Topic: {target.content}"
-        )
-        data['next_target_entry_id'] = str(target.id)
+        target_uuid = str(target.id)
+        resolved_entry_id = entry_id
     else:
-        # Legacy "all" value now starts only the first pending item. Cross-topic
-        # chaining is disabled, so this never drains the remaining queue.
+        # Legacy "all" — enqueue the highest-priority pending primary topic.
         research_ids = Tag.objects.filter(
             tag_name='research_topic'
         ).values_list('entry_id', flat=True)
@@ -5821,60 +5823,21 @@ def api_research_run(request):
         ).order_by('priority', 'timestamp_created').first()
         if not first_item:
             return JsonResponse({'error': 'No pending research items'}, status=400)
-        if is_busy:
-            from .research_queue import enqueue
-            pos = enqueue('run', str(first_item.id),
-                          (first_item.data or {}).get('entry_id') or str(first_item.id))
-            return JsonResponse({'ok': True, 'queued': True, 'position': pos,
-                                 'entry_id': 'all'}, status=202)
-        data['next_target'] = (
-            f"SPECIFIC TARGET:\nEntry UUID: {first_item.id}\n"
-            f"Topic: {first_item.content}"
-        )
-        data['next_target_entry_id'] = str(first_item.id)
+        target_uuid = str(first_item.id)
+        resolved_entry_id = (first_item.data or {}).get('entry_id') or target_uuid
 
-    target_uuid = data.get('next_target_entry_id')
-    topic_line = data.get('next_target', '').split('\n')[-1]  # "Topic: ..."
-
-    # Record start time on the target entry for duration tracking
-    if target_uuid:
-        target_entry = Entry.objects.filter(id=target_uuid).first()
-        if target_entry:
-            tdata = target_entry.data or {}
-            tdata['started_at'] = time.time()
-            target_entry.data = tdata
-            target_entry.save(update_fields=['data'])
-
-    now = time.time()
-
-    # Force-run: set scheduled_time to now so scheduler sees it as due
-    # (just setting last_run=0 fails when scheduled_time is in the future today)
-    original_scheduled = data.get('scheduled_time')
-    if original_scheduled:
-        data['scheduled_time_config'] = original_scheduled
-        tz = get_app_tz()
-        data['scheduled_time'] = datetime.now(tz).strftime('%H%M')
-    data['last_run'] = 0
-    research_action.data = data
-    research_action.timestamp_modified = now
-    research_action.save(update_fields=['data', 'timestamp_modified'])
+    from .research_queue import enqueue, drain_if_idle
+    pos = enqueue('run', target_uuid, resolved_entry_id)
+    drained = drain_if_idle()
 
     _log_research(logging.INFO,
-                  f"Submit triggered — {topic_line}",
+                  f"Run enqueued: {resolved_entry_id} position={pos}"
+                  + (" (drained immediately)" if drained else ""),
                   entry_id=target_uuid)
 
-    # Wake the action agent via SIGHUP
-    wake_ok, wake_msg = _wake_action_agent()
-    if not wake_ok:
-        _log_research(logging.WARNING,
-                      f"Action agent wake failed: {wake_msg}",
-                      entry_id=target_uuid)
-        return JsonResponse({'ok': True, 'warning': wake_msg})
-
-    _log_research(logging.INFO, "Action agent woken", entry_id=target_uuid)
-
-    # _dispatch_research_3way handles all enabled models when the action agent picks this up.
-    return JsonResponse({'ok': True, 'entry_id': entry_id})
+    return JsonResponse({'ok': True, 'queued': True, 'position': pos,
+                         'entry_id': resolved_entry_id,
+                         'drained': bool(drained)}, status=202)
 
 
 @login_required
@@ -5961,47 +5924,24 @@ def api_research_rerun(request):
                   f"Rerun created: {new_entry_id} from {entry_id}",
                   entry_id=str(new_entry.id))
 
-    # Auto-submit: trigger research on the new entry immediately
+    # Auto-submit: enqueue the new entry. Drain picks it up immediately if
+    # the agent is idle, or after the running agent completes otherwise.
     research_action = Entry.objects.filter(
         kind='action', deleted_at__isnull=True,
         data__entry_id='research-agent',
     ).first()
     auto_submitted = False
+    queue_position = None
+    drained = False
     if research_action:
-        status = SysConfig.objects.filter(
-            key='agent_research-agent_status'
-        ).values_list('value', flat=True).first()
-        if status != 'running':
-            rdata = research_action.data or {}
-            # Force-run: set scheduled_time to now so scheduler sees it as due
-            original_scheduled = rdata.get('scheduled_time')
-            if original_scheduled:
-                rdata['scheduled_time_config'] = original_scheduled
-                tz = get_app_tz()
-                rdata['scheduled_time'] = datetime.now(tz).strftime('%H%M')
-            rdata['last_run'] = 0
-            rdata['next_target'] = (
-                f"SPECIFIC TARGET:\nEntry UUID: {new_entry.id}\n"
-                f"Topic: {new_entry.content}"
-            )
-            rdata['next_target_entry_id'] = str(new_entry.id)
-            research_action.data = rdata
-            research_action.timestamp_modified = now
-            research_action.save(update_fields=['data', 'timestamp_modified'])
-
-            # Record start time on the new entry
-            edata = new_entry.data or {}
-            edata['started_at'] = now
-            new_entry.data = edata
-            new_entry.save(update_fields=['data'])
-
-            _wake_action_agent()
-            # _dispatch_research_3way handles all enabled models when agent picks this up
-
-            _log_research(logging.INFO,
-                          f"Rerun auto-submitted: {new_entry_id}",
-                          entry_id=str(new_entry.id))
-            auto_submitted = True
+        from .research_queue import enqueue, drain_if_idle
+        queue_position = enqueue('run', str(new_entry.id), new_entry_id)
+        drained = bool(drain_if_idle())
+        _log_research(logging.INFO,
+                      f"Rerun enqueued: {new_entry_id} position={queue_position}"
+                      + (" (drained immediately)" if drained else ""),
+                      entry_id=str(new_entry.id))
+        auto_submitted = True
 
     return JsonResponse({
         'ok': True,
@@ -6009,6 +5949,8 @@ def api_research_rerun(request):
         'new_uuid': str(new_entry.id),
         'version': next_ver,
         'auto_submitted': auto_submitted,
+        'queue_position': queue_position,
+        'drained': drained,
     })
 
 
@@ -6095,12 +6037,6 @@ def api_research_rerun_models(request):
     if not entry_id:
         return JsonResponse({'error': 'entry_id required'}, status=400)
 
-    # If busy, queue the rerun request — drains after the running agent completes.
-    status_val = SysConfig.objects.filter(
-        key='agent_research-agent_status'
-    ).values_list('value', flat=True).first()
-    is_busy = (status_val == 'running')
-
     from .action_runner import RESEARCH_MODELS
     valid_models = set(RESEARCH_MODELS)
     models = [m for m in models if m in valid_models]
@@ -6113,97 +6049,35 @@ def api_research_rerun_models(request):
     if not base:
         return JsonResponse({'error': f'Entry not found: {entry_id}'}, status=404)
 
-    if is_busy:
-        from .research_queue import enqueue
-        pos = enqueue('rerun', str(base.id), entry_id, models=models)
-        return JsonResponse({'ok': True, 'queued': True, 'position': pos,
-                             'entry_id': entry_id, 'models': models}, status=202)
-
-    # Set selected models to 'rerun', delete their old entries
-    base_data = base.data if isinstance(base.data, dict) else {}
-    now = time.time()
-    # Backfill: old entries may lack per-model status — default unset to 'done'
-    # so _dispatch_research_3way doesn't treat None as "needs dispatch"
-    for m in valid_models:
-        if f'{m}_status' not in base_data:
-            base_data[f'{m}_status'] = 'done'
-    for model in models:
-        base_data[f'{model}_status'] = 'rerun'
-        # Soft-delete old model entry so it's recreated fresh
-        old = Entry.objects.filter(
-            data__entry_id=f'{entry_id}-{model}', deleted_at__isnull=True,
-        ).first()
-        if old:
-            old.deleted_at = now
-            old.save(update_fields=['deleted_at'])
-
-    # Leave any existing synthesis entry intact — it stays visible while the
-    # rerun runs. The synthesis regeneration path (_create_and_dispatch_synthesis)
-    # replaces it atomically at the moment the new synthesis begins writing.
-
-    # Clear stale run/synthesis metadata so rerun works correctly
-    base_data.pop('run_status', None)
-    base_data.pop('run_completed_at', None)
-    base_data.pop('run_exit_code', None)
-    base_data.pop('run_duration_seconds', None)
-    base_data.pop('run_error', None)
-    base_data.pop('subagent_count', None)
-    base_data.pop('synthesis_triggered', None)
-    base.data = base_data
-    base.status = 'active'  # re-activate for processing
-    base.save(update_fields=['data', 'status'])
-
-    # Trigger research-agent
-    research_action = Entry.objects.filter(
-        kind='action', deleted_at__isnull=True,
-        data__entry_id='research-agent',
-    ).first()
-    if research_action:
-        status_val = SysConfig.objects.filter(
-            key='agent_research-agent_status'
-        ).values_list('value', flat=True).first()
-        if status_val != 'running':
-            rdata = research_action.data or {}
-            original_scheduled = rdata.get('scheduled_time')
-            if original_scheduled:
-                rdata['scheduled_time_config'] = original_scheduled
-                tz = get_app_tz()
-                rdata['scheduled_time'] = datetime.now(tz).strftime('%H%M')
-            rdata['last_run'] = 0
-            rdata['next_target'] = (
-                f"SPECIFIC TARGET:\nEntry UUID: {base.id}\n"
-                f"Topic: {base.content}"
-            )
-            rdata['next_target_entry_id'] = str(base.id)
-            research_action.data = rdata
-            research_action.timestamp_modified = now
-            research_action.save(update_fields=['data', 'timestamp_modified'])
-            _wake_action_agent()
+    from .research_queue import enqueue, drain_if_idle
+    pos = enqueue('rerun', str(base.id), entry_id, models=models)
+    drained = bool(drain_if_idle())
 
     _log_research(logging.INFO,
-                  f"Model rerun: {entry_id} models={models}",
+                  f"Model rerun enqueued: {entry_id} models={models} position={pos}"
+                  + (" (drained immediately)" if drained else ""),
                   entry_id=str(base.id))
 
     return JsonResponse({
         'ok': True,
+        'queued': True,
+        'position': pos,
         'entry_id': entry_id,
         'models': models,
-    })
+        'drained': drained,
+    }, status=202)
 
 
 @login_required
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_research_synthesize(request):
-    """Manually dispatch the synthesis step for a research topic.
+    """Manually enqueue the synthesis step for a research topic.
 
     Always-live button — the human decides when synthesis is appropriate.
-    Reuses the same dispatch path as the automatic all-models-terminal trigger:
-    retires any existing synthesis sub-entry, then calls
-    _create_and_dispatch_synthesis. Refuses if the research agent is already
-    running (same 409 behavior as rerun endpoints).
-    """
-    from django.db import transaction
+    Enqueues a 'synthesize' item; drain dispatches via dispatch_synthesize,
+    which retires any existing synthesis sub-entry and calls
+    _create_and_dispatch_synthesis (single writer to next_target)."""
     try:
         body = json.loads(request.body)
     except json.JSONDecodeError:
@@ -6213,25 +6087,13 @@ def api_research_synthesize(request):
     if not entry_id:
         return JsonResponse({'error': 'entry_id required'}, status=400)
 
-    status_val = SysConfig.objects.filter(
-        key='agent_research-agent_status'
-    ).values_list('value', flat=True).first()
-    is_busy = (status_val == 'running')
-
     base = Entry.objects.filter(
         data__entry_id=entry_id, deleted_at__isnull=True,
     ).first()
     if not base:
         return JsonResponse({'error': f'Entry not found: {entry_id}'}, status=404)
 
-    if is_busy:
-        from .research_queue import enqueue
-        pos = enqueue('synthesize', str(base.id), entry_id)
-        return JsonResponse({'ok': True, 'queued': True, 'position': pos,
-                             'entry_id': entry_id}, status=202)
-
-    from .action_runner import RESEARCH_MODELS, _create_and_dispatch_synthesis
-
+    from .action_runner import RESEARCH_MODELS
     base_data = base.data if isinstance(base.data, dict) else {}
     dispatched = [m for m in RESEARCH_MODELS
                   if base_data.get(f'{m}_entry_id')]
@@ -6240,37 +6102,25 @@ def api_research_synthesize(request):
             {'error': 'No dispatched models on this topic — nothing to synthesize'},
             status=400)
 
+    from .research_queue import enqueue, drain_if_idle
+    pos = enqueue('synthesize', str(base.id), entry_id)
+    drained = bool(drain_if_idle())
+
     synth_entry_id = f'{entry_id}-synthesis'
-    now = time.time()
-
-    with transaction.atomic():
-        base = Entry.objects.select_for_update().filter(
-            data__entry_id=entry_id, deleted_at__isnull=True,
-        ).first()
-        base_data = base.data if isinstance(base.data, dict) else {}
-        base_data['synthesis_triggered'] = True
-        base.data = base_data
-        base.save(update_fields=['data'])
-
-    existing = Entry.objects.filter(
-        data__entry_id=synth_entry_id, deleted_at__isnull=True,
-    ).first()
-    if existing:
-        existing.deleted_at = now
-        existing.save(update_fields=['deleted_at'])
-
-    _create_and_dispatch_synthesis(entry_id, base, synth_entry_id)
-
     _log_research(logging.INFO,
-                  f"Manual synthesis: {entry_id} models={dispatched}",
+                  f"Synthesis enqueued: {entry_id} models={dispatched} position={pos}"
+                  + (" (drained immediately)" if drained else ""),
                   entry_id=str(base.id))
 
     return JsonResponse({
         'ok': True,
+        'queued': True,
+        'position': pos,
         'entry_id': entry_id,
         'synthesis_entry_id': synth_entry_id,
         'models': dispatched,
-    })
+        'drained': drained,
+    }, status=202)
 
 
 @login_required
