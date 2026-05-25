@@ -3647,12 +3647,19 @@ def api_entry_save(request, entry_id):
     # For journal entries: parse leading date/time specs from content.
     # Date prefix: "20260407/9am ePIC streaming..." -> new date/time.
     # Time-only prefix: "9am ePIC streaming..." -> update existing event time.
-    if entry.kind == 'journal':
+    # Use the effective post-save kind so memory→journal in the same save
+    # parses the prefix, and journal→other does not (since the entry won't
+    # be a journal after this save).
+    _valid_kinds = ('memory', 'todo', 'journal', 'bookmark', 'profile', 'ai', 'goal', 'list', 'action')
+    _new_kind = data.get('kind')
+    effective_kind = _new_kind if _new_kind in _valid_kinds else entry.kind
+    prefix_warnings = []
+    if effective_kind == 'journal':
         try:
             from . import services
             from .journal_editor import parse_journal_editor_prefix
             entry_data = entry.data if isinstance(entry.data, dict) else {}
-            content, event_ts = parse_journal_editor_prefix(
+            content, event_ts, prefix_warnings = parse_journal_editor_prefix(
                 content,
                 entry_data.get('event_date'),
                 services.get_timezone(),
@@ -3797,6 +3804,8 @@ def api_entry_save(request, entry_id):
     if merged:
         resp['merged'] = True
         resp['merged_content'] = entry.content
+    if prefix_warnings:
+        resp['warnings'] = prefix_warnings
     return JsonResponse(resp)
 
 

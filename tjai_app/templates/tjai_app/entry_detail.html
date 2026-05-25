@@ -856,6 +856,12 @@
                     var st = document.getElementById('saveStatus');
                     st.style.display = 'inline';
                     setTimeout(function() { st.style.display = 'none'; }, 2000);
+                    if (data.warnings && data.warnings.length) {
+                        // Skip navigation so the user can see the warning;
+                        // they can click into the entry from here.
+                        flashNotice(data.warnings.join(' | '));
+                        return;
+                    }
                     var returnUrl = new URLSearchParams(window.location.search).get('return');
                     if (returnUrl) {
                         location.replace(returnUrl);
@@ -1105,6 +1111,9 @@
                     _serverTimestamp = data.timestamp_modified || _serverTimestamp;
                     _autosaveFailCount = 0;
                     _showAutosaveStatus(data.merged ? 'autosaved (merged)' : 'autosaved', false);
+                    if (data.warnings && data.warnings.length) {
+                        flashNotice(data.warnings.join(' | '));
+                    }
                 } else {
                     throw new Error(data.error || 'save failed');
                 }

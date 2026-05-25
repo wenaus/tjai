@@ -1318,10 +1318,39 @@ def change_entry_kind(entry_id, kind):
         return {"error": f"Entry is already kind '{kind}'"}
 
     entry.kind = kind
-    entry.is_dirty = 1
-    entry.save(update_fields=['kind', 'is_dirty'])
+    update_fields = ['kind', 'is_dirty']
 
-    return _format_entry(entry)
+    # Promoting to journal: parse any leading date/time prefix from the
+    # existing content (e.g. "20260526/12:45 Pick up Mom" or "tomorrow
+    # 12:45 ..."), so a memory→journal flip picks up an inline date the
+    # same way the web editor would.
+    prefix_warnings = []
+    if kind == 'journal':
+        try:
+            from .journal_editor import parse_journal_editor_prefix
+            entry_data = entry.data if isinstance(entry.data, dict) else {}
+            current_event_ts = entry_data.get('event_date')
+            new_content, event_ts, prefix_warnings = parse_journal_editor_prefix(
+                entry.content or '',
+                current_event_ts,
+                get_timezone(),
+            )
+            if event_ts is not None:
+                if not isinstance(entry.data, dict):
+                    entry.data = {}
+                entry.data['event_date'] = event_ts
+                entry.content = new_content
+                update_fields += ['data', 'content']
+        except (ValueError, TypeError, OverflowError, OSError):
+            pass
+
+    entry.is_dirty = 1
+    entry.save(update_fields=update_fields)
+
+    result = _format_entry(entry)
+    if prefix_warnings:
+        result['warnings'] = prefix_warnings
+    return result
 
 
 def delete_entry(entry_id, content):
