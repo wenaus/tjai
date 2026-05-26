@@ -1393,15 +1393,7 @@
             }
             try {
                 const data = await fetchJson(`/tjai/api/dashboard/status?${params.join('&')}`);
-                dashboardTimezone = data.timezone || dashboardTimezone;
-                const entries = data.recent_entries || [];
-                loadedEntryCount = entries.length;
-                hasMoreEntries = data.has_more;
-                totalEntryCount = data.total_count || entries.length;
-                document.getElementById('entries-label').innerHTML = entriesLabel();
-                document.getElementById('entries-list').innerHTML = renderEntries(entries, dashboardTimezone);
-                restoreExpandedRelations(document.getElementById('entries-list'));
-                highlightAvailableTags(entries);
+                renderStatus(data);
             } catch (err) {
                 console.error('Filter fetch failed:', err);
             }
