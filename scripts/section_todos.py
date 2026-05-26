@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
 """Appends ## ToDo to the daily synopsis entry.
 
-Lists todos added or modified in the last 30 days, reverse time order,
-title as link to the entry detail page with up to 3 lines of subtext.
-All statuses included.
+Lists all pending todos in reverse modification-time order, title as link
+to the entry detail page with up to 3 lines of subtext. Done and archived
+todos are excluded; no time-depth limit.
 """
-import time
-
 import bootstrap  # noqa: F401 - Django setup
 from synopsis_utils import main_section
 
 from tjai_app.models import Entry
 
 
-LOOKBACK_DAYS = 30
 SUBTEXT_LINES = 3
 SUBTEXT_MAX_CHARS = 140
 
@@ -53,16 +50,13 @@ def _title_and_subtext(entry):
 def build(since_ts, target_date):
     """Return markdown body or None.
 
-    Ignores the passed since_ts (24h default) — todos need a longer window
-    to serve as a surfacing mechanism.
+    Ignores the passed since_ts — all pending todos are surfaced regardless
+    of age.
     """
-    window_ts = time.time() - LOOKBACK_DAYS * 86400
-
     entries = list(Entry.objects.filter(
         kind='todo',
         deleted_at__isnull=True,
-        timestamp_modified__gte=window_ts,
-    ).order_by('-timestamp_modified'))
+    ).exclude(status__in=('done', 'archive')).order_by('-timestamp_modified'))
 
     if not entries:
         return None

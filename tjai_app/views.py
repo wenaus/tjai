@@ -196,7 +196,7 @@ def _render_xml_code(text):
 from .tjai_utils import fmt_datetime, fmt_date, fmt_time, fmt_duration, fmt_ago, get_app_tz
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render, redirect
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
@@ -1366,8 +1366,13 @@ def logout_view(request):
 @login_required
 def dashboard(request):
     """Render the dashboard HTML page."""
+    if request.GET.get('status') == 'archive' and request.GET.get('view') != 'archive':
+        params = request.GET.copy()
+        params['view'] = 'archive'
+        del params['status']
+        return HttpResponseRedirect(f"?{params.urlencode()}")
     return render(request, 'tjai_app/dashboard.html', {
-        'is_archive': request.GET.get('status') == 'archive',
+        'is_archive': request.GET.get('view') == 'archive',
         'is_dialog': request.GET.get('view') == 'dialog',
         'is_trash': request.GET.get('deleted') == '1',
         'current_dialog_context': CURRENT_DIALOG_CONTEXT,
@@ -1533,13 +1538,13 @@ def api_offline_material_cache_manifest(request):
     add('/tjai/api/diary/entries', 'Diary entries API', 'api', 'diary')
     add('/tjai/dashboard/', 'Dashboard page', 'page', 'dashboard')
     add('/tjai/dashboard/?view=dialog', 'Dialog dashboard page', 'page', 'dashboard')
-    add('/tjai/dashboard/?status=archive', 'Archive dashboard page', 'page', 'dashboard')
+    add('/tjai/dashboard/?view=archive', 'Archive dashboard page', 'page', 'dashboard')
     add('/tjai/dashboard/?deleted=1', 'Trash dashboard page', 'page', 'dashboard')
     add('/tjai/api/dashboard/calendar', 'Dashboard calendar API', 'api', 'dashboard')
     add('/tjai/api/dashboard/named', 'Dashboard named API', 'api', 'dashboard')
     add('/tjai/api/dashboard/status', 'Dashboard default status API', 'api', 'dashboard')
     add('/tjai/api/dashboard/status?view=dialog', 'Dashboard dialog status API', 'api', 'dashboard')
-    add('/tjai/api/dashboard/status?status=archive', 'Dashboard archive status API', 'api', 'dashboard')
+    add('/tjai/api/dashboard/status?view=archive', 'Dashboard archive status API', 'api', 'dashboard')
     add('/tjai/api/dashboard/status?deleted=1', 'Dashboard trash status API', 'api', 'dashboard')
     add('/tjai/api/dialog/daily-counts', 'Dashboard dialog counts API', 'api', 'dashboard')
     add('/tjai/assessment/', 'AI assessment page', 'page', 'ai')
@@ -1917,7 +1922,11 @@ def dashboard_status(request):
     filter_client = request.GET.get('client')
     filter_model = request.GET.get('model')
     filter_machine = request.GET.get('machine')
-    filter_status = request.GET.get('status')
+    # status: csv multi-select; `_none` token matches NULL/empty status.
+    # exclude_status: csv negative selection.
+    filter_statuses = [s for s in request.GET.get('status', '').split(',') if s]
+    exclude_statuses = [s for s in request.GET.get('exclude_status', '').split(',') if s]
+    archive_view = request.GET.get('view') == 'archive'
     filter_date = request.GET.get('date')  # YYYY-MM-DD, filter entries to this day
     filter_from_time = request.GET.get('from_time')  # ISO datetime e.g. 2026-03-04T03:30
     filter_to_time = request.GET.get('to_time')  # ISO datetime e.g. 2026-03-04T05:30
@@ -1936,10 +1945,6 @@ def dashboard_status(request):
         base_qs = Entry.objects.filter(deleted_at__isnull=False)
     else:
         base_qs = Entry.objects.filter(deleted_at__isnull=True)
-        if filter_status:
-            base_qs = base_qs.filter(status=filter_status)
-        else:
-            base_qs = base_qs.exclude(status='archive')
 
     if filter_kind:
         base_qs = base_qs.filter(kind=filter_kind)
@@ -2021,6 +2026,19 @@ def dashboard_status(request):
         except ValueError:
             pass
 
+    if not show_deleted:
+        if archive_view:
+            base_qs = base_qs.filter(status='archive')
+        else:
+            base_qs = base_qs.exclude(status='archive')
+
+    # Status options are derived from the page population after all non-status
+    # filters. Status counts below are derived from the final displayed list.
+    status_options_qs = base_qs
+
+    if not show_deleted and (filter_statuses or exclude_statuses):
+        base_qs = _apply_status_filter(base_qs, filter_statuses, exclude_statuses)
+
     base_qs = base_qs.order_by('-timestamp_modified')
 
     recent = list(base_qs[offset:offset + DASHBOARD_PAGE])
@@ -2082,8 +2100,9 @@ def dashboard_status(request):
 
     has_entry_filter = any([
         filter_tag, filter_kind, filter_context, filter_client, filter_model,
-        filter_machine, filter_status, filter_date, filter_from_time,
-        filter_to_time, user_exclude_contexts, request.GET.get('public') == '1',
+        filter_machine, filter_statuses, exclude_statuses, filter_date,
+        filter_from_time, filter_to_time, user_exclude_contexts,
+        request.GET.get('public') == '1',
         request.GET.get('with_relations') == '1',
     ])
     include_error_logs = (
@@ -2143,10 +2162,6 @@ def dashboard_status(request):
         deleted_at__isnull=True, context_id__isnull=False
     ).values_list('context_id', flat=True).distinct().order_by('context_id'))
 
-    # Rebuild tag stats on full page load to purge orphans
-    from .tag_stats import rebuild_tag_stats
-    rebuild_tag_stats()
-
     # Tags (alpha sorted, excluding context-only tags) with counts for sparse tags
     tag_stats = TagStats.objects.filter(is_context_only=False).order_by('tag_name')
     all_tags = list(tag_stats.values_list('tag_name', flat=True))
@@ -2187,6 +2202,31 @@ def dashboard_status(request):
         context_id__in=DIALOG_CONTEXTS
     ).values('kind').annotate(cnt=Count('id')).values_list('kind', 'cnt'))
 
+    # Status counts reflect the entries actually displayed after status
+    # include/exclude filters. Active/excluded statuses are forced in at
+    # count 0 so their controls remain visible when the filter empties them.
+    status_counts = {}
+    status_options = []
+    if not show_deleted:
+        option_rows = (status_options_qs.values('status')
+                       .annotate(cnt=Count('id'))
+                       .values_list('status', 'cnt'))
+        option_set = set()
+        for s, _cnt in option_rows:
+            option_set.add(s if s else '_none')
+        option_set.update(filter_statuses)
+        option_set.update(exclude_statuses)
+
+        rows = (base_qs.values('status')
+                .annotate(cnt=Count('id'))
+                .values_list('status', 'cnt'))
+        for s, cnt in rows:
+            key = s if s else '_none'
+            status_counts[key] = status_counts.get(key, 0) + cnt
+        for s in option_set:
+            status_counts.setdefault(s, 0)
+        status_options = sorted(option_set)
+
     dialog_clients = []
     dialog_models = []
     if dialog_view:
@@ -2213,6 +2253,8 @@ def dashboard_status(request):
         'all_tags': all_tags,
         'tag_counts': tag_counts,
         'kind_counts': kind_counts,
+        'status_counts': status_counts,
+        'status_options': status_options,
         'open_todos': open_todos,
         'machines': machines,
         'oldest_sync': {'machine': oldest_machine, 'age_min': sync_age_min} if oldest_machine else None,
@@ -2235,20 +2277,26 @@ def dashboard_search(request):
     except Exception:
         search_query = SearchQuery(q, config='english')
 
+    show_deleted = request.GET.get('deleted') == '1'
     qs = Entry.objects.filter(
         search_vector=search_query,
-        deleted_at__isnull=True,
+        deleted_at__isnull=not show_deleted,
     ).annotate(
         rank=SearchRank('search_vector', search_query, normalization=1, cover_density=True),
     )
 
-    # Apply same filters as dashboard_status. Search includes archived
-    # entries by default (unlike the entry list) — when you're searching
-    # for something specific, you want to find it whether or not it was
-    # archived during a picks-curation pass.
-    filter_status = request.GET.get('status')
-    if filter_status:
-        qs = qs.filter(status=filter_status)
+    archive_view = request.GET.get('view') == 'archive'
+    if not show_deleted:
+        if archive_view:
+            qs = qs.filter(status='archive')
+        else:
+            qs = qs.exclude(status='archive')
+
+    # Apply same filters as dashboard_status.
+    filter_statuses = [s for s in request.GET.get('status', '').split(',') if s]
+    exclude_statuses = [s for s in request.GET.get('exclude_status', '').split(',') if s]
+    if not show_deleted and (filter_statuses or exclude_statuses):
+        qs = _apply_status_filter(qs, filter_statuses, exclude_statuses)
 
     filter_kind = request.GET.get('kind')
     if filter_kind:
@@ -3142,6 +3190,30 @@ def _lookup_entry(entry_id, request=None):
 def _is_public(entry):
     """Check if entry has data.access == 'public'."""
     return isinstance(entry.data, dict) and entry.data.get('access') == 'public'
+
+
+def _apply_status_filter(qs, filter_statuses, exclude_statuses):
+    """Apply multi-select status filtering. `_none` token matches NULL/empty.
+
+    Positive selection (filter_statuses) restricts to those values.
+    Negative selection (exclude_statuses) drops those values. Both can
+    coexist; positive applied first, negative second.
+    """
+    if filter_statuses:
+        q = Q()
+        for s in filter_statuses:
+            if s == '_none':
+                q |= Q(status__isnull=True) | Q(status='')
+            else:
+                q |= Q(status=s)
+        qs = qs.filter(q)
+    if exclude_statuses:
+        for s in exclude_statuses:
+            if s == '_none':
+                qs = qs.exclude(Q(status__isnull=True) | Q(status=''))
+            else:
+                qs = qs.exclude(status=s)
+    return qs
 
 
 @require_http_methods(["GET"])
