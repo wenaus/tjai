@@ -62,7 +62,7 @@ def parse_journal_editor_prefix(content, current_event_ts, tz):
     err_buf = io.StringIO()
     try:
         with redirect_stderr(err_buf):
-            ts, remaining = parse_date_spec(tokens)
+            ts, remaining = parse_date_spec(tokens, tz=tz)
     except (ValueError, TypeError, OverflowError, OSError):
         return content, None, []
     if len(remaining) >= len(tokens):

@@ -67,7 +67,7 @@ def parse_time(time_str: str) -> Tuple[int, int]:
     return hour, minute
 
 
-def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
+def parse_date_spec(args_list: List[str], tz=None) -> Tuple[float, List[str]]:
     """Parse date/time specification from start of arguments list.
 
     Supports:
@@ -81,11 +81,17 @@ def parse_date_spec(args_list: List[str]) -> Tuple[float, List[str]]:
 
     Args:
         args_list: List of argument strings
+        tz: Optional ZoneInfo to use. If None, resolved via the tj CLI
+            timezone manager — which reads ~/.tjai/config.json and may
+            prompt via input() if no location is configured. Non-CLI
+            callers (web, daemons) MUST pass tz explicitly to avoid that
+            interactive fallback.
 
     Returns:
         Tuple of (event_timestamp_utc, remaining_args)
     """
-    tz = get_timezone_object()
+    if tz is None:
+        tz = get_timezone_object()
 
     # Get current datetime in user's timezone
     if tz:
