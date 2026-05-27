@@ -213,6 +213,9 @@
             <button class="toolbar-btn save-btn" id="saveBtn">save</button>
             <button class="toolbar-btn" id="cancelBtn">cancel</button>
             <button class="toolbar-btn" id="relateBtn" style="margin-left:16px;">relate to</button>
+            <label style="margin-left:16px;cursor:pointer;color:#c0d8f0;font-size:12px;" title="Save without changing timestamp_modified">
+                <input type="checkbox" id="keepTimeField" class="public-check"> keep mod time
+            </label>
             <span class="status" id="saveStatus" style="display:none">saved</span>
         </div>
     </div>
@@ -278,6 +281,9 @@
                         continue;
                     }
                     html += '<div style="margin: 3px 0;"><span style="color:#7a7a7a">' + escHtml(key) + '</span> ' + fmtVal(key, raw[key]) + '</div>';
+                    if (key === 'content_lines') {
+                        html += '<div style="margin: 3px 0;"><span style="color:#7a7a7a">created</span> <span>{{ created_display|escapejs }}</span></div>';
+                    }
                 }
                 el.innerHTML = html;
             })();
@@ -496,6 +502,7 @@
             document.getElementById('contextField').value = originalContext;
             document.getElementById('tagsField').value = originalTags;
             document.getElementById('entryIdField').value = originalEntryId;
+            document.getElementById('keepTimeField').checked = false;
             if (!cm) {
                 cm = CodeMirror.fromTextArea(document.getElementById('editor'), {
                     mode: 'markdown',
@@ -845,10 +852,11 @@
             var priority = priorityVal ? parseInt(priorityVal) : null;
             var status = document.getElementById('statusField').value.trim() || null;
             var isPublic = document.getElementById('publicToggle').checked;
+            var keepTime = document.getElementById('keepTimeField').checked;
             fetch(saveUrl, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-                body: JSON.stringify({content: content, name: name, context: context, format: fmt, tags: tags, entry_id: entryIdVal, kind: kind, priority: priority, status: status, access: isPublic ? 'public' : null, expected_ts: _serverTimestamp})
+                body: JSON.stringify({content: content, name: name, context: context, format: fmt, tags: tags, entry_id: entryIdVal, kind: kind, priority: priority, status: status, access: isPublic ? 'public' : null, keep_time: keepTime, expected_ts: _serverTimestamp})
             }).then(function(r) { return r.json(); }).then(function(data) {
                 if (data.ok) {
                     _lastSavedContent = content;

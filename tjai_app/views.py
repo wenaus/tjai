@@ -3643,6 +3643,7 @@ def entry_detail(request, entry_id=None):
         'tags': tags,
         'line_count': len(lines),
         'first_line': first_line,
+        'created_display': fmt_datetime(entry.timestamp_created),
         'event_date': data.get('event_date') if data else None,
         'github_url': github_url,
         'content_format': fmt,
@@ -3847,7 +3848,8 @@ def api_entry_save(request, entry_id):
     # Preserve mod time if only tags/context changed (content and other fields unchanged)
     metadata_only = (content == old_content and
                      'name' not in data and not fmt_changed)
-    if not metadata_only:
+    keep_time = data.get('keep_time') is True and not data.get('autosave')
+    if not keep_time and not metadata_only:
         entry.timestamp_modified = time.time()
     entry.save()
     created_version = None
