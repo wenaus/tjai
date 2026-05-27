@@ -282,6 +282,7 @@
                     }
                     html += '<div style="margin: 3px 0;"><span style="color:#7a7a7a">' + escHtml(key) + '</span> ' + fmtVal(key, raw[key]) + '</div>';
                     if (key === 'content_lines') {
+                        html += '<div style="margin: 3px 0;"><span style="color:#7a7a7a">status</span> <span>{{ entry.status|default:"(none)"|escapejs }}</span></div>';
                         html += '<div style="margin: 3px 0;"><span style="color:#7a7a7a">created</span> <span>{{ created_display|escapejs }}</span></div>';
                     }
                 }
@@ -889,13 +890,20 @@
         }
 
         var entryActionRunning = false;
-        function runEntryAction(label, url, method, confirmText, doneUrl) {
+        function runEntryAction(label, url, method, confirmText, doneUrl, body) {
             if (entryActionRunning) return;
             if (confirmText && !confirm(confirmText)) return;
             entryActionRunning = true;
+            var headers = {'X-CSRFToken': csrfToken};
+            var payload = null;
+            if (body) {
+                headers['Content-Type'] = 'application/json';
+                payload = JSON.stringify(body);
+            }
             fetch(url, {
                 method: method,
-                headers: {'X-CSRFToken': csrfToken},
+                headers: headers,
+                body: payload,
             }).then(function(r) { return r.json(); }).then(function(data) {
                 if (data.status === 'ok') {
                     location.href = doneUrl;
@@ -914,7 +922,8 @@
                 archiveUrl,
                 'POST',
                 null,
-                returnToOriginList()
+                returnToOriginList(),
+                {keep_time: document.getElementById('keepTimeField').checked}
             );
         }
         function doTrash() {

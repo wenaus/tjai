@@ -1235,6 +1235,11 @@ def api_delete_entry(request, entry_id):
 @require_http_methods(["POST"])
 def api_archive_entry(request, entry_id):
     """Archive an entry by setting status='archive', including from Trash."""
+    try:
+        data = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    keep_time = data.get('keep_time') is True
     include_deleted = request.GET.get('from_trash') == '1'
     qs = Entry.objects.all() if include_deleted else Entry.objects.filter(deleted_at__isnull=True)
     entry = qs.filter(id=entry_id).first()
@@ -1251,9 +1256,12 @@ def api_archive_entry(request, entry_id):
     now = time.time()
     entry.deleted_at = None
     entry.status = 'archive'
-    entry.timestamp_modified = now
     entry.is_dirty = 1
-    entry.save(update_fields=['deleted_at', 'status', 'timestamp_modified', 'is_dirty'])
+    update_fields = ['deleted_at', 'status', 'is_dirty']
+    if not keep_time:
+        entry.timestamp_modified = now
+        update_fields.append('timestamp_modified')
+    entry.save(update_fields=update_fields)
 
     return JsonResponse({
         "status": "ok",
