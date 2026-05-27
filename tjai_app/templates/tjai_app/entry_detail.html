@@ -147,11 +147,15 @@
     {% endif %}
     <div style="margin-bottom: 4px;">
         <span id="first-line"></span>
+        {% if is_trashed %}
+        <span style="margin-left:8px;color:#cc4444;font-size:12px;">Trash</span>
+        {% else %}
         <button class="toolbar-btn" id="editBtn" style="margin-left: 8px;">edit</button>
         <label style="margin-left:16px;cursor:pointer;color:#9ccc65;font-size:12px;" title="Toggle public access">
             <input type="checkbox" id="publicToggle" class="public-check" {% if is_public %}checked{% endif %}> public
         </label>
         <a id="publicLink" href="/tjai/p/{{ public_slug }}/" target="_blank" style="color:#9ccc65;margin-left:6px;font-size:12px;{% if not is_public %}display:none;{% endif %}" title="Open public page">link</a>
+        {% endif %}
         <span id="offline-entry-status" style="float:right;color:#888;font-size:11px;"></span>
     </div>
     <div id="version-label" style="color:#daa520; font-size: 12px; margin-bottom: 4px; display:none;"><span id="version-label-text"></span> <span id="autosave-inline" style="color:#888;"></span></div>
@@ -242,6 +246,7 @@
             <div style="margin: 3px 0;"><span style="color:#7a7a7a">status</span> <span>{{ entry.status|default:"(none)" }}</span></div>
             {% if entry.kind == 'todo' or entry.kind == 'goal' %}<div style="margin: 3px 0;"><span style="color:#7a7a7a">done</span> <span>{{ entry_done|yesno:"true,false" }}</span></div>{% endif %}
             <div style="margin: 3px 0;"><span style="color:#7a7a7a">created</span> <span>{{ created_display }}</span></div>
+            {% if is_trashed %}<div style="margin: 3px 0;"><span style="color:#7a7a7a">deleted</span> <span>{{ deleted_display }}</span></div>{% endif %}
         </div>
         {% if entry.data %}
         <div id="entry-data"></div>
@@ -286,7 +291,7 @@
                 var html = '';
                 for (var key in raw) {
                     if (key === 'content_lines') continue;
-                    if (key === 'done' && "{{ entry.kind|escapejs }}" === "todo") continue;
+                    if (key === 'done' && ("{{ entry.kind|escapejs }}" === "todo" || "{{ entry.kind|escapejs }}" === "goal")) continue;
                     if (REDACT_DATA_KEYS.hasOwnProperty(key)) {
                         html += '<div style="margin: 3px 0;"><span style="color:#7a7a7a">' + escHtml(key) + '</span> <span style="color:#888;font-style:italic">' + escHtml(REDACT_DATA_KEYS[key]) + '</span></div>';
                         continue;
@@ -298,8 +303,12 @@
         </script>
         {% endif %}
         <div style="margin-top: 8px;">
+            {% if is_trashed %}
+            <span class="delete-link" id="restoreBtn" style="color:#9ccc65">restore</span>
+            {% else %}
             <span class="delete-link" id="archiveBtn" style="color:#d8a070">archive</span>
             <span class="delete-link" id="trashBtn" style="margin-left:12px">trash</span>
+            {% endif %}
         </div>
     </div>
 
@@ -468,6 +477,7 @@
         var saveUrl = "{% url 'api_entry_save' entry.id %}";
         var deleteUrl = "{% url 'api_delete_entry' entry.id %}";
         var archiveUrl = "{% url 'api_archive_entry' entry.id %}";
+        var restoreUrl = "{% url 'api_restore_entry' entry.id %}";
         var fallbackListUrl = "{% url 'dashboard' %}";
         function returnToOriginList() {
             if (document.referrer) {
@@ -483,18 +493,21 @@
         var cm = null;
 
         // Public toggle — immediate save, uses current editor content if editing
-        document.getElementById('publicToggle').addEventListener('change', function() {
-            var isPublic = this.checked;
-            var content = cm ? cm.getValue() : "{{ entry.content|escapejs }}";
-            fetch(saveUrl, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-                body: JSON.stringify({content: content, access: isPublic ? 'public' : null})
-            }).then(function(r) { return r.json(); }).then(function(data) {
-                if (!data.ok) alert('Save failed: ' + (data.error || 'unknown'));
-                document.getElementById('publicLink').style.display = isPublic ? '' : 'none';
-            }).catch(function(err) { alert('Save failed: ' + err); });
-        });
+        var publicToggle = document.getElementById('publicToggle');
+        if (publicToggle) {
+            publicToggle.addEventListener('change', function() {
+                var isPublic = this.checked;
+                var content = cm ? cm.getValue() : "{{ entry.content|escapejs }}";
+                fetch(saveUrl, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+                    body: JSON.stringify({content: content, access: isPublic ? 'public' : null})
+                }).then(function(r) { return r.json(); }).then(function(data) {
+                    if (!data.ok) alert('Save failed: ' + (data.error || 'unknown'));
+                    document.getElementById('publicLink').style.display = isPublic ? '' : 'none';
+                }).catch(function(err) { alert('Save failed: ' + err); });
+            });
+        }
 
         // linkifyContent provided by tjai-utils.js
         document.getElementById('first-line').innerHTML = linkifyContent(escapeHtml("{{ first_line|escapejs }}"));
@@ -952,6 +965,15 @@
                 returnToOriginList()
             );
         }
+        function doRestore() {
+            runEntryAction(
+                'Restore',
+                restoreUrl,
+                'POST',
+                null,
+                window.location.href
+            );
+        }
 
         // Autosave state — MUST be before startEdit can be called
         var _autosaveInterval = null;
@@ -992,12 +1014,17 @@
             if (document.visibilityState === 'visible') _checkForRemoteChanges();
         });
 
-        document.getElementById('editBtn').addEventListener('click', startEdit);
+        var editBtn = document.getElementById('editBtn');
+        if (editBtn) editBtn.addEventListener('click', startEdit);
         document.getElementById('kindField').addEventListener('change', updateDoneFieldVisibility);
         document.getElementById('saveBtn').addEventListener('click', doSave);
         document.getElementById('cancelBtn').addEventListener('click', cancelEdit);
-        document.getElementById('archiveBtn').addEventListener('click', doArchive);
-        document.getElementById('trashBtn').addEventListener('click', doTrash);
+        var archiveBtn = document.getElementById('archiveBtn');
+        if (archiveBtn) archiveBtn.addEventListener('click', doArchive);
+        var trashBtn = document.getElementById('trashBtn');
+        if (trashBtn) trashBtn.addEventListener('click', doTrash);
+        var restoreBtn = document.getElementById('restoreBtn');
+        if (restoreBtn) restoreBtn.addEventListener('click', doRestore);
         document.getElementById('relateBtn').addEventListener('click', function() {
             window.open('/tjai/relate/{{ entry.id }}/', '_blank');
         });

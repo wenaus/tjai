@@ -3179,7 +3179,7 @@ def agent_log_data(request):
 
 def _lookup_entry(entry_id, request=None):
     """Resolve entry_id (UUID, data.entry_id, nickname, or name) to an Entry or None."""
-    base = Entry.objects.filter(deleted_at__isnull=True)
+    base = Entry.objects.all()
     if request and request.GET.get('uuid'):
         return base.filter(id=request.GET['uuid']).first()
     if request and request.GET.get('entry_id'):
@@ -3515,12 +3515,13 @@ def entry_detail(request, entry_id=None):
 
     if not entry:
         raise Http404("Entry not found")
+    is_trashed = entry.deleted_at is not None
     tags = list(Tag.objects.filter(entry_id=entry.id).values_list('tag_name', flat=True))
     lines = [l for l in entry.content.split('\n') if l.strip()]
     data = entry.data if isinstance(entry.data, dict) else None
     # Update stale content_lines in data
     actual_lines = len(lines)
-    if data is not None:
+    if data is not None and not is_trashed:
         stored = data.get('content_lines')
         if stored != actual_lines and actual_lines > 1:
             data['content_lines'] = actual_lines
@@ -3669,6 +3670,8 @@ def entry_detail(request, entry_id=None):
         'is_public': is_public,
         'public_slug': public_slug,
         'entry_done': entry_done,
+        'is_trashed': is_trashed,
+        'deleted_display': fmt_datetime(entry.deleted_at) if is_trashed else None,
     })
 
 
