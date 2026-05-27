@@ -201,7 +201,7 @@
             <label style="margin-left:16px">status</label>
             <input id="statusField" type="text" value="{{ entry.status|default:'' }}" placeholder="(none)" style="width:100px">
             <label id="doneFieldLabel" style="margin-left:16px;cursor:pointer;color:#c0d8f0;">
-                <input type="checkbox" id="doneField" class="public-check" {% if todo_done %}checked{% endif %}> done
+                <input type="checkbox" id="doneField" class="public-check" {% if entry_done %}checked{% endif %}> done
             </label>
             <label style="margin-left:16px">format</label>
             <select id="formatField" style="background:#111;color:#c0d8f0;border:1px solid #555;padding:3px 6px;font-family:inherit;font-size:13px;border-radius:3px;">
@@ -240,7 +240,7 @@
         <div style="margin-bottom: 8px;">
             <div style="margin: 3px 0;"><span style="color:#7a7a7a">content_lines</span> <span>{{ line_count }}</span></div>
             <div style="margin: 3px 0;"><span style="color:#7a7a7a">status</span> <span>{{ entry.status|default:"(none)" }}</span></div>
-            {% if entry.kind == 'todo' %}<div style="margin: 3px 0;"><span style="color:#7a7a7a">done</span> <span>{{ todo_done|yesno:"true,false" }}</span></div>{% endif %}
+            {% if entry.kind == 'todo' or entry.kind == 'goal' %}<div style="margin: 3px 0;"><span style="color:#7a7a7a">done</span> <span>{{ entry_done|yesno:"true,false" }}</span></div>{% endif %}
             <div style="margin: 3px 0;"><span style="color:#7a7a7a">created</span> <span>{{ created_display }}</span></div>
         </div>
         {% if entry.data %}
@@ -463,7 +463,7 @@
         var originalEntryId = "{{ entry.data.entry_id|default:''|escapejs }}";
         var originalKind = "{{ entry.kind|escapejs }}";
         var originalPriority = "{{ entry.priority|default:''|escapejs }}";
-        var originalDone = {{ todo_done|yesno:"true,false" }};
+        var originalDone = {{ entry_done|yesno:"true,false" }};
         var csrfToken = "{{ csrf_token }}";
         var saveUrl = "{% url 'api_entry_save' entry.id %}";
         var deleteUrl = "{% url 'api_delete_entry' entry.id %}";
@@ -501,7 +501,8 @@
 
         var baseTitle = document.title;
         function updateDoneFieldVisibility() {
-            var show = document.getElementById('kindField').value === 'todo';
+            var kind = document.getElementById('kindField').value;
+            var show = kind === 'todo' || kind === 'goal';
             document.getElementById('doneFieldLabel').style.display = show ? '' : 'none';
         }
         function startEdit() {
@@ -866,7 +867,8 @@
             var priorityVal = document.getElementById('priorityField').value.trim();
             var priority = priorityVal ? parseInt(priorityVal) : null;
             var status = document.getElementById('statusField').value.trim() || null;
-            var done = document.getElementById('kindField').value === 'todo' ? document.getElementById('doneField').checked : null;
+            var doneKind = document.getElementById('kindField').value;
+            var done = (doneKind === 'todo' || doneKind === 'goal') ? document.getElementById('doneField').checked : null;
             var isPublic = document.getElementById('publicToggle').checked;
             var keepTime = document.getElementById('keepTimeField').checked;
             fetch(saveUrl, {

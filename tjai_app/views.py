@@ -3645,7 +3645,7 @@ def entry_detail(request, entry_id=None):
 
     is_public = _is_public(entry)
     public_slug = (data.get('entry_id') or data.get('nickname') or entry.name or str(entry.id)) if data else str(entry.id)
-    todo_done = bool(data.get('done')) if data and 'done' in data else entry.status == 'done'
+    entry_done = bool(data.get('done')) if data and 'done' in data else entry.status == 'done'
     return render(request, 'tjai_app/entry_detail.html', {
         'entry': entry,
         'content_html': content_html,
@@ -3668,7 +3668,7 @@ def entry_detail(request, entry_id=None):
         'restore_version_info_json': json.dumps(restore_version_info),
         'is_public': is_public,
         'public_slug': public_slug,
-        'todo_done': todo_done,
+        'entry_done': entry_done,
     })
 
 
@@ -3832,7 +3832,7 @@ def api_entry_save(request, entry_id):
     if 'done' in data:
         if not isinstance(entry.data, dict):
             entry.data = {}
-        if entry.kind == 'todo':
+        if entry.kind in ('todo', 'goal'):
             new_done = bool(data['done'])
             done_changed = old_done != new_done
             entry.data['done'] = new_done
