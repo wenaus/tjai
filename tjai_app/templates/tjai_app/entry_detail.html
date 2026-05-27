@@ -231,8 +231,12 @@
             {% if entry.context_id %}<span class="context">={{ entry.context_id }}</span>{% endif %}
             {% if entry.name %}<strong>@{{ entry.name }}</strong>{% endif %}
             {% for t in tags %}<span class="tag">:{{ t }}</span> {% endfor %}
-            <span style="color: #666;">{{ line_count }} lines</span>
             {% if is_public %}<a href="/tjai/p/{{ public_slug }}/" style="color:#9ccc65;margin-left:8px;font-size:12px;" title="Public link">public link</a>{% endif %}
+        </div>
+        <div style="margin-bottom: 8px;">
+            <div style="margin: 3px 0;"><span style="color:#7a7a7a">content_lines</span> <span>{{ line_count }}</span></div>
+            <div style="margin: 3px 0;"><span style="color:#7a7a7a">status</span> <span>{{ entry.status|default:"(none)" }}</span></div>
+            <div style="margin: 3px 0;"><span style="color:#7a7a7a">created</span> <span>{{ created_display }}</span></div>
         </div>
         {% if entry.data %}
         <div id="entry-data"></div>
@@ -276,15 +280,12 @@
                 var REDACT_DATA_KEYS = {worker_result: '[result body]', worker_error: '[error body]'};
                 var html = '';
                 for (var key in raw) {
+                    if (key === 'content_lines') continue;
                     if (REDACT_DATA_KEYS.hasOwnProperty(key)) {
                         html += '<div style="margin: 3px 0;"><span style="color:#7a7a7a">' + escHtml(key) + '</span> <span style="color:#888;font-style:italic">' + escHtml(REDACT_DATA_KEYS[key]) + '</span></div>';
                         continue;
                     }
                     html += '<div style="margin: 3px 0;"><span style="color:#7a7a7a">' + escHtml(key) + '</span> ' + fmtVal(key, raw[key]) + '</div>';
-                    if (key === 'content_lines') {
-                        html += '<div style="margin: 3px 0;"><span style="color:#7a7a7a">status</span> <span>{{ entry.status|default:"(none)"|escapejs }}</span></div>';
-                        html += '<div style="margin: 3px 0;"><span style="color:#7a7a7a">created</span> <span>{{ created_display|escapejs }}</span></div>';
-                    }
                 }
                 el.innerHTML = html;
             })();
