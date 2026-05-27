@@ -3645,6 +3645,7 @@ def entry_detail(request, entry_id=None):
 
     is_public = _is_public(entry)
     public_slug = (data.get('entry_id') or data.get('nickname') or entry.name or str(entry.id)) if data else str(entry.id)
+    todo_done = bool(data.get('done')) if data and 'done' in data else entry.status == 'done'
     return render(request, 'tjai_app/entry_detail.html', {
         'entry': entry,
         'content_html': content_html,
@@ -3667,6 +3668,7 @@ def entry_detail(request, entry_id=None):
         'restore_version_info_json': json.dumps(restore_version_info),
         'is_public': is_public,
         'public_slug': public_slug,
+        'todo_done': todo_done,
     })
 
 
@@ -3734,6 +3736,7 @@ def api_entry_save(request, entry_id):
     _valid_kinds = ('memory', 'todo', 'journal', 'bookmark', 'profile', 'ai', 'goal', 'list', 'action')
     _new_kind = data.get('kind')
     effective_kind = _new_kind if _new_kind in _valid_kinds else entry.kind
+    old_done = bool(entry.data.get('done')) if isinstance(entry.data, dict) and 'done' in entry.data else entry.status == 'done'
     prefix_warnings = []
     if effective_kind == 'journal':
         try:
@@ -3825,6 +3828,19 @@ def api_entry_save(request, entry_id):
     if 'status' in data:
         sv = (data['status'] or '').strip() if isinstance(data['status'], str) else None
         entry.status = sv or None
+    done_changed = False
+    if 'done' in data:
+        if not isinstance(entry.data, dict):
+            entry.data = {}
+        if entry.kind == 'todo':
+            new_done = bool(data['done'])
+            done_changed = old_done != new_done
+            entry.data['done'] = new_done
+        else:
+            done_changed = 'done' in entry.data
+            entry.data.pop('done', None)
+        if not entry.data:
+            entry.data = None
     # Content format: md/txt/xml/None (auto)
     fmt_changed = False
     if 'format' in data:
@@ -3855,7 +3871,7 @@ def api_entry_save(request, entry_id):
             entry.data.pop('access', None)
     # Preserve mod time if only tags/context changed (content and other fields unchanged)
     metadata_only = (content == old_content and
-                     'name' not in data and not fmt_changed)
+                     'name' not in data and not fmt_changed and not done_changed)
     keep_time = data.get('keep_time') is True and not data.get('autosave')
     if not keep_time and not metadata_only:
         entry.timestamp_modified = time.time()

@@ -199,6 +199,9 @@
             <input id="priorityField" type="number" min="1" value="{{ entry.priority|default:'' }}" placeholder="(none)" style="width:60px">
             <label style="margin-left:16px">status</label>
             <input id="statusField" type="text" value="{{ entry.status|default:'' }}" placeholder="(none)" style="width:100px">
+            <label id="doneFieldLabel" style="margin-left:16px;cursor:pointer;color:#c0d8f0;">
+                <input type="checkbox" id="doneField" class="public-check" {% if todo_done %}checked{% endif %}> done
+            </label>
             <label style="margin-left:16px">format</label>
             <select id="formatField" style="background:#111;color:#c0d8f0;border:1px solid #555;padding:3px 6px;font-family:inherit;font-size:13px;border-radius:3px;">
                 <option value="">auto</option>
@@ -236,6 +239,7 @@
         <div style="margin-bottom: 8px;">
             <div style="margin: 3px 0;"><span style="color:#7a7a7a">content_lines</span> <span>{{ line_count }}</span></div>
             <div style="margin: 3px 0;"><span style="color:#7a7a7a">status</span> <span>{{ entry.status|default:"(none)" }}</span></div>
+            {% if entry.kind == 'todo' %}<div style="margin: 3px 0;"><span style="color:#7a7a7a">done</span> <span>{{ todo_done|yesno:"true,false" }}</span></div>{% endif %}
             <div style="margin: 3px 0;"><span style="color:#7a7a7a">created</span> <span>{{ created_display }}</span></div>
         </div>
         {% if entry.data %}
@@ -281,6 +285,7 @@
                 var html = '';
                 for (var key in raw) {
                     if (key === 'content_lines') continue;
+                    if (key === 'done' && "{{ entry.kind|escapejs }}" === "todo") continue;
                     if (REDACT_DATA_KEYS.hasOwnProperty(key)) {
                         html += '<div style="margin: 3px 0;"><span style="color:#7a7a7a">' + escHtml(key) + '</span> <span style="color:#888;font-style:italic">' + escHtml(REDACT_DATA_KEYS[key]) + '</span></div>';
                         continue;
@@ -457,6 +462,7 @@
         var originalEntryId = "{{ entry.data.entry_id|default:''|escapejs }}";
         var originalKind = "{{ entry.kind|escapejs }}";
         var originalPriority = "{{ entry.priority|default:''|escapejs }}";
+        var originalDone = {{ todo_done|yesno:"true,false" }};
         var csrfToken = "{{ csrf_token }}";
         var saveUrl = "{% url 'api_entry_save' entry.id %}";
         var deleteUrl = "{% url 'api_delete_entry' entry.id %}";
@@ -493,6 +499,10 @@
         document.getElementById('first-line').innerHTML = linkifyContent(escapeHtml("{{ first_line|escapejs }}"));
 
         var baseTitle = document.title;
+        function updateDoneFieldVisibility() {
+            var show = document.getElementById('kindField').value === 'todo';
+            document.getElementById('doneFieldLabel').style.display = show ? '' : 'none';
+        }
         function startEdit() {
             document.title = baseTitle + ' - Edit';
             document.getElementById('viewMode').style.display = 'none';
@@ -504,6 +514,8 @@
             document.getElementById('contextField').value = originalContext;
             document.getElementById('tagsField').value = originalTags;
             document.getElementById('entryIdField').value = originalEntryId;
+            document.getElementById('doneField').checked = originalDone;
+            updateDoneFieldVisibility();
             document.getElementById('keepTimeField').checked = false;
             if (!cm) {
                 cm = CodeMirror.fromTextArea(document.getElementById('editor'), {
@@ -853,12 +865,13 @@
             var priorityVal = document.getElementById('priorityField').value.trim();
             var priority = priorityVal ? parseInt(priorityVal) : null;
             var status = document.getElementById('statusField').value.trim() || null;
+            var done = document.getElementById('kindField').value === 'todo' ? document.getElementById('doneField').checked : null;
             var isPublic = document.getElementById('publicToggle').checked;
             var keepTime = document.getElementById('keepTimeField').checked;
             fetch(saveUrl, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-                body: JSON.stringify({content: content, name: name, context: context, format: fmt, tags: tags, entry_id: entryIdVal, kind: kind, priority: priority, status: status, access: isPublic ? 'public' : null, keep_time: keepTime, expected_ts: _serverTimestamp})
+                body: JSON.stringify({content: content, name: name, context: context, format: fmt, tags: tags, entry_id: entryIdVal, kind: kind, priority: priority, status: status, done: done, access: isPublic ? 'public' : null, keep_time: keepTime, expected_ts: _serverTimestamp})
             }).then(function(r) { return r.json(); }).then(function(data) {
                 if (data.ok) {
                     _lastSavedContent = content;
@@ -977,6 +990,7 @@
         });
 
         document.getElementById('editBtn').addEventListener('click', startEdit);
+        document.getElementById('kindField').addEventListener('change', updateDoneFieldVisibility);
         document.getElementById('saveBtn').addEventListener('click', doSave);
         document.getElementById('cancelBtn').addEventListener('click', cancelEdit);
         document.getElementById('archiveBtn').addEventListener('click', doArchive);
