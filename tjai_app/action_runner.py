@@ -900,7 +900,11 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
 
     if not models_to_run:
         logger.info("No models to dispatch for %s", base_entry_id)
-        return
+        data.pop('next_target', None)
+        data.pop('next_target_entry_id', None)
+        action.data = data
+        action.save(update_fields=['data'])
+        return False
 
     # Create entries and dispatch — uniform loop, all models
     launch_failures = []

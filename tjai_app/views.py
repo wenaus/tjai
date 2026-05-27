@@ -1757,9 +1757,13 @@ def dashboard_calendar(request):
             # Pre-format all date/time strings server-side
             date_key = event_dt.strftime('%Y%m%d')
 
-            # Only show today's daily synopsis in calendar
             entry_id = data.get('entry_id', '')
-            if entry_id.startswith('daily-') and date_key != today_date_str:
+            # Only show today's daily synopsis/diary in calendar. Older diary
+            # entries belong on the Diary page.
+            if (
+                (entry_id.startswith('daily-') or entry_id.startswith('diary-'))
+                and date_key != today_date_str
+            ):
                 continue
             date_display = event_dt.strftime('%a %b %-d')
             is_allday = entry_id.startswith('daily-') or entry_id.startswith('diary-') or not (event_dt.hour or event_dt.minute)
