@@ -36,6 +36,7 @@ Built on an offline-first, distributed architecture: the `tj` client works local
 | [Browser Offline Cache](docs/offline-cache.md) | Research and generic browser-side offline caching for tjai pages and APIs |
 | [Remote Worker Pipeline](docs/remote-workers.md) | Long-poll protocol for offloading inference (e.g. gemma) to a worker on another machine — capability whitelist, claim lifecycle, display contract, troubleshooting |
 | [Claude Integration](docs/claude-integration.md) | MCP setup, Claude Code settings, dialog memory, Claude.ai, OAuth |
+| [Gemini Integration](docs/gemini-integration.md) | MCP setup, Gemini/Antigravity CLI settings, pre-launch context loading, dialog logging |
 | [Telegram Bot](docs/telegram.md) | Voice/text assistant, setup, voice commands, Mini App |
 | [Add-ons: Gmail & Chrome](docs/addons.md) | Gmail calendar add-on, Chrome bookmark extension |
 | [Bulk Import](docs/bulk-import.md) | Importing bookmarks from external sources |
