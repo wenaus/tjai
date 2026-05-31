@@ -1,2 +1,0 @@
-# Dependencies for tjai
-# No external dependencies - uses Python standard library

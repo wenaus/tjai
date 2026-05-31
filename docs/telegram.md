@@ -25,7 +25,9 @@ A personal AI assistant via Telegram with full tjai access, voice dialogue, and 
    ANTHROPIC_API_KEY=<key>
    OPENAI_API_KEY=<key>  # Whisper STT and TTS
    ```
-4. Install: `pip install -r requirements-tgbot.txt`
+4. Bot deps are part of the standard venv (`requirements/tgbot.txt`, included in
+   `dev.txt`/`prod.txt`); see [Python Environment](python-environment.md). No
+   separate install step.
 5. Start: `./deploy/restart_tgbot.sh --sync`
 
 ## Usage

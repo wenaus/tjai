@@ -28,6 +28,7 @@ Built on an offline-first, distributed architecture: the `tj` client works local
 | Document | Contents |
 |----------|----------|
 | [Installation & Configuration](docs/configuration.md) | Quick start, database setup, config file, backup/restore |
+| [Python Environment](docs/python-environment.md) | Interpreter pin, requirements layout, uv-based venv build (single source of truth) |
 | [CLI Reference](docs/cli.md) | Complete command reference for `tj` |
 | [Architecture](docs/architecture.md) | Sync design, MCP gateway, design decisions |
 | [Server & Deployment](docs/server.md) | Production environment, deploy, endpoints, logging, health, backups |

@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
-# Sync repo to /var/www/tjai, install deps, migrate, restart services
+# Sync repo to /var/www/tjai, install deps, migrate, restart services.
+# Interpreter + venv are built by deploy/make_venv.sh from .python-version
+# (uv-managed CPython) -- the single source of truth shared with dev setup.
 set -euo pipefail
 
 REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 TARGET_DIR=/var/www/tjai
 VENV=$TARGET_DIR/.venv
-PYTHON=/opt/python-3.14/bin/python3.14
 SECONDS=0
 
 # rsync code (preserve .venv, .env, data/)
-# --chmod ensures files are world-readable so www-data (gunicorn) can read them
-rsync -a --chmod=D755,F644 \
+# --chmod keeps dirs/files world-readable for www-data (gunicorn) AND sets the
+# execute bit on files, so scripts (e.g. deploy/make_venv.sh) survive rsync runnable.
+rsync -a --chmod=D755,F755 \
   --exclude '.venv' --exclude '.venv.*' --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' --exclude '.env' --exclude 'data/' \
   "$REPO_ROOT/" "$TARGET_DIR/"
 echo "[${SECONDS}s] rsync done"
@@ -21,25 +23,24 @@ if [[ ! -f $TARGET_DIR/.env ]]; then
   exit 1
 fi
 
-# create venv if missing
-if [[ ! -d $VENV ]]; then
-  $PYTHON -m venv "$VENV"
-fi
-
-# install deps only if requirements changed
-REQ_FILE="$TARGET_DIR/requirements/prod.txt"
+# Build/refresh the venv via the single source of truth (deploy/make_venv.sh).
+# Runs when the venv is missing or any requirements file / .python-version
+# changed. make_venv.sh self-heals the interpreter: if .python-version no longer
+# matches the venv's Python, it rebuilds -- the pin can never silently drift.
+REQ_HASH=$(cat "$TARGET_DIR"/requirements/*.txt "$TARGET_DIR/.python-version" | md5sum | cut -d' ' -f1)
 REQ_HASH_FILE="$TARGET_DIR/.last_requirements_hash"
-REQ_HASH=$(md5sum "$REQ_FILE" | cut -d' ' -f1)
-if [[ ! -f "$REQ_HASH_FILE" ]] || [[ "$(cat "$REQ_HASH_FILE")" != "$REQ_HASH" ]]; then
-  "$VENV/bin/pip" install -r "$REQ_FILE"
+if [[ ! -d $VENV ]] || [[ ! -f "$REQ_HASH_FILE" ]] || [[ "$(cat "$REQ_HASH_FILE")" != "$REQ_HASH" ]]; then
+  "$TARGET_DIR/deploy/make_venv.sh" "$VENV" prod
   echo "$REQ_HASH" > "$REQ_HASH_FILE"
 else
-  echo "Requirements unchanged, skipping pip install."
+  echo "Requirements & interpreter unchanged, skipping venv sync."
 fi
+
+# one-time cleanup of the retired package
 if "$VENV/bin/python" -c "import importlib.metadata as m; m.version('django-mcp-server')" >/dev/null 2>&1; then
-  "$VENV/bin/pip" uninstall -y django-mcp-server
+  uv pip uninstall --python "$VENV/bin/python" django-mcp-server
 fi
-echo "[${SECONDS}s] pip done"
+echo "[${SECONDS}s] deps done"
 
 # migrate
 pushd "$TARGET_DIR" >/dev/null

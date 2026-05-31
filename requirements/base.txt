@@ -5,6 +5,7 @@ requests>=2.31.0
 psycopg[binary]>=3.2
 markdown>=3.5
 mcp>=1.26.0
+starlette>=1.2.1  # security floor: CVE-2026-48710 BadHost; pin at validated version, transitive via mcp/sse-starlette
 feedparser>=6.0
 openai>=1.0.0
 google-genai>=1.0.0

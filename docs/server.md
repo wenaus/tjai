@@ -9,7 +9,7 @@
 - **Database:** PostgreSQL. `DJANGO_DATABASE_URL` is in `/var/www/tjai/.env` only.
 - **Django settings:** `tjai_project/settings/base.py` (split settings dir)
 - **Static files:** `tjai_app/static/tjai/` → served via Apache Alias at `/tjai/static/`
-- **Python:** 3.14 (built from source at `/opt/python-3.14`)
+- **Python:** version pinned in `.python-version`, provisioned by uv; see [Python Environment](python-environment.md)
 - **Web server:** gunicorn on port 8002, managed by systemd (`deploy/tjai-gunicorn.service`), runs as `www-data`
 - **MCP server:** standalone FastMCP/ASGI service on port 8003, managed by systemd (`deploy/tjai-mcp-asgi.service`), runs as `www-data`
 - **Action agent:** managed by supervisord (`deploy/supervisord.conf`), runs as `admin`

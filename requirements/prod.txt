@@ -1,4 +1,7 @@
+# Production venv = base app + telegram bot + server tooling.
+# Built by deploy/make_venv.sh on the interpreter pinned in .python-version.
 -r base.txt
+-r tgbot.txt
 gunicorn>=23.0.0
 py-spy>=0.4.2
 supervisor>=4.2.0
