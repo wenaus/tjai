@@ -11,6 +11,8 @@ REPOS=(
     /home/admin/github/lxr-mcp-server
     /home/admin/github/rucio-eic-mcp-server
     /home/admin/github/xrootd-mcp-server
+    /home/admin/github/corun-mcp-server
+    /home/admin/github/corun-ai
     /home/admin/github/snippets
     /home/admin/github/panda-server
     /home/admin/github/panda-client
