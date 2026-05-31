@@ -9,6 +9,12 @@ https://etaverse.com/tjai/mcp/
 The endpoint is for personal MCP clients such as Claude Code and local tooling.
 It is not intended for claude.ai connectors or public unauthenticated access.
 
+> **Scope.** This document describes the MCP server tjai *exposes* — its tools,
+> transport, auth, and deployment. A separate, read-only **Postgres MCP** that
+> Claude Code uses to query the database directly (bypassing the ORM/REST layer)
+> is described in [Related: Direct Database MCP](#related-direct-database-mcp)
+> below.
+
 ## Architecture
 
 MCP is served by a standalone ASGI process, separate from the main Django web
@@ -202,3 +208,25 @@ sudo systemctl reload apache2
 
 Do not point `/tjai/mcp` back at gunicorn without reintroducing the failure mode
 that originally let MCP consume the main web worker pool.
+
+## Related: Direct Database MCP
+
+Distinct from the MCP server tjai exposes, Claude Code clients also use a
+read-only **Postgres MCP** to query the tjai database directly — schema
+inspection, ad-hoc `SELECT`, and index/health analysis without going through the
+Django ORM or REST layer:
+
+```text
+Claude Code
+  -> postgres-mcp (--access-mode restricted)
+  -> PostgreSQL (tjai database)
+```
+
+This is a generic third-party server (`postgres-mcp`, "Postgres MCP Pro"), not
+tjai code, and a per-developer client tool rather than a deployed service. It is
+read-only by policy. Tools it exposes: `execute_sql`, `list_schemas`,
+`list_objects`, `get_object_details`, `explain_query`, `analyze_db_health`,
+`analyze_query_indexes`, `analyze_workload_indexes`, `get_top_queries`.
+
+Install and registration are in
+[configuration.md → Database MCP](configuration.md#database-mcp-read-only-sql-access).

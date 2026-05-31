@@ -48,6 +48,43 @@ Local SQLite location is configurable. Default: `~/Dropbox/Current/tjai_{locatio
 tj config show  # Check current database location
 ```
 
+### Database MCP (read-only SQL access)
+
+A read-only **Postgres MCP** server (`postgres-mcp`, "Postgres MCP Pro") lets
+Claude Code query the PostgreSQL database directly — schema inspection, ad-hoc
+`SELECT`, and index/health analysis. It is a per-developer client tool, not a
+deployed service, and is distinct from the MCP server tjai itself exposes (see
+[mcp.md](mcp.md)).
+
+Install (per developer machine):
+
+```bash
+uv tool install postgres-mcp        # -> ~/.local/bin/postgres-mcp
+# or: pipx install postgres-mcp
+```
+
+Register with Claude Code in restricted (read-only) mode:
+
+```bash
+claude mcp add postgres-tjai -- \
+  postgres-mcp --access-mode restricted \
+  postgresql://<user>@<host>:<port>/<database>
+```
+
+On the production host the connection is `postgresql://tjai@localhost:5432/tjai`.
+Keep `--access-mode restricted` unless you have a specific need for writes; it
+enforces read-only and guards against unsafe or heavy queries.
+
+Verify:
+
+```bash
+claude mcp list        # postgres-tjai: ... ✓ Connected
+```
+
+A newly added server is not live in an already-open Claude Code session until
+restart — `claude mcp list` only probes the config. Restart, then confirm with a
+`list_schemas` call or `SELECT version()`.
+
 ## Configuration File
 
 `~/.tjai/config.json` — created automatically on first run:
