@@ -17,15 +17,11 @@ import subprocess
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
-# Bootstrap Django (for timezone only)
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tjai_project.settings.base')
-
-import django  # noqa: E402
-django.setup()
-
-from tjai_app.tjai_utils import get_app_tz  # noqa: E402
+# tjai operates in Eastern time exclusively (SysConfig timezone = America/New_York).
+# Standalone by design: no Django bootstrap, so cron runs without the app's env vars.
+APP_TZ = ZoneInfo('America/New_York')
 
 DEV_DAILY_DIR = Path('/var/www/tjai/data/dev_daily')
 
@@ -290,7 +286,7 @@ def generate_day(target_date, tz, lookback_days=7):
 
 
 def main():
-    tz = get_app_tz()
+    tz = APP_TZ
     today = datetime.now(tz=tz).date()
 
     if len(sys.argv) > 1 and sys.argv[1] == 'backfill':
