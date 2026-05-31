@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate weekly dev activity report from upstream repos.
+"""Generate dev activity report from upstream repos (6-week lookback).
 
 Uses GitHub API (gh CLI) for PR events and git log for direct commits.
 Three event types: PR opened, PR merged, direct commit.
@@ -7,7 +7,7 @@ Three event types: PR opened, PR merged, direct commit.
 Writes /var/www/tjai/data/dev_daily/YYYY-MM-DD.md
 
 Usage:
-    python section_dev.py              # generate today's report (7-day window)
+    python section_dev.py              # generate today's report (6-week window)
     python section_dev.py backfill 30  # backfill last 30 days
 """
 import json
@@ -29,9 +29,12 @@ DEV_DAILY_DIR = Path('/var/www/tjai/data/dev_daily')
 REPOS = sorted([
     ('/home/admin/github/harvester', 'HSF/harvester', 'harvester'),
     ('/home/admin/github/iDDS', 'HSF/iDDS', 'iDDS'),
+    ('/home/admin/github/panda-bigmon-core', 'PanDAWMS/panda-bigmon-core', 'panda-bigmon-core'),
     ('/home/admin/github/panda-client', 'PanDAWMS/panda-client', 'panda-client'),
+    ('/home/admin/github/panda-compose', 'PanDAWMS/panda-compose', 'panda-compose'),
     ('/home/admin/github/panda-server', 'PanDAWMS/panda-server', 'panda-server'),
-    ('/home/admin/github/pilot2', 'PanDAWMS/pilot2', 'pilot2'),
+    ('/home/admin/github/pilot3', 'PanDAWMS/pilot3', 'pilot3'),
+    ('/home/admin/github/pilot-wrapper', 'PanDAWMS/pilot-wrapper', 'pilot-wrapper'),
 ], key=lambda r: r[2].lower())
 
 
@@ -207,7 +210,7 @@ def _direct_commits(repo_dir, gh_repo, since_iso, until_iso):
     return events
 
 
-def generate_day(target_date, tz, lookback_days=7):
+def generate_day(target_date, tz, lookback_days=42):
     """Generate dev report covering the last lookback_days. Returns total event count."""
     until_dt = datetime(target_date.year, target_date.month, target_date.day, tzinfo=tz) + timedelta(days=1)
     since_dt = until_dt - timedelta(days=lookback_days)
@@ -232,7 +235,7 @@ def generate_day(target_date, tz, lookback_days=7):
         events += _direct_commits(repo_dir, gh_repo, since_iso, until_iso)
 
         if not events:
-            all_lines.append('<p class="empty">No activity this week.</p>')
+            all_lines.append(f'<p class="empty">No activity in the last {lookback_days} days.</p>')
             continue
 
         # Sort reverse chronological
