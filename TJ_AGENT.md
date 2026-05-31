@@ -163,7 +163,7 @@ Django runs on ec2dev via gunicorn (port 8002) behind Apache reverse proxy.
 **Key paths:**
 - Git repo: `/home/admin/github/tjrepo/tjai`
 - Deployment: `/var/www/tjai` (not a git repo)
-- Python: pinned in `.python-version`, provisioned by uv (see `docs/python-environment.md`)
+- Python: requested in `.python-version` (series floor), provisioned by uv (see `docs/python-environment.md`)
 - Apache config: `/etc/apache2/sites-enabled/etaverse.conf`
 - Apache logs: `/var/log/apache2/etaverse_ssl_error.log`
 - Gunicorn logs: `journalctl -u tjai-gunicorn`

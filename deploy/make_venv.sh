@@ -10,8 +10,8 @@
 #
 # This is the ONLY code path that builds a tjai venv. Both local dev setup and
 # deploy/update_from_dev.sh call it, so dev and prod cannot drift. If an
-# existing venv's interpreter no longer matches .python-version, it is rebuilt
-# -- the pin is authoritative, and drift is self-healing rather than silent.
+# existing venv's interpreter no longer satisfies .python-version, it is rebuilt
+# -- the requested version is authoritative, and drift self-heals not silently.
 set -euo pipefail
 
 REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -37,13 +37,19 @@ command -v uv >/dev/null 2>&1 || {
 
 py_version() { "$1/bin/python" -c 'import platform; print(platform.python_version())' 2>/dev/null || echo none; }
 
-# Rebuild when the venv's interpreter no longer matches the pinned version.
+# Rebuild when the venv's interpreter no longer satisfies the request.
+# .python-version is a floor-style request (e.g. "3.14" = newest 3.14.x), so a
+# venv on 3.14.3 satisfies "3.14" and must NOT be rebuilt -- match on the
+# series, not an exact string, or every run would needlessly rebuild.
 if [[ -d "$VENV" ]]; then
   current=$(py_version "$VENV")
-  if [[ "$current" != "$PYVER" ]]; then
-    echo "venv interpreter $current != pinned $PYVER -- rebuilding $VENV"
-    rm -rf "$VENV"
-  fi
+  case "$current" in
+    "$PYVER"|"$PYVER".*) ;;  # satisfies the request -- keep
+    *)
+      echo "venv interpreter $current does not satisfy requested $PYVER -- rebuilding $VENV"
+      rm -rf "$VENV"
+      ;;
+  esac
 fi
 
 [[ -d "$VENV" ]] || uv venv --python "$PYVER" "$VENV"

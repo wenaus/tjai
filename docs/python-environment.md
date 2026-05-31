@@ -9,20 +9,23 @@ same code path from the same files, so they cannot drift.
 
 | Element | File | Notes |
 |---------|------|-------|
-| Interpreter version | `.python-version` | One line (e.g. `3.14.3`). The de-facto standard pin, read by uv. |
+| Interpreter version | `.python-version` | One line, a floor-style request (e.g. `3.14` = newest 3.14.x). The de-facto standard file, read by uv. |
 | Base dependencies | `requirements/base.txt` | The Django app. |
 | Telegram bot deps | `requirements/tgbot.txt` | Composed into prod and dev; not installed standalone. |
 | Prod dependency set | `requirements/prod.txt` | `base` + `tgbot` + server tooling (gunicorn, py-spy, supervisor). |
 | Dev dependency set | `requirements/dev.txt` | `base` + `tgbot` (prod minus server tooling). |
 | Build procedure | `deploy/make_venv.sh` | The only code path that creates a venv. |
 
-Version ranges are `>=` by intent — newest compatible releases, no lockfile.
+Interpreter and dependency specs are both floors by intent — `>=` for packages,
+a series request (`3.14`) for the interpreter — newest compatible releases, no
+lockfile and no exact pins.
 
 ## Provisioning: uv
 
-[uv](https://docs.astral.sh/uv/) reads `.python-version`, fetches that exact
-standalone CPython if it is not already present, creates the venv, and installs
-the requirements. There is no hand-compiled interpreter to maintain.
+[uv](https://docs.astral.sh/uv/) reads `.python-version`, fetches a matching
+standalone CPython (newest in the requested series) if none is already present,
+creates the venv, and installs the requirements. There is no hand-compiled
+interpreter to maintain.
 
 ```bash
 deploy/make_venv.sh                 # dev venv at ./.venv, requirements/dev.txt
@@ -30,9 +33,10 @@ deploy/make_venv.sh /path/.venv prod  # prod venv, requirements/prod.txt
 ```
 
 `make_venv.sh` is self-healing: if an existing venv's interpreter no longer
-matches `.python-version`, it rebuilds rather than installing into the stale
-interpreter. Bumping the Python version is therefore a one-line edit to
-`.python-version` — the next venv build picks it up automatically.
+satisfies `.python-version` (matched on the series, so `3.14.3` satisfies
+`3.14`), it rebuilds rather than installing into the stale interpreter. Bumping
+the Python version is therefore a one-line edit to `.python-version` — the next
+venv build picks it up automatically.
 
 uv-managed venvs do not seed `pip`; use `uv pip install --python <venv>/bin/python`
 to add a package to an existing venv.
