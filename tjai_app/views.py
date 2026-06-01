@@ -2809,14 +2809,7 @@ def api_assessment_dashboard(request):
             'sessions': session_summaries,
         })
 
-    # Stop-phrase-guard counts from SysConfig
-    spg_raw = SysConfig.objects.filter(key='stop_phrase_guard_counts').values_list('value', flat=True).first()
-    try:
-        spg_counts = json.loads(spg_raw) if spg_raw else {}
-    except (json.JSONDecodeError, TypeError):
-        spg_counts = {}
-
-    return JsonResponse({'days': days, 'stop_phrase_guard': spg_counts})
+    return JsonResponse({'days': days})
 
 
 @login_required

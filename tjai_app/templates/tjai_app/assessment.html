@@ -580,20 +580,6 @@
                 // Daily integral plot
                 html += renderDailyPlot(days, 'integral', 'Daily Integral', '#ce93d8');
 
-                // Stop-phrase-guard counts
-                const spg = data.stop_phrase_guard || {};
-                const spgKeys = Object.keys(spg).sort();
-                const spgTotal = spgKeys.reduce((sum, k) => sum + spg[k], 0);
-                html += `<h2 style="color:#d8a070;font-size:15px;margin:20px 0 8px">Stop Phrase Guard</h2>`;
-                if (spgTotal === 0) {
-                    html += `<div style="color:#888">No violations recorded yet.</div>`;
-                } else {
-                    html += `<div style="color:#e0e0e0;margin-bottom:4px">Total violations: <span style="color:#ef5350;font-weight:bold">${spgTotal}</span></div>`;
-                    for (const k of spgKeys) {
-                        html += `<div style="margin:2px 0"><span style="color:#8a8a8a;display:inline-block;width:140px">${escHtml(k)}</span> <span style="color:#e0e0e0">${spg[k]}</span></div>`;
-                    }
-                }
-
                 document.getElementById('content-panel').innerHTML = html;
             } catch (e) {
                 document.getElementById('content-panel').innerHTML = '<div class="error">Error loading dashboard</div>';
