@@ -7,6 +7,7 @@
     <title>Diary</title>
     <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
     <script src="/tjai/static/tjai/tjai-utils.js"></script>
+    {% include "tjai_app/_prism.html" %}
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -250,6 +251,7 @@
 
                 if (!html) html = '<div class="loading">No diary entries yet.</div>';
                 document.getElementById('diary-content').innerHTML = html;
+                if (window.Prism) Prism.highlightAllUnder(document.getElementById('diary-content'));
             } catch (e) {
                 document.getElementById('diary-content').innerHTML =
                     '<div class="loading">Error loading diary: ' + escHtml(e.message) + '</div>';

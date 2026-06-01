@@ -16,6 +16,13 @@ const STATIC_ASSETS = [
   '/tjai/static/tjai/vendor/prism/1.29.0/themes/prism-tomorrow.min.css',
   '/tjai/static/tjai/vendor/prism/1.29.0/prism.min.js',
   '/tjai/static/tjai/vendor/prism/1.29.0/components/prism-markup.min.js',
+  '/tjai/static/tjai/vendor/prism/1.29.0/components/prism-bash.min.js',
+  '/tjai/static/tjai/vendor/prism/1.29.0/components/prism-python.min.js',
+  '/tjai/static/tjai/vendor/prism/1.29.0/components/prism-c.min.js',
+  '/tjai/static/tjai/vendor/prism/1.29.0/components/prism-cpp.min.js',
+  '/tjai/static/tjai/vendor/prism/1.29.0/components/prism-json.min.js',
+  '/tjai/static/tjai/vendor/prism/1.29.0/components/prism-yaml.min.js',
+  '/tjai/static/tjai/vendor/prism/1.29.0/components/prism-sql.min.js',
 ];
 
 self.addEventListener('install', (event) => {

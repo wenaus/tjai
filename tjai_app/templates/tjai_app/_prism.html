@@ -1,0 +1,18 @@
+{% comment %}
+Prism syntax highlighting for rendered markdown code blocks: theme + core +
+vendored grammars. Server-rendered pages highlight automatically on load.
+Client-rendered pages (content injected via innerHTML) must call
+Prism.highlightAllUnder(container) after each render — Prism only auto-runs once
+on DOMContentLoaded. Grammar set: bash, python, c, cpp, json, yaml, sql
+(html/css/js are built into core).
+{% endcomment %}
+<link rel="stylesheet" href="/tjai/static/tjai/vendor/prism/1.29.0/themes/prism-tomorrow.min.css">
+<script src="/tjai/static/tjai/vendor/prism/1.29.0/prism.min.js"></script>
+<script src="/tjai/static/tjai/vendor/prism/1.29.0/components/prism-markup.min.js"></script>
+<script src="/tjai/static/tjai/vendor/prism/1.29.0/components/prism-bash.min.js"></script>
+<script src="/tjai/static/tjai/vendor/prism/1.29.0/components/prism-python.min.js"></script>
+<script src="/tjai/static/tjai/vendor/prism/1.29.0/components/prism-c.min.js"></script>
+<script src="/tjai/static/tjai/vendor/prism/1.29.0/components/prism-cpp.min.js"></script>
+<script src="/tjai/static/tjai/vendor/prism/1.29.0/components/prism-json.min.js"></script>
+<script src="/tjai/static/tjai/vendor/prism/1.29.0/components/prism-yaml.min.js"></script>
+<script src="/tjai/static/tjai/vendor/prism/1.29.0/components/prism-sql.min.js"></script>

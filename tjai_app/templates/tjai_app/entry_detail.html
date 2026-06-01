@@ -10,9 +10,7 @@
     <script src="/tjai/static/tjai/turndown-7.2.0.js"></script>
     <link rel="stylesheet" href="/tjai/static/tjai/vendor/codemirror/5.65.18/codemirror.min.css">
     <link rel="stylesheet" href="/tjai/static/tjai/vendor/codemirror/5.65.18/theme/material-darker.min.css">
-    {% if content_format == 'xml' %}
     <link rel="stylesheet" href="/tjai/static/tjai/vendor/prism/1.29.0/themes/prism-tomorrow.min.css">
-    {% endif %}
     <style>
         body {
             font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
@@ -86,9 +84,11 @@
         .field-row input.public-check { width: 14px; padding: 0; }
         .CodeMirror-selected { background: #264f78 !important; }
         .CodeMirror-focused .CodeMirror-selected { background: #264f78 !important; }
-        /* Code blocks: light pink in both display and edit */
+        /* Code blocks: boxed; pink base text, Prism token colors layered on top.
+           Box applies to every .content pre (markdown emits the language class on
+           <code>, leaving <pre> bare) so bash/python/etc. match the XML block look. */
         .content pre, .content code { color: #f0c0c0; }
-        .content pre.language-markup {
+        .content pre {
             background: #151515;
             border: 1px solid #333;
             border-radius: 4px;
@@ -96,7 +96,7 @@
             overflow-x: auto;
             white-space: pre-wrap;
         }
-        .content pre.language-markup code {
+        .content pre code {
             color: inherit;
             white-space: pre-wrap;
         }
@@ -416,10 +416,15 @@
 
     <script src="/tjai/static/tjai/vendor/codemirror/5.65.18/codemirror.min.js"></script>
     <script src="/tjai/static/tjai/vendor/codemirror/5.65.18/mode/markdown/markdown.min.js"></script>
-    {% if content_format == 'xml' %}
     <script src="/tjai/static/tjai/vendor/prism/1.29.0/prism.min.js"></script>
     <script src="/tjai/static/tjai/vendor/prism/1.29.0/components/prism-markup.min.js"></script>
-    {% endif %}
+    <script src="/tjai/static/tjai/vendor/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script src="/tjai/static/tjai/vendor/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="/tjai/static/tjai/vendor/prism/1.29.0/components/prism-c.min.js"></script>
+    <script src="/tjai/static/tjai/vendor/prism/1.29.0/components/prism-cpp.min.js"></script>
+    <script src="/tjai/static/tjai/vendor/prism/1.29.0/components/prism-json.min.js"></script>
+    <script src="/tjai/static/tjai/vendor/prism/1.29.0/components/prism-yaml.min.js"></script>
+    <script src="/tjai/static/tjai/vendor/prism/1.29.0/components/prism-sql.min.js"></script>
     <script>
         (function() {
             var statusEl = document.getElementById('offline-entry-status');
