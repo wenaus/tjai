@@ -228,5 +228,16 @@ read-only by policy. Tools it exposes: `execute_sql`, `list_schemas`,
 `list_objects`, `get_object_details`, `explain_query`, `analyze_db_health`,
 `analyze_query_indexes`, `analyze_workload_indexes`, `get_top_queries`.
 
+### When to use it
+
+The tjai MCP tools are the primary interface to tjai data; reach for them
+first. The Postgres MCP is a read-only second-tier supplement, justified only
+when the tjai tools genuinely cannot reach the data — schema inspection, ad-hoc
+aggregation across many rows, or a table no tool exposes. Falling back to it
+because a routine read has no tjai tool is a gap to close, not a habit to keep:
+report it and add the tool rather than normalizing raw SQL. `get_logs` exists
+for exactly this reason — log reads kept dropping to `execute_sql` against the
+`applog` table because no tool exposed it.
+
 Install and registration are in
 [configuration.md → Database MCP](configuration.md#database-mcp-read-only-sql-access).

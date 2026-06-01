@@ -169,6 +169,10 @@ Tools:
 - get_memories(context, limit, offset, start_date, end_date): Get memory entries.
   Call unfiltered to see recent activity.
 - get_bookmarks(context, limit, offset, start_date, end_date): Get saved bookmarks.
+- get_logs(source, level, contains, ref, start_date, end_date, limit): Read
+  application log (AppLog) rows — agent/script/server logs (the Agent Log page
+  data). For operational/diagnostic questions; AppLog is not an Entry, so the
+  entry-query tools can't reach it. Use this instead of raw SQL.
 - search_entries(query, kind, context, limit, offset): Search or list entries. Omit
   query for structured listing/filtering by kind, context, or date. Use
   order_by='rank' only with a non-empty query.

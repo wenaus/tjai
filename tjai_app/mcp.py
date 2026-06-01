@@ -13,6 +13,8 @@ Available tools:
     get_todos         - Retrieve todo items with filtering options
     get_memories      - Get memory entries. Call unfiltered to see general activity
     get_bookmarks     - Get saved bookmark entries (URLs)
+    get_dialog        - Get recorded human-AI dialog turns for a host/time range
+    get_logs          - Read application log (AppLog) rows — agent/script/server logs
     search_entries    - Search/list entries with optional full-text query and filters
     get_named_entries - Get entries by @name, or list all named entries
     get_entry         - Get a single entry by ID
@@ -417,6 +419,53 @@ async def get_dialog(
     result = await sync_to_async(services.get_dialog)(
         host=host, start_date=start_date, end_date=end_date,
         limit=limit, offset=offset, max_content_length=max_content_length,
+    )
+    return _json_text(result)
+
+
+@mcp.tool()
+async def get_logs(
+    source: str = None,
+    level: str = None,
+    contains: str = None,
+    ref: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    limit: int = 100,
+    max_content_length: int = DEFAULT_MAX_CONTENT_LENGTH,
+) -> str:
+    """
+    Read application log entries (the AppLog / `applog` table) — the log lines
+    scripts, agents, and the server emit via DbLogHandler. Same data as the
+    web Agent Log page.
+
+    Use this for operational/diagnostic questions ("did reconcile_research
+    run?", "any ERRORs from the action agent today?") INSTEAD of dropping to
+    raw SQL. AppLog is not an Entry — search_entries/get_memories cannot reach
+    it.
+
+    Args:
+        source: Exact log source, e.g. 'reconcile_research', 'agent_complete',
+                'action_agent', 'watchdog'.
+        level: Minimum level (inclusive) — DEBUG|INFO|WARNING|ERROR|CRITICAL.
+        contains: Case-insensitive substring match on the message.
+        ref: Filter to a referenced entry_id/action_id (matched in extra_data
+             or the message).
+        start_date: Start of range (YYYYMMDD, ISO, or natural language like
+                    '1d', '6h', 'yesterday', 'monday'). Default: no filtering.
+        end_date: End of range. Default: now.
+        limit: Page size. Default 100, hard maximum 500.
+        max_content_length: Truncate each message to this many chars
+                            (default 500; 0 for full).
+
+    Returns:
+        Newest-first list of entries, each containing:
+        timestamp (ET), level, source, message, extra_data.
+    """
+    result = await sync_to_async(services.get_logs)(
+        source=source, level=level, contains=contains, ref=ref,
+        start_date=start_date, end_date=end_date, limit=limit,
+        max_content_length=max_content_length,
     )
     return _json_text(result)
 

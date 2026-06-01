@@ -16,7 +16,7 @@ from django.utils import timezone
 from django.db.models import Q
 
 from .dialog_context import DIALOG_TAG
-from .models import Entry, Context, Tag, SysConfig, Relation
+from .models import Entry, Context, Tag, SysConfig, Relation, AppLog
 from .tagger import tag_bookmark
 from .tjai_utils import fmt_datetime, get_app_tz, safe_truncate
 from tj.commands.journal import parse_time
@@ -733,6 +733,75 @@ def get_dialog(host, start_date=None, end_date=None, limit=None, offset=0, max_c
             'content': content,
         })
     return turns
+
+
+_LOG_LEVELS = {'DEBUG': 10, 'INFO': 20, 'WARNING': 30, 'ERROR': 40, 'CRITICAL': 50}
+
+
+def _clean_log_message(message):
+    """Strip a duplicated 'YYYY-MM-DD HH:MM:SS LEVEL ' prefix that older
+    DbLogHandler rows stored in the message body. timestamp/level/source are
+    returned as separate fields, so the prefix is noise. Mirrors the web Agent
+    Log page (views.agent_log_data)."""
+    return re.sub(
+        r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} '
+        r'(DEBUG|INFO|WARNING|ERROR|CRITICAL)\s+',
+        '', message or '', count=1)
+
+
+def get_logs(source=None, level=None, contains=None, ref=None,
+             start_date=None, end_date=None, limit=100,
+             max_content_length=DEFAULT_MAX_CONTENT_LENGTH):
+    """Read application log (AppLog) rows with optional filters.
+
+    AppLog is a separate table (db_table='applog'), not an Entry — the
+    entry-query tools cannot reach it. Returns newest-first list of
+    {timestamp (ET), level, source, message, extra_data}."""
+    limit = min(int(limit or 100), 500)
+    tz = get_app_tz()
+    qs = AppLog.objects.order_by('-timestamp')
+
+    if source:
+        qs = qs.filter(source=source)
+    if level:
+        lvl = _LOG_LEVELS.get(str(level).upper())
+        if lvl is None:
+            return {"error": f"Invalid level '{level}'. Use DEBUG|INFO|WARNING|ERROR|CRITICAL."}
+        qs = qs.filter(level__gte=lvl)
+    if contains:
+        qs = qs.filter(message__icontains=contains)
+    if ref:
+        # Mirror views.agent_log_data: referenced in extra_data or the message.
+        qs = qs.filter(
+            Q(extra_data__entry_id=ref) |
+            Q(extra_data__action_id=ref) |
+            Q(message__icontains=ref[:8]))
+    if start_date is not None:
+        start_ts, err = parse_date_filter(start_date, tz=tz)
+        if err:
+            return {"error": err}
+        if start_ts:
+            qs = qs.filter(timestamp__gte=datetime.fromtimestamp(start_ts, tz=tz))
+    if end_date is not None:
+        end_ts, err = parse_date_filter(end_date, end_of_day=True, tz=tz)
+        if err:
+            return {"error": err}
+        if end_ts:
+            qs = qs.filter(timestamp__lte=datetime.fromtimestamp(end_ts, tz=tz))
+
+    rows = []
+    for log in qs[:limit]:
+        msg = _clean_log_message(log.message)
+        if max_content_length and len(msg) > max_content_length:
+            msg = safe_truncate(msg, max_content_length, suffix='…')
+        rows.append({
+            'timestamp': log.timestamp.astimezone(tz).isoformat(),
+            'level': log.levelname or str(log.level),
+            'source': log.source,
+            'message': msg,
+            'extra_data': log.extra_data or {},
+        })
+    return rows
 
 
 def get_bookmarks(context=None, limit=50, offset=0, start_date=None, end_date=None, max_content_length=DEFAULT_MAX_CONTENT_LENGTH):
