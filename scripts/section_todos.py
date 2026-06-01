@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Appends ## ToDo to the daily synopsis entry.
 
-Lists all pending todos in reverse modification-time order, title as link
-to the entry detail page with up to 3 lines of subtext. Done and archived
-todos are excluded; no time-depth limit.
+Lists all pending todos grouped by context (alphabetical; uncontexted last),
+reverse modification-time within each context. Title as link to the entry
+detail page with up to 3 lines of subtext. Done and archived todos are
+excluded; no time-depth limit.
 """
 import bootstrap  # noqa: F401 - Django setup
 from synopsis_utils import main_section
@@ -56,7 +57,7 @@ def build(since_ts, target_date):
     entries = list(Entry.objects.filter(
         kind='todo',
         deleted_at__isnull=True,
-    ).exclude(status__in=('done', 'archive')).order_by('-timestamp_modified'))
+    ).exclude(status__in=('done', 'archive')).order_by('context_id', '-timestamp_modified'))
 
     if not entries:
         return None
