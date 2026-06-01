@@ -40,6 +40,7 @@ A Chrome extension for copying markdown links and saving bookmarks to tjai. Sour
 - Copy page title + URL as markdown link `[Title](url)`
 - Copy with clean URL (strips query params and fragments)
 - Save to tjai as bookmark (kind `bookmark`, tagged `chrome`)
+- Detect events on the page and add them to the tjai calendar (see below)
 
 ### How Bookmarking Works
 
@@ -48,11 +49,28 @@ A Chrome extension for copying markdown links and saving bookmarks to tjai. Sour
 - Uses browser tab title as bookmark title
 - Server creates entry with content `[Title](url)`
 
+### Event Detection
+
+When the popup opens, a content script probes the active page for a schema.org
+`Event` in JSON-LD (`<script type="application/ld+json">`). If one with a `name`
+and `startDate` is found, an event card and an **Add to tjai calendar** button
+appear. There is no URL gate — any page advertising an `Event` is matched
+(Indico, Squarespace calendars, Eventbrite, and the like); pages without one
+stay silent. A zoom URL, if present on the page, is captured too.
+
+"Add to tjai calendar" POSTs to `api/add-journal` (same Bearer token) with
+`{title, event_timestamp, location, zoom_url, event_url, source: "web"}`,
+creating a `journal` entry tagged `web` with `data.event_date` set. The start
+time is parsed from the Event's ISO `startDate` and displayed in the app
+timezone (fetched from `api/health`). The server's `event_url` field renders a
+generic `[event](url)` back-link; the Indico-specific `indico_url` field
+renders `[indico](url)`.
+
 ### Files
 
-- `tj-getlink/manifest.json` — Manifest V3 (permissions: `activeTab`, `clipboardWrite`, `storage`)
+- `tj-getlink/manifest.json` — Manifest V3 (permissions: `activeTab`, `clipboardWrite`, `storage`, `scripting`)
 - `tj-getlink/popup.html/js/css` — Extension popup UI and logic
-- Server endpoint: `api/add-bookmark` in `tjai_app/views.py` (same Bearer token as Gmail add-on)
+- Server endpoints: `api/add-bookmark` (bookmarks) and `api/add-journal` (events) in `tjai_app/views.py` (same Bearer token as Gmail add-on)
 
 ### Setup
 

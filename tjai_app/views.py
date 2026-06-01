@@ -4272,7 +4272,10 @@ def api_add_journal(request):
     Requires Bearer token matching SysConfig 'gmail_addon_api_key'.
 
     Request body: {title, event_timestamp, location, zoom_url, gmail_url,
-                   indico_url, source (default: "gmail")}
+                   indico_url, event_url, source (default: "gmail")}
+
+    event_url is a generic source link (e.g. a web event page detected by the
+    Chrome extension); indico_url is the Indico-specific equivalent.
     """
     auth_header = request.META.get('HTTP_AUTHORIZATION', '')
     if not auth_header.startswith('Bearer '):
@@ -4297,6 +4300,7 @@ def api_add_journal(request):
     zoom_url = data.get("zoom_url", "").strip()
     gmail_url = data.get("gmail_url", "").strip()
     indico_url = data.get("indico_url", "").strip()
+    event_url = data.get("event_url", "").strip()
     location = data.get("location", "").strip()
     source = data.get("source", "gmail").strip()
 
@@ -4314,6 +4318,8 @@ def api_add_journal(request):
         parts.append(f"[gmail]({gmail_url})")
     if indico_url:
         parts.append(f"[indico]({indico_url})")
+    if event_url:
+        parts.append(f"[event]({event_url})")
     content = " ".join(parts)
 
     now = time.time()
