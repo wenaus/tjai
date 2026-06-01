@@ -21,7 +21,7 @@
         .content {
             flex: 1;
             overflow-y: auto;
-            padding: 20px 32px;
+            padding: 0 32px 20px;
         }
         .day-content h2 {
             margin: 32px 0 10px 0;
@@ -65,6 +65,21 @@
         }
         .day-content .empty { color: #666; font-style: italic; margin: 4px 0 16px 0; }
         .loading { color: #888; padding: 20px 0; }
+        .toc {
+            position: sticky;
+            top: 0;
+            background: #1a1a1a;
+            padding: 14px 0 10px;
+            margin-bottom: 6px;
+            border-bottom: 1px solid #333;
+            font-size: 12px;
+            line-height: 2;
+            z-index: 5;
+        }
+        .toc a { color: #ff9800; text-decoration: none; white-space: nowrap; }
+        .toc a:hover { text-decoration: underline; }
+        .toc .toc-date { color: #888; font-size: 11px; }
+        .toc .toc-sep { color: #555; }
     </style>
 </head>
 <body>
@@ -91,6 +106,48 @@
             html += `<div class="day-content">${day.html}</div>`;
         }
         el.innerHTML = html;
+
+        // Compact TOC: repo sections sorted by most-recent activity date, inline,
+        // with in-page anchors — a quick view of where the latest changes are and
+        // a way to jump straight to them. Built from the rendered DOM: repo
+        // sections are the h2s whose link points at github; a section's mod date
+        // is its first event's <b>Mon D</b> (events render newest-first).
+        const MONTHS = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+        const esc = s => { const d = document.createElement('span'); d.textContent = s; return d.innerHTML; };
+        const slug = s => 'sec-' + s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        const parseDate = t => {
+            const m = (t || '').trim().match(/^([A-Z][a-z]{2})\s+(\d{1,2})/);
+            if (!m || MONTHS[m[1]] === undefined) return -1;
+            return MONTHS[m[1]] * 100 + parseInt(m[2], 10);
+        };
+        const repoH2s = [...el.querySelectorAll('h2')].filter(h => {
+            const a = h.querySelector('a');
+            return a && /github\.com/.test(a.getAttribute('href') || '');
+        });
+        const tocItems = [];
+        for (const h2 of repoH2s) {
+            const name = (h2.querySelector('a').textContent || '').trim();
+            if (!h2.id) h2.id = slug(name);
+            let dateTxt = '', dateVal = -1;
+            for (let n = h2.nextElementSibling; n && n.tagName !== 'H2'; n = n.nextElementSibling) {
+                const b = n.querySelector && n.querySelector('b');
+                if (b) { dateTxt = b.textContent.trim(); dateVal = parseDate(dateTxt); break; }
+            }
+            tocItems.push({ name, id: h2.id, dateTxt, dateVal });
+        }
+        if (tocItems.length) {
+            tocItems.sort((a, b) => b.dateVal - a.dateVal);
+            const toc = document.createElement('div');
+            toc.className = 'toc';
+            toc.innerHTML = tocItems.map(it =>
+                `<a href="#${it.id}">${esc(it.name)}${it.dateTxt ? ` <span class="toc-date">${esc(it.dateTxt)}</span>` : ''}</a>`
+            ).join('<span class="toc-sep"> · </span>');
+            el.insertBefore(toc, el.firstChild);
+            // Offset anchor jumps so the section title clears the sticky TOC bar
+            // (measured, so it stays correct when the bar wraps to >1 line).
+            const off = toc.offsetHeight + 8;
+            for (const h2 of repoH2s) h2.style.scrollMarginTop = off + 'px';
+        }
     } catch (e) {
         el.innerHTML = `<div class="loading" style="color:#ef5350;">Error: ${e.message}</div>`;
     }
