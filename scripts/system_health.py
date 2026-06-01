@@ -624,8 +624,14 @@ def assess_health(system, postgres, tjai=None, backups=None, web_apps=None, **_k
         issues.append(('red', f'Memory available {mem_avail}% < 10%'))
     if disk > 90:
         issues.append(('red', f'Disk {disk}% > 90%'))
-    if cache_hit < 95:
-        issues.append(('red', f'PG cache hit {cache_hit}% < 95%'))
+    # cache_hit is the lifetime cumulative shared_buffers ratio
+    # (pg_stat_database, stats never reset). It understates true cache
+    # effectiveness — most "reads" are served from the OS page cache, not
+    # disk — and is dragged down permanently by bulk imports/backups/VACUUM.
+    # A healthy tjai sits ~99% and can only drift down, so thresholds are set
+    # low: real cache starvation shows up well below 90%. Do not raise to 99%.
+    if cache_hit < 90:
+        issues.append(('red', f'PG cache hit {cache_hit}% < 90%'))
     if swap > 50:
         issues.append(('red', f'Swap {swap}% > 50%'))
 
@@ -637,8 +643,8 @@ def assess_health(system, postgres, tjai=None, backups=None, web_apps=None, **_k
         issues.append(('yellow', f'Memory available {mem_avail}% < 20%'))
     if 'Disk' not in red_prefixes and disk > 80:
         issues.append(('yellow', f'Disk {disk}% > 80%'))
-    if 'PG' not in red_prefixes and cache_hit < 99:
-        issues.append(('yellow', f'PG cache hit {cache_hit}% < 99%'))
+    if 'PG' not in red_prefixes and cache_hit < 95:
+        issues.append(('yellow', f'PG cache hit {cache_hit}% < 95%'))
     if 'Swap' not in red_prefixes and swap > 20:
         issues.append(('yellow', f'Swap {swap}% > 20%'))
 
