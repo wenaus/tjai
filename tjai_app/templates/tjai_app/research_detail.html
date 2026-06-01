@@ -296,6 +296,26 @@
         const detailEntryId = routeDetailEntryId || query.get('entry_id') || detailIdFromPath() || '';
         let currentTopic = null;
         let currentDetail = null;
+        // Live synthesis feedback: after dispatch, poll the detail until the
+        // synthesis sub-entry reaches 'done'. The agent's status flips to
+        // 'completed' the instant it launches the detached run, so agent.running
+        // is false the whole time synthesis is actually running — synthesis.status
+        // === 'done' is the only reliable completion signal.
+        let detailPollTimer = null;
+        let awaitingSynthUntil = 0;   // epoch ms; while > Date.now(), keep polling
+        function clearDetailPoll() { if (detailPollTimer) { clearTimeout(detailPollTimer); detailPollTimer = null; } }
+        function scheduleSynthPoll(data) {
+            const s = data && data.synthesis;
+            const done = !!(s && s.status === 'done');
+            const failed = !!(s && (s.run_error || s.status === 'failed'));
+            if (awaitingSynthUntil > Date.now() && !done && !failed) {
+                clearDetailPoll();
+                detailPollTimer = setTimeout(loadDetail, 6000);
+            } else {
+                awaitingSynthUntil = 0;
+                clearDetailPoll();
+            }
+        }
 
         function detailIdFromPath() {
             const prefix = '/tjai/research-detail/';
@@ -331,6 +351,7 @@
                 currentTopic = data.topic;
                 currentDetail = data;
                 render(data);
+                scheduleSynthPoll(data);
             } catch (e) {
                 try {
                     const data = await ResearchCache.offlineDetail(detailEntryId);
@@ -354,6 +375,7 @@
                 <h1>${esc(topic.title)}</h1>
                 <div>
                     <span class="status status-${esc(status)}">${esc(status)}</span>
+                    ${awaitingSynthUntil > Date.now() && !(data.synthesis && data.synthesis.status === 'done') ? '<span class="status status-active" title="Synthesis run in progress — this page auto-updates">⏳ synthesizing…</span>' : ''}
                     <span class="meta">${esc(topic.detail_entry_id || detailEntryId)}</span>
                 </div>
                 <div class="meta">Topic: <a href="${esc(topic.entry_url)}">${esc(topic.entry_id || '')}</a> · created ${esc(topic.created_display || '')} · modified ${esc(topic.modified_display || '')}${topic.source ? ' · source ' + esc(topic.source) : ''}</div>
@@ -389,6 +411,9 @@
             const models = data.models || [];
             const agent = data.agent || {};
             const disabled = agent.running ? ' disabled' : '';
+            // Synthesize button shows while synthesis is pending (not yet done);
+            // disabled like the other verb buttons while the agent is running.
+            const synthPending = !(data.synthesis && data.synthesis.status === 'done');
             const branchByModel = {};
             for (const branch of (data.branches || [])) {
                 if (branch.model) branchByModel[branch.model] = branch;
@@ -418,6 +443,7 @@
                     <div class="model-checks">${checks}</div>
                     <div class="model-buttons">
                         <button type="button" onclick="rerunModels(this)"${disabled}>Rerun selections</button>
+                        ${synthPending ? (awaitingSynthUntil > Date.now() ? `<button type="button" disabled>Synthesizing…</button>` : `<button type="button" onclick="synthesizeItem(this)"${disabled}>Synthesize</button>`) : ''}
                         <button type="button" onclick="rerunItem(this)"${disabled}>Resubmit</button>
                         <button type="button" onclick="submitItem(this)"${disabled}>Submit</button>
                         ${note}
@@ -602,7 +628,9 @@
                 const data = await resp.json();
                 if (!resp.ok || data.error) throw new Error(data.error || 'Synthesize failed');
                 btn.textContent = 'Queued';
-                setTimeout(loadDetail, 1200);
+                awaitingSynthUntil = Date.now() + 30 * 60 * 1000;  // live-poll until synthesis lands
+                clearDetailPoll();
+                detailPollTimer = setTimeout(loadDetail, 2000);
             } catch (e) {
                 btn.textContent = e.message;
                 setTimeout(loadDetail, 2500);
