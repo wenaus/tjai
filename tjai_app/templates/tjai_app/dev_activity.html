@@ -38,7 +38,7 @@
         .day-content .event-line { }
         .day-content .files { color: #888; font-size: 11px; margin: 2px 0 2px 16px; }
         .day-content .files code { color: #aaa; font-size: 11px; }
-        .day-content .body-oneline { color: #bbb; font-size: 12px; margin: 2px 0 2px 16px; white-space: pre-wrap; }
+        .day-content .body-oneline { color: #bbb; font-size: 12px; margin: 2px 0 2px 16px; }
         .day-content details { margin: 2px 0 2px 16px; }
         .day-content summary {
             cursor: pointer;
@@ -59,10 +59,22 @@
         .day-content .body-text {
             margin: 4px 0 4px 16px;
             color: #999;
-            white-space: pre-wrap;
             font-size: 12px;
             line-height: 1.5;
         }
+        /* Rendered-markdown content inside PR/commit bodies. The global
+           *{margin:0;padding:0} reset strips list indent and paragraph
+           spacing, so restore the minimum needed for readable bodies. */
+        .day-content .body-oneline p,
+        .day-content .body-text p { margin: 4px 0; }
+        .day-content .body-oneline ul, .day-content .body-oneline ol,
+        .day-content .body-text ul, .day-content .body-text ol { margin: 4px 0; padding-left: 18px; }
+        .day-content .body-oneline li,
+        .day-content .body-text li { margin: 2px 0; }
+        .day-content .body-oneline code,
+        .day-content .body-text code { color: #aaa; }
+        .day-content .body-oneline pre,
+        .day-content .body-text pre { margin: 4px 0; padding: 6px 8px; background: #111; border-radius: 4px; overflow-x: auto; }
         .day-content .empty { color: #666; font-style: italic; margin: 4px 0 16px 0; }
         .loading { color: #888; padding: 20px 0; }
         .toc {

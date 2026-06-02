@@ -19,6 +19,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+# Sibling Django-free markdown util (a deliberate copy of the views.py helpers,
+# since this script runs standalone from cron with no Django). See md_render.py.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from md_render import render_body, render_inline
+
 # tjai operates in Eastern time exclusively (SysConfig timezone = America/New_York).
 # Standalone by design: no Django bootstrap, so cron runs without the app's env vars.
 APP_TZ = ZoneInfo('America/New_York')
@@ -256,17 +261,23 @@ def generate_day(target_date, tz, lookback_days=42):
                 file_summary = ', '.join(collapsed)
                 all_lines.append(f'<div class="files">{file_summary}</div>')
 
-            # Body — show directly if <10 lines, collapsible otherwise
+            # Body — markdown-rendered. Show directly if <10 lines, collapsible
+            # otherwise. The body is rendered as ONE document (markdown is
+            # whole-document — slicing off the first line orphans its child
+            # bullets and markdown reparses them as a code block). For the
+            # collapsible case the summary is just an inline teaser of the first
+            # line (list marker stripped); the full body renders on expand.
+            # (div, not p, around body-text: rendered markdown carries block
+            # elements that can't legally nest inside a <p>.)
             if body:
                 body_lines = [l for l in body.split('\n') if l.strip()]
+                rendered = render_body(body)
                 if len(body_lines) < 10:
-                    all_lines.append(f'<div class="body-oneline">{body}</div>')
+                    all_lines.append(f'<div class="body-oneline">{rendered}</div>')
                 else:
-                    first_line = body_lines[0].strip()
-                    rest = '\n'.join(body_lines[1:])
-                    display_rest = rest[:500] + ('...' if len(rest) > 500 else '')
-                    all_lines.append(f'<details><summary>{first_line}</summary>')
-                    all_lines.append(f'<p class="body-text">{display_rest}</p>')
+                    teaser = re.sub(r'^\s*(?:[-*+]|\d+\.)\s+', '', body_lines[0].strip())
+                    all_lines.append(f'<details><summary>{render_inline(teaser)}</summary>')
+                    all_lines.append(f'<div class="body-text">{rendered}</div>')
                     all_lines.append(f'</details>')
 
             all_lines.append(f'</div>')
