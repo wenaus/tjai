@@ -133,6 +133,25 @@
         .day-content a:hover { text-decoration: underline; }
         .day-content strong { color: #c5e1a5; }
         .loading { color: #888; padding: 20px 0; }
+        /* Dark mode scrollbars */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: #444 #1a1a1a;
+        }
     </style>
 </head>
 <body>
