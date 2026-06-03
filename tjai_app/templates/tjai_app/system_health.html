@@ -265,7 +265,7 @@
             // PostgreSQL section
             html += '<div class="section"><div class="section-title">PostgreSQL</div><div class="metric-grid">';
             html += metric('Connections', pg.connections);
-            html += metric('Cache Hit Ratio', pg.cache_hit_ratio + '%', metricClass(pg.cache_hit_ratio, 99, 95, true));
+            html += metric('Cache Hit Ratio', pg.cache_hit_ratio + '%', metricClass(pg.cache_hit_ratio, 95, 90, true));
             html += metric('DB Size', pg.db_size_mb + ' MB');
             html += metric('Commits', fmt(pg.xact_commit));
             html += metric('Rollbacks', fmt(pg.xact_rollback));
