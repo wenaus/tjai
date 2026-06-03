@@ -5020,8 +5020,9 @@ def research_list_page(request):
 
 
 @login_required
-def research_legacy_page(request):
-    """Render the legacy research queue page."""
+def research_obsolete_page(request):
+    """Render the obsolete research queue page (superseded by research_page /
+    research_list.html). Kept reachable but not for new work."""
     return render(request, 'tjai_app/research.html')
 
 
@@ -5283,6 +5284,10 @@ def api_research_list(request):
 
     items = []
     counts_by_status = Counter()
+    # Top activity panel summary. Filled across ALL topics below (before the
+    # filter/pagination cut) so it never misses an in-flight, queued, or
+    # synthesis-owed topic regardless of the current search/status filter or page.
+    activity = {'active': [], 'queued': [], 'pending_synth': []}
     for entry in base_entries:
         data = entry.data if isinstance(entry.data, dict) else {}
         eid = data.get('entry_id') or ''
@@ -5297,14 +5302,44 @@ def api_research_list(request):
                 or None
             )
         model_counts = Counter(v for v in model_map.values() if v)
-        if any(v in ('launching', 'active', 'staged', 'rerun') for v in model_map.values()):
+        _active_models = [m for m in RESEARCH_MODELS
+                          if model_map.get(m) in ('launching', 'active', 'staged', 'rerun')]
+        _synth_is_done = eid in synthesis_done or data.get('synthesis_done') is True
+        # Synthesis is "in flight" whenever its sub-entry exists and is not
+        # terminal. _create_and_dispatch_synthesis creates the sub-entry with
+        # NO status (None) and only stamps 'done' on completion — so a
+        # None/pending status means running, NOT owed. Only done/failed/blocked
+        # are terminal. Testing the status string for 'active'/'staged' (as the
+        # old code did) silently misses the entire run.
+        _synth_in_flight = (eid in synthesis_status_by_eid and not _synth_is_done
+                            and synthesis_status_by_eid.get(eid) not in ('failed', 'blocked'))
+        if _active_models:
             display_status = 'active'
-        elif synthesis_status_by_eid.get(eid) in ('launching', 'active', 'staged'):
+        elif _synth_in_flight:
             # Models done, synthesis in flight — topic is NOT done yet.
             display_status = 'active'
         elif any(v == 'failed' for v in model_map.values()) and display_status in ('proposed', 'pending'):
             display_status = 'failed'
         counts_by_status[display_status] += 1
+
+        # Activity panel classification (mutually exclusive, priority order).
+        # Done before the filter continues so it covers every topic.
+        _detail_url = f'/tjai/research-detail/{eid}_detail/'
+        if _active_models or _synth_in_flight:
+            activity['active'].append({
+                'entry_id': eid, 'detail_url': _detail_url,
+                'phase': 'researching' if _active_models else 'synthesizing',
+                'models': _active_models,
+            })
+        elif eid in queued_position_by_eid:
+            activity['queued'].append({
+                'entry_id': eid, 'detail_url': _detail_url,
+                'kind': queued_kind_by_eid.get(eid) or 'run',
+            })
+        elif researched_models.get(eid) and not _synth_is_done:
+            activity['pending_synth'].append({
+                'entry_id': eid, 'detail_url': _detail_url,
+            })
 
         if status_filter and display_status not in status_filter:
             continue
@@ -5360,6 +5395,7 @@ def api_research_list(request):
     response = JsonResponse({
         'items': page_items,
         'models': list(RESEARCH_MODELS),
+        'activity': activity,
         'stats': {
             'topics': len(base_entries),
             'filtered': total_filtered,
@@ -5646,6 +5682,58 @@ def api_research_data(request):
                     item[f'{model}_subentry_id'] = sub.get('entry_id')
         items.append(item)
 
+    # --- Top activity panel (MAIN PAGE ONLY) -----------------------------
+    # Additive read-only summary for research.html's prominent top panel.
+    # Detail pages are served by api_research_detail and are NOT affected.
+    # Real work state straight from the data — synthesis sub-entry presence
+    # + status, base model statuses, and the run queue. Computed across ALL
+    # topics (this endpoint is unpaginated) so nothing in flight or owed is
+    # missed. No agent status flag, no system_busy.
+    _synth_exists = set()       # base eids that have a synthesis sub-entry
+    _synth_done = set()         # base eids whose synthesis sub-entry is done
+    _research_done = set()      # base eids with >=1 completed model report
+    for _beid, _subs in model_entries_by_base.items():
+        for _sub in _subs:
+            if _sub.get('model') == 'synthesis':
+                _synth_exists.add(_beid)
+                if _sub.get('sub_status') == 'done':
+                    _synth_done.add(_beid)
+            elif _sub.get('sub_status') == 'done':
+                _research_done.add(_beid)
+
+    _queued_kind = {}
+    try:
+        from .research_queue import _research_action
+        _ra = _research_action()
+        for _p in (((_ra.data or {}).get('pending_runs') or []) if _ra else []):
+            _peid = _p.get('entry_id')
+            if _peid and _peid not in _queued_kind:
+                _queued_kind[_peid] = _p.get('kind') or 'run'
+    except Exception as _exc:
+        logger.warning("activity panel: queue read failed: %s", _exc)
+
+    activity = {'active': [], 'queued': [], 'pending_synth': []}
+    for _it in items:
+        if _it.get('source') == 'multimodel':
+            continue
+        _eid = _it.get('entry_id') or ''
+        _detail_url = f'/tjai/research-detail/{_eid}_detail/'
+        _active_models = [m for m in RESEARCH_MODELS
+                          if _it.get(f'{m}_status') in ('active', 'launching')]
+        _synth_in_flight = _eid in _synth_exists and _eid not in _synth_done
+        if _active_models or _synth_in_flight:
+            _phase = 'synthesizing' if (_synth_in_flight and not _active_models) else 'researching'
+            activity['active'].append({
+                'entry_id': _eid, 'detail_url': _detail_url,
+                'phase': _phase, 'models': _active_models})
+        elif _eid in _queued_kind:
+            activity['queued'].append({
+                'entry_id': _eid, 'detail_url': _detail_url,
+                'kind': _queued_kind[_eid]})
+        elif _eid in _research_done and _eid not in _synth_done:
+            activity['pending_synth'].append({
+                'entry_id': _eid, 'detail_url': _detail_url})
+
     # Worker health — derived PER MACHINE, not per capability.
     #
     # Why per-machine: the `worker_capability_{cap}_lastpoll` sysconfig rows
@@ -5883,6 +5971,7 @@ def api_research_data(request):
         'sysprompt_id': str(sysprompt) if sysprompt else None,
         'ideation_prompt_id': str(ideation_prompt) if ideation_prompt else None,
         'agent': agent_status,
+        'activity': activity,
     })
 
 

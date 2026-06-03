@@ -1,10 +1,17 @@
+<!--
+    OBSOLETE — DO NOT EDIT FOR NEW WORK.
+    This is the obsolete research page, served only at /tjai/research-obsolete/
+    (view: research_obsolete_page). The live research page is research_list.html
+    (/tjai/research/, view research_page) backed by api_research_list. Changes
+    made here do NOT appear on the live page. New features go in research_list.html.
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <link rel="icon" type="image/svg+xml" href="/tjai/static/tjai/favicon.svg">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>tjai Research</title>
+    <title>tjai Research (OBSOLETE)</title>
     <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -40,6 +47,40 @@
         .agent-idle { background: #222; color: #8a8a8a; }
         .agent-running { background: rgba(255, 213, 79, 0.1); color: #ffd54f; }
         .agent-failed { background: rgba(239, 83, 80, 0.1); color: #ef5350; }
+        /* Prominent activity panel: one line per in-flight / queued item,
+           directly below the grey header line. Yellow = actively working,
+           blue = queued/pending. Driven off per-item data (sub-entry status
+           + queue position), NOT the fragile agent status flag. */
+        /* Always rendered (never display:none) so it doubles as a health
+           sentinel: if the panel vanishes, something regressed. */
+        .activity-panel { flex-shrink: 0; }
+        .activity-line {
+            display: block;
+            padding: 8px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            border-bottom: 1px solid #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-decoration: none;
+        }
+        a.activity-line:hover { filter: brightness(1.3); text-decoration: none; }
+        .activity-active {
+            background: rgba(255, 213, 79, 0.12);
+            color: #ffd54f;
+            border-left: 4px solid #ffd54f;
+        }
+        .activity-queued {
+            background: rgba(144, 202, 249, 0.10);
+            color: #90caf9;
+            border-left: 4px solid #90caf9;
+        }
+        .activity-none {
+            color: #8a8a8a;
+            background: #222;
+            border-left: 4px solid #444;
+        }
         .content-area {
             flex: 1;
             overflow-y: auto;
@@ -156,6 +197,7 @@
         <a href="#" onclick="event.preventDefault();createResearchTopic()">New Topic</a>
         <span class="stats" id="stats"></span>
     </div>
+    <div class="activity-panel" id="activity-panel"><div class="activity-line activity-none">Loading…</div></div>
     <div class="agent-banner agent-idle" id="agent-banner">Agent: loading...</div>
     <div class="error-section" id="error-section"></div>
     <div class="content-area" id="content">
@@ -228,7 +270,56 @@
             }
         }
 
-        function render(data) {
+        async function refreshBanner() {
+            // Lightweight 10s tick: refresh ONLY the top running-status banner
+            // so the topic list never re-renders (no scroll jump, no checkbox
+            // churn). Reuses the research data endpoint; render(data, true)
+            // returns before the heavy list DOM.
+            try {
+                const resp = await fetch('/tjai/api/research/data');
+                const data = await resp.json();
+                if (data.error) return;
+                agentRunning = (data.agent || {}).status === 'running';
+                render(data, true);
+            } catch (e) { /* keep last banner on transient error */ }
+        }
+
+        function renderActivityPanel(data) {
+            // Renders data.activity — the server-computed, unpaginated summary
+            // of real work state (active / queued / pending-synthesis). Always
+            // renders at least one line ("No current activity") so the panel is
+            // a visible health sentinel: if it vanishes, something regressed.
+            // No truncation — a flood of pending syntheses is signal, not noise.
+            const panel = document.getElementById('activity-panel');
+            if (!panel) return;
+            const act = data.activity || { active: [], queued: [], pending_synth: [] };
+            const line = (href, cls, glyph, text) =>
+                `<a class="activity-line ${cls}" href="${href}">${glyph} ${esc(text)}</a>`;
+            const lines = [];
+            for (const a of (act.active || [])) {
+                const text = a.phase === 'synthesizing'
+                    ? `Synthesizing ${a.entry_id}`
+                    : (a.models && a.models.length)
+                        ? `Researching ${a.entry_id} — ${a.models.join(', ')}`
+                        : `Working ${a.entry_id}`;
+                lines.push(line(a.detail_url, 'activity-active', '⟳', text));
+            }
+            for (const a of (act.queued || [])) {
+                const k = a.kind === 'synthesize' ? 'synthesis'
+                        : a.kind === 'rerun' ? 'rerun' : 'run';
+                lines.push(line(a.detail_url, 'activity-queued', '⏳', `Queued (${k}) ${a.entry_id}`));
+            }
+            for (const a of (act.pending_synth || [])) {
+                lines.push(line(a.detail_url, 'activity-queued', '⊙', `Synthesis pending — ${a.entry_id}`));
+            }
+            if (lines.length === 0) {
+                lines.push(`<div class="activity-line activity-none">No current activity</div>`);
+            }
+            panel.innerHTML = lines.join('');
+        }
+
+        function render(data, bannerOnly = false) {
+            renderActivityPanel(data);
             // Ideation prompt link
             const ipEl = document.getElementById('ideation-prompt-link');
             if (data.ideation_prompt_id) {
@@ -470,6 +561,11 @@
             } else {
                 errorDiv.innerHTML = '';
             }
+
+            // Banner-only refresh stops here — everything below is the heavy
+            // topic-list DOM render, reserved for the full-page (60s) refresh
+            // and post-action refreshes.
+            if (bannerOnly) return;
 
             // Stats
             const pending = items.filter(i => i.status === 'pending').length;
@@ -759,6 +855,13 @@
 
 
         fetchData();
+        // Live monitor (the page used to freeze on a stale snapshot during a
+        // multi-minute synthesis / research run):
+        //   - top running-status banner refreshes every 10s (banner only, so
+        //     the list below never churns; pendingChecks survives it anyway)
+        //   - full page (list + banner) refreshes every 60s
+        setInterval(refreshBanner, 10000);
+        setInterval(fetchData, 60000);
     </script>
 </body>
 </html>

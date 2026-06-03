@@ -275,7 +275,7 @@
                 html += `<div class="run-block" data-run="${esc(runId)}">`;
                 html += '<div class="run-header">';
                 html += `<span class="run-time">${(run.run_display || runId)}</span>`;
-                let statsText = `${picks.length} picks, ${keptCount} kept`;
+                let statsText = `${activeCount} to review · ${picks.length} picks, ${keptCount} kept`;
                 if (run.source_count) {
                     statsText += totalSources ? `, ${run.source_count} of ${totalSources} sources` : `, ${run.source_count} sources`;
                 }
@@ -306,6 +306,7 @@
                     html += `<button class="${pick.thumbs === 'down' ? 'active-down' : ''}" onclick="setThumbs('${pick.id}', 'down', this)">&#x25BC;</button>`;
                     html += `<button class="${pick.kept ? 'active-keep' : ''}" onclick="toggleKeep('${pick.id}', this)">Keep</button>`;
                     html += `<button class="${pick.readme ? 'active-readme' : ''}" onclick="toggleReadme('${pick.id}', this)">ReadMe</button>`;
+                    html += `<button onclick="clearPick('${pick.id}')">Clear</button>`;
                     html += '</div>';
                     html += '</div>';
                 }
@@ -367,7 +368,7 @@
             return data;
         }
 
-        function markViewed(id, linkEl) {
+        function clearPick(id) {
             const pick = findPick(id);
             if (!pick || pick.archived || pick.kept) return;
             pick.archived = true;
@@ -376,6 +377,11 @@
             if (el) el.remove();
             updateGlobalStats();
             updateRunHeaders();
+        }
+
+        function markViewed(id, linkEl) {
+            // Opening the article also clears it from triage.
+            clearPick(id);
         }
 
         function setThumbs(id, direction, btn) {
@@ -475,7 +481,7 @@
                 }
                 const statsEl = block.querySelector('.run-stats');
                 if (statsEl) {
-                    let st = `${run.picks.length} picks, ${keptCount} kept`;
+                    let st = `${activeCount} to review · ${run.picks.length} picks, ${keptCount} kept`;
                     if (run.source_count) {
                         st += totalSources ? `, ${run.source_count} of ${totalSources} sources` : `, ${run.source_count} sources`;
                     }

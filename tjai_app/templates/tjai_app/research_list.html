@@ -37,6 +37,39 @@
             color: #a0a0a0;
             font-size: 12px;
         }
+        /* Top activity panel: one line per in-flight / queued / synthesis-owed
+           topic. Always renders (≥1 line) so it doubles as a regression
+           sentinel — if it vanishes, something broke. Yellow = working,
+           blue = queued/pending, grey = idle. */
+        .activity-panel { border-bottom: 1px solid #333; }
+        .activity-line {
+            display: block;
+            padding: 8px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-decoration: none;
+            border-bottom: 1px solid #2a2a2a;
+        }
+        .activity-line:last-child { border-bottom: none; }
+        a.activity-line:hover { filter: brightness(1.25); text-decoration: none; }
+        .activity-active {
+            background: rgba(255, 213, 79, 0.12);
+            color: #ffd54f;
+            border-left: 4px solid #ffd54f;
+        }
+        .activity-queued {
+            background: rgba(144, 202, 249, 0.12);
+            color: #90caf9;
+            border-left: 4px solid #90caf9;
+        }
+        .activity-none {
+            color: #9b9b9b;
+            background: #202020;
+            border-left: 4px solid #444;
+        }
         .toolbar {
             display: grid;
             grid-template-columns: minmax(220px, 1fr) 150px 150px auto auto;
@@ -201,12 +234,13 @@
 <body>
     {% with current_page="research" %}{% include "tjai_app/_menu.html" %}{% endwith %}
     <div class="page-header">
-        <a href="/tjai/research-legacy/">Legacy Research Page</a>
+        <a href="/tjai/research-obsolete/">Obsolete Research Page</a>
         <span class="header-right">
             <span class="stats" id="stats">Loading...</span>
             <span class="meta" id="offline-cache-status">cache loading</span>
         </span>
     </div>
+    <div class="activity-panel" id="activity-panel"><div class="activity-line activity-none">Loading…</div></div>
     <form class="toolbar" id="search-form">
         <input id="query" type="search" autocomplete="off" placeholder="Search research topics">
         <select id="scope">
@@ -297,7 +331,41 @@
             }
         }
 
+        function renderActivityPanel(data) {
+            // Renders data.activity (server-computed across ALL topics, not just
+            // this page) — active / queued / synthesis-owed. Always renders at
+            // least one line so the panel is a visible health sentinel. No
+            // truncation: a flood of pending syntheses is signal, not noise.
+            const panel = document.getElementById('activity-panel');
+            if (!panel) return;
+            const act = data.activity || {active: [], queued: [], pending_synth: []};
+            const line = (href, cls, glyph, text) =>
+                `<a class="activity-line ${cls}" href="${href}">${glyph} ${esc(text)}</a>`;
+            const lines = [];
+            for (const a of (act.active || [])) {
+                const text = a.phase === 'synthesizing'
+                    ? `Synthesizing ${a.entry_id}`
+                    : (a.models && a.models.length)
+                        ? `Researching ${a.entry_id} — ${a.models.join(', ')}`
+                        : `Working ${a.entry_id}`;
+                lines.push(line(a.detail_url, 'activity-active', '⟳', text));
+            }
+            for (const a of (act.queued || [])) {
+                const k = a.kind === 'synthesize' ? 'synthesis'
+                        : a.kind === 'rerun' ? 'rerun' : 'run';
+                lines.push(line(a.detail_url, 'activity-queued', '⏳', `Queued (${k}) ${a.entry_id}`));
+            }
+            for (const a of (act.pending_synth || [])) {
+                lines.push(line(a.detail_url, 'activity-queued', '⊙', `Synthesis pending — ${a.entry_id}`));
+            }
+            if (lines.length === 0) {
+                lines.push('<div class="activity-line activity-none">No current activity</div>');
+            }
+            panel.innerHTML = lines.join('');
+        }
+
         function render(data) {
+            renderActivityPanel(data);
             const stats = data.stats || {};
             state.hasMore = !!stats.has_more;
             state.latestStats = stats;
