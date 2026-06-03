@@ -285,8 +285,8 @@ def collect_entries(since_ts):
 def collect_dialog(since_ts):
     """Dialog turn counts by source.
 
-    Co-development dialog turns live in dialog contexts (currently
-    'co-code', historically 'claude-code') and carry tag 'ccdialog';
+    Co-development dialog turns live in the 'co-code' context and
+    carry tag 'ccdialog';
     they do not carry a data.source field. This is the canonical
     discriminator used across the rest of the codebase (services.py,
     views.py SQL). A prior data.source='mcp'|'claude_code' filter

@@ -139,10 +139,9 @@ any machine can load recent dialog context.
 ```
 
 Dialog entries: `kind='memory'`, `tag='ccdialog'`, `is_dirty=0`
-(server-only). Current dialog writes use `context='co-code'`, meaning
-co-development dialog across Claude Code, Codex, and future coding assistants.
-Historical Claude-era dialog remains in `context='claude-code'`; readers must
-support both contexts, with `ccdialog` as the durable technical discriminator.
+(server-only). Dialog writes use `context='co-code'`, meaning
+co-development dialog across Claude Code, Codex, and future coding assistants,
+with `ccdialog` as the durable technical discriminator.
 Uses `Entry.objects.create()` directly (bypasses 60s dedup). Metadata in
 `Entry.data` includes `role`, `client`, `model`, `model_provider`,
 `reasoning_effort`, `session_id`, `project_path`, and `hostname` when the
