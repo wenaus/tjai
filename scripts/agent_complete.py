@@ -108,6 +108,28 @@ def _clear_research_subagent_names(source_entry_id, ref_extra):
     return count
 
 
+def _clear_orphaned_research_subagent_names(ref_extra):
+    """Safety sweep: research subagent reports must NEVER hold an @name —
+    they are addressed by data.entry_id, not by name. The per-run clear in
+    _clear_research_subagent_names() can miss a subagent that writes its
+    report *after* that clear fires, leaving an orphaned @name that pollutes
+    the named-entry namespace. This run-agnostic sweep clears any research
+    subagent report that still carries a name. Scoped strictly to the
+    'research-subagent' tag, so user-curated @names are never touched.
+    """
+    qs = Entry.objects.filter(
+        tags__tag_name='research-subagent',
+        deleted_at__isnull=True,
+        name__isnull=False,
+    ).exclude(name='')
+
+    count = qs.update(name=None)
+    if count:
+        logger.info("Safety sweep cleared @names from %d orphaned research "
+                    "subagent reports", count, extra=ref_extra)
+    return count
+
+
 def _wait_for_subagents(action_id, current_entry, ref_extra):
     """On timeout, wait for subagent reports to finish arriving.
 
@@ -441,6 +463,9 @@ def main():
             entry_data = entry.data if isinstance(entry.data, dict) else {}
             _clear_research_subagent_names(
                 entry_data.get('entry_id'), ref_extra)
+            # Run-agnostic safety net for subagents that wrote after the
+            # per-run clear above (the source of the @name pollution).
+            _clear_orphaned_research_subagent_names(ref_extra)
         except Exception as e:
             logger.error("%s: failed to clear research subagent names: %s",
                          action_id, e, extra=ref_extra)
