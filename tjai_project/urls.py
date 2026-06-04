@@ -94,6 +94,7 @@ urlpatterns = [
     path("api/picks/archive-run", views.api_picks_archive_run, name="api_picks_archive_run"),
     path("api/picks/run", views.api_picks_run, name="api_picks_run"),
     path("api/picks/abort", views.api_picks_abort, name="api_picks_abort"),
+    path("api/picks/curate-page", views.api_curate_page, name="api_curate_page"),
     path("rss/", views.rss_page, name="rss"),
     path("api/rss/data", views.api_rss_data, name="api_rss_data"),
     path("api/rss/mark-read", views.api_rss_mark_read, name="api_rss_mark_read"),

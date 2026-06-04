@@ -4266,6 +4266,111 @@ def api_add_bookmark(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+def api_curate_page(request):
+    """Stage a page the user is viewing (+ optional fetched PDFs) and dispatch
+    the deterministic picks curator (scripts/curate_page.py).
+
+    Called by the tj-getlink Chrome extension's "Curate picks from this page"
+    buttons. The extension runs inside the user's authenticated session, so for
+    the "with-download" variant it fetches the page's same-origin PDFs itself
+    and uploads them here — the server is never authenticated to the source site.
+
+    Requires Bearer token matching SysConfig 'gmail_addon_api_key'.
+
+    multipart/form-data fields:
+      url        (required) the page URL
+      title      page title
+      source     human label for the page (e.g. workshop name)
+      mode       'page' (text only) | 'download' (text + uploaded PDFs)
+      page_text  extracted page text
+      pdfs       (download mode) one or more uploaded PDF files
+
+    Returns {status:'queued', job_id}. Curation runs in the background; created
+    picks appear in the normal /tjai/picks/ triage UI.
+    """
+    auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+    if not auth_header.startswith('Bearer '):
+        return JsonResponse({"error": "Authorization required"}, status=401)
+    token = auth_header[7:]
+    try:
+        api_key = SysConfig.objects.get(key='gmail_addon_api_key').value
+    except SysConfig.DoesNotExist:
+        return JsonResponse({"error": "API key not configured"}, status=503)
+    if token != api_key:
+        return JsonResponse({"error": "Invalid API key"}, status=403)
+
+    import os
+    import sys
+    import subprocess
+    from pathlib import Path
+
+    url = (request.POST.get('url') or '').strip()
+    if not url:
+        return JsonResponse({"error": "url is required"}, status=400)
+    title = (request.POST.get('title') or '').strip()
+    source = (request.POST.get('source') or '').strip()
+    mode = (request.POST.get('mode') or 'page').strip()
+    page_text = request.POST.get('page_text') or ''
+
+    pdf_files = request.FILES.getlist('pdfs')
+    MAX_PDFS = 25  # server-side cap; the extension also warns/approves past a threshold
+    truncated = len(pdf_files) > MAX_PDFS
+    pdf_files = pdf_files[:MAX_PDFS]
+
+    # Stage the job on disk for the background worker.
+    # HANDOFF (ec2dev): confirm this root is writable by the web user; falls back
+    # to the repo's data/ dir if /var/www is not writable in this deployment.
+    scripts_dir = Path(__file__).resolve().parent.parent / 'scripts'
+    jobs_root = Path('/var/www/tjai/data/curate-jobs')
+    try:
+        jobs_root.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        jobs_root = scripts_dir.parent / 'data' / 'curate-jobs'
+        jobs_root.mkdir(parents=True, exist_ok=True)
+
+    job_id = str(uuid.uuid7())
+    job_dir = jobs_root / job_id
+    (job_dir / 'pdfs').mkdir(parents=True, exist_ok=True)
+
+    (job_dir / 'meta.json').write_text(
+        json.dumps({'url': url, 'title': title, 'source': source, 'mode': mode}),
+        encoding='utf-8')
+    if page_text.strip():
+        (job_dir / 'page.txt').write_text(page_text, encoding='utf-8')
+
+    saved = 0
+    if mode == 'download':
+        for f in pdf_files:
+            name = os.path.basename(f.name or '') or f'deck-{saved}.pdf'
+            if not name.lower().endswith('.pdf'):
+                name += '.pdf'
+            with open(job_dir / 'pdfs' / name, 'wb') as out:
+                for chunk in f.chunks():
+                    out.write(chunk)
+            saved += 1
+
+    # Fire-and-forget: curate_page.py reads job_dir, runs claude -p, and creates
+    # the picks. The HTTP request returns immediately.
+    log_fh = open(job_dir / 'job.log', 'wb')
+    subprocess.Popen(
+        [sys.executable, str(scripts_dir / 'curate_page.py'), str(job_dir)],
+        stdout=log_fh, stderr=log_fh, start_new_session=True,
+    )
+    SysConfig.objects.update_or_create(
+        key=f'curate_{job_id}_status',
+        defaults={'value': 'running', 'timestamp_modified': time.time()})
+
+    return JsonResponse({
+        'status': 'queued',
+        'job_id': job_id,
+        'mode': mode,
+        'pdfs_saved': saved,
+        'pdfs_truncated': truncated,
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
 def api_add_journal(request):
     """Create a journal entry from an external source (Gmail Add-on, Chrome extension).
 
