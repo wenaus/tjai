@@ -201,8 +201,8 @@ Tools:
 - edit_relation(relation_id, relation_type, data): Edit a relation's type/data.
 - delete_relation(relation_id): Delete a relation.
 - get_relations(entry_id): Get all relations for an entry.
-- get_web(entry_id, depth, kinds): Traverse the relation graph from an entry.
-  BFS up to depth hops, optional kind filtering on results.
+- get_relation_graph(entry_id, depth, kinds): Traverse the relation graph from
+  an entry. BFS up to depth hops, optional kind filtering on results.
 
 Entry types: memory (notes), todo (tasks), journal (calendar events), profile
 (user facts), ai (AI instructions), bookmark (URLs), list (lists), action,

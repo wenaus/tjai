@@ -1594,7 +1594,7 @@ def get_relations(entry_id, max_content_length=DEFAULT_MAX_CONTENT_LENGTH):
     return _get_relations_for_entry(entry_id, max_content_length=max_content_length)
 
 
-def get_web(entry_id, depth=2, kinds=None, max_content_length=DEFAULT_MAX_CONTENT_LENGTH):
+def get_relation_graph(entry_id, depth=2, kinds=None, max_content_length=DEFAULT_MAX_CONTENT_LENGTH):
     """Traverse the relation graph from an entry, returning the connected subgraph.
 
     BFS traversal up to `depth` hops. Explores all edges regardless of entry kind,

@@ -32,7 +32,7 @@ Available tools:
     edit_relation     - Edit a relation's type and/or data
     delete_relation   - Delete a relation
     get_relations     - Get all relations for an entry
-    get_web           - Traverse the relation graph from an entry
+    get_relation_graph - Traverse the relation graph from an entry
 
 Entry types: memory, todo, journal, profile, bookmark, ai, list, action, goal
 Valid statuses: active, done, blocked, archive. Priority: positive integers (1=highest).
@@ -1128,7 +1128,7 @@ async def get_relations(entry_id: str, max_content_length: int = DEFAULT_MAX_CON
 
 
 @mcp.tool()
-async def get_web(
+async def get_relation_graph(
     entry_id: str,
     depth: int = 2,
     kinds: list[str] = None,
@@ -1153,7 +1153,7 @@ async def get_web(
         (list of formatted relations between included entries).
         Returns {"error": "..."} if entry not found or invalid parameters.
     """
-    return await sync_to_async(services.get_web)(
+    return await sync_to_async(services.get_relation_graph)(
         entry_id=entry_id, depth=depth, kinds=kinds,
         max_content_length=max_content_length,
     )
