@@ -434,13 +434,21 @@
                 const cls = ['done', 'active', 'staged', 'launching', 'failed', 'blocked'].includes(st) ? st : '';
                 return `<label class="model-control ${cls}"><input type="checkbox" class="model-rerun-cb" value="${esc(model)}"${disabled}>${esc(model)}${st ? ' (' + esc(st) + ')' : ''}</label>`;
             }).join('');
+            // Synthesis is selectable in the same group: tick it alone to rerun
+            // just the synthesis pass on the current reports, or alongside models
+            // (a model rerun re-triggers synthesis automatically when it finishes).
+            const synthSt = (data.synthesis && data.synthesis.status) ? data.synthesis.status : 'not-run';
+            const synthCls = ['done', 'active', 'staged', 'launching', 'failed', 'blocked'].includes(synthSt) ? synthSt : '';
+            const synthCheck = models.length
+                ? `<label class="model-control ${synthCls}" title="Rerun the synthesis pass on the current model reports"><input type="checkbox" class="synth-rerun-cb"${disabled}>synthesis (${esc(synthSt)})</label>`
+                : '';
             const note = agent.running
                 ? `<span class="meta">${agent.running_here ? 'Research agent is running this topic; Abort is available above.' : 'Research agent is running another topic; controls are disabled.'}</span>`
                 : '';
             return `
                 <div class="model-controls">
                     ${resultLinks.length ? `<div class="model-result-links">${resultLinks.join('')}</div>` : ''}
-                    <div class="model-checks">${checks}</div>
+                    <div class="model-checks">${checks}${synthCheck}</div>
                     <div class="model-buttons">
                         <button type="button" onclick="rerunModels(this)"${disabled}>Rerun selections</button>
                         ${synthPending ? (awaitingSynthUntil > Date.now() ? `<button type="button" disabled>Synthesizing…</button>` : `<button type="button" onclick="synthesizeItem(this)"${disabled}>Synthesize</button>`) : ''}
@@ -640,7 +648,37 @@
         async function rerunModels(btn) {
             if (!currentTopic || !currentTopic.entry_id) return;
             const models = Array.from(document.querySelectorAll('.model-rerun-cb:checked')).map(cb => cb.value);
-            if (!models.length) { alert('Select at least one model'); return; }
+            const wantSynth = !!document.querySelector('.synth-rerun-cb:checked');
+            if (!models.length && !wantSynth) { alert('Select at least one model, or synthesis'); return; }
+
+            // Synthesis-only: run the synthesis pass now on the existing reports.
+            // When models are also selected we do NOT dispatch synthesis here —
+            // a model rerun clears synthesis_triggered, so synthesis re-runs
+            // automatically once the reran models finish (synthesizing now would
+            // use the stale, pre-rerun reports).
+            if (!models.length) {
+                if (!confirm('Rerun synthesis for ' + currentTopic.entry_id + '?\n\nAny existing synthesis sub-entry is retired and regenerated.')) return;
+                btn.disabled = true;
+                btn.textContent = 'Synthesizing...';
+                try {
+                    const resp = await fetch('/tjai/api/research/synthesize', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrf()},
+                        body: JSON.stringify({entry_id: currentTopic.entry_id}),
+                    });
+                    const data = await resp.json();
+                    if (!resp.ok || data.error) throw new Error(data.error || 'Synthesize failed');
+                    btn.textContent = 'Queued synthesis';
+                    awaitingSynthUntil = Date.now() + 30 * 60 * 1000;  // live-poll until synthesis lands
+                    clearDetailPoll();
+                    detailPollTimer = setTimeout(loadDetail, 2000);
+                } catch (e) {
+                    btn.textContent = e.message;
+                    setTimeout(loadDetail, 2500);
+                }
+                return;
+            }
+
             btn.disabled = true;
             btn.textContent = 'Rerunning...';
             try {
@@ -651,7 +689,8 @@
                 });
                 const data = await resp.json();
                 if (!resp.ok || data.error) throw new Error(data.error || 'Rerun failed');
-                btn.textContent = 'Queued ' + models.join('+');
+                btn.textContent = 'Queued ' + models.join('+') + (wantSynth ? ' + synthesis' : '');
+                if (wantSynth) awaitingSynthUntil = Date.now() + 30 * 60 * 1000;
                 setTimeout(loadDetail, 1200);
             } catch (e) {
                 btn.textContent = e.message;
