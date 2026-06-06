@@ -639,9 +639,7 @@ def heal_research_subprocess_state():
                 entry,
                 f'Process PID {sc.value} died without completing',
             )
-        sc.value = ''
-        sc.timestamp_modified = now
-        sc.save(update_fields=['value', 'timestamp_modified'])
+        sc.delete()
 
     active_entries = Entry.objects.filter(
         data__source='multimodel',
@@ -698,6 +696,13 @@ def research_model_complete(model_entry, terminal_status='done'):
     if not base_entry_id or not model:
         logger.warning("Missing base_entry_id or model in entry data")
         return
+
+    # This model's subprocess has reached a terminal state — drop its
+    # PID-tracking row. The row is only useful while the subprocess is alive
+    # (abort + liveness healing); leaving it behind is what fills SysConfig
+    # with dead research_*_pid detritus. filter().delete() is a no-op if the
+    # row was already removed (e.g. by kill/heal).
+    SysConfig.objects.filter(key=_research_pid_key(base_entry_id, model)).delete()
 
     with transaction.atomic():
         base = Entry.objects.select_for_update().filter(

@@ -181,10 +181,9 @@ def _check_kill_request():
             killed += 1
         except (ValueError, ProcessLookupError):
             pass
-        # Clear the PID entry regardless (process dead or killed)
-        sc.value = ''
-        sc.timestamp_modified = time.time()
-        sc.save(update_fields=['value', 'timestamp_modified'])
+        # Drop the PID row regardless (process dead or killed) — it only
+        # tracks a live subprocess, so a dead one is pure detritus.
+        sc.delete()
 
     logger.info("Kill request completed: %d process(es) killed", killed)
 
