@@ -75,6 +75,8 @@
         .day-content .body-text code { color: #aaa; }
         .day-content .body-oneline pre,
         .day-content .body-text pre { margin: 4px 0; padding: 6px 8px; background: #111; border-radius: 4px; overflow-x: auto; }
+        /* ```text``` prose fences reuse the .body-text pre box; just give links contrast. */
+        .day-content .text-fence a { color: #90caf9; }
         .day-content .empty { color: #666; font-style: italic; margin: 4px 0 16px 0; }
         .loading { color: #888; padding: 20px 0; }
         .toc {

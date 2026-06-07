@@ -31,6 +31,7 @@ Built on an offline-first, distributed architecture: the `tj` client works local
 | [Python Environment](docs/python-environment.md) | Interpreter pin, requirements layout, uv-based venv build (single source of truth) |
 | [CLI Reference](docs/cli.md) | Complete command reference for `tj` |
 | [Architecture](docs/architecture.md) | Sync design, MCP gateway, design decisions |
+| [Markdown Rendering](docs/rendering.md) | Server-side render pipeline, linkify policy, Prism code blocks, `text` prose fences |
 | [Server & Deployment](docs/server.md) | Production environment, deploy, endpoints, logging, health, backups |
 | [Action Agent](docs/action-agent.md) | Scheduled task daemon, execution pipeline, action entry schema |
 | [Agents](docs/agents.md) | Daily synopsis, AI news curation (Picks), autonomous research, RSS reader |

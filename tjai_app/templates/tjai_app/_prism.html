@@ -7,6 +7,16 @@ on DOMContentLoaded. Grammar set: bash, python, c, cpp, json, yaml, sql
 (html/css/js are built into core).
 {% endcomment %}
 <link rel="stylesheet" href="/tjai/static/tjai/vendor/prism/1.29.0/themes/prism-tomorrow.min.css">
+<style>
+  /* ```text``` prose fences (emails, PR/commit bodies): monospace box, links live,
+     not Prism-highlighted (the language class is stripped server-side). */
+  .text-fence { background:#151515; border:1px solid #333; border-radius:4px;
+    padding:12px; overflow-x:auto; white-space:pre-wrap; color:#f0c0c0;
+    font-family:Consolas,Monaco,"Andale Mono",monospace; font-size:.9em; }
+  .text-fence code { background:none; color:inherit; padding:0;
+    white-space:pre-wrap; font-family:inherit; }
+  .text-fence a { color:#90caf9; }
+</style>
 <script src="/tjai/static/tjai/vendor/prism/1.29.0/prism.min.js"></script>
 <script src="/tjai/static/tjai/vendor/prism/1.29.0/components/prism-markup.min.js"></script>
 <script src="/tjai/static/tjai/vendor/prism/1.29.0/components/prism-bash.min.js"></script>

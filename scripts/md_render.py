@@ -125,7 +125,8 @@ def render_markdown(text, extensions=None):
     exts = extensions if extensions is not None else ['nl2br', 'tables', 'fenced_code']
     safe_text = _neutralize_raw_html_hazards(text)
     html = markdown.markdown(_fix_md_list_spacing(safe_text), extensions=exts, tab_length=2)
-    return _neutralize_raw_html_hazards(html)
+    html = _neutralize_raw_html_hazards(html)
+    return _render_text_fences(html)
 
 
 _BARE_URL_RE = re.compile(r'https?://[^\s<]+')
@@ -175,6 +176,34 @@ def linkify_rendered_html(html):
         else:
             out.append(linkify_text(part))
     return ''.join(out)
+
+
+# A ```text``` fence is prose (emails, PR/commit bodies), not code: keep the
+# monospace box but make links live. markdown emits <pre><code class="language-text">
+# and never parses link syntax inside a fence; Prism would also re-render the block
+# from its textContent, discarding any anchors injected server-side. So drop the
+# language class (Prism then ignores the block), turn [text](url) and bare URLs into
+# anchors, and restyle through the .text-fence class. Real code fences (```python,
+# ```bash, …) are left untouched. Keep in sync with tjai_app/views.py.
+_TEXT_FENCE_RE = re.compile(r'<pre><code class="language-text">(.*?)</code></pre>', re.DOTALL)
+_MD_LINK_RE = re.compile(r'\[([^\]\n]+)\]\((https?://[^)\s]+)\)')
+
+
+def _linkify_text_fence_content(content):
+    def md_link(m):
+        href = html_escape(html_unescape(m.group(2)), quote=True)
+        return f'<a target="_blank" href="{href}">{m.group(1)}</a>'
+    # Convert explicit [disp](url) links first, then linkify remaining bare URLs
+    # (the tag-aware linkifier leaves the anchors just created alone).
+    return linkify_rendered_html(_MD_LINK_RE.sub(md_link, content))
+
+
+def _render_text_fences(html):
+    def repl(m):
+        return ('<pre class="text-fence"><code>'
+                + _linkify_text_fence_content(m.group(1))
+                + '</code></pre>')
+    return _TEXT_FENCE_RE.sub(repl, html)
 
 
 def render_body(text):

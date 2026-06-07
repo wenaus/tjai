@@ -100,6 +100,8 @@
             color: inherit;
             white-space: pre-wrap;
         }
+        /* ```text``` prose fences reuse the .content pre box; just give links contrast. */
+        .content pre a { color: #90caf9; }
         .cm-s-material-darker .cm-comment { color: #f0c0c0 !important; }
         .rel-section { margin-top: 12px; }
         .rel-section h3 { color: #e0e0e0; margin-bottom: 6px; font-weight: normal; }
