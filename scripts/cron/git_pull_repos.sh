@@ -1,54 +1,50 @@
 #!/bin/bash
-# Pull latest for all tracked repos every 10 minutes.
-# For swf-* repos: checkout and pull the highest infra/baseline-vNN branch.
-# For others: pull current branch.
+# Pull latest for every repo in ~/github, every 30 minutes.
+# swf-* repos: checkout and pull the highest infra/baseline-vNN branch.
+# All other repos: pull the current branch.
+# All pulls are --ff-only (never merges or clobbers); a 3s sleep spaces them
+# so a run does not fire ~25 fetches at GitHub at once.
 
 set -uo pipefail
 
-REPOS=(
-    /home/admin/github/tjrepo
-    /home/admin/github/BNLNPPS.github.io
-    /home/admin/github/lxr-mcp-server
-    /home/admin/github/rucio-eic-mcp-server
-    /home/admin/github/xrootd-mcp-server
-    /home/admin/github/corun-mcp-server
-    /home/admin/github/corun-ai
-    /home/admin/github/snippets
-    /home/admin/github/panda-server
-    /home/admin/github/panda-client
-    /home/admin/github/pilot2
-    /home/admin/github/harvester
-    /home/admin/github/iDDS
-)
+GITHUB_DIR=/home/admin/github
 
 SWF_REPOS=(
-    /home/admin/github/swf-testbed
-    /home/admin/github/swf-monitor
-    /home/admin/github/swf-common-lib
-    /home/admin/github/swf-remote
+    "$GITHUB_DIR/swf-testbed"
+    "$GITHUB_DIR/swf-monitor"
+    "$GITHUB_DIR/swf-common-lib"
+    "$GITHUB_DIR/swf-remote"
 )
 
-for repo in "${REPOS[@]}"; do
-    if [ -d "$repo/.git" ]; then
-        git -C "$repo" pull --ff-only --quiet 2>&1 || echo "WARN: pull failed for $repo"
-    fi
+is_swf() {
+    local r="$1" s
+    for s in "${SWF_REPOS[@]}"; do
+        [ "$r" = "$s" ] && return 0
+    done
+    return 1
+}
+
+# Every non-swf git repo under ~/github: pull current branch.
+for dir in "$GITHUB_DIR"/*/; do
+    repo="${dir%/}"
+    [ -d "$repo/.git" ] || continue
+    is_swf "$repo" && continue
+    git -C "$repo" pull --ff-only --quiet 2>&1 || echo "WARN: pull failed for $repo"
+    sleep 3
 done
 
+# swf-* repos: track the highest infra/baseline-vNN branch.
 for repo in "${SWF_REPOS[@]}"; do
-    if [ ! -d "$repo/.git" ]; then
-        continue
-    fi
-    # Fetch all branches
+    [ -d "$repo/.git" ] || continue
     git -C "$repo" fetch --quiet 2>&1 || { echo "WARN: fetch failed for $repo"; continue; }
 
-    # Find highest infra/baseline-vNN
     highest=$(git -C "$repo" branch -r 2>/dev/null \
         | grep -oP 'origin/infra/baseline-v\K\d+' \
         | sort -n | tail -1)
 
     if [ -z "$highest" ]; then
-        # No versioned branch — just pull current branch
         git -C "$repo" pull --ff-only --quiet 2>&1 || echo "WARN: pull failed for $repo"
+        sleep 3
         continue
     fi
 
@@ -60,4 +56,5 @@ for repo in "${SWF_REPOS[@]}"; do
     fi
 
     git -C "$repo" pull --ff-only --quiet 2>&1 || echo "WARN: pull failed for $repo ($target)"
+    sleep 3
 done
