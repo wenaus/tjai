@@ -5825,6 +5825,7 @@ def api_research_data(request):
     # missed. No agent status flag, no system_busy.
     _synth_exists = set()       # base eids that have a synthesis sub-entry
     _synth_done = set()         # base eids whose synthesis sub-entry is done
+    _synth_terminal = set()     # base eids whose synthesis is terminal (done/failed/blocked)
     _research_done = set()      # base eids with >=1 completed model report
     for _beid, _subs in model_entries_by_base.items():
         for _sub in _subs:
@@ -5832,6 +5833,8 @@ def api_research_data(request):
                 _synth_exists.add(_beid)
                 if _sub.get('sub_status') == 'done':
                     _synth_done.add(_beid)
+                if _sub.get('sub_status') in ('done', 'failed', 'blocked'):
+                    _synth_terminal.add(_beid)
             elif _sub.get('sub_status') == 'done':
                 _research_done.add(_beid)
 
@@ -5854,7 +5857,10 @@ def api_research_data(request):
         _detail_url = f'/tjai/research-detail/{_eid}_detail/'
         _active_models = [m for m in RESEARCH_MODELS
                           if _it.get(f'{m}_status') in ('active', 'launching')]
-        _synth_in_flight = _eid in _synth_exists and _eid not in _synth_done
+        # A failed/blocked synthesis is terminal, not in flight — otherwise a
+        # synthesis that never wrote its report shows "synthesizing" forever
+        # (mirrors the list activity panel's already-correct check above).
+        _synth_in_flight = _eid in _synth_exists and _eid not in _synth_terminal
         if _active_models or _synth_in_flight:
             _phase = 'synthesizing' if (_synth_in_flight and not _active_models) else 'researching'
             activity['active'].append({

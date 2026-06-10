@@ -474,13 +474,16 @@
                 });
             }
 
-            // Find next upcoming event (future, not clock entries)
+            // Find next upcoming event (future, not clock entries). A just-started
+            // event stays the countdown target until LATE_GRACE_SEC after its start,
+            // so the chip keeps counting negative for a meeting you're late for.
+            const LATE_GRACE_SEC = 15 * 60;
             let nextUpcomingTs = null;
             for (const entry of entries) {
                 if (entry.data?.clock) continue;
                 if (entry.data?._placeholder) continue;
                 if (entry.data?.entry_id?.startsWith('daily-')) continue;
-                if (entry.event_date > now) {
+                if (entry.event_date > now - LATE_GRACE_SEC) {
                     nextUpcomingTs = entry.event_date;
                     break;
                 }
@@ -547,16 +550,24 @@
                     copyPrefix = 'All day ';
                 }
 
-                // Countdown for next upcoming event (only if it's today)
+                // Countdown for next upcoming event (only if it's today). Counts
+                // down to the start, then negative for up to LATE_GRACE_SEC after.
                 let countdownStr = '';
                 if (entry.event_date === nextUpcomingTs && isToday && !isDailyEntry) {
                     const diffSec = entry.event_date - now;
-                    const hours = Math.floor(diffSec / 3600);
-                    const minutes = Math.floor((diffSec % 3600) / 60);
-                    if (hours > 0) {
+                    if (diffSec >= 3600) {
+                        const hours = Math.floor(diffSec / 3600);
+                        const minutes = Math.floor((diffSec % 3600) / 60);
                         countdownStr = `<span style="color:#e57373;font-weight:bold">in ${hours}h ${minutes}m</span> `;
-                    } else if (minutes > 0) {
+                    } else if (diffSec >= 60) {
+                        const minutes = Math.floor(diffSec / 60);
                         countdownStr = `<span style="color:#e57373;font-weight:bold">in ${minutes}m</span> `;
+                    } else if (diffSec >= 0) {
+                        countdownStr = `<span style="color:#e57373;font-weight:bold">in &lt;1m</span> `;
+                    } else {
+                        // Started — count negative (−1m … −15m), brighter red to pop.
+                        const lateMin = Math.ceil(-diffSec / 60);
+                        countdownStr = `<span style="color:#ff5252;font-weight:bold">−${lateMin}m</span> `;
                     }
                 }
 

@@ -19,6 +19,7 @@ import bootstrap  # noqa: F401 - Django setup
 
 from tjai_app.db_log_handler import DbLogHandler
 from tjai_app.models import Entry, SysConfig, Tag
+from django.db.models import Q
 
 import logging
 
@@ -95,9 +96,9 @@ def _clear_research_subagent_names(source_entry_id, ref_extra):
         return 0
 
     qs = Entry.objects.filter(
+        Q(tags__tag_name='research-subagent') | Q(data__type='research-subagent'),
         data__source_entry_id=source_entry_id,
         deleted_at__isnull=True,
-        tags__tag_name='research-subagent',
         name__isnull=False,
     ).exclude(name='')
 
@@ -114,11 +115,12 @@ def _clear_orphaned_research_subagent_names(ref_extra):
     _clear_research_subagent_names() can miss a subagent that writes its
     report *after* that clear fires, leaving an orphaned @name that pollutes
     the named-entry namespace. This run-agnostic sweep clears any research
-    subagent report that still carries a name. Scoped strictly to the
-    'research-subagent' tag, so user-curated @names are never touched.
+    subagent report that still carries a name. Scoped strictly to
+    research-subagent reports (by the 'research-subagent' tag or a
+    data.type marker), so user-curated @names are never touched.
     """
     qs = Entry.objects.filter(
-        tags__tag_name='research-subagent',
+        Q(tags__tag_name='research-subagent') | Q(data__type='research-subagent'),
         deleted_at__isnull=True,
         name__isnull=False,
     ).exclude(name='')
