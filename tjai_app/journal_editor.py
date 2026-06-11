@@ -15,7 +15,7 @@ def parse_journal_editor_prefix(content, current_event_ts, tz):
     """Parse a leading date/time spec from web-edited journal content.
 
     Accepts any prefix that `parse_date_spec` understands: YYYYMMDD,
-    YYYYMMDD/HH:MM, mm/dd, yyyy/mm/dd, mmdd, tomorrow, yesterday,
+    YYYYMMDD/HH:MM, mm/dd, yyyy/mm/dd, mmdd, today, tomorrow, yesterday,
     weekday names, t+N/w+N/m+N, jan/feb/.../dec + day. A trailing HH:MM
     or H[:MM]am|pm token is consumed as the time-of-day.
 

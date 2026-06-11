@@ -69,6 +69,17 @@ def main():
                  (expected.year, expected.month, expected.day, 12, 45),
                  "tomorrow timestamp")
 
+    # Natural language: "today 8:30am ..." on a new entry (no current date).
+    # Regression: "today" was unrecognized, so the prefix was stored verbatim
+    # with no event_date instead of anchoring to today at the given time.
+    content, ts, warnings = parse_journal_editor_prefix("today 8:30am ePIC AC/SCC meeting", None, tz)
+    assert_equal(content, "ePIC AC/SCC meeting", "today content")
+    assert_equal(warnings, [], "today warnings")
+    dt = datetime.fromtimestamp(ts, tz)
+    assert_equal((dt.year, dt.month, dt.day, dt.hour, dt.minute),
+                 (today_local.year, today_local.month, today_local.day, 8, 30),
+                 "today timestamp")
+
     # mm/dd
     content, ts, warnings = parse_journal_editor_prefix("6/15 7pm dinner", None, tz)
     assert_equal(content, "dinner", "mm/dd content")

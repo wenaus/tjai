@@ -72,7 +72,7 @@ def parse_date_spec(args_list: List[str], tz=None) -> Tuple[float, List[str]]:
 
     Supports:
     - HH:MM (today at specified time)
-    - tomorrow (tomorrow at midnight)
+    - today/tomorrow/yesterday (at midnight unless a time follows)
     - mon/tue/wed/thu/fri/sat/sun (next occurrence of weekday)
     - mmdd (4 digits, date in current year)
     - YYYYMMDD (8 digits, full date)
@@ -178,9 +178,9 @@ def parse_date_spec(args_list: List[str], tz=None) -> Tuple[float, List[str]]:
 
         return dt.timestamp(), remaining
 
-    # Check for 'tomorrow' or 'yesterday'
-    if first in ('tomorrow', 'yesterday'):
-        offset = 1 if first == 'tomorrow' else -1
+    # Check for 'today', 'tomorrow', or 'yesterday'
+    if first in ('today', 'tomorrow', 'yesterday'):
+        offset = {'today': 0, 'tomorrow': 1, 'yesterday': -1}[first]
         target_date = now.date() + timedelta(days=offset)
 
         # Check for time
