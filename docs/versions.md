@@ -22,6 +22,15 @@ Every content or data change to an entry is automatically versioned via a Django
 
 Table: `entry_versions`. Index on `(entry, -timestamp)`.
 
+## Retention
+
+A daily cron (`scripts/cron/purge_old_versions.py`) trims history: versions older
+than 30 days are deleted, but the 10 most recent per entry are always kept
+regardless of age. So every entry retains at least its last 10 versions, and a
+full 30-day window for anything edited more recently — enough that age-based
+comparisons (e.g. "what did this look like 24h ago?") still find a baseline for a
+living document that sat idle then was heavily edited in a single session.
+
 ## MCP Tool: `get_entry_versions`
 
 ```
@@ -36,6 +45,12 @@ get_entry_versions(entry_id, version=None, age=None, max_content_length=0)
 **Retrieve by age:**
 - `age="24h"` — most recent version at least 24 hours old
 - `age="7d"` — most recent version at least 7 days old
+
+If no version is that old (the entry's whole retained history is younger than the
+requested age), the **oldest available** version is returned instead, with a
+`note` field — so callers always get a comparison baseline rather than nothing.
+This is what lets the ideation agent diff @Underway even on a day when every
+retained version is less than 24h old.
 
 **List all versions:**
 - Omit both `version` and `age` — returns `{"versions": [...], "count": N}` with up to 50 versions (newest first) with truncated content

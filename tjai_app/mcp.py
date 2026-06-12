@@ -1180,6 +1180,8 @@ async def get_entry_versions(
                  (negative, e.g. -1 for previous version, -2 for two versions back).
         age: Minimum age — returns the most recent version at least this old.
              Format: '24h', '7d', '2w'. Useful for "what did this look like yesterday?"
+             If no version is that old, returns the oldest available version instead
+             (with a 'note' field) so you always get a comparison baseline.
         max_content_length: Truncate content to this many characters. Default: 0 (full).
                            When listing all versions (no version/age filter), defaults to
                            100 chars for the overview.

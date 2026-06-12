@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Purge entry versions older than 3 days, keeping the 2 most recent per entry."""
+"""Purge entry versions older than 30 days, keeping the 10 most recent per entry."""
 import sys
 import time
 
@@ -7,8 +7,11 @@ sys.path.insert(0, '/home/admin/github/tjrepo/tjai/scripts')
 import bootstrap  # noqa: E402, F401
 from django.db import connection
 
-MAX_AGE_DAYS = 3
-KEEP_MIN = 2  # always keep the N most recent versions per entry
+MAX_AGE_DAYS = 30
+KEEP_MIN = 10  # always keep the N most recent versions per entry, regardless of age
+# Rationale: a month of full history plus a floor of 10 versions/entry keeps a
+# usable comparison baseline (e.g. for the ideation agent's @Underway diff) even
+# for a living doc that sat idle for weeks then got a burst of edits in one day.
 
 
 def purge():

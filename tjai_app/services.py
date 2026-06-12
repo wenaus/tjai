@@ -1664,7 +1664,9 @@ def get_entry_versions(entry_id, version=None, age=None, max_content_length=0):
         entry_id: UUID of the entry.
         version: Specific version number (positive) or relative (-1 = previous, -2 = two back).
         age: Minimum age string (e.g. '24h', '7d') — returns the most recent version
-             at least that old.
+             at least that old. If no version is that old (the entry's whole
+             retained history is younger), returns the oldest available version
+             instead, with a 'note' field, so there is always a comparison baseline.
         max_content_length: Truncate content (0 = full).
 
     Returns single version (if version or age specified) or a dict containing
@@ -1702,7 +1704,23 @@ def get_entry_versions(entry_id, version=None, age=None, max_content_length=0):
             'id', 'version_num', 'content', 'data', 'changed_by', 'timestamp'
         ).first()
         if not v:
-            return {"error": f"No version at least {age} old"}
+            # No version is that old. Rather than returning nothing — which
+            # made callers like the ideation agent conclude "no changes to
+            # assess" for a doc whose entire retained history is younger than
+            # `age` — fall back to the oldest available version so there is
+            # still a comparison baseline. Flag it so the caller knows the
+            # baseline is younger than requested.
+            v = versions.order_by('version_num').values(
+                'id', 'version_num', 'content', 'data', 'changed_by', 'timestamp'
+            ).first()
+            if not v:
+                return {"error": "Entry has no version history"}
+            result = _format_version(v, max_content_length)
+            result["note"] = (
+                f"No version at least {age} old; returned the oldest available "
+                f"(v{v['version_num']}) as the comparison baseline."
+            )
+            return result
         return _format_version(v, max_content_length)
 
     # No filter — return all versions wrapped in a dict. A bare empty list
