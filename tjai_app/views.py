@@ -230,6 +230,7 @@ from django.shortcuts import render, redirect
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+from django.urls import reverse
 
 from django.db.models import Count, Q
 from django.db.models.functions import Lower
@@ -4258,10 +4259,14 @@ def api_add_bookmark(request):
             Tag.objects.get_or_create(entry_id=duplicate.id, tag_name=t)
         if readme:
             Tag.objects.get_or_create(entry_id=duplicate.id, tag_name='readme')
+        entry_url = request.build_absolute_uri(reverse('entry_detail', args=[duplicate.id]))
+        entry_link = f"[{title}]({entry_url})" if title else entry_url
         return JsonResponse({
             "status": "duplicate",
             "entry_id": duplicate.id,
             "content": duplicate.content,
+            "entry_url": entry_url,
+            "entry_link": entry_link,
             "updated": True,
         })
 
@@ -4285,10 +4290,14 @@ def api_add_bookmark(request):
     from .tagger import tag_bookmark
     auto_tags = tag_bookmark(entry)
 
+    entry_url = request.build_absolute_uri(reverse('entry_detail', args=[entry.id]))
+    entry_link = f"[{title}]({entry_url})" if title else entry_url
     return JsonResponse({
         "status": "ok",
         "entry_id": entry.id,
         "content": content,
+        "entry_url": entry_url,
+        "entry_link": entry_link,
         "auto_tags": auto_tags,
     })
 
