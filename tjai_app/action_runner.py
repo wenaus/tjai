@@ -160,13 +160,18 @@ def get_due_actions(trigger_filter=None):
     actions = Entry.objects.filter(
         kind='action',
         deleted_at__isnull=True,
-    ).exclude(status='done').exclude(status='blocked')
+    ).exclude(status='done')
 
     due = []
     now = time.time()
 
     for action in actions:
         data = action.data or {}
+
+        # 'blocked' = auto-dispatch off: suppress the recurring schedule but still
+        # honor an explicit Run (dispatch_run sets next_target_entry_id, one-shot).
+        if action.status == 'blocked' and not data.get('next_target_entry_id'):
+            continue
 
         if trigger_filter and data.get('trigger') != trigger_filter:
             continue
