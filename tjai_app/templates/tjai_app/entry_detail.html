@@ -774,6 +774,25 @@
                         return isName ? `[[@${ref.replace(/^@/, '')}]]` : `[[${ref}]]`;
                     },
                 });
+                // A bare-URL link — an anchor whose visible text is its own href,
+                // e.g. a URL copied out of a Google Doc — pastes as a plain URL
+                // instead of the redundant [url](url). The server render linkifies
+                // bare URLs (see docs/rendering.md), so it still becomes a live
+                // link. Aliased links (visible text differs from the href) keep
+                // their [text](url) form so real link text is preserved.
+                turndown.addRule('bareUrlLink', {
+                    filter: function (node) {
+                        if (node.nodeName !== 'A') return false;
+                        const href = node.getAttribute('href') || '';
+                        if (!/^https?:\/\//i.test(href)) return false;
+                        const text = (node.textContent || '').trim();
+                        const strip = s => s.replace(/\/+$/, '');
+                        return strip(text) === strip(href);
+                    },
+                    replacement: function (content, node) {
+                        return node.getAttribute('href') || '';
+                    },
+                });
 
                 cm.on('paste', function(cm, e) {
                     const cd = e.clipboardData;
