@@ -1135,6 +1135,11 @@ def api_command(request):
     """
     Execute a command on the server.
 
+    No @login_required by design. The `tj` CLI/daemon (tj/server.py
+    send_command) POSTs here with no credential for set_sysconfig /
+    get_sysconfig (sync interval, run-action state). Adding @login_required
+    breaks the CLI.
+
     Request body:
     {
         "command": "set_sysconfig",
@@ -1823,7 +1828,10 @@ def dashboard_calendar(request):
 
     # Inject annual events
     from .services import _query_annual_events
-    start_dt = monday_of_prev_week.replace(hour=0, minute=0, second=0, microsecond=0)
+    # start_ts is midnight-floored in both the before and default branches;
+    # derive the annual-event window start from it (monday_of_prev_week is
+    # only assigned in the default branch).
+    start_dt = datetime.fromtimestamp(start_ts, tz=tz)
     end_dt = datetime.fromtimestamp(end_ts, tz=tz)
     today_mmdd = now_dt.month * 100 + now_dt.day
     seen_ids = {r['id'] for r in result}
@@ -3724,8 +3732,6 @@ def api_entry_purge_versions(request, entry_id):
 
 @login_required
 @require_http_methods(["POST"])
-@login_required
-@require_http_methods(["POST"])
 def api_entry_tag_delete(request, entry_id, tag_name):
     """Delete a single tag from an entry."""
     deleted, _ = Tag.objects.filter(entry_id=entry_id, tag_name=tag_name).delete()
@@ -3735,8 +3741,13 @@ def api_entry_tag_delete(request, entry_id, tag_name):
 def api_entry_save(request, entry_id):
     """Save entry content from the inline editor.
 
-    Accepts ?beacon=1 for sendBeacon saves on tab close (CSRF skipped,
-    authenticated by session cookie via @login_required).
+    No @login_required by design. The Telegram Mini App (the `miniapp`
+    view) is not login-gated and carries no Django session, and it saves
+    through this endpoint. Adding @login_required here redirects Mini App
+    saves to the login page and breaks editing. See docs/telegram.md.
+
+    Accepts ?beacon=1 for sendBeacon saves on tab close (CSRF skipped for
+    the beacon case only).
     """
     from .signals import set_changed_by
     # sendBeacon can't set X-CSRFToken header — skip CSRF for beacon saves

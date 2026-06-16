@@ -52,6 +52,22 @@ A personal AI assistant via Telegram with full tjai access, voice dialogue, and 
 - "recent" — last 5 entries
 - "voice help" — list commands
 
+## Mini App server access
+
+The Mini App is served at `/tjai/m/` by the `miniapp` view, which is not
+`@login_required` and establishes no Django session. The tjai endpoints the
+Mini App calls are therefore reachable without a Django login; access is gated
+by the Telegram WebApp context and the bot's single-user restriction, not by
+Django authentication.
+
+This constrains the server: endpoints the Mini App uses must not carry
+`@login_required`. In particular `api_entry_save` (`api/entry/<uuid>/save`) is
+called by the Mini App editor, and adding `@login_required` to it redirects
+Mini App saves to the login page and breaks editing. Closing this gap would
+require server-side validation of the Telegram `initData` signature to
+authenticate the Mini App, applied across the endpoints it uses, rather than a
+per-endpoint decorator.
+
 ## Management
 
 ```bash
