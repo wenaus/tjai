@@ -335,7 +335,9 @@
             }
         }
 
-        let namedSort = 'alpha';
+        // Server-persisted (sysconfig) default; a named_sort URL param still wins.
+        const SAVED_NAMED_SORT = '{{ named_sort|default:"alpha" }}';
+        let namedSort = SAVED_NAMED_SORT;
         let namedData = null;
 
         async function fetchNamed() {
@@ -392,7 +394,17 @@
             if (alphaBtn) alphaBtn.classList.toggle('active', sort === 'alpha');
             if (modBtn) modBtn.classList.toggle('active', sort === 'mod');
             if (namedData) renderNamed();
-            if (updateUrl) syncStateToUrl();
+            if (updateUrl) {
+                // updateUrl=true marks an explicit user switch (the load path passes
+                // false). Persist server-side in sysconfig so the choice is
+                // remembered on the next visit, on any device.
+                fetchJson('/tjai/api/command', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: 'set_sysconfig', key: 'dashboard_named_sort', value: sort }),
+                }).catch(e => console.error('Failed to save named-sort preference:', e));
+                syncStateToUrl();
+            }
         }
 
         function renderNamed() {
@@ -1015,7 +1027,10 @@
             const rel = params.get('rel');
             if (rel) rel.split(',').filter(Boolean).forEach(id => expandedRelations.add(id));
             const namedSortParam = params.get('named_sort');
-            namedSort = namedSortParam === 'mod' ? 'mod' : 'alpha';
+            // Precedence: explicit URL param > saved sysconfig default > alpha.
+            namedSort = namedSortParam
+                ? (namedSortParam === 'mod' ? 'mod' : 'alpha')
+                : SAVED_NAMED_SORT;
             setNamedSort(namedSort, false);
             isFilterActive = !!(dialogView || activeTags.size > 0 || activeKind || activeContext || activeClient || activeModel || activeMachine || activeStatuses.size > 0 || excludedStatuses.size > 0 || activePublic || activeWithRelations || activeDate || activeFromTime || activeToTime || excludedContexts.size > 0);
             const searchParam = params.get('search');

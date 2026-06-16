@@ -1409,12 +1409,18 @@ def dashboard(request):
         params['view'] = 'archive'
         del params['status']
         return HttpResponseRedirect(f"?{params.urlencode()}")
+    named_sort = SysConfig.objects.filter(
+        key='dashboard_named_sort'
+    ).values_list('value', flat=True).first()
+    if named_sort not in ('alpha', 'mod'):
+        named_sort = 'alpha'
     return render(request, 'tjai_app/dashboard.html', {
         'is_archive': request.GET.get('view') == 'archive',
         'is_dialog': request.GET.get('view') == 'dialog',
         'is_trash': request.GET.get('deleted') == '1',
         'current_dialog_context': CURRENT_DIALOG_CONTEXT,
         'dialog_contexts_json': json.dumps(list(DIALOG_CONTEXTS)),
+        'named_sort': named_sort,
     })
 
 
