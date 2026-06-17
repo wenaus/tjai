@@ -511,6 +511,22 @@ def collect_web_apps():
                 'status': safe_truncate(str(e), 80),
                 'ok': False,
             }
+    caddyfile = Path('/etc/caddy/Caddyfile')
+    try:
+        caddy_text = caddyfile.read_text()
+        skip_verify_count = caddy_text.count('tls_insecure_skip_verify')
+        loopback_https = 'reverse_proxy https://127.0.0.1:8443' in caddy_text
+        protected = loopback_https and skip_verify_count >= 3
+        results['/ingress/'] = {
+            'status': 'loopback TLS isolated' if protected else 'loopback TLS cert validation risk',
+            'ok': protected,
+        }
+    except Exception as e:
+        logger.error("Caddy ingress guard failed: %s", e, exc_info=True)
+        results['/ingress/'] = {
+            'status': safe_truncate(f'Caddy guard failed: {e}', 80),
+            'ok': False,
+        }
     return results
 
 
