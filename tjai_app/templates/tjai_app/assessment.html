@@ -167,8 +167,8 @@
     <div class="agent-banner agent-idle" id="agent-banner">
         <span id="agent-status-text">Agent: loading...</span>
         <span class="assessor-toggle">
-            <button class="assessor-btn active" data-assessor="claude" onclick="switchAssessor('claude')">Claude</button>
-            <button class="assessor-btn" data-assessor="gemini" onclick="switchAssessor('gemini')">Gemini</button>
+            <button class="assessor-btn" data-assessor="claude" onclick="switchAssessor('claude')">Claude</button>
+            <button class="assessor-btn active" data-assessor="gemini" onclick="switchAssessor('gemini')">Gemini</button>
         </span>
     </div>
     <div class="container">
@@ -184,7 +184,23 @@
         let allDates = [];
         let todayKey = '';
         let selectedEntryId = null;
-        let currentAssessor = new URLSearchParams(window.location.search).get('assessor') || 'claude';
+        function initialAssessor() {
+            const params = new URLSearchParams(window.location.search);
+            const assessor = params.get('assessor');
+            if (assessor === 'claude' || assessor === 'gemini') return assessor;
+
+            return 'gemini';
+        }
+
+        let currentAssessor = initialAssessor();
+
+        function entryIdForAssessor(entryId, assessor) {
+            if (!entryId || entryId === '__dashboard__' || entryId === 'assessment-system-prompt') return entryId;
+            if (!entryId.startsWith('assessment-')) return entryId;
+
+            const dateStr = entryId.replace('assessment-', '').replace('-gemini', '');
+            return 'assessment-' + dateStr + (assessor === 'gemini' ? '-gemini' : '');
+        }
 
         function switchAssessor(assessor) {
             currentAssessor = assessor;
@@ -194,8 +210,7 @@
             // Preserve current date when toggling
             let targetEntryId = null;
             if (selectedEntryId && selectedEntryId.startsWith('assessment-') && selectedEntryId !== 'assessment-system-prompt') {
-                const dateStr = selectedEntryId.replace('assessment-', '').replace('-gemini', '');
-                targetEntryId = 'assessment-' + dateStr + (assessor === 'gemini' ? '-gemini' : '');
+                targetEntryId = entryIdForAssessor(selectedEntryId, assessor);
             }
             const url = new URL(window.location);
             url.searchParams.set('assessor', assessor);
@@ -247,6 +262,8 @@
                 let target = selectedEntryId || new URLSearchParams(window.location.search).get('entry_id');
                 if (!target) {
                     target = '__dashboard__';
+                } else {
+                    target = entryIdForAssessor(target, currentAssessor);
                 }
                 if (target === '__dashboard__') {
                     selectDate('__dashboard__');

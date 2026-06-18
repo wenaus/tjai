@@ -2618,9 +2618,9 @@ def api_assessment_dates(request):
     """Return list of assessment dates as JSON.
 
     Query params:
-        assessor: 'claude' (default) or 'gemini' — which assessor's entries to show.
+        assessor: 'gemini' (default) or 'claude' — which assessor's entries to show.
     """
-    assessor = request.GET.get('assessor', 'claude')
+    assessor = request.GET.get('assessor', 'gemini')
 
     entries = Entry.objects.filter(
         data__entry_id__startswith='assessment-',
@@ -2768,9 +2768,9 @@ def api_assessment_dashboard(request):
     """Return dashboard data: daily trends and session breakdowns.
 
     Query params:
-        assessor: 'claude' (default) or 'gemini'.
+        assessor: 'gemini' (default) or 'claude'.
     """
-    assessor = request.GET.get('assessor', 'claude')
+    assessor = request.GET.get('assessor', 'gemini')
 
     entries = Entry.objects.filter(
         data__entry_id__startswith='assessment-',
