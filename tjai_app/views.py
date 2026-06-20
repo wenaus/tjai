@@ -3755,23 +3755,22 @@ def api_entry_save(request, entry_id):
     if request.GET.get('beacon') == '1':
         from django.middleware.csrf import CsrfViewMiddleware
         setattr(request, '_dont_enforce_csrf_checks', True)
-    body_peek = json.loads(request.body) if request.body else {}
-    if body_peek.get('first_autosave'):
-        set_changed_by('first_autosave')
-    elif body_peek.get('autosave'):
-        set_changed_by('autosave')
-    else:
-        set_changed_by('web_ui')
     entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
     if not entry:
         return JsonResponse({'error': 'Entry not found'}, status=404)
     from .models import EntryVersion
     version_count_before = EntryVersion.objects.filter(entry_id=entry.id).count()
     try:
-        data = json.loads(request.body)
+        data = json.loads(request.body) if request.body else {}
         content = data.get('content', '')
     except (json.JSONDecodeError, KeyError):
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    if data.get('first_autosave'):
+        set_changed_by('first_autosave')
+    elif data.get('autosave'):
+        set_changed_by('autosave')
+    else:
+        set_changed_by('web_ui')
     # Strip trailing whitespace from each line (common paste artifact)
     content = '\n'.join(line.rstrip() for line in content.split('\n'))
     # For journal entries: parse leading date/time specs from content.

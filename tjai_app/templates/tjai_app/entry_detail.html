@@ -415,7 +415,14 @@
                 method: 'POST',
                 headers: {'X-CSRFToken': '{{ csrf_token }}'},
             });
-            var data = await resp.json();
+            var text = await resp.text();
+            var data = {};
+            try {
+                data = text ? JSON.parse(text) : {};
+            } catch(e) {
+                throw new Error('HTTP ' + resp.status + ' returned non-JSON:\n\n' + text);
+            }
+            if (!resp.ok) throw new Error(data.error || ('HTTP ' + resp.status));
             if (data.ok) location.reload();
         } catch(e) { alert('Purge failed: ' + e.message); }
     }
@@ -502,6 +509,24 @@
             }
             return fallbackListUrl;
         }
+        function parseJsonResponse(response) {
+            return response.text().then(function(text) {
+                var data = null;
+                if (text) {
+                    try {
+                        data = JSON.parse(text);
+                    } catch(e) {
+                        throw new Error('HTTP ' + response.status + ' returned non-JSON:\n\n' + text);
+                    }
+                } else {
+                    data = {};
+                }
+                if (!response.ok) {
+                    throw new Error(data.error || ('HTTP ' + response.status));
+                }
+                return data;
+            });
+        }
         var cm = null;
 
         // Public toggle — immediate save, uses current editor content if editing
@@ -514,7 +539,7 @@
                     method: 'POST',
                     headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
                     body: JSON.stringify({content: content, access: isPublic ? 'public' : null})
-                }).then(function(r) { return r.json(); }).then(function(data) {
+                }).then(parseJsonResponse).then(function(data) {
                     if (!data.ok) alert('Save failed: ' + (data.error || 'unknown'));
                     document.getElementById('publicLink').style.display = isPublic ? '' : 'none';
                 }).catch(function(err) { alert('Save failed: ' + err); });
@@ -810,7 +835,7 @@
                         if (items.length === 0) return;
                         const uuids = [...items].map(el => el.dataset.tjaiEntryId);
                         Promise.all(uuids.map(uuid =>
-                            fetch(`/tjai/api/entry/${uuid}/content`).then(r => r.json())
+                            fetch(`/tjai/api/entry/${uuid}/content`).then(parseJsonResponse)
                         )).then(entries => {
                             const lines = entries.map(ent => {
                                 if (ent.error) return '- (entry not found)';
@@ -919,7 +944,7 @@
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
                 body: JSON.stringify({content: content, name: name, context: context, format: fmt, tags: tags, entry_id: entryIdVal, kind: kind, priority: priority, status: status, done: done, access: isPublic ? 'public' : null, keep_time: keepTime, expected_ts: _serverTimestamp})
-            }).then(function(r) { return r.json(); }).then(function(data) {
+            }).then(parseJsonResponse).then(function(data) {
                 if (data.ok) {
                     _lastSavedContent = content;
                     if (data.timestamp_modified) _serverTimestamp = data.timestamp_modified;
@@ -965,7 +990,7 @@
                 method: method,
                 headers: headers,
                 body: payload,
-            }).then(function(r) { return r.json(); }).then(function(data) {
+            }).then(parseJsonResponse).then(function(data) {
                 if (data.status === 'ok') {
                     location.href = doneUrl;
                 } else {
@@ -1033,7 +1058,7 @@
         function _checkForRemoteChanges() {
             if (_autosaveInterval) return;  // this tab is editing
             fetch("{% url 'api_entry_content' entry.id %}", {cache: 'no-store'})
-                .then(function(r) { return r.json(); })
+                .then(parseJsonResponse)
                 .then(function(data) {
                     if (data && data.timestamp && data.timestamp > _viewBaselineTs + 0.5) {
                         location.reload();
@@ -1189,10 +1214,7 @@
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
                 body: JSON.stringify(body)
-            }).then(function(r) {
-                if (!r.ok) throw new Error('HTTP ' + r.status);
-                return r.json();
-            }).then(function(data) {
+            }).then(parseJsonResponse).then(function(data) {
                 if (data.ok) {
                     if (data.version && window._addEntryVersion) window._addEntryVersion(data.version);
                     _isFirstAutosave = false;  // Only clear after confirmed success
@@ -1229,7 +1251,7 @@
                     method: 'POST',
                     headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
                     body: JSON.stringify({goal_entry_id: '{{ goal_note_url|escapejs }}'})
-                }).then(function(r) { return r.json(); }).then(function(data) {
+                }).then(parseJsonResponse).then(function(data) {
                     if (data.url) {
                         window.open(data.url, '_blank');
                         location.reload();
