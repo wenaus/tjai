@@ -17,6 +17,7 @@ import sys
 import time
 
 import bootstrap  # noqa: F401 - Django setup
+from django.db import close_old_connections, connections
 from tjai_app.dialog_context import DIALOG_CONTEXTS, DIALOG_TAG
 from tjai_app.action_runner import (
     get_due_actions, get_next_scheduled_time, execute_action, write_heartbeat,
@@ -52,21 +53,25 @@ def sleep_until_next(trigger_filter=None):
     """
     global wake_requested
 
-    actions = Entry.objects.filter(
-        kind='action',
-        deleted_at__isnull=True,
-    ).exclude(status='done').exclude(status='blocked')
+    close_old_connections()
+    try:
+        actions = Entry.objects.filter(
+            kind='action',
+            deleted_at__isnull=True,
+        ).exclude(status='done').exclude(status='blocked')
 
-    now = time.time()
-    earliest_due = now + MAX_SLEEP
+        now = time.time()
+        earliest_due = now + MAX_SLEEP
 
-    for action in actions:
-        data = action.data or {}
-        if trigger_filter and data.get('trigger') != trigger_filter:
-            continue
-        next_due = get_next_scheduled_time(action)
-        if next_due < earliest_due:
-            earliest_due = next_due
+        for action in actions:
+            data = action.data or {}
+            if trigger_filter and data.get('trigger') != trigger_filter:
+                continue
+            next_due = get_next_scheduled_time(action)
+            if next_due < earliest_due:
+                earliest_due = next_due
+    finally:
+        connections.close_all()
 
     sleep_secs = max(MIN_SLEEP, min(MAX_SLEEP, earliest_due - now))
     deadline = now + sleep_secs
@@ -79,43 +84,47 @@ def sleep_until_next(trigger_filter=None):
         if shutdown_requested or wake_requested:
             break
         now_loop = time.time()
-        # Poll sysconfig for refresh requests from web UI
-        if now_loop - last_sysconfig_check >= SYSCONFIG_POLL_INTERVAL:
-            last_sysconfig_check = now_loop
-            from tjai_app.models import SysConfig
-            # Check for kill request first (runs as admin, has permission)
-            _check_kill_request()
-            for check_key in ('action_agent_wake_requested', 'system_health_refresh_requested',
-                              'action_agent_restart_requested'):
-                req = SysConfig.objects.filter(
-                    key=check_key
-                ).values_list('value', flat=True).first()
-                if req:
-                    wake_requested = True
+        close_old_connections()
+        try:
+            # Poll sysconfig for refresh requests from web UI
+            if now_loop - last_sysconfig_check >= SYSCONFIG_POLL_INTERVAL:
+                last_sysconfig_check = now_loop
+                from tjai_app.models import SysConfig
+                # Check for kill request first (runs as admin, has permission)
+                _check_kill_request()
+                for check_key in ('action_agent_wake_requested', 'system_health_refresh_requested',
+                                  'action_agent_restart_requested'):
+                    req = SysConfig.objects.filter(
+                        key=check_key
+                    ).values_list('value', flat=True).first()
+                    if req:
+                        wake_requested = True
+                        break
+                if wake_requested:
                     break
-            if wake_requested:
-                break
-        # Periodic agent health check
-        if now_loop - last_health_check >= HEALTH_CHECK_INTERVAL:
-            last_health_check = now_loop
-            try:
-                _check_agent_health()
-            except Exception as e:
-                logger.error("Agent health check failed: %s", e)
-        # Periodic entry flood detection
-        if now_loop - last_flood_check >= ENTRY_FLOOD_INTERVAL:
-            last_flood_check = now_loop
-            try:
-                _check_entry_flood()
-            except Exception as e:
-                logger.error("Entry flood check failed: %s", e)
-        # Periodic multimodel subprocess watchdog
-        if now_loop - last_multimodel_check >= MULTIMODEL_WATCHDOG_INTERVAL:
-            last_multimodel_check = now_loop
-            try:
-                _check_multimodel_stale()
-            except Exception as e:
-                logger.error("Multimodel watchdog failed: %s", e)
+            # Periodic agent health check
+            if now_loop - last_health_check >= HEALTH_CHECK_INTERVAL:
+                last_health_check = now_loop
+                try:
+                    _check_agent_health()
+                except Exception as e:
+                    logger.error("Agent health check failed: %s", e)
+            # Periodic entry flood detection
+            if now_loop - last_flood_check >= ENTRY_FLOOD_INTERVAL:
+                last_flood_check = now_loop
+                try:
+                    _check_entry_flood()
+                except Exception as e:
+                    logger.error("Entry flood check failed: %s", e)
+            # Periodic multimodel subprocess watchdog
+            if now_loop - last_multimodel_check >= MULTIMODEL_WATCHDOG_INTERVAL:
+                last_multimodel_check = now_loop
+                try:
+                    _check_multimodel_stale()
+                except Exception as e:
+                    logger.error("Multimodel watchdog failed: %s", e)
+        finally:
+            connections.close_all()
         time.sleep(1)
 
     if wake_requested:
@@ -123,8 +132,12 @@ def sleep_until_next(trigger_filter=None):
         logger.info("Woken by SIGHUP or sysconfig request")
         # Clear the web-UI wake flag so we don't re-trigger
         from tjai_app.models import SysConfig
-        SysConfig.objects.filter(key='action_agent_wake_requested').update(
-            value='', timestamp_modified=time.time())
+        close_old_connections()
+        try:
+            SysConfig.objects.filter(key='action_agent_wake_requested').update(
+                value='', timestamp_modified=time.time())
+        finally:
+            connections.close_all()
 
 
 def _check_kill_request():
@@ -552,6 +565,7 @@ def _check_assessment_rerun_for(sysconfig_key, action_entry_id):
     proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
 
     def _monitor(proc, action_entry_id, date_str):
+        close_old_connections()
         try:
             stdout, stderr = proc.communicate()
             if stdout:
@@ -564,8 +578,6 @@ def _check_assessment_rerun_for(sysconfig_key, action_entry_id):
                     stdout=stdout,
                     stderr=stderr,
                 ))
-            from django.db import connection
-            connection.ensure_connection()
             now = time.time()
             SysConfig.objects.update_or_create(
                 key=f'agent_{action_entry_id}_status',
@@ -574,6 +586,8 @@ def _check_assessment_rerun_for(sysconfig_key, action_entry_id):
         except Exception:
             import traceback
             logger.error("rerun %s monitor error:\n%s", action_entry_id, traceback.format_exc())
+        finally:
+            connections.close_all()
 
     thread = threading.Thread(target=_monitor, args=(proc, action_entry_id, date_str), daemon=True)
     thread.start()
@@ -781,6 +795,7 @@ def main():
     last_applog_cleanup = 0
     _action_run_log = {}  # action_id -> [timestamps] for runaway detection
     while not shutdown_requested:
+        close_old_connections()
         try:
             _check_health_refresh()
             _check_daily_rerun()
@@ -845,6 +860,8 @@ def main():
         except Exception as e:
             logger.error("Main loop: %s", e, exc_info=True)
             time.sleep(60)
+        finally:
+            connections.close_all()
 
     logger.debug("Action agent shutting down")
 

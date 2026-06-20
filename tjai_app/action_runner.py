@@ -14,6 +14,8 @@ import traceback
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from django.db import close_old_connections, connections
+
 from .db_log_handler import DbLogHandler
 from .models import Entry, SysConfig, Tag
 from . import services
@@ -465,6 +467,7 @@ def dispatch_ai(action, entry_id=None, target_date=None):
         Status-setting is agent_complete.py's job — we only log I/O here
         to avoid race conditions.
         """
+        close_old_connections()
         try:
             stdout, stderr = proc.communicate()
             if stdout:
@@ -484,6 +487,8 @@ def dispatch_ai(action, entry_id=None, target_date=None):
                 ))
         except Exception:
             logger.error("Agent monitor thread error:\n%s", traceback.format_exc())
+        finally:
+            connections.close_all()
 
     thread = threading.Thread(target=_monitor, args=(proc, action_id), daemon=True)
     thread.start()
