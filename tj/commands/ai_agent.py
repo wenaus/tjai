@@ -393,10 +393,12 @@ def _launch_codex(codex_path: str, system_prompt: str, prompt: str, entry_id: st
 
     env = os.environ.copy()
     env['HOME'] = os.environ.get('HOME', '/home/admin')
-    env['PATH'] = os.environ.get(
-        'PATH',
-        '/home/admin/.nvm/versions/node/v24.13.1/bin:/home/admin/.local/bin:/usr/local/bin:/usr/bin:/bin',
-    )
+    base_path = os.environ.get('PATH', '/usr/local/bin:/usr/bin:/bin')
+    required_paths = [
+        '/home/admin/.nvm/versions/node/v24.13.1/bin',
+        '/home/admin/.local/bin',
+    ]
+    env['PATH'] = ':'.join(required_paths + [base_path])
     env['PYTHONIOENCODING'] = 'utf-8'
     env['LANG'] = 'C.UTF-8'
     env['LC_ALL'] = 'C.UTF-8'

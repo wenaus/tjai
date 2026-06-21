@@ -479,7 +479,29 @@ def main():
         try:
             from tjai_app.services import get_timezone
             from datetime import datetime
-            date_str = datetime.now(get_timezone()).date().isoformat()
+            from pathlib import Path
+            from synopsis_utils import find_daily_entry, append_section
+
+            target_date = datetime.now(get_timezone()).date()
+            date_str = target_date.isoformat()
+            mmdd = target_date.strftime('%m-%d')
+
+            filtered_path = Path('/var/www/tjai/data/history') / f'{mmdd}-filtered.md'
+            daily_entry = find_daily_entry(target_date)
+            if filtered_path.exists() and daily_entry:
+                body = filtered_path.read_text(encoding='utf-8').strip()
+                marker = '## Today in History\n\n'
+                if body.startswith(marker):
+                    body = body[len(marker):].strip()
+                if body:
+                    append_section(daily_entry, 'Today in History', body)
+                    logger.info("daily-history: upserted Today in History for %s",
+                                date_str)
+            else:
+                logger.warning(
+                    "daily-history: filtered file or daily entry missing for %s",
+                    date_str)
+
             from extract_history import process_date
             if process_date(date_str):
                 logger.info("daily-history: extracted history HTML for %s", date_str)
