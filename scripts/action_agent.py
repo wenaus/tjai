@@ -143,7 +143,7 @@ def sleep_until_next(trigger_filter=None):
 def _check_kill_request():
     """Kill zombie agent processes if requested via sysconfig flag.
 
-    Kills both Claude agent processes (found by /proc scan) and
+    Kills both Claude/Codex agent processes (found by /proc scan) and
     Gemini/ChatGPT subprocesses (found by stored PID in sysconfig).
     """
     from tjai_app.models import SysConfig
@@ -165,9 +165,7 @@ def _check_kill_request():
         line = line.strip()
         if not line:
             continue
-        if '--output-format' not in line or 'text' not in line:
-            continue
-        if 'claude' not in line:
+        if not _is_local_agent_cmdline(line):
             continue
         parts = line.split(None, 2)
         if len(parts) < 2:
@@ -178,7 +176,7 @@ def _check_kill_request():
             continue
         try:
             os.kill(pid, signal.SIGTERM)
-            logger.warning("Killed zombie claude process PID %d", pid)
+            logger.warning("Killed zombie local agent process PID %d", pid)
             killed += 1
         except ProcessLookupError:
             pass
@@ -456,8 +454,16 @@ def _check_agent_health():
             SysConfig.objects.filter(key=stale_key).delete()
 
 
+def _is_local_agent_cmdline(cmdline):
+    """Return True for local Claude/Codex action-agent subprocesses."""
+    return (
+        ('claude' in cmdline and '--output-format' in cmdline and 'text' in cmdline)
+        or ('codex' in cmdline and 'exec' in cmdline and 'tjai-codex-' in cmdline)
+    )
+
+
 def _scan_agent_processes():
-    """Scan /proc for claude agent processes (--output-format text).
+    """Scan /proc for local Claude/Codex agent processes.
 
     Returns list of PIDs.
     """
@@ -468,7 +474,7 @@ def _scan_agent_processes():
         try:
             with open(f'/proc/{pid_dir}/cmdline', 'rb') as f:
                 cmdline = f.read().decode('utf-8', errors='replace')
-            if 'claude' in cmdline and '--output-format' in cmdline and 'text' in cmdline:
+            if _is_local_agent_cmdline(cmdline):
                 pids.append(int(pid_dir))
         except (PermissionError, FileNotFoundError):
             continue

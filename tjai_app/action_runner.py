@@ -29,7 +29,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parent.parent / 'scripts'
 # prompt on the entry. REMOTE_WORKER_MODELS maps the research model name to its
 # WORKER_CAPABILITIES entry (which the worker's worker_models config then maps
 # to a local ollama tag).
-RESEARCH_MODELS = ('claude', 'gemini', 'chatgpt', 'deepseek-flash', 'deepseek-pro')  # gemma and qwen off — code kept (remote worker, completion handling) so either can be re-enabled by adding it back. qwen off 2026-06-08: the Mac remote worker was offline and qwen jobs accumulated staged. chatgpt: research_multimodel.py via OpenAI Responses API with hosted web search. deepseek-flash/pro: research_multimodel.py via DeepSeek's Anthropic-compat endpoint with read-only tjai MCP tools
+RESEARCH_MODELS = ('gemini', 'chatgpt', 'deepseek-flash', 'deepseek-pro')  # claude off 2026-06-20 after subscription auth failure storm; dormant claude dispatch code kept for possible re-enable. gemma and qwen off — code kept (remote worker, completion handling) so either can be re-enabled by adding it back. qwen off 2026-06-08: the Mac remote worker was offline and qwen jobs accumulated staged. chatgpt: research_multimodel.py via OpenAI Responses API with hosted web search. deepseek-flash/pro: research_multimodel.py via DeepSeek's Anthropic-compat endpoint with read-only tjai MCP tools
 REMOTE_WORKER_MODELS = {'qwen': 'qwen', 'gemma': 'gemma4'}
 TJAI_DIR = SCRIPTS_DIR.parent
 TJ_PY = TJAI_DIR / 'tj.py'
@@ -1064,18 +1064,21 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
     return claude_proc_launched
 
 
-def update_last_run(action):
+def update_last_run(action, clear_retry_state=True):
     """Update the action's last_run timestamp.
 
     If scheduled_time_config exists (force-run in progress), restore
     scheduled_time from it and clear the temporary key.
+
+    For detached AI actions, agent_complete.py owns retry cleanup because the
+    spawned Claude process has not succeeded merely because it was launched.
     """
     data = action.data or {}
     data['last_run'] = time.time()
 
-    # Clear retry state — this run was dispatched (success/failure handled by agent_complete)
-    data.pop('retry_after', None)
-    data.pop('retry_count', None)
+    if clear_retry_state:
+        data.pop('retry_after', None)
+        data.pop('retry_count', None)
 
     # Restore scheduled_time after a force-run
     if 'scheduled_time_config' in data:
@@ -1214,7 +1217,10 @@ def execute_action(action, target_date=None):
                 update_last_run(action)
                 return False
 
-        update_last_run(action)
+        agent_completion_pending = bool((data or {}).get('ai_prompt')) and not (
+            research_3way_handled and not research_3way_local_proc
+        )
+        update_last_run(action, clear_retry_state=not agent_completion_pending)
         return True
     finally:
         _log_context.action_id = None

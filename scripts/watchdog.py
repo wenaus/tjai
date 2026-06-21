@@ -127,22 +127,29 @@ def check_stale_agents():
     return {'check': 'stale_agents', 'status': 'ok', 'detail': ''}
 
 
+def _is_local_agent_cmdline(cmdline):
+    """Return True for local Claude/Codex action-agent subprocesses."""
+    return (
+        ('claude' in cmdline and '--output-format' in cmdline and 'text' in cmdline)
+        or ('codex' in cmdline and 'exec' in cmdline and 'tjai-codex-' in cmdline)
+    )
+
+
 def check_zombie_processes():
-    """Find claude processes in /proc not matching any running sysconfig state."""
-    claude_pids = []
+    """Find local agent processes in /proc not matching any running state."""
+    agent_pids = []
     for pid_dir in os.listdir('/proc'):
         if not pid_dir.isdigit():
             continue
         try:
             with open(f'/proc/{pid_dir}/cmdline', 'rb') as f:
                 cmdline = f.read().decode('utf-8', errors='replace')
-            if ('claude' in cmdline and '--output-format' in cmdline
-                    and 'text' in cmdline):
-                claude_pids.append(int(pid_dir))
+            if _is_local_agent_cmdline(cmdline):
+                agent_pids.append(int(pid_dir))
         except (PermissionError, FileNotFoundError):
             continue
 
-    if not claude_pids:
+    if not agent_pids:
         return {'check': 'zombie_processes', 'status': 'ok', 'detail': ''}
 
     has_running = SysConfig.objects.filter(
@@ -153,8 +160,8 @@ def check_zombie_processes():
         return {
             'check': 'zombie_processes',
             'status': 'warning',
-            'detail': (f"{len(claude_pids)} claude process(es) with no "
-                       f"running agent: PIDs {claude_pids}"),
+            'detail': (f"{len(agent_pids)} local agent process(es) with no "
+                       f"running agent: PIDs {agent_pids}"),
         }
     return {'check': 'zombie_processes', 'status': 'ok', 'detail': ''}
 

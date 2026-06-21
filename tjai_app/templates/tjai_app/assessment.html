@@ -166,10 +166,6 @@
     {% with current_page="assessment" %}{% include "tjai_app/_menu.html" %}{% endwith %}
     <div class="agent-banner agent-idle" id="agent-banner">
         <span id="agent-status-text">Agent: loading...</span>
-        <span class="assessor-toggle">
-            <button class="assessor-btn" data-assessor="claude" onclick="switchAssessor('claude')">Claude</button>
-            <button class="assessor-btn active" data-assessor="gemini" onclick="switchAssessor('gemini')">Gemini</button>
-        </span>
     </div>
     <div class="container">
         <div class="panel-left" id="date-list">
@@ -184,50 +180,25 @@
         let allDates = [];
         let todayKey = '';
         let selectedEntryId = null;
-        function initialAssessor() {
-            const params = new URLSearchParams(window.location.search);
-            const assessor = params.get('assessor');
-            if (assessor === 'claude' || assessor === 'gemini') return assessor;
+        const currentAssessor = 'gemini';
 
-            return 'gemini';
-        }
-
-        let currentAssessor = initialAssessor();
-
-        function entryIdForAssessor(entryId, assessor) {
+        function entryIdForAssessor(entryId) {
             if (!entryId || entryId === '__dashboard__' || entryId === 'assessment-system-prompt') return entryId;
             if (!entryId.startsWith('assessment-')) return entryId;
 
             const dateStr = entryId.replace('assessment-', '').replace('-gemini', '');
-            return 'assessment-' + dateStr + (assessor === 'gemini' ? '-gemini' : '');
+            return 'assessment-' + dateStr + '-gemini';
         }
 
-        function switchAssessor(assessor) {
-            currentAssessor = assessor;
-            document.querySelectorAll('.assessor-btn').forEach(b => {
-                b.classList.toggle('active', b.dataset.assessor === assessor);
-            });
-            // Preserve current date when toggling
-            let targetEntryId = null;
-            if (selectedEntryId && selectedEntryId.startsWith('assessment-') && selectedEntryId !== 'assessment-system-prompt') {
-                targetEntryId = entryIdForAssessor(selectedEntryId, assessor);
-            }
+        function dropLegacyAssessorParam() {
             const url = new URL(window.location);
-            url.searchParams.set('assessor', assessor);
-            if (targetEntryId) {
-                url.searchParams.set('entry_id', targetEntryId);
+            if (url.searchParams.has('assessor')) {
+                url.searchParams.delete('assessor');
+                history.replaceState(null, '', url);
             }
-            history.replaceState(null, '', url);
-            selectedEntryId = targetEntryId;
-            fetchDates();
         }
 
-        // Set initial toggle state from URL
-        document.addEventListener('DOMContentLoaded', () => {
-            document.querySelectorAll('.assessor-btn').forEach(b => {
-                b.classList.toggle('active', b.dataset.assessor === currentAssessor);
-            });
-        });
+        dropLegacyAssessorParam();
 
         function updateBanner(agent) {
             const banner = document.getElementById('agent-banner');
@@ -263,7 +234,7 @@
                 if (!target) {
                     target = '__dashboard__';
                 } else {
-                    target = entryIdForAssessor(target, currentAssessor);
+                    target = entryIdForAssessor(target);
                 }
                 if (target === '__dashboard__') {
                     selectDate('__dashboard__');
@@ -532,8 +503,7 @@
             // Dots
             days.forEach((d, i) => {
                 const dotColor = vals[i] > 0 ? '#9ccc65' : vals[i] < 0 ? '#ef5350' : '#8a8a8a';
-                const eidSuffix = currentAssessor === 'gemini' ? '-gemini' : '';
-                svg += `<circle cx="${x(i)}" cy="${y(vals[i])}" r="3" fill="${dotColor}" style="cursor:pointer" onclick="selectDate('assessment-${d.date}${eidSuffix}')"><title>${d.date}: ${vals[i]}</title></circle>`;
+                svg += `<circle cx="${x(i)}" cy="${y(vals[i])}" r="3" fill="${dotColor}" style="cursor:pointer" onclick="selectDate('assessment-${d.date}-gemini')"><title>${d.date}: ${vals[i]}</title></circle>`;
             });
 
             // Vertical markers
@@ -584,8 +554,7 @@
                     return;
                 }
                 const days = data.days || [];
-                const assessorLabel = currentAssessor.charAt(0).toUpperCase() + currentAssessor.slice(1);
-                let html = `<h1 style="color:#d8a070;font-size:18px;margin-bottom:16px">AI Performance Dashboard — ${assessorLabel}</h1>`;
+                let html = `<h1 style="color:#d8a070;font-size:18px;margin-bottom:16px">AI Performance Dashboard — Gemini</h1>`;
 
                 if (days.length === 0) {
                     html += '<div class="loading">No assessments yet.</div>';

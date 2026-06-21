@@ -1,4 +1,4 @@
-"""AI Agent command - launch a DETACHED Claude instance with mandatory guidance.
+"""AI Agent command - launch a detached AI agent with mandatory guidance.
 
 tj agent is for standalone autonomous tasks that do NOT feed results back to the
 caller's session: cron jobs, periodic reflection, async analysis, briefings.
@@ -12,10 +12,13 @@ tj agent = fire-and-forget, reports to tjai entry
 Task subagent = in-session, feeds back into current context
 """
 
+import json
 import os
+import re
 import shutil
 import sys
 import subprocess
+import tempfile
 import uuid
 from pathlib import Path
 from datetime import datetime, timezone
@@ -46,7 +49,7 @@ def _append_to_entry(entry_id: str, text: str) -> None:
 
 
 def handle_ai_agent(args) -> None:
-    """Handle 'tj agent' command — launch a detached, autonomous Claude instance.
+    """Handle 'tj agent' command — launch a detached, autonomous AI agent.
 
     This is for fire-and-forget tasks that need project context (MCP, AI guidance)
     but do NOT need to feed results back into the current session. The agent writes
@@ -79,15 +82,25 @@ def handle_ai_agent(args) -> None:
 
     prompt = " ".join(prompt_parts)
 
-    # Find claude CLI
-    claude_path = shutil.which('claude')
-    if not claude_path:
-        fallback = os.path.expanduser('~/.local/bin/claude')
-        if os.path.isfile(fallback) and os.access(fallback, os.X_OK):
-            claude_path = fallback
-        else:
-            print("Error: 'claude' CLI not found in PATH or ~/.local/bin", file=sys.stderr)
+    model = os.environ.get('TJAI_AGENT_MODEL', 'opus')
+    codex_path = None
+    claude_path = None
+    if _is_codex_model(model):
+        try:
+            codex_path = _find_codex()
+        except RuntimeError as e:
+            print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
+    else:
+        # Find claude CLI
+        claude_path = shutil.which('claude')
+        if not claude_path:
+            fallback = os.path.expanduser('~/.local/bin/claude')
+            if os.path.isfile(fallback) and os.access(fallback, os.X_OK):
+                claude_path = fallback
+            else:
+                print("Error: 'claude' CLI not found in PATH or ~/.local/bin", file=sys.stderr)
+                sys.exit(1)
 
     # Fetch AI guidance
     guidance_text = _fetch_guidance(context)
@@ -104,8 +117,10 @@ def handle_ai_agent(args) -> None:
     system_prompt = _build_system_prompt(guidance_text, entry_id, prompt,
                                          custom_prompt=custom_prompt)
 
-    # Launch claude instance
-    _launch_claude(claude_path, system_prompt, prompt, entry_id)
+    if codex_path:
+        _launch_codex(codex_path, system_prompt, prompt, entry_id)
+    else:
+        _launch_claude(claude_path, system_prompt, prompt, entry_id)
 
 
 def _fetch_guidance(context: Optional[str]) -> str:
@@ -247,11 +262,215 @@ When your task is complete, you MUST call mcp__tjai__append_entry_content on ent
 This is not optional. The entry is your report-back mechanism. Existing content is preserved automatically — you never need to read-then-rewrite."""
 
 
+CODEX_PATHS = [
+    os.environ.get('TJAI_CODEX_PATH', ''),
+    '/home/admin/.nvm/versions/node/v24.13.1/bin/codex',
+    '/usr/local/bin/codex',
+]
+CODEX_MCP_TOOLS = [
+    'get_server_instructions',
+    'get_calendar',
+    'get_profile',
+    'get_ai_guidance',
+    'list_contexts',
+    'create_entry',
+    'get_todos',
+    'get_memories',
+    'get_bookmarks',
+    'get_dialog',
+    'get_logs',
+    'search_entries',
+    'get_named_entries',
+    'get_entry',
+    'get_entry_by_entry_id',
+    'edit_entry_metadata',
+    'replace_entry_content',
+    'edit_entry',
+    'append_entry_content',
+    'copy_calendar_entry',
+    'change_entry_kind',
+    'delete_entry',
+    'run_action',
+    'create_goal',
+    'get_goal',
+    'create_relation',
+    'edit_relation',
+    'delete_relation',
+    'get_relations',
+    'get_relation_graph',
+    'get_entry_versions',
+]
+
+
+def _toml_literal(value):
+    """Return a simple TOML literal suitable for Codex -c key=value."""
+    return json.dumps(value)
+
+
+def _find_codex():
+    """Find the codex CLI binary."""
+    for path in CODEX_PATHS:
+        if path and os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+    fallback = shutil.which('codex')
+    if fallback:
+        return fallback
+    raise RuntimeError("codex CLI not found at: " + ", ".join(p for p in CODEX_PATHS if p))
+
+
+def _is_codex_model(model):
+    """Return True when this action should run through codex exec."""
+    runner = os.environ.get('TJAI_AGENT_RUNNER', '').lower()
+    if runner == 'codex':
+        return True
+    return model.startswith('gpt-') or model.startswith('codex')
+
+
+def _codex_mcp_config_args():
+    """Build Codex -c overrides for the tjai HTTP MCP server."""
+    env_name = 'TJAI_CODEX_MCP_TOKEN'
+    args = [
+        '-c', f'mcp_servers.tjai.url={_toml_literal("https://etaverse.com/tjai/mcp/")}',
+        '-c', f'mcp_servers.tjai.bearer_token_env_var={_toml_literal(env_name)}',
+        '-c', 'mcp_servers.tjai.required=true',
+        '-c', 'mcp_servers.tjai.default_tools_approval_mode="approve"',
+        '-c', 'mcp_servers.tjai.tool_timeout_sec=300',
+    ]
+    for tool_name in CODEX_MCP_TOOLS:
+        args += [
+            '-c',
+            f'mcp_servers.tjai.tools.{tool_name}.approval_mode="approve"',
+        ]
+    return args, env_name
+
+
+def _build_codex_command(codex_path, model, output_file):
+    """Build a non-interactive Codex command matching corun-ai's pattern."""
+    mcp_args, _ = _codex_mcp_config_args()
+    return [
+        codex_path,
+        '--ask-for-approval', 'never',
+        'exec',
+        '--ephemeral',
+        '--ignore-user-config',
+        '--ignore-rules',
+        '--sandbox', 'workspace-write',
+        '--add-dir', '/var/www/tjai/data',
+        '--skip-git-repo-check',
+        '-m', model,
+        '-o', output_file,
+        '-c', 'web_search="live"',
+        *mcp_args,
+        '-',
+    ]
+
+
+def _launch_codex(codex_path: str, system_prompt: str, prompt: str, entry_id: str) -> None:
+    """Launch codex exec in background. Logs combined output for diagnostics."""
+    import shlex
+
+    model = os.environ.get('TJAI_AGENT_MODEL', 'gpt-5.5')
+    timeout_secs = int(os.environ.get('TJAI_AGENT_TIMEOUT', '0'))
+    action_id = os.environ.get('TJAI_ACTION_ID')
+
+    user_prompt = ("Begin executing your task per the system prompt now."
+                   if os.environ.get('TJAI_PROMPT_IS_SYSTEM') else prompt)
+    combined_prompt = (
+        "SYSTEM INSTRUCTIONS (follow these for all responses):\n"
+        f"{system_prompt}\n\n"
+        "USER REQUEST:\n"
+        f"{user_prompt}"
+    )
+
+    work_dir = tempfile.mkdtemp(prefix='tjai-codex-')
+    prompt_file = os.path.join(work_dir, 'prompt.txt')
+    output_file = os.path.join(work_dir, 'codex-output.md')
+    with open(prompt_file, 'w', encoding='utf-8') as f:
+        f.write(combined_prompt)
+    os.chmod(prompt_file, 0o600)
+
+    cmd = _build_codex_command(codex_path, model, output_file)
+
+    env = os.environ.copy()
+    env['HOME'] = os.environ.get('HOME', '/home/admin')
+    env['PATH'] = os.environ.get(
+        'PATH',
+        '/home/admin/.nvm/versions/node/v24.13.1/bin:/home/admin/.local/bin:/usr/local/bin:/usr/bin:/bin',
+    )
+    env['PYTHONIOENCODING'] = 'utf-8'
+    env['LANG'] = 'C.UTF-8'
+    env['LC_ALL'] = 'C.UTF-8'
+    env.pop('OPENAI_API_KEY', None)
+    env.pop('CODEX_API_KEY', None)
+    env.pop('CLAUDECODE', None)
+    token = env.get('TJAI_MCP_TOKEN', '').strip()
+    if token:
+        env['TJAI_CODEX_MCP_TOKEN'] = token
+
+    # Record model/effort in tracking entry metadata
+    try:
+        repository = RepositoryFactory.get_repository()
+        entry = repository.get_entry(entry_id)
+        if entry:
+            existing = entry.data if isinstance(entry.data, dict) else {}
+            existing['model'] = model
+            existing['runner'] = 'codex'
+            repository.update_entry(entry_id, data=existing, is_dirty=True)
+    except Exception as e:
+        print(f"Error writing agent metadata to entry: {e}", file=sys.stderr)
+
+    _append_to_entry(entry_id, "LAUNCHED codex")
+
+    if action_id:
+        scripts_dir = Path(__file__).resolve().parent.parent.parent / 'scripts'
+        completion_cmd = f'{sys.executable} {scripts_dir}/agent_complete.py {shlex.quote(action_id)}'
+        codex_cmd = shlex.join(cmd)
+        if timeout_secs > 0:
+            codex_cmd = f'timeout {timeout_secs} {codex_cmd}'
+        shell_cmd = (
+            f'ERRFILE=$(mktemp /tmp/tjai-agent-XXXXXX.err) ; '
+            f'{codex_cmd} < {shlex.quote(prompt_file)} >"$ERRFILE" 2>&1 ; '
+            f'CODE=$? ; '
+            f'{completion_cmd} $CODE "$ERRFILE" ; '
+            f'rm -rf {shlex.quote(work_dir)}'
+        )
+        subprocess.Popen(
+            ['bash', '-c', shell_cmd],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            env=env,
+            cwd='/var/www/tjai' if os.path.isdir('/var/www/tjai') else os.getcwd(),
+        )
+    else:
+        if timeout_secs > 0:
+            cmd = ['timeout', str(timeout_secs)] + cmd
+        proc = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            start_new_session=True,
+            env=env,
+            cwd='/var/www/tjai' if os.path.isdir('/var/www/tjai') else os.getcwd(),
+        )
+        proc.stdin.write(combined_prompt)
+        proc.stdin.close()
+
+    print("Agent launched")
+
+
 def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: str) -> None:
     """Launch claude -p in background. Logs stderr to file for diagnostics."""
     import shlex
 
     model = os.environ.get('TJAI_AGENT_MODEL', 'opus')
+    if _is_codex_model(model):
+        _launch_codex(_find_codex(), system_prompt, prompt, entry_id)
+        return
+
     effort = os.environ.get('TJAI_AGENT_EFFORT', 'xhigh')
     timeout_secs = int(os.environ.get('TJAI_AGENT_TIMEOUT', '0'))
 

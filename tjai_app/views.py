@@ -1597,9 +1597,8 @@ def api_offline_material_cache_manifest(request):
     add('/tjai/api/dashboard/status?deleted=1', 'Dashboard trash status API', 'api', 'dashboard')
     add('/tjai/api/dialog/daily-counts', 'Dashboard dialog counts API', 'api', 'dashboard')
     add('/tjai/assessment/', 'AI assessment page', 'page', 'ai')
-    for assessor in ('claude', 'gemini'):
-        add(f'/tjai/api/assessment/dates?assessor={assessor}', f'AI dates {assessor}', 'api', 'ai')
-        add(f'/tjai/api/assessment/dashboard?assessor={assessor}', f'AI dashboard {assessor}', 'api', 'ai')
+    add('/tjai/api/assessment/dates?assessor=gemini', 'AI dates gemini', 'api', 'ai')
+    add('/tjai/api/assessment/dashboard?assessor=gemini', 'AI dashboard gemini', 'api', 'ai')
     add('/tjai/git/', 'Git page', 'page', 'activity')
     add('/tjai/api/git/data', 'Git data API', 'api', 'activity')
     add('/tjai/dev/', 'Dev page', 'page', 'activity')
@@ -2615,13 +2614,7 @@ def assessment_page(request):
 
 @login_required
 def api_assessment_dates(request):
-    """Return list of assessment dates as JSON.
-
-    Query params:
-        assessor: 'gemini' (default) or 'claude' — which assessor's entries to show.
-    """
-    assessor = request.GET.get('assessor', 'gemini')
-
+    """Return Gemini assessment dates as JSON."""
     entries = Entry.objects.filter(
         data__entry_id__startswith='assessment-',
         data__has_key='scores',
@@ -2629,13 +2622,7 @@ def api_assessment_dates(request):
         deleted_at__isnull=True,
     ).exclude(data__entry_id__contains='-prompt').order_by('-data__date')
 
-    # Filter by assessor
-    if assessor == 'gemini':
-        entries = entries.filter(data__entry_id__endswith='-gemini')
-        suffix = '-gemini'
-    else:
-        entries = entries.exclude(data__entry_id__endswith='-gemini')
-        suffix = ''
+    entries = entries.filter(data__entry_id__endswith='-gemini')
 
     tz = get_app_tz()
     today_key = datetime.now(tz).strftime('%Y%m%d')
@@ -2665,8 +2652,7 @@ def api_assessment_dates(request):
             'integral': integral,
         })
 
-    # Agent status — use assessor-specific action id
-    action_id = 'llm-assessment-gemini' if assessor == 'gemini' else 'llm-assessment'
+    action_id = 'llm-assessment-gemini'
     agent_keys = {}
     for sc in SysConfig.objects.filter(key__startswith=f'agent_{action_id}'):
         agent_keys[sc.key] = sc.value
@@ -2731,10 +2717,7 @@ def api_assessment_content(request):
 
 @login_required
 def api_assessment_rerun(request):
-    """Request re-run of assessment action for a specific date.
-
-    Handles both Claude (assessment-YYYY-MM-DD) and Gemini (assessment-YYYY-MM-DD-gemini).
-    """
+    """Request Gemini assessment re-run for a specific date."""
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
 
@@ -2742,7 +2725,6 @@ def api_assessment_rerun(request):
     if not entry_id.startswith('assessment-'):
         return JsonResponse({'error': 'Invalid entry_id'}, status=400)
 
-    is_gemini = entry_id.endswith('-gemini')
     date_str = entry_id.replace('assessment-', '').replace('-gemini', '')
 
     from datetime import datetime as dt
@@ -2752,9 +2734,8 @@ def api_assessment_rerun(request):
         return JsonResponse({'error': f'Cannot parse date from {entry_id}'}, status=400)
 
     now = time.time()
-    rerun_key = 'assessment_gemini_rerun_date' if is_gemini else 'assessment_rerun_date'
     SysConfig.objects.update_or_create(
-        key=rerun_key,
+        key='assessment_gemini_rerun_date',
         defaults={'value': date_str, 'timestamp_modified': now})
     SysConfig.objects.update_or_create(
         key='action_agent_wake_requested',
@@ -2765,23 +2746,14 @@ def api_assessment_rerun(request):
 
 @login_required
 def api_assessment_dashboard(request):
-    """Return dashboard data: daily trends and session breakdowns.
-
-    Query params:
-        assessor: 'gemini' (default) or 'claude'.
-    """
-    assessor = request.GET.get('assessor', 'gemini')
-
+    """Return Gemini dashboard data: daily trends and session breakdowns."""
     entries = Entry.objects.filter(
         data__entry_id__startswith='assessment-',
         kind='memory',
         deleted_at__isnull=True,
     ).exclude(data__entry_id__contains='-prompt').order_by('data__date')
 
-    if assessor == 'gemini':
-        entries = entries.filter(data__entry_id__endswith='-gemini')
-    else:
-        entries = entries.exclude(data__entry_id__endswith='-gemini')
+    entries = entries.filter(data__entry_id__endswith='-gemini')
 
     SESSION_GAP = 30 * 60  # 30 min gap = new session
 
