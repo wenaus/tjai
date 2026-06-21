@@ -5255,6 +5255,49 @@ def _research_display_status(entry, data):
     return status
 
 
+def _research_topic_has_started(data, model_map=None, subentry_count=0,
+                                queued=False, agent_running=False):
+    """Return True once a base research topic has real execution state.
+
+    Ideation-created topics should sit as proposed until explicitly submitted.
+    A model can mistakenly create them with Entry.status='active'; that status
+    only means "running" for base topics after dispatch, which always stamps
+    started_at or model/run metadata.
+    """
+    if queued or agent_running or subentry_count:
+        return True
+    if any(data.get(k) for k in (
+        'started_at', 'run_status', 'run_completed_at', 'run_error',
+        'synthesis_done', 'synthesis_triggered',
+    )):
+        return True
+    if any(v for v in (model_map or {}).values()):
+        return True
+    for key, value in data.items():
+        if value and (key.endswith('_status') or key.endswith('_entry_id')):
+            return True
+    return False
+
+
+def _research_corrected_base_status(entry, data, model_map=None,
+                                    subentry_count=0, queued=False,
+                                    agent_running=False):
+    display_status = _research_display_status(entry, data)
+    if (
+        display_status == 'active'
+        and data.get('source') == 'ideation-agent'
+        and not _research_topic_has_started(
+            data,
+            model_map=model_map,
+            subentry_count=subentry_count,
+            queued=queued,
+            agent_running=agent_running,
+        )
+    ):
+        return 'proposed'
+    return display_status
+
+
 def _research_execution_info(entry, data):
     info = []
     if data.get('run_status'):
@@ -5432,6 +5475,13 @@ def api_research_list(request):
                 or model_statuses.get(eid, {}).get(model)
                 or None
             )
+        display_status = _research_corrected_base_status(
+            entry,
+            data,
+            model_map=model_map,
+            subentry_count=subentry_counts.get(eid, 0),
+            queued=eid in queued_position_by_eid,
+        )
         model_counts = Counter(v for v in model_map.values() if v)
         _active_models = [m for m in RESEARCH_MODELS
                           if model_map.get(m) in ('launching', 'active', 'staged', 'rerun')]
@@ -5634,6 +5684,13 @@ def api_research_detail(request):
         )
         if (branch_by_model.get(model) or {}).get('run_error'):
             model_errors[model] = branch_by_model[model]['run_error']
+    topic_status = _research_corrected_base_status(
+        entry,
+        data,
+        model_map=model_statuses,
+        subentry_count=len(branches) + (1 if synthesis else 0),
+        agent_running=agent_status == 'running' and agent_current_entry == str(entry.id),
+    )
 
     response = JsonResponse({
         'topic': {
@@ -5645,7 +5702,7 @@ def api_research_detail(request):
             'territory_html': _linkify_rendered_html(_render_markdown(territory or entry.content)),
             'content': entry.content,
             'content_html': _linkify_rendered_html(_render_markdown(entry.content)),
-            'status': _research_display_status(entry, data),
+            'status': topic_status,
             'raw_status': entry.status,
             'priority': entry.priority,
             'source': data.get('source') or '',
