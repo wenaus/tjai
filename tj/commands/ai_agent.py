@@ -285,6 +285,8 @@ CODEX_MCP_TOOLS = [
     'get_entry_by_entry_id',
     'edit_entry_metadata',
     'replace_entry_content',
+    'replace_text_in_entry',
+    'replace_section_in_entry',
     'edit_entry',
     'append_entry_content',
     'copy_calendar_entry',
@@ -299,6 +301,7 @@ CODEX_MCP_TOOLS = [
     'get_relations',
     'get_relation_graph',
     'get_entry_versions',
+    'restore_version',
 ]
 
 
