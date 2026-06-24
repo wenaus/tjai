@@ -177,6 +177,46 @@ def _linkify_rendered_html(html):
     return ''.join(out)
 
 
+_H2_RE = re.compile(r'<h2(?P<attrs>[^>]*)>(?P<title>.*?)</h2>', re.IGNORECASE | re.DOTALL)
+_ID_ATTR_RE = re.compile(r'\sid=(["\'])(?P<id>.*?)\1', re.IGNORECASE | re.DOTALL)
+
+
+def _slugify_heading(text):
+    slug = re.sub(r'[^a-z0-9]+', '-', text.lower()).strip('-')
+    return slug or 'section'
+
+
+def _strip_html(text):
+    return html_unescape(re.sub(r'<[^>]*>', '', text)).strip()
+
+
+def _add_h2_section_links(content_html):
+    """Add anchors to rendered h2 headings and return view-only section links."""
+    if not content_html:
+        return content_html, []
+    links = []
+    seen = Counter()
+
+    def repl(match):
+        attrs = match.group('attrs') or ''
+        title_html = match.group('title') or ''
+        title = _strip_html(title_html)
+        if not title:
+            return match.group(0)
+        existing_id = _ID_ATTR_RE.search(attrs)
+        if existing_id:
+            anchor = existing_id.group('id')
+        else:
+            base = _slugify_heading(title)
+            seen[base] += 1
+            anchor = base if seen[base] == 1 else f'{base}-{seen[base]}'
+            attrs = f'{attrs} id="{html_escape(anchor, quote=True)}"'
+        links.append({'title': title, 'anchor': anchor})
+        return f'<h2{attrs}>{title_html}</h2>'
+
+    return _H2_RE.sub(repl, content_html), links
+
+
 # A ```text``` fence is prose (emails, PR/commit bodies), not code: keep the
 # monospace box but make links live. markdown emits <pre><code class="language-text">
 # and never parses link syntax inside a fence; Prism would also re-render the block
@@ -3556,6 +3596,7 @@ def entry_detail(request, entry_id=None):
             fmt = 'txt'
         else:
             fmt = 'md'
+    section_links = []
     if fmt == 'xml':
         content_html = _render_xml_code(entry.content)
     else:
@@ -3574,6 +3615,8 @@ def entry_detail(request, entry_id=None):
         content_html = _linkify_rendered_html(content_html)
         # External markdown links open in new tab; bare URLs are handled above.
         content_html = content_html.replace('<a href="http', '<a target="_blank" href="http')
+        if entry.kind == 'memory':
+            content_html, section_links = _add_h2_section_links(content_html)
     first_line = lines[0] if lines else ''
     if entry.context_id == 'poetry':
         content_lines = entry.content.split('\n')
@@ -3663,6 +3706,7 @@ def entry_detail(request, entry_id=None):
     return render(request, 'tjai_app/entry_detail.html', {
         'entry': entry,
         'content_html': content_html,
+        'section_links': section_links,
         'tags': tags,
         'line_count': len(lines),
         'first_line': first_line,

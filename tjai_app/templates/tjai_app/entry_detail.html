@@ -38,6 +38,27 @@
             line-height: 1.5;
             max-width: 900px;
         }
+        .section-links {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            max-width: 900px;
+            margin: 0 0 12px;
+            color: #777;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .section-links a {
+            color: #90caf9;
+        }
+        .section-links .sep {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.8em;
+            color: #e0e0e0;
+            line-height: 1;
+        }
         .content p:has(+ ul),
         .content p:has(+ ol) {
             margin-bottom: 0;
@@ -173,6 +194,13 @@
         {% else %}
         <button class="toolbar-btn" id="createNoteBtn" style="font-size: 11px;">Create companion note</button>
         {% endif %}
+    </div>
+    {% endif %}
+    {% if section_links %}
+    <div id="sectionLinksDiv" class="section-links">
+        {% for link in section_links %}
+        <a href="#{{ link.anchor }}">{{ link.title }}</a>{% if not forloop.last %}<span class="sep">-</span>{% endif %}
+        {% endfor %}
     </div>
     {% endif %}
     </div>
@@ -562,6 +590,8 @@
             document.getElementById('editBtn').style.display = 'none';
             var gn = document.getElementById('goalNoteDiv');
             if (gn) gn.style.display = 'none';
+            var sl = document.getElementById('sectionLinksDiv');
+            if (sl) sl.style.display = 'none';
             document.getElementById('nameField').value = originalName;
             document.getElementById('contextField').value = originalContext;
             document.getElementById('tagsField').value = originalTags;
@@ -913,6 +943,8 @@
             document.getElementById('version-label').style.display = 'none';
             var gn = document.getElementById('goalNoteDiv');
             if (gn) gn.style.display = '';
+            var sl = document.getElementById('sectionLinksDiv');
+            if (sl) sl.style.display = '';
         }
 
         function doSave() {
