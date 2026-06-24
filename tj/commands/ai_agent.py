@@ -344,22 +344,32 @@ def _codex_mcp_config_args():
     return args, env_name
 
 
-def _build_codex_command(codex_path, model, output_file):
+def _build_codex_command(codex_path, model, effort, output_file):
     """Build a non-interactive Codex command matching corun-ai's pattern."""
     mcp_args, _ = _codex_mcp_config_args()
+    effort_args = []
+    if effort:
+        if effort == 'max':
+            effort = 'xhigh'
+        allowed = {'none', 'minimal', 'low', 'medium', 'high', 'xhigh'}
+        if effort not in allowed:
+            raise RuntimeError(
+                f"Unsupported Codex reasoning effort {effort!r}; "
+                f"expected one of {', '.join(sorted(allowed))}"
+            )
+        effort_args = ['-c', f'model_reasoning_effort={_toml_literal(effort)}']
     return [
         codex_path,
         '--ask-for-approval', 'never',
         'exec',
         '--ephemeral',
-        '--ignore-user-config',
-        '--ignore-rules',
         '--sandbox', 'workspace-write',
         '--add-dir', '/var/www/tjai/data',
         '--skip-git-repo-check',
         '-m', model,
         '-o', output_file,
         '-c', 'web_search="live"',
+        *effort_args,
         *mcp_args,
         '-',
     ]
@@ -370,6 +380,7 @@ def _launch_codex(codex_path: str, system_prompt: str, prompt: str, entry_id: st
     import shlex
 
     model = os.environ.get('TJAI_AGENT_MODEL', 'gpt-5.5')
+    effort = os.environ.get('TJAI_AGENT_EFFORT', 'high')
     timeout_secs = int(os.environ.get('TJAI_AGENT_TIMEOUT', '0'))
     action_id = os.environ.get('TJAI_ACTION_ID')
 
@@ -389,7 +400,7 @@ def _launch_codex(codex_path: str, system_prompt: str, prompt: str, entry_id: st
         f.write(combined_prompt)
     os.chmod(prompt_file, 0o600)
 
-    cmd = _build_codex_command(codex_path, model, output_file)
+    cmd = _build_codex_command(codex_path, model, effort, output_file)
 
     env = os.environ.copy()
     env['HOME'] = os.environ.get('HOME', '/home/admin')
@@ -416,6 +427,7 @@ def _launch_codex(codex_path: str, system_prompt: str, prompt: str, entry_id: st
         if entry:
             existing = entry.data if isinstance(entry.data, dict) else {}
             existing['model'] = model
+            existing['effort'] = 'xhigh' if effort == 'max' else effort
             existing['runner'] = 'codex'
             repository.update_entry(entry_id, data=existing, is_dirty=True)
     except Exception as e:

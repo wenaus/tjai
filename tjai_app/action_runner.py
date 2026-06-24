@@ -403,6 +403,8 @@ def dispatch_ai(action, entry_id=None, target_date=None):
     if model:
         env['TJAI_AGENT_MODEL'] = model
     effort = data.get('effort')
+    if not effort and model and (model.startswith('gpt-') or model.startswith('codex')):
+        effort = 'high'
     if effort:
         env['TJAI_AGENT_EFFORT'] = effort
     # Per-action opt-in: when true, the action's ai_prompt is used as the
