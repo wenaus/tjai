@@ -29,7 +29,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parent.parent / 'scripts'
 # prompt on the entry. REMOTE_WORKER_MODELS maps the research model name to its
 # WORKER_CAPABILITIES entry (which the worker's worker_models config then maps
 # to a local ollama tag).
-RESEARCH_MODELS = ('gemini', 'chatgpt', 'deepseek-flash', 'deepseek-pro')  # claude off 2026-06-20 after subscription auth failure storm; dormant claude dispatch code kept for possible re-enable. gemma and qwen off — code kept (remote worker, completion handling) so either can be re-enabled by adding it back. qwen off 2026-06-08: the Mac remote worker was offline and qwen jobs accumulated staged. chatgpt: research_multimodel.py via OpenAI Responses API with hosted web search. deepseek-flash/pro: research_multimodel.py via DeepSeek's Anthropic-compat endpoint with read-only tjai MCP tools
+RESEARCH_MODELS = ('claude', 'gemini', 'chatgpt', 'deepseek-flash', 'deepseek-pro')  # claude is a peer researcher only; synthesis uses Codex/GPT launch overrides below. gemma and qwen off — code kept (remote worker, completion handling) so either can be re-enabled by adding it back. qwen off 2026-06-08: the Mac remote worker was offline and qwen jobs accumulated staged. chatgpt: research_multimodel.py via OpenAI Responses API with hosted web search. deepseek-flash/pro: research_multimodel.py via DeepSeek's Anthropic-compat endpoint with read-only tjai MCP tools
 REMOTE_WORKER_MODELS = {'qwen': 'qwen', 'gemma': 'gemma4'}
 TJAI_DIR = SCRIPTS_DIR.parent
 TJ_PY = TJAI_DIR / 'tj.py'
@@ -344,9 +344,12 @@ def create_journal_entry(action, target_date=None):
     return entry_id
 
 
-def dispatch_ai(action, entry_id=None, target_date=None):
+def dispatch_ai(action, entry_id=None, target_date=None, data_overrides=None):
     """Dispatch the AI step via tj agent."""
-    data = action.data or {}
+    action_data = action.data or {}
+    data = dict(action_data)
+    if data_overrides:
+        data.update(data_overrides)
     ai_prompt = data.get('ai_prompt')
     if not ai_prompt:
         return True
@@ -454,7 +457,10 @@ def dispatch_ai(action, entry_id=None, target_date=None):
             del data[key]
             ephemeral_changed = True
     if ephemeral_changed:
-        action.data = data
+        persisted_data = dict(action_data)
+        for key in ('next_target', 'next_target_entry_id'):
+            persisted_data.pop(key, None)
+        action.data = persisted_data
         action.save(update_fields=['data'])
 
     proc = subprocess.Popen(
@@ -786,7 +792,7 @@ def research_model_complete(model_entry, terminal_status='done'):
 
 
 def _create_and_dispatch_synthesis(base_entry_id, base_entry, synth_entry_id):
-    """Create synthesis entry and dispatch Claude to run it."""
+    """Create synthesis entry and dispatch Codex/GPT to run it."""
     import uuid as _uuid
 
     now = time.time()
@@ -858,10 +864,16 @@ def _create_and_dispatch_synthesis(base_entry_id, base_entry, synth_entry_id):
     research_action.data = data
     research_action.timestamp_modified = now
     research_action.save(update_fields=['data', 'timestamp_modified'])
-
-    SysConfig.objects.update_or_create(
-        key='action_agent_wake_requested',
-        defaults={'value': '1', 'timestamp_modified': now})
+    dispatch_ai(
+        research_action,
+        target_date=None,
+        data_overrides={
+            'model': 'gpt-5.5',
+            'effort': 'high',
+            'system_prompt_entry_id': None,
+        },
+    )
+    update_last_run(research_action, clear_retry_state=False)
 
     logger.info("Synthesis dispatched: %s (entry %s)", synth_entry_id, synth.id)
 
