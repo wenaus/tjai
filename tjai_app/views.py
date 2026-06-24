@@ -5707,6 +5707,7 @@ def api_research_detail(request):
             'priority': entry.priority,
             'source': data.get('source') or '',
             'created_display': fmt_datetime(entry.timestamp_created),
+            'modified': entry.timestamp_modified,
             'modified_display': fmt_datetime(entry.timestamp_modified),
             'modified_ago': fmt_ago(entry.timestamp_modified),
             'detail_entry_id': f'{eid}_detail',

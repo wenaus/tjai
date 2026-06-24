@@ -367,6 +367,11 @@
         function render(data) {
             const topic = data.topic || {};
             const status = topic.status || 'pending';
+            const synthDone = !!(data.synthesis && data.synthesis.status === 'done');
+            if (synthDone) {
+                awaitingSynthUntil = 0;
+                clearDetailPoll();
+            }
             document.title = 'tjai Research Detail: ' + (topic.title || detailEntryId);
             document.getElementById('header-status').textContent =
                 `${topic.detail_entry_id || detailEntryId} · modified ${topic.modified_display || ''}${data.offline && data.cached_at ? ' · cached ' + new Date(data.cached_at).toLocaleString() : ''}`;
@@ -374,7 +379,7 @@
                 <h1>${esc(topic.title)}</h1>
                 <div>
                     <span class="status status-${esc(status)}">${esc(status)}</span>
-                    ${awaitingSynthUntil > Date.now() && !(data.synthesis && data.synthesis.status === 'done') ? '<span class="status status-active" title="Synthesis run in progress — this page auto-updates">⏳ synthesizing…</span>' : ''}
+                    ${awaitingSynthUntil > Date.now() && !synthDone ? '<span class="status status-active" title="Synthesis run in progress — this page auto-updates">⏳ synthesizing…</span>' : ''}
                     <span class="meta">${esc(topic.detail_entry_id || detailEntryId)}</span>
                 </div>
                 <div class="meta">Topic: <a href="${esc(topic.entry_url)}">${esc(topic.entry_id || '')}</a> · created ${esc(topic.created_display || '')} · modified ${esc(topic.modified_display || '')}${topic.source ? ' · source ' + esc(topic.source) : ''}</div>

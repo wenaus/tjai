@@ -363,6 +363,9 @@ def main():
     SysConfig.objects.update_or_create(
         key=f'agent_{action_id}_completed',
         defaults={'value': str(now), 'timestamp_modified': now})
+    SysConfig.objects.update_or_create(
+        key=f'agent_{action_id}_process_alive',
+        defaults={'value': '0', 'timestamp_modified': now})
 
     # Drain any queued research requests that piled up while this agent was
     # running. drain_after_complete() is a no-op if the agent is somehow
