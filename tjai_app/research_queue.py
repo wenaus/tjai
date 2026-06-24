@@ -58,6 +58,14 @@ def enqueue(kind: str, target_uuid: str, entry_id: str,
             raise RuntimeError("research-agent action entry not found")
         data = ra.data if isinstance(ra.data, dict) else {}
         queue = list(data.get('pending_runs') or [])
+        for idx, pending in enumerate(queue, start=1):
+            if (pending.get('kind') == kind
+                    and str(pending.get('target_uuid')) == str(target_uuid)
+                    and pending.get('entry_id') == entry_id):
+                logger.info(
+                    "research-queue: already queued kind=%s entry_id=%s position=%d",
+                    kind, entry_id, idx)
+                return idx
         item = {'kind': kind, 'target_uuid': str(target_uuid),
                 'entry_id': entry_id, 'queued_at': time.time()}
         if models is not None:

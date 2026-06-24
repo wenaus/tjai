@@ -1061,6 +1061,16 @@ def _dispatch_research_3way(action, data, base_entry, base_entry_id,
     for failed_entry in launch_failures:
         research_model_complete(failed_entry, terminal_status='failed')
 
+    if not claude_proc_launched:
+        changed = False
+        for key in ('next_target', 'next_target_entry_id'):
+            if key in data:
+                data.pop(key, None)
+                changed = True
+        if changed:
+            action.data = data
+            action.save(update_fields=['data'])
+
     # True iff a local claude subprocess was launched — the only case where
     # agent_complete.py will later clear research-agent sysconfig status.
     return claude_proc_launched
