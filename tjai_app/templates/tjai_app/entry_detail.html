@@ -167,7 +167,13 @@
     </style>
 </head>
 <body>
+    {% if entry.context_id == "recipe" %}
+    {% with current_page="recipes" %}{% include "tjai_app/_menu.html" %}{% endwith %}
+    {% elif entry.context_id == "poetry" %}
+    {% with current_page="poetry" %}{% include "tjai_app/_menu.html" %}{% endwith %}
+    {% else %}
     {% with current_page="entry" %}{% include "tjai_app/_menu.html" %}{% endwith %}
+    {% endif %}
 
     <div id="entry-header" style="flex-shrink:0; background:#222; padding:8px 16px; border-bottom:1px solid #333;">
     {% if entry.name %}
