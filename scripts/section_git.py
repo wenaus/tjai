@@ -38,7 +38,7 @@ def _repo_commits(repo_dir, github_url, since_iso, until_iso=None):
     Returns list of (label, [line, ...]) tuples.
     """
     try:
-        cmd = ['git', 'log', f'--since={since_iso}',
+        cmd = ['git', 'log', '--all', f'--since={since_iso}',
                '--format=%H%x00%s%x00%b%x01']
         if until_iso:
             cmd.insert(3, f'--until={until_iso}')
@@ -124,10 +124,10 @@ def build(since_ts, target_date):
         if not repo_dir.exists():
             continue
         try:
-            subprocess.run(['git', 'pull', '--ff-only'], capture_output=True,
+            subprocess.run(['git', 'fetch', '--all', '--prune'], capture_output=True,
                            timeout=30, cwd=repo_dir)
         except Exception as e:
-            logger.warning("git pull failed for %s: %s", label, e)
+            logger.warning("git fetch failed for %s: %s", label, e)
         commits = _repo_commits(repo_dir, github_url, since_iso)
         if commits:
             if label in MONOREPO_SUBDIRS:

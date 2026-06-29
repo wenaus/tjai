@@ -29,7 +29,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parent.parent / 'scripts'
 # prompt on the entry. REMOTE_WORKER_MODELS maps the research model name to its
 # WORKER_CAPABILITIES entry (which the worker's worker_models config then maps
 # to a local ollama tag).
-RESEARCH_MODELS = ('claude', 'gemini', 'chatgpt', 'deepseek-flash', 'deepseek-pro')  # claude is a peer researcher only; synthesis uses Codex/GPT launch overrides below. gemma and qwen off — code kept (remote worker, completion handling) so either can be re-enabled by adding it back. qwen off 2026-06-08: the Mac remote worker was offline and qwen jobs accumulated staged. chatgpt: research_multimodel.py via OpenAI Responses API with hosted web search. deepseek-flash/pro: research_multimodel.py via DeepSeek's Anthropic-compat endpoint with read-only tjai MCP tools
+RESEARCH_MODELS = ('claude', 'gemini', 'chatgpt')  # claude is a peer researcher only; synthesis uses Codex/GPT launch overrides below. gemma and qwen off — code kept (remote worker, completion handling) so either can be re-enabled by adding it back. qwen off 2026-06-08: the Mac remote worker was offline and qwen jobs accumulated staged. chatgpt: research_multimodel.py via OpenAI Responses API with hosted web search. deepseek-flash/pro off 2026-06-29 — code kept in research_multimodel.py so either can be re-enabled by adding it back.
 REMOTE_WORKER_MODELS = {'qwen': 'qwen', 'gemma': 'gemma4'}
 TJAI_DIR = SCRIPTS_DIR.parent
 TJ_PY = TJAI_DIR / 'tj.py'

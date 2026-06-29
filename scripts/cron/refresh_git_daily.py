@@ -28,7 +28,7 @@ logging.basicConfig(level=logging.INFO,
 HEAL_LOOKBACK_DAYS = 30
 
 
-def regen_date(target):
+def regen_date(target, fetch=True):
     """Regenerate git_daily/<target>.md. Returns (path, bytes_written)."""
     tz = get_timezone()
     since_dt = datetime(target.year, target.month, target.day, tzinfo=tz)
@@ -40,9 +40,20 @@ def regen_date(target):
     for repo_path, github_url, label in _GIT_REPOS:
         if not os.path.isdir(repo_path):
             continue
+        if fetch:
+            try:
+                fetch_result = subprocess.run(
+                    ['git', '-c', 'safe.directory=*', 'fetch', '--all', '--prune'],
+                    capture_output=True, timeout=30, cwd=repo_path,
+                    encoding='utf-8', errors='replace',
+                )
+                if fetch_result.returncode != 0:
+                    logger.error("git fetch failed for %s: %s", label, fetch_result.stderr.strip())
+            except Exception as e:
+                logger.error("git fetch failed for %s: %s", label, e)
         try:
             result = subprocess.run(
-                ['git', '-c', 'safe.directory=*', 'log',
+                ['git', '-c', 'safe.directory=*', 'log', '--all',
                  f'--since={since_iso}', f'--until={until_iso}',
                  '--format=%H%x00%s%x00%b%x01'],
                 capture_output=True, timeout=10, cwd=repo_path,
@@ -118,21 +129,14 @@ def main():
     tz = get_timezone()
     today = datetime.now(tz=tz).date()
 
-    targets = [today, today - timedelta(days=1)]
+    # Regenerate the full recent window, not only empty files. This catches
+    # days that were non-empty but incomplete because an older refresh saw only
+    # the checked-out branch or stale local refs.
+    targets = [today - timedelta(days=offset) for offset in range(HEAL_LOOKBACK_DAYS + 1)]
 
-    # Heal: any empty file in last HEAL_LOOKBACK_DAYS. Legitimately-empty days
-    # (no commits) stay empty on regen — cheap and idempotent. Falsely-empty
-    # days (file written before the day's commits) get fixed.
-    git_dir = Path(django_settings.BASE_DIR) / 'data' / 'git_daily'
-    for offset in range(2, HEAL_LOOKBACK_DAYS + 1):
-        d = today - timedelta(days=offset)
-        f = git_dir / f'{d.isoformat()}.md'
-        if f.exists() and f.stat().st_size == 0:
-            targets.append(d)
-
-    for d in targets:
+    for index, d in enumerate(targets):
         try:
-            path, size = regen_date(d)
+            path, size = regen_date(d, fetch=(index == 0))
             logger.info("regen %s -> %d bytes", d.isoformat(), size)
         except Exception as e:
             logger.error("regen %s failed: %s", d.isoformat(), e)

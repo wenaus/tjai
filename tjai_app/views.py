@@ -2871,7 +2871,9 @@ def api_assessment_dashboard(request):
 @login_required
 def git_activity(request):
     """Git activity page — reverse chronological from daily files."""
-    return render(request, 'tjai_app/git_activity.html')
+    response = render(request, 'tjai_app/git_activity.html')
+    response['Cache-Control'] = 'no-store, max-age=0'
+    return response
 
 
 # Keep in sync with scripts/section_git.py REPOS
@@ -2918,7 +2920,7 @@ def _refresh_recent_git_daily():
                 continue
             try:
                 result = subprocess.run(
-                    ['git', '-c', 'safe.directory=*', 'log',
+                    ['git', '-c', 'safe.directory=*', 'log', '--all',
                      f'--since={since_iso}', f'--until={until_iso}',
                      '--format=%H%x00%s%x00%b%x01'],
                     capture_output=True, timeout=10, cwd=repo_path,
