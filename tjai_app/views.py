@@ -2887,6 +2887,7 @@ _GIT_REPOS = [
     ('/home/admin/github/BNLNPPS.github.io', 'https://github.com/BNLNPPS/BNLNPPS.github.io', 'BNLNPPS.github.io'),
     ('/home/admin/github/lxr-mcp-server', 'https://github.com/BNLNPPS/lxr-mcp-server', 'lxr-mcp-server'),
     ('/home/admin/github/corun-ai', 'https://github.com/BNLNPPS/corun-ai', 'corun-ai'),
+    ('/home/admin/github/epic-wfms-docs', 'https://github.com/eic/epic-wfms-docs', 'epic-wfms-docs'),
     ('/home/admin/github/rucio-eic-mcp-server', 'https://github.com/BNLNPPS/rucio-eic-mcp-server', 'rucio-eic-mcp-server'),
 ]
 
