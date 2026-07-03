@@ -543,15 +543,17 @@ def main():
     # Agent can exit 0 while producing nothing (e.g. MCP auth failure).
     if action_id == 'picks-agent' and status == 'completed':
         try:
-            from datetime import datetime, timedelta
-            from tjai_app.services import get_timezone
-            tz = get_timezone()
-            # Count picks created in the last 2 hours (covers the run window)
-            cutoff = (datetime.now(tz) - timedelta(hours=2)).timestamp()
+            # Count picks created since this dispatch launched. Exclude the
+            # agent no-op sentinel, which is not real curated content.
+            cutoff = float(launched_ts) if launched_ts else now - 7200
             picks_count = Entry.objects.filter(
                 kind='bookmark', context__name='picks',
                 deleted_at__isnull=True,
                 timestamp_created__gte=cutoff,
+            ).exclude(
+                content__iexact='__noop__',
+            ).exclude(
+                data__entry_id='__noop__',
             ).count()
             if picks_count == 0:
                 logger.error("picks-agent: completed but 0 picks created — treating as failure",

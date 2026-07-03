@@ -178,6 +178,14 @@ def get_due_actions(trigger_filter=None):
         if trigger_filter and data.get('trigger') != trigger_filter:
             continue
 
+        action_id = data.get('entry_id')
+        if action_id:
+            status = SysConfig.objects.filter(
+                key=f'agent_{action_id}_status',
+            ).values_list('value', flat=True).first()
+            if status in ('running', 'waiting_subagents'):
+                continue
+
         next_due = get_next_scheduled_time(action)
         if next_due > now:
             continue

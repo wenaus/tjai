@@ -26,6 +26,16 @@ VALID_KINDS = ('memory', 'todo', 'journal', 'profile', 'ai', 'bookmark', 'list',
 VALID_STATUSES = ('active', 'done', 'blocked', 'archive', 'failed')
 DEFAULT_MAX_CONTENT_LENGTH = 500
 MAX_RESULT_LIMIT = 500
+PICKS_NOOP_SENTINEL = '__noop__'
+
+
+def is_noop_pick_bookmark(content, data=None):
+    """Return True for the picks agent's no-op sentinel, not a real bookmark."""
+    data = data if isinstance(data, dict) else {}
+    return (
+        (content or '').strip() == PICKS_NOOP_SENTINEL
+        or data.get('entry_id') == PICKS_NOOP_SENTINEL
+    )
 
 
 def _validate_result_limit(limit):
@@ -384,10 +394,13 @@ def list_contexts():
 def create_entry(content, kind="memory", context=None, name=None, tags=None,
                  event_date=None, event_time=None, priority=None, status=None,
                  create_context=False, source_tags=None, data=None):
-    if not content or not content.strip():
+    stripped_content = content.strip() if content else ''
+    if not stripped_content:
         return {"error": "content is required and cannot be empty"}
     if kind not in VALID_KINDS:
         return {"error": f"Invalid kind '{kind}'. Must be one of: {', '.join(VALID_KINDS)}"}
+    if kind == 'bookmark' and context == 'picks' and is_noop_pick_bookmark(stripped_content, data):
+        return {"error": "Invalid picks bookmark: __noop__ is a sentinel, not content"}
     if status is not None and status not in VALID_STATUSES:
         return {"error": f"Invalid status '{status}'. Must be one of: {', '.join(VALID_STATUSES)}"}
     if priority is not None:

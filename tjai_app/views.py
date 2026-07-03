@@ -6677,6 +6677,8 @@ def api_research_studies(request):
 @login_required
 def api_picks_data(request):
     """Return picks grouped by run as JSON."""
+    from . import services
+
     entries = Entry.objects.filter(
         kind='bookmark',
         context__name='picks',
@@ -6689,6 +6691,8 @@ def api_picks_data(request):
     run_meta = {}
     for e in entries:
         data = e.data if isinstance(e.data, dict) else {}
+        if services.is_noop_pick_bookmark(e.content, data):
+            continue
         run_key = data.get('run', 'unknown')
         if run_key not in runs:
             runs[run_key] = []
