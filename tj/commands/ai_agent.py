@@ -222,10 +222,21 @@ def _build_system_prompt(guidance: str, entry_id: str, original_prompt: str,
     the default agent behavior. Guidance and operational rules are still
     included.
     """
+    mcp_discovery_rule = """MCP TOOL DISCOVERY:
+- If this task names a tjai MCP tool but that tool is not currently exposed as
+  a callable function, use the available tool-discovery mechanism to load/search
+  for that exact tool before substituting other tools. In Codex this may appear
+  as tool_search.
+- Server instruction text is not enough; use the actual callable tool when the
+  task asks for it. For structured evidence windows, prefer direct
+  search_entries(kind, context, start_date, max_content_length) access once
+  loaded."""
+
     if os.environ.get('TJAI_PROMPT_IS_SYSTEM'):
+        prompt = f"{mcp_discovery_rule}\n\n{original_prompt}"
         if guidance:
-            return f"{guidance}\n\n---\n\n{original_prompt}"
-        return original_prompt
+            return f"{guidance}\n\n---\n\n{prompt}"
+        return prompt
 
     if custom_prompt:
         # The custom_prompt path is for actions that supply their own system
@@ -241,7 +252,11 @@ def _build_system_prompt(guidance: str, entry_id: str, original_prompt: str,
 
 OPERATIONAL RULES:
 - Use mcp__tjai__ tools for all tjai data access.
+- If a named tjai MCP tool is not callable yet, use tool discovery to load it
+  before falling back to substitutes.
 - If you encounter any error, append it visibly to tracking entry {entry_id} via mcp__tjai__append_entry_content. Never fail silently.
+
+{mcp_discovery_rule}
 
 {custom_prompt}"""
 
@@ -251,9 +266,13 @@ OPERATIONAL RULES:
 
 OPERATIONAL RULES:
 - Use mcp__tjai__ tools for all tjai data access.
+- If a named tjai MCP tool is not callable yet, use tool discovery to load it
+  before falling back to substitutes.
 - Be concise and factual. No preamble.
 - If you encounter any error, append it to entry {entry_id} via mcp__tjai__append_entry_content. Never fail silently.
 - mcp__tjai__append_entry_content always preserves existing content — do NOT use replace_entry_content, which clobbers.
+
+{mcp_discovery_rule}
 
 MANDATORY CONCLUSION:
 When your task is complete, you MUST call mcp__tjai__append_entry_content on entry {entry_id} with:

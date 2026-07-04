@@ -169,6 +169,8 @@ Tools:
 - get_memories(context, limit, offset, start_date, end_date, max_content_length): Get memory entries.
   Call unfiltered to see recent activity.
 - get_bookmarks(context, limit, offset, start_date, end_date, max_content_length): Get saved bookmarks.
+- get_dialog(host, start_date, end_date, limit, offset, max_content_length): Get
+  recorded human-AI dialog turns. Use host='all' for all machines.
 - get_logs(source, level, contains, ref, start_date, end_date, limit, max_content_length): Read
   application log (AppLog) rows — agent/script/server logs (the Agent Log page
   data). For operational/diagnostic questions; AppLog is not an Entry, so the
@@ -180,6 +182,8 @@ Tools:
 - get_named_entries(name, context, max_content_length): Get entries by @name, or list all named.
 - get_entry(entry_id): Get a single entry by UUID.
 - get_entry_by_entry_id(entry_id): Find entry by human-readable entry_id.
+- get_entry_versions(entry_id, version, age, max_content_length): Get automatic
+  version history for an entry, including age-based baselines such as age='24h'.
 - create_entry(content, kind, context, name, tags, event_date, priority, status,
   create_context): Add new entries. Context must exist unless create_context=True.
 - edit_entry_metadata(entry_id, tags, status, priority, ...): Edit metadata

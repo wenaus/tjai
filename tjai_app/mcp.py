@@ -19,6 +19,7 @@ Available tools:
     get_named_entries - Get entries by @name, or list all named entries
     get_entry         - Get a single entry by ID
     get_entry_by_entry_id - Find entry by human-readable entry_id
+    get_entry_versions    - Get automatic version history for an entry
     edit_entry_metadata    - Edit an entry's metadata (tags, status, priority, …)
     replace_entry_content  - Replace an entry's content (destructive rewrite)
     append_entry_content   - Append text to an entry's existing content
