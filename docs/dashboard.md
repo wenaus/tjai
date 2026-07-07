@@ -81,7 +81,7 @@ The page reads from these endpoints:
 
 ## Calendar panel
 
-`fetchCalendar()` fetches `api/dashboard/calendar` with no parameters and `renderCalendar()` builds the list. The server returns events with pre-formatted Eastern-time fields (`date_display`, `time_display`, `date_key`, `week_num`, `week_start_key`) so the client does no date math for display.
+`fetchCalendar()` initially fetches `api/dashboard/calendar` with no parameters and `renderCalendar()` builds the list. The client keeps the loaded calendar window in page memory only. Scroll near the top loads the previous 30-day slice with `before=<start_ts>` and preserves scroll position; scroll near the bottom loads the next 30-day slice with `after=<end_ts>`. Dashboard auto-refreshes reuse the expanded window with `start=<start_ts>&end=<end_ts>` so the calendar does not collapse back to the default range while the page remains open. A browser reload, new visit, or navigation away and back starts again from the default range. The server caps expansion to 180 days outside the default window and returns `has_older` / `has_newer` so the scroll loader stops at the bounds. The server returns events with pre-formatted Eastern-time fields (`date_display`, `time_display`, `date_key`, `week_num`, `week_start_key`) so the client does no date math for display.
 
 Behavior:
 
@@ -188,7 +188,7 @@ Date and time formatting for entries and calendar events is done server-side (`t
 Read endpoints feeding the dashboard, with their top-level response keys:
 
 - **`api/dashboard/status`** (`dashboard_status`, GET, login required) — `timestamp`, `context`, `context_description`, `clock`, `work_sessions`, `recent_entries`, `has_more`, `total_count`, `timezone`, `contexts`, `all_tags`, `tag_counts`, `kind_counts`, `status_counts`, `status_options`, `open_todos`, `machines`, `oldest_sync`, `daily_counts`, `dialog_clients`, `dialog_models`. With `offset > 0`: only `recent_entries`, `has_more`, `total_count`.
-- **`api/dashboard/calendar`** (`dashboard_calendar`, GET, login required) — `entries`, `server_time`, `start_ts`, `timezone`, `today_date`, `today_date_display`.
+- **`api/dashboard/calendar`** (`dashboard_calendar`, GET, login required) — `entries`, `server_time`, `start_ts`, `end_ts`, `default_start_ts`, `default_end_ts`, `has_older`, `has_newer`, `timezone`, `today_ts`, `today_date`, `today_date_display`. Query parameters: no parameters returns the default window; `before=<timestamp>` returns the previous 30 days; `after=<timestamp>` returns the next 30 days; `start=<timestamp>&end=<timestamp>` refreshes a bounded window.
 - **`api/dashboard/named`** (`dashboard_named`, GET, login required) — `entries`, each with `id`, `name`, `content`, `context`, `timestamp`, `modified_display`, `line_count`. Sent with `Cache-Control: no-store`.
 - **`api/dashboard/search`** (`dashboard_search`, GET, login required) — `entries`, `has_more`, `offset`, `total_count`.
 - **`api/dialog/daily-counts`** (`api_dialog_daily_counts`, GET) — `daily_counts`.

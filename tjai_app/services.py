@@ -219,7 +219,9 @@ def _query_annual_events(start_dt, end_dt, today_mmdd):
     start_mmdd = start_dt.month * 100 + start_dt.day
     end_mmdd = end_dt.month * 100 + end_dt.day
 
-    if start_mmdd <= end_mmdd:
+    if (end_dt.date() - start_dt.date()).days >= 366:
+        range_q = Q(priority=1)
+    elif start_mmdd <= end_mmdd:
         range_q = Q(mmdd__gte=start_mmdd, mmdd__lte=end_mmdd, priority=1)
     else:
         range_q = (Q(mmdd__gte=start_mmdd, priority=1) | Q(mmdd__lte=end_mmdd, priority=1))

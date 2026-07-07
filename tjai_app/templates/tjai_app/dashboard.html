@@ -324,12 +324,118 @@
             return data;
         }
 
+        let calendarEntries = [];
+        let calendarMeta = null;
+        let calendarStartTs = null;
+        let calendarEndTs = null;
+        let calendarHasOlder = true;
+        let calendarHasNewer = true;
+        let loadingOlderCalendar = false;
+        let loadingNewerCalendar = false;
+
+        function calendarEntryKey(entry) {
+            return `${entry.id}:${entry.event_date}`;
+        }
+
+        function mergeCalendarEntries(existing, incoming) {
+            const byKey = new Map();
+            for (const entry of existing) byKey.set(calendarEntryKey(entry), entry);
+            for (const entry of incoming || []) byKey.set(calendarEntryKey(entry), entry);
+            return Array.from(byKey.values()).sort((a, b) => {
+                if (a.date_key !== b.date_key) return a.date_key < b.date_key ? -1 : 1;
+                const aAllday = a.time_display ? 1 : 0;
+                const bAllday = b.time_display ? 1 : 0;
+                if (aAllday !== bAllday) return aAllday - bAllday;
+                return a.event_date - b.event_date;
+            });
+        }
+
+        function updateCalendarState(data, mode = 'replace', direction = null) {
+            const previousStartTs = calendarStartTs;
+            const previousEndTs = calendarEndTs;
+            if (mode === 'replace') {
+                calendarStartTs = data.start_ts;
+                calendarEndTs = data.end_ts;
+                calendarEntries = data.entries || [];
+                calendarHasOlder = data.has_older !== false;
+                calendarHasNewer = data.has_newer !== false;
+            } else {
+                calendarStartTs = calendarStartTs === null ? data.start_ts : Math.min(calendarStartTs, data.start_ts);
+                calendarEndTs = calendarEndTs === null ? data.end_ts : Math.max(calendarEndTs, data.end_ts);
+                calendarEntries = mergeCalendarEntries(calendarEntries, data.entries || []);
+                if (direction === 'older') {
+                    calendarHasOlder = data.has_older !== false && data.start_ts < previousStartTs;
+                }
+                if (direction === 'newer') {
+                    calendarHasNewer = data.has_newer !== false && data.end_ts > previousEndTs;
+                }
+            }
+            calendarMeta = {...data, start_ts: calendarStartTs, end_ts: calendarEndTs};
+        }
+
+        function renderCalendarState() {
+            if (!calendarMeta) return;
+            renderCalendar({...calendarMeta, entries: calendarEntries});
+        }
+
         async function fetchCalendar() {
             try {
-                const data = await fetchJson('/tjai/api/dashboard/calendar');
-                renderCalendar(data);
+                const calContent = document.getElementById('calendar-content');
+                const preserveScroll = window._calendarInitialized && calContent
+                    ? calContent.scrollTop : null;
+                const params = [];
+                if (calendarStartTs !== null && calendarEndTs !== null) {
+                    params.push(`start=${encodeURIComponent(calendarStartTs)}`);
+                    params.push(`end=${encodeURIComponent(calendarEndTs)}`);
+                }
+                const qs = params.length ? `?${params.join('&')}` : '';
+                const data = await fetchJson(`/tjai/api/dashboard/calendar${qs}`);
+                updateCalendarState(data, 'replace');
+                renderCalendarState();
+                if (preserveScroll !== null) {
+                    document.getElementById('calendar-content').scrollTop = preserveScroll;
+                }
             } catch (e) {
                 document.getElementById('calendar-content').innerHTML = 'Error loading calendar';
+            }
+        }
+
+        async function loadOlderCalendar() {
+            if (loadingOlderCalendar || calendarStartTs === null || !calendarHasOlder) return;
+            loadingOlderCalendar = true;
+            const calContent = document.getElementById('calendar-content');
+            const oldHeight = calContent ? calContent.scrollHeight : 0;
+            const oldTop = calContent ? calContent.scrollTop : 0;
+            try {
+                const data = await fetchJson(`/tjai/api/dashboard/calendar?before=${encodeURIComponent(calendarStartTs)}`);
+                updateCalendarState(data, 'merge', 'older');
+                renderCalendarState();
+                if (calContent) {
+                    calContent.scrollTop = calContent.scrollHeight - oldHeight + oldTop;
+                }
+            } catch (e) {
+                console.error('loadOlderCalendar error:', e);
+            } finally {
+                loadingOlderCalendar = false;
+            }
+        }
+
+        async function loadNewerCalendar() {
+            if (loadingNewerCalendar || calendarEndTs === null || !calendarHasNewer) return;
+            loadingNewerCalendar = true;
+            const calContent = document.getElementById('calendar-content');
+            const oldTop = calContent ? calContent.scrollTop : 0;
+            try {
+                const data = await fetchJson(`/tjai/api/dashboard/calendar?after=${encodeURIComponent(calendarEndTs)}`);
+                updateCalendarState(data, 'merge', 'newer');
+                renderCalendarState();
+                if (calContent) {
+                    calContent.scrollTop = oldTop;
+                }
+            } catch (e) {
+                console.error('loadNewerCalendar error:', e);
+            } finally {
+                loadingNewerCalendar = false;
             }
         }
 
@@ -448,6 +554,7 @@
             let html = '';
             const now = data.server_time || (Date.now() / 1000);
             const serverTodayDate = data.today_date;
+            const includesToday = data.today_ts >= data.start_ts && data.today_ts < data.end_ts;
 
             let entries = data.entries.slice();  // Copy array
 
@@ -461,7 +568,7 @@
             }
 
             // If no entries for today, inject a placeholder
-            if (!hasTodayEntry && serverTodayDate) {
+            if (includesToday && !hasTodayEntry && serverTodayDate) {
                 // Get today's display info from server or construct minimal placeholder
                 const todayYear = serverTodayDate.slice(0, 4);
                 const todayMonth = parseInt(serverTodayDate.slice(4, 6)) - 1;
@@ -624,8 +731,10 @@
             // so the user's view isn't jerked while browsing older dates.
             // Explicit recenter: click "Today" in the top nav (#today-nav).
             if (!window._calendarInitialized) {
-                window._calendarInitialized = true;
                 window.scrollCalendarToToday();
+                window.setTimeout(() => {
+                    window._calendarInitialized = true;
+                }, 0);
             }
         }
 
@@ -645,6 +754,19 @@
             e.preventDefault();
             window.scrollCalendarToToday();
         });
+
+        const calendarContentEl = document.getElementById('calendar-content');
+        if (calendarContentEl) {
+            calendarContentEl.addEventListener('scroll', function() {
+                if (!window._calendarInitialized) return;
+                if (this.scrollTop < 50) {
+                    loadOlderCalendar();
+                }
+                if (this.scrollHeight - this.scrollTop - this.clientHeight < 50) {
+                    loadNewerCalendar();
+                }
+            });
+        }
 
         // Dialog charts — daily + weekly bar charts with tooltip + click-to-assessment
         let _dialogChartData = null;

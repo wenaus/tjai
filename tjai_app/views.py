@@ -1795,23 +1795,72 @@ def dashboard_calendar(request):
 
     tz = get_app_tz()
     timezone_name = str(tz)
+    slice_days = 30
+    max_expansion_days = 180
 
-    # Support lazy loading: ?before=TIMESTAMP loads older entries
+    # Default calendar window: previous full week through roughly 60 days ahead.
+    seven_days_ago = datetime.now(tz) - timedelta(days=7)
+    days_since_monday = seven_days_ago.weekday()
+    monday_of_prev_week = seven_days_ago - timedelta(days=days_since_monday)
+    default_start_dt = monday_of_prev_week.replace(hour=0, minute=0, second=0, microsecond=0)
+    default_start_ts = default_start_dt.timestamp()
+    default_end_ts = now + (60 * 24 * 60 * 60)
+
+    min_start_ts = (default_start_dt - timedelta(days=max_expansion_days)).timestamp()
+    max_end_dt = datetime.fromtimestamp(default_end_ts, tz=tz) + timedelta(days=max_expansion_days)
+    max_end_ts = max_end_dt.replace(hour=23, minute=59, second=59, microsecond=999999).timestamp()
+
+    # Support bounded refresh and lazy loading:
+    #   ?start=TIMESTAMP&end=TIMESTAMP refreshes the currently loaded window
+    #   ?before=TIMESTAMP loads the 30 days before that timestamp
+    #   ?after=TIMESTAMP loads the 30 days after that timestamp
+    start_param = request.GET.get('start')
+    end_param = request.GET.get('end')
     before_ts = request.GET.get('before')
-    if before_ts:
+    after_ts = request.GET.get('after')
+    if start_param and end_param:
+        try:
+            start_ts = float(start_param)
+            end_ts = float(end_param)
+        except ValueError:
+            start_ts = None
+            end_ts = None
+        if start_ts is None or end_ts is None or end_ts <= start_ts:
+            start_ts = None
+            end_ts = None
+    else:
+        start_ts = None
+        end_ts = None
+
+    if start_ts is not None and end_ts is not None:
+        pass
+    elif before_ts:
         try:
             end_ts = float(before_ts)
         except ValueError:
-            end_ts = now + (60 * 24 * 60 * 60)
-        start_dt = datetime.fromtimestamp(end_ts, tz=tz) - timedelta(days=30)
+            end_ts = default_start_ts
+        end_ts = max(min(end_ts, max_end_ts), min_start_ts)
+        start_dt = datetime.fromtimestamp(end_ts, tz=tz) - timedelta(days=slice_days)
         start_ts = start_dt.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+        start_ts = max(start_ts, min_start_ts)
+    elif after_ts:
+        try:
+            start_ts = float(after_ts)
+        except ValueError:
+            start_ts = default_end_ts
+        start_ts = max(min(start_ts, max_end_ts), min_start_ts)
+        end_dt = datetime.fromtimestamp(start_ts, tz=tz) + timedelta(days=slice_days)
+        end_ts = end_dt.replace(hour=23, minute=59, second=59, microsecond=999999).timestamp()
+        end_ts = min(end_ts, max_end_ts)
     else:
-        # Go back 7 days, then to Monday of that week (to show full previous week)
-        seven_days_ago = datetime.now(tz) - timedelta(days=7)
-        days_since_monday = seven_days_ago.weekday()
-        monday_of_prev_week = seven_days_ago - timedelta(days=days_since_monday)
-        start_ts = monday_of_prev_week.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
-        end_ts = now + (60 * 24 * 60 * 60)
+        start_ts = default_start_ts
+        end_ts = default_end_ts
+
+    start_ts = max(start_ts, min_start_ts)
+    end_ts = min(end_ts, max_end_ts)
+    if end_ts <= start_ts:
+        start_ts = default_start_ts
+        end_ts = default_end_ts
 
     # Query journal entries with event_date in range (exclude annual, handled separately)
     entries = Entry.objects.filter(
@@ -1824,6 +1873,7 @@ def dashboard_calendar(request):
 
     # Calculate today's date key in configured timezone
     now_dt = datetime.now(tz)
+    today_ts = now_dt.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
     today_date_str = now_dt.strftime('%Y%m%d')
 
     result = []
@@ -1879,9 +1929,16 @@ def dashboard_calendar(request):
             continue
         annual_month = entry.mmdd // 100
         annual_day = entry.mmdd % 100
-        try:
-            projected_dt = now_dt.replace(month=annual_month, day=annual_day, hour=0, minute=0, second=0, microsecond=0)
-        except ValueError:
+        projected_dt = None
+        for year in range(start_dt.year, end_dt.year + 1):
+            try:
+                candidate = datetime(year, annual_month, annual_day, tzinfo=tz)
+            except ValueError:
+                continue
+            if start_dt <= candidate < end_dt:
+                projected_dt = candidate
+                break
+        if projected_dt is None:
             continue
         date_key = projected_dt.strftime('%Y%m%d')
         date_display = projected_dt.strftime('%a %b %-d')
@@ -1908,7 +1965,13 @@ def dashboard_calendar(request):
         'entries': result,
         'server_time': now,
         'start_ts': start_ts,
+        'end_ts': end_ts,
+        'default_start_ts': default_start_ts,
+        'default_end_ts': default_end_ts,
+        'has_older': start_ts > min_start_ts,
+        'has_newer': end_ts < max_end_ts,
         'timezone': timezone_name,
+        'today_ts': today_ts,
         'today_date': today_date_str,
         'today_date_display': fmt_date(now_dt),
     })
