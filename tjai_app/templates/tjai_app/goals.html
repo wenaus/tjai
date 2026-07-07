@@ -60,6 +60,7 @@
             overflow-y: auto;
             padding: 16px 24px 40px;
         }
+        .content-area:focus { outline: none; }
         .goal-item {
             padding: 10px 12px;
             margin-bottom: 8px;
@@ -225,13 +226,22 @@
         <button class="btn-submit" onclick="createGoal()">Create</button>
     </div>
     <div class="filter-bar" id="filter-bar"></div>
-    <div class="content-area" id="content">
+    <div class="content-area" id="content" tabindex="-1">
         <div class="loading">Loading goals...</div>
     </div>
     <div class="detail-panel" id="detail-panel"></div>
 
     <script>
         // escapeHtml and linkifyContent provided by tjai-utils.js
+
+        function focusContentArea() {
+            const content = document.getElementById('content');
+            if (!content) return;
+            const active = document.activeElement;
+            if (!active || active === document.body || active === content) {
+                content.focus({preventScroll: true});
+            }
+        }
 
         // fmtDate removed — server provides modified_display
 
@@ -553,7 +563,8 @@
             render();
         });
 
-        fetchData();
+        focusContentArea();
+        fetchData().then(focusContentArea);
     </script>
 </body>
 </html>

@@ -23,6 +23,7 @@
             overflow-y: auto;
             padding: 0 32px 20px;
         }
+        .content:focus { outline: none; }
         .day-content h2 {
             margin: 32px 0 10px 0;
             padding-bottom: 4px;
@@ -117,12 +118,22 @@
 </head>
 <body>
 {% with current_page="dev" %}{% include "tjai_app/_menu.html" %}{% endwith %}
-<div class="content" id="content">
+<div class="content" id="content" tabindex="-1">
     <div class="loading">Loading dev activity...</div>
 </div>
 <script>
+function focusContentArea() {
+    const content = document.getElementById('content');
+    if (!content) return;
+    const active = document.activeElement;
+    if (!active || active === document.body || active === content) {
+        content.focus({preventScroll: true});
+    }
+}
+
 (async function() {
     const el = document.getElementById('content');
+    focusContentArea();
     try {
         const resp = await fetch('/tjai/api/dev/data?_=' + Date.now());
         if (!resp.ok) {
@@ -181,8 +192,10 @@
             const off = toc.offsetHeight + 8;
             for (const h2 of repoH2s) h2.style.scrollMarginTop = off + 'px';
         }
+        focusContentArea();
     } catch (e) {
         el.innerHTML = `<div class="loading" style="color:#ef5350;">Error: ${e.message}</div>`;
+        focusContentArea();
     }
 })();
 </script>

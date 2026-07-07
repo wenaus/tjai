@@ -24,6 +24,7 @@
             padding: 20px 32px;
             max-width: 900px;
         }
+        .content:focus { outline: none; }
         /* Heatmap */
         .heatmap { margin-bottom: 24px; }
         .heatmap-grid {
@@ -157,10 +158,19 @@
 <body>
 {% with current_page="git" %}{% include "tjai_app/_menu.html" %}{% endwith %}
 <div class="heatmap-tooltip" id="tooltip"></div>
-<div class="content" id="content">
+<div class="content" id="content" tabindex="-1">
     <div class="loading">Loading git activity...</div>
 </div>
 <script>
+function focusContentArea() {
+    const content = document.getElementById('content');
+    if (!content) return;
+    const active = document.activeElement;
+    if (!active || active === document.body || active === content) {
+        content.focus({preventScroll: true});
+    }
+}
+
 function buildHeatmap(heatmap) {
     // Grid from Feb 1 2026 (retirement day 1) to today
     const today = new Date();
@@ -293,6 +303,7 @@ function buildStats(heatmap) {
 (async function() {
     const el = document.getElementById('content');
     const tooltip = document.getElementById('tooltip');
+    focusContentArea();
     try {
         const resp = await fetch('/tjai/api/git/data?_=' + Date.now());
         if (!resp.ok) {
@@ -357,8 +368,10 @@ function buildStats(heatmap) {
                 setTimeout(() => header.style.background = '', 1500);
             }
         });
+        focusContentArea();
     } catch (e) {
         el.innerHTML = `<div class="loading" style="color:#ef5350;">Error: ${e.message}</div>`;
+        focusContentArea();
     }
 })();
 </script>

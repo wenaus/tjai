@@ -39,6 +39,7 @@
             overflow-y: auto;
             padding: 0 16px 16px;
         }
+        #timeline-container:focus { outline: none; }
         .section-divider {
             display: flex;
             align-items: center;
@@ -98,12 +99,21 @@
         <span id="daemon-status">loading...</span>
         <span id="refresh-info"></span>
     </div>
-    <div id="timeline-container">Loading...</div>
+    <div id="timeline-container" tabindex="-1">Loading...</div>
 
     <script>
     let lastData = null;
     let lastFetch = 0;
     let runningStartTimes = {};
+
+    function focusContentArea() {
+        const content = document.getElementById('timeline-container');
+        if (!content) return;
+        const active = document.activeElement;
+        if (!active || active === document.body || active === content) {
+            content.focus({preventScroll: true});
+        }
+    }
 
     function escHtml(s) {
         if (!s) return '';
@@ -322,7 +332,8 @@
         }
     }
 
-    fetchData();
+    focusContentArea();
+    fetchData().then(focusContentArea);
     setInterval(fetchData, 10000);
     setInterval(tick, 1000);
     </script>

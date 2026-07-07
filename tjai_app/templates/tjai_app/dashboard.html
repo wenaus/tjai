@@ -68,6 +68,7 @@
             flex: 1;
             overflow-y: auto;
         }
+        #recent-entries:focus { outline: none; }
         .panel-header {
             color: #d8a070;
             font-weight: bold;
@@ -281,7 +282,7 @@
                 <button id="search-go" class="filter-clear" title="Search">search</button>
                 <button id="filter-clear" class="filter-clear" title="Clear all filters">clear</button>
             </div>
-            <div id="recent-entries">
+            <div id="recent-entries" tabindex="-1">
                 <div id="entries-list"></div>
                 <div id="load-more-indicator" style="display:none; padding:8px 16px; color:#8a8a8a;">Loading more entries...</div>
             </div>
@@ -300,6 +301,15 @@
 
         // escapeHtml and linkifyContent provided by tjai-utils.js
         const dialogContexts = new Set({{ dialog_contexts_json|default:"[]"|safe }});
+
+        function focusContentArea() {
+            const content = document.getElementById('recent-entries');
+            if (!content) return;
+            const active = document.activeElement;
+            if (!active || active === document.body || active === content) {
+                content.focus({preventScroll: true});
+            }
+        }
 
         async function fetchJson(url, options = {}) {
             const resp = await fetch(url, options);
@@ -2001,6 +2011,7 @@
         refresh().then(() => {
             const searchParam = new URLSearchParams(location.search).get('search');
             if (searchParam) searchEntries(searchParam);
+            focusContentArea();
         });
 
         // Refresh every 20 seconds

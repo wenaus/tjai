@@ -29,6 +29,7 @@
             overflow-y: auto;
             padding: 16px;
         }
+        .page-content:focus { outline: none; }
         .entry-num { color: #daa520; }
         .timestamp { color: #8a8a8a; }
         .kind { color: #daa520; }
@@ -211,7 +212,7 @@
     {% endif %}
     </div>
 
-    <div class="page-content">
+    <div class="page-content" tabindex="-1">
 
     <!-- Content (view mode) -->
     <div id="viewMode">
@@ -951,6 +952,7 @@
             if (gn) gn.style.display = '';
             var sl = document.getElementById('sectionLinksDiv');
             if (sl) sl.style.display = '';
+            focusContentArea();
         }
 
         function doSave() {
@@ -1419,6 +1421,17 @@
 
             container.innerHTML = html;
         })();
+    </script>
+    <script>
+        function focusContentArea() {
+            var content = document.querySelector('.page-content');
+            if (!content || document.getElementById('editMode').style.display === 'block') return;
+            var active = document.activeElement;
+            if (!active || active === document.body || active === content) {
+                content.focus({preventScroll: true});
+            }
+        }
+        focusContentArea();
     </script>
     </div>
 </body>

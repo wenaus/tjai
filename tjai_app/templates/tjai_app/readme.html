@@ -23,6 +23,7 @@
             overflow-y: auto;
             padding: 16px 24px 40px;
         }
+        .content-area:focus { outline: none; }
         .readme-item {
             padding: 8px 12px;
             margin-bottom: 6px;
@@ -46,12 +47,21 @@
 </head>
 <body>
     {% with current_page="readme" %}{% include "tjai_app/_menu.html" %}{% endwith %}
-    <div class="content-area" id="readme-content">
+    <div class="content-area" id="readme-content" tabindex="-1">
         <div class="loading">Loading reading list...</div>
     </div>
 
     <script>
         let items = [];
+
+        function focusContentArea() {
+            const content = document.getElementById('readme-content');
+            if (!content) return;
+            const active = document.activeElement;
+            if (!active || active === document.body || active === content) {
+                content.focus({preventScroll: true});
+            }
+        }
 
         async function fetchReadme() {
             try {
@@ -115,7 +125,8 @@
             return c ? c[1] : '';
         }
 
-        fetchReadme();
+        focusContentArea();
+        fetchReadme().then(focusContentArea);
     </script>
 </body>
 </html>

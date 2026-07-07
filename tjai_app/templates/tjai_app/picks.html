@@ -48,6 +48,9 @@
             overflow-y: auto;
             padding: 0 24px 40px;
         }
+        .content-area:focus {
+            outline: none;
+        }
         .run-block {
             margin-bottom: 24px;
         }
@@ -223,13 +226,22 @@
         <span class="stats" id="global-stats"></span>
     </div>
     <div class="error-section" id="error-section"></div>
-    <div class="content-area" id="picks-content">
+    <div class="content-area" id="picks-content" tabindex="-1">
         <div class="loading">Loading picks...</div>
     </div>
 
     <script>
         let allRuns = [];
         let totalSources = 0;
+
+        function focusContentArea() {
+            const content = document.getElementById('picks-content');
+            if (!content) return;
+            const active = document.activeElement;
+            if (!active || active === document.body || active === content) {
+                content.focus({preventScroll: true});
+            }
+        }
 
         async function fetchPicks() {
             try {
@@ -638,7 +650,9 @@
             }, 10000);
         }
 
+        focusContentArea();
         fetchPicks().then(() => {
+            focusContentArea();
             if (picksAgentRunning) startPolling();
         });
     </script>
