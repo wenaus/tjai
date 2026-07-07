@@ -8025,6 +8025,49 @@ def api_agent_queue_data(request):
             item['model'] = model
         timeline.append(item)
 
+    # Include agent errors that are not completion summaries. The top menu
+    # turns Agents red for these rows, so the Agents page must explain them.
+    error_logs = AppLog.objects.filter(
+        source='agent_complete',
+        timestamp__gte=cutoff,
+        level__gte=40,
+        extra_data__action_id__isnull=False,
+    ).exclude(
+        message__contains='exit_code=',
+    ).order_by('-timestamp')[:100]
+
+    seen_error_logs = set()
+    for log_entry in error_logs:
+        ed = log_entry.extra_data or {}
+        aid = ed.get('action_id', '')
+        if not aid:
+            continue
+        tracking = ed.get('tracking', '')
+        dedup_key = f'{aid}:{tracking}:{log_entry.message}' if tracking else f'{aid}:{log_entry.id}'
+        if dedup_key in seen_error_logs:
+            continue
+        seen_error_logs.add(dedup_key)
+
+        entry_uuid = ed.get('entry_id', '')
+        if entry_uuid:
+            entry_ids_needed.add(entry_uuid)
+
+        timeline.append({
+            'type': 'completed',
+            'action_id': aid,
+            'action_uuid': action_uuid_map.get(aid, ''),
+            'completed_at': log_entry.timestamp.timestamp(),
+            'duration_sec': ed.get('duration_sec'),
+            'status': 'failed',
+            'entry_id': entry_uuid,
+            'tracking': tracking,
+            'message': log_entry.message,
+            'error': log_entry.message,
+            'result_url': action_data_map.get(aid, {}).get('result_url', ''),
+            'progress_log': action_data_map.get(aid, {}).get('progress_log', ''),
+            '_event_time': log_entry.timestamp.timestamp(),
+        })
+
     # Add SysConfig fallback for actions with no AppLog history yet
     for aid, lc in latest_completions.items():
         if aid not in seen_from_applog:
