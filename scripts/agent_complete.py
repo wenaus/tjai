@@ -539,8 +539,11 @@ def main():
         except Exception as e:
             logger.error("daily-history: extract_history failed: %s", e)
 
-    # Post-process picks: verify picks were actually created.
-    # Agent can exit 0 while producing nothing (e.g. MCP auth failure).
+    # Post-process picks: record the number of real picks created.
+    # A zero-pick run is allowed: the curation prompt explicitly permits an
+    # empty result when nothing earns a pick. Process failures are handled by
+    # the agent exit status above, not by treating a successful empty run as
+    # failed.
     if action_id == 'picks-agent' and status == 'completed':
         try:
             # Count picks created since this dispatch launched. Exclude the
@@ -556,22 +559,8 @@ def main():
                 data__entry_id='__noop__',
             ).count()
             if picks_count == 0:
-                logger.error("picks-agent: completed but 0 picks created — treating as failure",
-                             extra=ref_extra)
-                status = 'failed'
-                ref_extra['run_status'] = status
-                SysConfig.objects.update_or_create(
-                    key=f'agent_{action_id}_status',
-                    defaults={'value': status, 'timestamp_modified': time.time()})
-                SysConfig.objects.update_or_create(
-                    key=f'agent_{action_id}_last_error',
-                    defaults={'value': 'Completed with 0 picks created',
-                              'timestamp_modified': time.time()})
-                SysConfig.objects.update_or_create(
-                    key=f'agent_{action_id}_last_error_time',
-                    defaults={'value': str(time.time()),
-                              'timestamp_modified': time.time()})
-                _schedule_retry(action_id, ref_extra)
+                logger.info("picks-agent: completed with 0 picks created",
+                            extra=ref_extra)
             else:
                 logger.info("picks-agent: %d picks created", picks_count,
                             extra=ref_extra)
