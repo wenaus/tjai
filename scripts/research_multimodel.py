@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Call Gemini, ChatGPT, or DeepSeek API for a research topic.
+"""Run Gemini, subscription Codex, or DeepSeek research for a topic.
 
 Usage: research_multimodel.py <model> <entry_uuid> [gemini_tier]
   model: "gemini", "chatgpt", "deepseek-flash", or "deepseek-pro"
@@ -7,13 +7,17 @@ Usage: research_multimodel.py <model> <entry_uuid> [gemini_tier]
   gemini_tier: "flex" (default) or "standard" (gemini only)
 
 Loads the entry, builds a prompt from research-system-prompt-v2,
-calls the API with web search enabled (or MCP tools for DeepSeek), writes
-result to the entry, and checks whether all dispatched models are done to
-trigger synthesis.
+calls the selected model with web search enabled (or MCP tools for DeepSeek),
+writes the result to the entry, and checks whether all dispatched models are
+done to trigger synthesis. The historical "chatgpt" key runs Codex CLI through
+the authenticated ChatGPT subscription; it does not use the OpenAI API.
 """
 import asyncio
 import os
+from pathlib import Path
+import subprocess
 import sys
+import tempfile
 import time
 import traceback
 from contextlib import AsyncExitStack
@@ -44,10 +48,9 @@ if not logger.handlers:
     logger.addHandler(_sh)
 
 API_TIMEOUT = 1800  # 30 minutes
-CHATGPT_RESEARCH_MODEL = os.environ.get('CHATGPT_RESEARCH_MODEL', 'gpt-5.5')
-CHATGPT_RESEARCH_REASONING_EFFORT = os.environ.get(
-    'CHATGPT_RESEARCH_REASONING_EFFORT', 'high')
-CHATGPT_RESEARCH_VERBOSITY = os.environ.get('CHATGPT_RESEARCH_VERBOSITY', 'high')
+CODEX_RESEARCH_MODEL = os.environ.get('CODEX_RESEARCH_MODEL', 'gpt-5.6-sol')
+CODEX_RESEARCH_REASONING_EFFORT = os.environ.get(
+    'CODEX_RESEARCH_REASONING_EFFORT', 'xhigh')
 TJAI_MCP_URL = os.environ.get('TJAI_MCP_URL', 'https://etaverse.com/tjai/mcp/')
 DEEPSEEK_TOOL_PREFIXES = ('get_', 'list_', 'search_')
 DEEPSEEK_TOOL_NAMES = {'get_server_instructions'}
@@ -216,36 +219,64 @@ def _call_gemini(prompt, initial_tier='flex'):
     )
 
 
-def _call_chatgpt(prompt):
-    """Call ChatGPT Responses API with web search."""
-    from openai import OpenAI
-
-    api_key = os.environ.get('OPENAI_API_KEY')
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY not set in environment")
-
-    client = OpenAI(api_key=api_key, timeout=API_TIMEOUT)
+def _call_subscription_codex(prompt):
+    """Run the Codex research peer through the authenticated subscription."""
+    from tj.commands.ai_agent import _find_codex, _toml_literal
 
     logger.info(
-        "Calling ChatGPT API (%s, reasoning=%s, verbosity=%s)...",
-        CHATGPT_RESEARCH_MODEL,
-        CHATGPT_RESEARCH_REASONING_EFFORT,
-        CHATGPT_RESEARCH_VERBOSITY,
+        "Calling subscription Codex (%s, reasoning=%s)...",
+        CODEX_RESEARCH_MODEL,
+        CODEX_RESEARCH_REASONING_EFFORT,
     )
-    response = client.responses.create(
-        model=CHATGPT_RESEARCH_MODEL,
-        input=prompt,
-        reasoning={'effort': CHATGPT_RESEARCH_REASONING_EFFORT},
-        text={'verbosity': CHATGPT_RESEARCH_VERBOSITY},
-        tools=[{'type': 'web_search_preview', 'search_context_size': 'high'}],
-    )
-
-    # Extract text from the response output
-    result = response.output_text
-    if not result:
-        raise RuntimeError(f"ChatGPT returned empty response: {response}")
-
-    return result
+    with tempfile.TemporaryDirectory(prefix='tjai-research-codex-') as work_dir:
+        output_file = Path(work_dir) / 'codex-output.md'
+        cmd = [
+            _find_codex(), 'exec',
+            '--ephemeral',
+            '--ignore-user-config',
+            '--sandbox', 'read-only',
+            '-c', 'approval_policy="never"',
+            '--skip-git-repo-check',
+            '-m', CODEX_RESEARCH_MODEL,
+            '-c', 'web_search="live"',
+            '-c', (
+                'model_reasoning_effort='
+                f'{_toml_literal(CODEX_RESEARCH_REASONING_EFFORT)}'
+            ),
+            '-o', str(output_file),
+            '-',
+        ]
+        env = os.environ.copy()
+        env['HOME'] = os.environ.get('HOME', '/home/admin')
+        base_path = env.get('PATH', '/usr/local/bin:/usr/bin:/bin')
+        env['PATH'] = ':'.join([
+            '/home/admin/.nvm/versions/node/v24.13.1/bin',
+            '/home/admin/.local/bin',
+            base_path,
+        ])
+        env.pop('OPENAI_API_KEY', None)
+        env.pop('CODEX_API_KEY', None)
+        proc = subprocess.run(
+            cmd,
+            input=prompt,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=API_TIMEOUT,
+            cwd=work_dir,
+            env=env,
+        )
+        if proc.returncode != 0:
+            detail = (proc.stderr or proc.stdout or '').strip()
+            raise RuntimeError(
+                f"Codex exited {proc.returncode}: {detail or 'no diagnostics'}"
+            )
+        if not output_file.exists():
+            raise RuntimeError("Codex completed without writing its output file")
+        result = output_file.read_text(encoding='utf-8').strip()
+        if not result:
+            raise RuntimeError("Codex returned an empty research report")
+        return result
 
 
 def _get_tjai_mcp_token():
@@ -583,11 +614,11 @@ def main():
         reader_context = load_reader_context()
         prompt = build_research_prompt(topic, model, reader_context)
 
-        # Call the appropriate API
+        # Call the selected research runtime.
         if model == 'gemini':
             result = _call_gemini(prompt, initial_tier=gemini_tier)
         elif model == 'chatgpt':
-            result = _call_chatgpt(prompt)
+            result = _call_subscription_codex(prompt)
         else:
             # deepseek-flash / deepseek-pro — Anthropic-compat endpoint
             # with tjai MCP tools exposed through a multi-turn tool loop.

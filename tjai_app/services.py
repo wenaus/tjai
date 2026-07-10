@@ -333,7 +333,7 @@ def get_profile():
     return [_format_entry(entry) for entry in qs]
 
 
-def get_ai_guidance(context=None, location_name=None):
+def get_ai_guidance(context=None, location_name=None, audience=None):
     from django.db.models.functions import Coalesce
     qs = Entry.objects.filter(
         kind='ai',
@@ -346,6 +346,10 @@ def get_ai_guidance(context=None, location_name=None):
 
     results = []
     for entry in qs:
+        entry_data = entry.data if isinstance(entry.data, dict) else {}
+        entry_audiences = entry_data.get('audiences')
+        if entry_audiences and audience not in entry_audiences:
+            continue
         entry_context = entry.context.name if entry.context else None
         if context is None:
             if entry_context is None:

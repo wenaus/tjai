@@ -163,7 +163,7 @@ Codex equivalents live in `computers/common/codex-hooks/`:
 ### Session-Start Bootstrap Directive
 
 `load.py` emits a per-machine directive instructing the model to call
-`mcp__tjai__get_ai_guidance(context=X, location_name=Y)` and
+`mcp__tjai__get_ai_guidance(context=X, location_name=Y, audience="anthropic")` and
 `mcp__tjai__get_profile()` before responding to the user's first message,
 regardless of message content. Mapping lives in `HOSTNAME_CONTEXTS` inside
 `load.py`, keyed by `location_name` from `~/.tjai/config.json` (fallback:
@@ -173,6 +173,17 @@ apply, and the warning makes the unmapped host discoverable via
 `claude --verbose`. Add an entry to `HOSTNAME_CONTEXTS` to also load
 project-specific guidance. The profile call is host-independent and always
 included.
+
+Both startup tools return compact, size-bounded pages. The model must follow
+`next_offset` with otherwise identical arguments until `complete=true`; stopping
+early omits guidance. The bounded response prevents client tool-output limits
+from silently dropping entries as the instruction set grows.
+
+AI guidance may declare `data.audiences` to limit loading to model-provider
+families. Entries without that field are universal. OpenAI-backed clients use
+`openai`; Anthropic-backed clients use `anthropic`. Scheduled agents select the
+family from the provider they launch. Omitting `audience` excludes targeted
+entries.
 
 `location_name` is the canonical tjai machine ID (not OS hostname). When it
 is present in `~/.tjai/config.json`, the hook passes it to `get_ai_guidance`

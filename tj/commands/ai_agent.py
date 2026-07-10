@@ -103,7 +103,8 @@ def handle_ai_agent(args) -> None:
                 sys.exit(1)
 
     # Fetch AI guidance
-    guidance_text = _fetch_guidance(context)
+    audience = 'openai' if codex_path else 'anthropic'
+    guidance_text = _fetch_guidance(context, audience)
     if not guidance_text:
         print("Warning: No AI guidance found.", file=sys.stderr)
 
@@ -123,20 +124,22 @@ def handle_ai_agent(args) -> None:
         _launch_claude(claude_path, system_prompt, prompt, entry_id)
 
 
-def _fetch_guidance(context: Optional[str]) -> str:
+def _fetch_guidance(context: Optional[str], audience: str) -> str:
     """Fetch AI guidance from tjai, formatted as text."""
     try:
         repository = RepositoryFactory.get_repository()
         all_ai = repository.query_entries(kind='ai')
         active = [e for e in all_ai if not getattr(e, 'deleted_at', None)]
-        tags_by_entry = repository.get_tags_by_entry()
 
         universal = []
         specific = []
 
         for entry in active:
-            entry_tags = tags_by_entry.get(entry.id, [])
-            is_universal = not entry.context and not entry_tags
+            entry_data = entry.data if isinstance(entry.data, dict) else {}
+            audiences = entry_data.get('audiences')
+            if audiences and audience not in audiences:
+                continue
+            is_universal = not entry.context
             if is_universal:
                 universal.append(entry)
             elif context and entry.context == context:
@@ -260,7 +263,7 @@ OPERATIONAL RULES:
 
 {custom_prompt}"""
 
-    return f"""You are a tjai research and task agent working for Torre Wenaus, a physicist and software developer at BNL. You have access to his personal knowledge base via MCP tools. Call get_profile() to understand the user. You are truthful, thorough, and addicted to researching facts rather than assuming.
+    return f"""You are a tjai research and task agent working for Torre Wenaus, a physicist and software developer at BNL. You have access to his personal knowledge base via MCP tools. Call get_profile() to understand the user, following next_offset until complete=true. You are truthful, thorough, and addicted to researching facts rather than assuming.
 
 {guidance}
 
@@ -401,8 +404,8 @@ def _launch_codex(codex_path: str, system_prompt: str, prompt: str, entry_id: st
     """Launch codex exec in background. Logs combined output for diagnostics."""
     import shlex
 
-    model = os.environ.get('TJAI_AGENT_MODEL', 'gpt-5.5')
-    effort = os.environ.get('TJAI_AGENT_EFFORT', 'high')
+    model = os.environ.get('TJAI_AGENT_MODEL', 'gpt-5.6-sol')
+    effort = os.environ.get('TJAI_AGENT_EFFORT', 'xhigh')
     timeout_secs = int(os.environ.get('TJAI_AGENT_TIMEOUT', '0'))
     action_id = os.environ.get('TJAI_ACTION_ID')
 

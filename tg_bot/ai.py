@@ -112,13 +112,13 @@ def build_system_prompt(profile_entries: list, ai_guidance: list) -> str:
 
     if profile_entries:
         parts.append("## About Torre")
-        for entry in profile_entries[:10]:  # Limit to top 10
+        for entry in profile_entries:
             parts.append(f"- {entry['content']}")
         parts.append("")
 
     if ai_guidance:
         parts.append("## Guidelines")
-        for entry in ai_guidance[:10]:
+        for entry in ai_guidance:
             ctx = f" [{entry['context']}]" if entry.get('context') else ""
             parts.append(f"- {entry['content']}{ctx}")
         parts.append("")

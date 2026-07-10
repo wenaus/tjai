@@ -199,7 +199,7 @@ def get_profile():
 
 
 def get_ai_guidance(context=None):
-    return services.get_ai_guidance(context=context)
+    return services.get_ai_guidance(context=context, audience='anthropic')
 
 
 def list_contexts():

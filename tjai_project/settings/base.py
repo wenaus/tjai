@@ -157,10 +157,13 @@ TJAI_MCP_SERVER_CONFIG = {
     "instructions": """tjai is a personal AI memory and task management system.
 
 Tools:
-- get_ai_guidance(context): Get behavioral instructions for AI assistants.
-  Returns general guidance plus context-specific guidance if context provided.
-  CALL THIS when starting work on any project.
-- get_profile(): Get personal facts and preferences about the user.
+- get_ai_guidance(context, location_name, offset, audience): Get behavioral instructions
+  for AI assistants. Returns general guidance plus context-specific guidance if
+  context is provided and audience-specific guidance for the named provider
+  family. CALL THIS when starting work on any project, following next_offset
+  until complete=true.
+- get_profile(offset): Get personal facts and preferences about the user,
+  following next_offset until complete=true.
 - get_todos(context, status, include_done, max_content_length): Get task list with filtering.
   Valid statuses: active, done, blocked, archive.
 - get_calendar(start_date, end_date, context, days): Get calendar entries
@@ -221,7 +224,9 @@ Pagination: For read tools that accept limit and offset, limit is a page size,
 not a requirement. The hard maximum page size is 500. If a returned list has
 exactly the requested limit, more results may exist; at your discretion, fetch
 the next page with offset += limit until a page returns fewer than the requested
-limit or the requested window is complete.""",
+limit or the requested window is complete. get_profile and get_ai_guidance use
+bounded pages with explicit next_offset and complete fields; every page is
+mandatory startup context, so continue until complete=true.""",
 }
 
 

@@ -29,7 +29,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parent.parent / 'scripts'
 # prompt on the entry. REMOTE_WORKER_MODELS maps the research model name to its
 # WORKER_CAPABILITIES entry (which the worker's worker_models config then maps
 # to a local ollama tag).
-RESEARCH_MODELS = ('claude', 'gemini', 'chatgpt')  # claude is a peer researcher only; synthesis uses Codex/GPT launch overrides below. gemma and qwen off — code kept (remote worker, completion handling) so either can be re-enabled by adding it back. qwen off 2026-06-08: the Mac remote worker was offline and qwen jobs accumulated staged. chatgpt: research_multimodel.py via OpenAI Responses API with hosted web search. deepseek-flash/pro off 2026-06-29 — code kept in research_multimodel.py so either can be re-enabled by adding it back.
+RESEARCH_MODELS = ('claude', 'gemini', 'chatgpt')  # claude is a peer researcher only; synthesis uses Codex/GPT launch overrides below. gemma and qwen off — code kept (remote worker, completion handling) so either can be re-enabled by adding it back. qwen off 2026-06-08: the Mac remote worker was offline and qwen jobs accumulated staged. chatgpt is the compatibility key for the subscription-backed Codex CLI peer launched by research_multimodel.py. deepseek-flash/pro off 2026-06-29 — code kept in research_multimodel.py so either can be re-enabled by adding it back.
 REMOTE_WORKER_MODELS = {'qwen': 'qwen', 'gemma': 'gemma4'}
 TJAI_DIR = SCRIPTS_DIR.parent
 TJ_PY = TJAI_DIR / 'tj.py'
@@ -415,7 +415,7 @@ def dispatch_ai(action, entry_id=None, target_date=None, data_overrides=None):
         env['TJAI_AGENT_MODEL'] = model
     effort = data.get('effort')
     if not effort and model and (model.startswith('gpt-') or model.startswith('codex')):
-        effort = 'high'
+        effort = 'xhigh'
     if effort:
         env['TJAI_AGENT_EFFORT'] = effort
     # Per-action opt-in: when true, the action's ai_prompt is used as the
@@ -591,7 +591,7 @@ exactly as specified in the Output Format section above."""
     return full_prompt
 
 
-def _local_api_research_models():
+def _local_subprocess_research_models():
     """Models launched as local research_multimodel.py subprocesses."""
     return [m for m in RESEARCH_MODELS
             if m != 'claude' and m not in REMOTE_WORKER_MODELS]
@@ -633,7 +633,7 @@ def heal_research_subprocess_state():
     reflected as failed in both the sub-entry and base model status.
     """
     now = time.time()
-    local_models = set(_local_api_research_models())
+    local_models = set(_local_subprocess_research_models())
 
     for sc in SysConfig.objects.filter(key__startswith='research_', key__endswith='_pid'):
         if not sc.value:
@@ -876,8 +876,8 @@ def _create_and_dispatch_synthesis(base_entry_id, base_entry, synth_entry_id):
         research_action,
         target_date=None,
         data_overrides={
-            'model': 'gpt-5.5',
-            'effort': 'high',
+            'model': 'gpt-5.6-sol',
+            'effort': 'xhigh',
             'system_prompt_entry_id': None,
         },
     )

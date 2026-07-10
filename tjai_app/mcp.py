@@ -43,8 +43,11 @@ set via data={"entry_id": "kebab-case-slug"}. This is how entries are referenced
 linked, and looked up (get_entry_by_entry_id). Without it, the entry is UUID-only.
 
 Contexts group entries by project or topic. Most tools accept a context parameter
-to filter results. Use get_ai_guidance(context) before starting work on any
-project to get project-specific instructions.
+to filter results. Use get_ai_guidance(context, audience) before starting work
+on any project to get project- and provider-specific instructions. OpenAI-backed
+clients use audience="openai"; Anthropic-backed clients use
+audience="anthropic". get_profile and get_ai_guidance return bounded pages;
+follow next_offset until complete is true.
 
 MCP output compatibility: Read tools whose natural result is a list return
 JSON text rather than a top-level MCP array, so empty results are delivered as
@@ -99,6 +102,75 @@ def _json_text(value) -> str:
     return json.dumps(value, cls=DjangoJSONEncoder, ensure_ascii=False)
 
 
+STARTUP_CONTEXT_MAX_RESPONSE_CHARS = 12_000
+
+
+def _compact_startup_entry(entry):
+    """Keep only fields needed to apply profile and guidance entries."""
+    data = entry.get("data") or {}
+    result = {
+        "entry_id": data.get("entry_id") or entry.get("name") or entry.get("id"),
+        "kind": entry.get("kind"),
+        "content": entry.get("content") or entry.get("message", ""),
+    }
+    if entry.get("context") is not None:
+        result["context"] = entry["context"]
+    if entry.get("priority") is not None:
+        result["priority"] = entry["priority"]
+    return result
+
+
+def _startup_context_page(entries, offset):
+    """Build a compact page that cannot silently grow past the output budget."""
+    if not isinstance(offset, int) or isinstance(offset, bool) or offset < 0:
+        return {"error": "offset must be a non-negative integer"}
+
+    compact_entries = [_compact_startup_entry(entry) for entry in entries]
+    entry_count = len(compact_entries)
+    if offset > entry_count:
+        return {"error": f"offset {offset} exceeds entry_count {entry_count}"}
+
+    page_entries = []
+    next_index = offset
+    while next_index < entry_count:
+        candidate_entries = page_entries + [compact_entries[next_index]]
+        candidate_next = next_index + 1
+        candidate = {
+            "entries": candidate_entries,
+            "entry_count": entry_count,
+            "returned_count": len(candidate_entries),
+            "offset": offset,
+            "next_offset": candidate_next if candidate_next < entry_count else None,
+            "complete": candidate_next == entry_count,
+        }
+        if len(_json_text(candidate)) > STARTUP_CONTEXT_MAX_RESPONSE_CHARS:
+            if not page_entries:
+                return {
+                    "error": "A single startup-context entry exceeds the safe MCP response size",
+                    "entry_id": compact_entries[next_index]["entry_id"],
+                    "response_limit_chars": STARTUP_CONTEXT_MAX_RESPONSE_CHARS,
+                }
+            break
+        page_entries = candidate_entries
+        next_index = candidate_next
+
+    result = {
+        "entries": page_entries,
+        "entry_count": entry_count,
+        "returned_count": len(page_entries),
+        "offset": offset,
+        "next_offset": next_index if next_index < entry_count else None,
+        "complete": next_index == entry_count,
+    }
+    if len(_json_text(result)) > STARTUP_CONTEXT_MAX_RESPONSE_CHARS:
+        return {
+            "error": "Startup-context page exceeded the safe MCP response size",
+            "offset": offset,
+            "response_limit_chars": STARTUP_CONTEXT_MAX_RESPONSE_CHARS,
+        }
+    return result
+
+
 @mcp.tool()
 async def get_server_instructions() -> str:
     """
@@ -149,7 +221,7 @@ async def get_calendar(
 
 
 @mcp.tool()
-async def get_profile() -> str:
+async def get_profile(offset: int = 0) -> str:
     """
     Get all profile entries about the user.
 
@@ -158,17 +230,28 @@ async def get_profile() -> str:
     working style, technical background, personal preferences.
 
     Call this early in a session to understand context about who you're helping.
+    This response is deliberately compact and size-bounded. If complete is false,
+    call get_profile(offset=next_offset) and continue until complete is true.
+
+    Args:
+        offset: Entry offset for the next bounded page. Start at 0.
 
     Returns:
-        List of profile entries ordered by most recently modified, each containing:
-        id, content, context, kind, created, modified, tags.
+        A bounded page with entries, entry_count, returned_count, offset,
+        next_offset, and complete. Each entry contains only instruction-bearing
+        fields: entry_id, content, kind, and optional context and priority.
     """
     result = await sync_to_async(services.get_profile)()
-    return _json_text(result)
+    return _json_text(_startup_context_page(result, offset))
 
 
 @mcp.tool()
-async def get_ai_guidance(context: str = None, location_name: str = None) -> str:
+async def get_ai_guidance(
+    context: str = None,
+    location_name: str = None,
+    offset: int = 0,
+    audience: str = None,
+) -> str:
     """
     Get AI guidance entries - behavioral instructions for AI assistants.
 
@@ -177,9 +260,14 @@ async def get_ai_guidance(context: str = None, location_name: str = None) -> str
     - Context-specific guidance: Rules for working on particular projects/topics
     - Machine-specific guidance: Rules/facts for a particular host, keyed by
       location_name (see below)
+    - Audience-specific guidance: Rules limited to model-provider families
 
     IMPORTANT: Always call this before starting work on any context/project to
     get project-specific instructions. The user expects you to follow these.
+    This response is deliberately compact and size-bounded. If complete is false,
+    call get_ai_guidance with the same context, location_name, and audience plus
+    offset=next_offset. Continue until complete is true. Missing pages mean
+    missing behavioral instructions.
 
     Args:
         context: If provided, returns general guidance PLUS guidance specific
@@ -198,17 +286,23 @@ async def get_ai_guidance(context: str = None, location_name: str = None) -> str
                  exists, an info notice is appended to the results telling
                  you to surface that fact to the user so the missing entry
                  can be authored.
+        offset: Entry offset for the next bounded page. Start at 0.
+        audience: Model-provider family requesting guidance. Active values are
+                 openai and anthropic. Entries with no data.audiences apply
+                 universally. If audience is omitted, audience-specific entries
+                 are excluded.
 
     Returns:
-        List of AI guidance entries ordered by context then modification date,
-        each containing: id, content, context (null for general), kind,
-        created, modified, tags. When location_name is supplied, the
-        machine-specific entry (or an info notice if absent) is appended.
+        A bounded page with entries, entry_count, returned_count, offset,
+        next_offset, and complete. Each entry contains only instruction-bearing
+        fields: entry_id, content, kind, and optional context and priority.
+        When location_name is supplied, the machine-specific entry (or an info
+        notice if absent) is included in the paginated result.
     """
     result = await sync_to_async(services.get_ai_guidance)(
-        context=context, location_name=location_name
+        context=context, location_name=location_name, audience=audience
     )
-    return _json_text(result)
+    return _json_text(_startup_context_page(result, offset))
 
 
 @mcp.tool()
