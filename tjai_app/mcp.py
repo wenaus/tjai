@@ -707,7 +707,9 @@ async def replace_entry_content(entry_id: str, content: str) -> dict:
         content: The new content text (required, non-empty).
 
     Returns:
-        The updated entry with all fields.
+        The updated entry with all fields and a complete unified `diff`.
+        After a successful edit, you MUST present the returned `diff` verbatim
+        to the user in a fenced diff block. Never silently omit or summarize it.
         Returns {"error": "..."} if validation fails.
     """
     return await sync_to_async(services.replace_entry_content)(
@@ -748,7 +750,9 @@ async def replace_text_in_entry(
             STALE_PRECONDITION instead of writing.
 
     Returns:
-        On success: the updated entry dict + 'replaced_count'.
+        On success: the updated entry dict + 'replaced_count' and a complete
+            unified `diff`. You MUST present the returned `diff` verbatim to
+            the user in a fenced diff block. Never silently omit or summarize it.
         On error: {"error": "...", "code": "..."} where code is one of
             NOT_FOUND, BAD_REQUEST, NO_MATCH, MULTIPLE_MATCHES (with `count`),
             STALE_PRECONDITION (with current/expected timestamps), EMPTY_RESULT.
@@ -799,7 +803,9 @@ async def replace_section_in_entry(
 
     Returns:
         On success: updated entry dict + 'section_lines_replaced' and
-            'heading_line_index'.
+            'heading_line_index', plus a complete unified `diff`. You MUST
+            present the returned `diff` verbatim to the user in a fenced diff
+            block. Never silently omit or summarize it.
         On error: {"error": "...", "code": "..."} where code is one of
             NOT_FOUND, BAD_REQUEST, HEADING_NOT_FOUND, MULTIPLE_HEADINGS
             (with `count`), OCCURRENCE_OUT_OF_RANGE, STALE_PRECONDITION,
@@ -833,7 +839,9 @@ async def edit_entry(
 ) -> dict:
     """Deprecated. Use edit_entry_metadata / replace_entry_content /
     append_entry_content. Kept registered for back-compat with callers that
-    already have this name cached; do not use in new code."""
+    already have this name cached; do not use in new code. If a cached caller
+    changes content, it MUST present the returned `diff` verbatim to the user
+    in a fenced diff block."""
     return await sync_to_async(services.edit_entry)(
         entry_id=entry_id, content=content, context=context,
         clear_context=clear_context, tags=tags, event_date=event_date,
@@ -864,7 +872,9 @@ async def append_entry_content(
                    '\\n\\n' (blank line). Pass '' for no separator.
 
     Returns:
-        The updated entry with all fields.
+        The updated entry with all fields and a complete unified `diff`.
+        After a successful edit, you MUST present the returned `diff` verbatim
+        to the user in a fenced diff block. Never silently omit or summarize it.
         Returns {"error": "..."} if validation fails.
     """
     return await sync_to_async(services.append_entry_content)(
@@ -1217,7 +1227,10 @@ async def restore_version(
                  Default: -1 (restore to the version before the most recent change).
 
     Returns:
-        The restored entry with all fields.
+        The restored entry with all fields and a complete unified `diff`.
+        After a successful restore, you MUST present the returned `diff`
+        verbatim to the user in a fenced diff block. Never silently omit or
+        summarize it.
         Returns {"error": "..."} if entry or version not found.
     """
     return await sync_to_async(services.restore_version)(

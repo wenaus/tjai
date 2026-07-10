@@ -4,6 +4,7 @@ All functions are synchronous (Django ORM). MCP wraps with sync_to_async.
 Returns dicts/lists, not ORM objects.
 """
 
+import difflib
 import re
 import time
 import uuid
@@ -995,6 +996,19 @@ def append_entry_content(entry_id, content, separator="\n\n"):
     return _edit_entry_impl(entry_id=entry_id, content=new_content)
 
 
+def _content_unified_diff(entry, before, after):
+    """Return a complete unified diff for an entry content change."""
+    data = entry.data if isinstance(entry.data, dict) else {}
+    label = data.get('entry_id') or entry.name or str(entry.id)
+    return '\n'.join(difflib.unified_diff(
+        (before or '').splitlines(),
+        (after or '').splitlines(),
+        fromfile=f'{label}:before',
+        tofile=f'{label}:after',
+        lineterm='',
+    ))
+
+
 def _check_precondition(entry, expected_modified_at):
     """Verify the entry's current modified_at matches the client's expectation.
     Returns an error dict on mismatch, or None if precondition holds (or absent)."""
@@ -1380,7 +1394,10 @@ def _edit_entry_impl(entry_id, content=None, context=None, clear_context=False,
         from .tag_stats import rebuild_tag_stats
         rebuild_tag_stats()
 
-    return _format_entry(entry)
+    result = _format_entry(entry)
+    if content is not None:
+        result['diff'] = _content_unified_diff(entry, old_content, actual_content)
+    return result
 
 
 def change_entry_kind(entry_id, kind):
@@ -1806,10 +1823,13 @@ def restore_version(entry_id, version=None):
         if not v:
             return {"error": f"Version {version} not found"}
 
+    old_content = entry.content
     set_changed_by('api')
     entry.content = v['content']
     if v['data'] is not None:
         entry.data = v['data']
     entry.save()
 
-    return _format_entry(entry)
+    result = _format_entry(entry)
+    result['diff'] = _content_unified_diff(entry, old_content, entry.content)
+    return result
