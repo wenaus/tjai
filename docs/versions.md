@@ -9,6 +9,11 @@ Every content or data change to an entry is automatically versioned via a Django
 - **Sequential numbering**: Each entry's versions are numbered v1, v2, v3... (`version_num` field). Allocation is serialized per entry with a PostgreSQL transaction advisory lock.
 - **Attribution**: `changed_by` records who made the change ('web_ui', 'api_delete', 'autosave', etc.).
 
+MCP content transforms run in a database transaction while holding a row lock.
+Append, exact-text replacement, section replacement, and restore therefore
+calculate from one locked current state, and the content save plus its version
+snapshot commit together.
+
 ## Model: `EntryVersion`
 
 | Field | Type | Description |
@@ -85,5 +90,5 @@ old = get_entry_versions(entry_id=current.id, age="24h")
 - Skips if entry is new (no `pk` yet)
 - Loads the old entry from DB and compares content + data
 - Skips autosave operations to avoid version spam
-- Uses thread-local `_changed_by` for attribution (set via `set_changed_by()` before save)
+- Uses a scoped context variable for attribution that always restores the prior source after saving
 - Calls the shared serialized allocator used by explicit snapshots

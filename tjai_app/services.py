@@ -10,7 +10,7 @@ import time
 import uuid
 from datetime import datetime, timedelta
 
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Count
 from django.utils import timezone
 
@@ -957,7 +957,8 @@ def edit_entry_metadata(entry_id, context=None, clear_context=False, tags=None,
                         event_date=None, event_time=None, clear_event_date=False,
                         priority=None, clear_priority=False,
                         status=None, clear_status=False,
-                        name=None, clear_name=False, keep_time=False, data=None):
+                        name=None, clear_name=False, keep_time=False, data=None,
+                        source='api'):
     """Edit an entry's metadata fields (tags, status, priority, context, name,
     event date/time, data, …) without touching its content. For content
     changes use replace_entry_content or append_entry_content."""
@@ -968,10 +969,11 @@ def edit_entry_metadata(entry_id, context=None, clear_context=False, tags=None,
         priority=priority, clear_priority=clear_priority,
         status=status, clear_status=clear_status,
         name=name, clear_name=clear_name, keep_time=keep_time, data=data,
+        source=source,
     )
 
 
-def replace_entry_content(entry_id, content):
+def replace_entry_content(entry_id, content, source='api'):
     """Replace an entry's content with the supplied text (destructive — the
     previous content is gone from the current version; it remains in version
     history and can be recovered via restore_version). Use when you genuinely
@@ -980,10 +982,10 @@ def replace_entry_content(entry_id, content):
         return {"error": "entry_id is required"}
     if content is None or not content.strip():
         return {"error": "content is required and cannot be empty"}
-    return _edit_entry_impl(entry_id=entry_id, content=content)
+    return _edit_entry_impl(entry_id=entry_id, content=content, source=source)
 
 
-def append_entry_content(entry_id, content, separator="\n\n"):
+def append_entry_content(entry_id, content, separator="\n\n", source='api'):
     """Append text to an entry's existing content. Final content is
     `existing + separator + content`. Existing content is always preserved.
     Use this for log-style entries, agent report-back, shopping lists, etc."""
@@ -991,13 +993,21 @@ def append_entry_content(entry_id, content, separator="\n\n"):
         return {"error": "entry_id is required"}
     if content is None or not content.strip():
         return {"error": "content is required and cannot be empty"}
-    entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
-    if not entry:
-        return {"error": f"Entry '{entry_id}' not found or already deleted"}
-    existing = entry.content or ""
-    sep = separator if separator is not None else ""
-    new_content = (existing + sep + content) if existing else content
-    return _edit_entry_impl(entry_id=entry_id, content=new_content)
+    with transaction.atomic():
+        entry = Entry.objects.select_for_update().filter(
+            id=entry_id, deleted_at__isnull=True
+        ).first()
+        if not entry:
+            return {"error": f"Entry '{entry_id}' not found or already deleted"}
+        existing = entry.content or ""
+        sep = separator if separator is not None else ""
+        new_content = (existing + sep + content) if existing else content
+        return _edit_entry_impl(
+            entry_id=entry_id,
+            content=new_content,
+            source=source,
+            locked_entry=entry,
+        )
 
 
 def _content_unified_diff(entry, before, after):
@@ -1098,7 +1108,8 @@ def _find_section(content, heading, level=None, occurrence=None):
     return ('found', heading_line_idx, body_start, body_end, count)
 
 
-def replace_text_in_entry(entry_id, old_text, new_text, replace_all=False, expected_modified_at=None):
+def replace_text_in_entry(entry_id, old_text, new_text, replace_all=False,
+                          expected_modified_at=None, source='api'):
     """Surgical exact-match replace within an entry's content. Replaces
     `old_text` with `new_text`. Errors if `old_text` is absent, or if it
     occurs more than once and `replace_all` is False (supply more
@@ -1130,47 +1141,55 @@ def replace_text_in_entry(entry_id, old_text, new_text, replace_all=False, expec
         return {"error": "old_text is required and cannot be empty", "code": "BAD_REQUEST"}
     if new_text is None:
         return {"error": "new_text is required (use empty string to delete)", "code": "BAD_REQUEST"}
-    entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
-    if not entry:
-        return {"error": f"Entry '{entry_id}' not found or already deleted", "code": "NOT_FOUND"}
-    err = _check_precondition(entry, expected_modified_at)
-    if err:
-        return err
+    with transaction.atomic():
+        entry = Entry.objects.select_for_update().filter(
+            id=entry_id, deleted_at__isnull=True
+        ).first()
+        if not entry:
+            return {"error": f"Entry '{entry_id}' not found or already deleted", "code": "NOT_FOUND"}
+        err = _check_precondition(entry, expected_modified_at)
+        if err:
+            return err
 
-    existing = entry.content or ""
-    count = existing.count(old_text)
-    if count == 0:
-        return {"error": "old_text not found in entry content", "code": "NO_MATCH"}
-    if count > 1 and not replace_all:
-        return {
-            "error": (f"old_text matched {count} times; pass replace_all=True to "
-                      "replace all, or supply more surrounding context to make it unique"),
-            "code": "MULTIPLE_MATCHES",
-            "count": count,
-        }
+        existing = entry.content or ""
+        count = existing.count(old_text)
+        if count == 0:
+            return {"error": "old_text not found in entry content", "code": "NO_MATCH"}
+        if count > 1 and not replace_all:
+            return {
+                "error": (f"old_text matched {count} times; pass replace_all=True to "
+                          "replace all, or supply more surrounding context to make it unique"),
+                "code": "MULTIPLE_MATCHES",
+                "count": count,
+            }
 
-    if replace_all:
-        new_content = existing.replace(old_text, new_text)
-        replaced = count
-    else:
-        new_content = existing.replace(old_text, new_text, 1)
-        replaced = 1
+        if replace_all:
+            new_content = existing.replace(old_text, new_text)
+            replaced = count
+        else:
+            new_content = existing.replace(old_text, new_text, 1)
+            replaced = 1
 
-    if new_content == existing:
-        return {"error": "old_text and new_text are identical; no change would result",
-                "code": "NOOP_PATCH"}
-    if not new_content.strip():
-        return {"error": "Result would be empty content; use delete_entry instead",
-                "code": "EMPTY_RESULT"}
+        if new_content == existing:
+            return {"error": "old_text and new_text are identical; no change would result",
+                    "code": "NOOP_PATCH"}
+        if not new_content.strip():
+            return {"error": "Result would be empty content; use delete_entry instead",
+                    "code": "EMPTY_RESULT"}
 
-    result = _edit_entry_impl(entry_id=entry_id, content=new_content)
-    if isinstance(result, dict) and "error" not in result:
-        result["replaced_count"] = replaced
-    return result
+        result = _edit_entry_impl(
+            entry_id=entry_id,
+            content=new_content,
+            source=source,
+            locked_entry=entry,
+        )
+        if isinstance(result, dict) and "error" not in result:
+            result["replaced_count"] = replaced
+        return result
 
 
 def replace_section_in_entry(entry_id, heading, new_body, level=None, occurrence=None,
-                             expected_modified_at=None):
+                             expected_modified_at=None, source='api'):
     """Replace the body under a markdown heading. Heading line itself is
     preserved; everything from the line after the heading up to the next
     heading at the same OR higher level is replaced with `new_body`.
@@ -1212,64 +1231,73 @@ def replace_section_in_entry(entry_id, heading, new_body, level=None, occurrence
                 "code": "BAD_REQUEST"}
     if level is not None and (not isinstance(level, int) or not 1 <= level <= 6):
         return {"error": f"level must be an int 1-6, got {level!r}", "code": "BAD_REQUEST"}
-    entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
-    if not entry:
-        return {"error": f"Entry '{entry_id}' not found or already deleted", "code": "NOT_FOUND"}
-    err = _check_precondition(entry, expected_modified_at)
-    if err:
-        return err
+    with transaction.atomic():
+        entry = Entry.objects.select_for_update().filter(
+            id=entry_id, deleted_at__isnull=True
+        ).first()
+        if not entry:
+            return {"error": f"Entry '{entry_id}' not found or already deleted", "code": "NOT_FOUND"}
+        err = _check_precondition(entry, expected_modified_at)
+        if err:
+            return err
 
-    existing = entry.content or ""
-    found = _find_section(existing, heading, level=level, occurrence=occurrence)
-    status = found[0]
-    if status == 'not_found':
-        msg = f"No heading matching {heading!r}"
-        if level is not None:
-            msg += f" at level {level}"
-        return {"error": msg, "code": "HEADING_NOT_FOUND"}
-    if status == 'multiple':
-        return {"error": (f"Found {found[1]} headings matching {heading!r}; "
-                          "specify level or occurrence to disambiguate"),
-                "code": "MULTIPLE_HEADINGS", "count": found[1]}
-    if status == 'out_of_range':
-        return {"error": (f"occurrence out of range: only {found[1]} matching "
-                          f"heading(s) exist"),
-                "code": "OCCURRENCE_OUT_OF_RANGE", "count": found[1]}
+        existing = entry.content or ""
+        found = _find_section(existing, heading, level=level, occurrence=occurrence)
+        status = found[0]
+        if status == 'not_found':
+            msg = f"No heading matching {heading!r}"
+            if level is not None:
+                msg += f" at level {level}"
+            return {"error": msg, "code": "HEADING_NOT_FOUND"}
+        if status == 'multiple':
+            return {"error": (f"Found {found[1]} headings matching {heading!r}; "
+                              "specify level or occurrence to disambiguate"),
+                    "code": "MULTIPLE_HEADINGS", "count": found[1]}
+        if status == 'out_of_range':
+            return {"error": (f"occurrence out of range: only {found[1]} matching "
+                              f"heading(s) exist"),
+                    "code": "OCCURRENCE_OUT_OF_RANGE", "count": found[1]}
 
-    _, h_idx, b_start, b_end, total_matches = found
-    lines = existing.split('\n')
-    new_body_lines = new_body.split('\n')
-    new_lines = lines[:b_start] + new_body_lines + lines[b_end:]
-    new_content = '\n'.join(new_lines)
+        _, h_idx, b_start, b_end, total_matches = found
+        lines = existing.split('\n')
+        new_body_lines = new_body.split('\n')
+        new_lines = lines[:b_start] + new_body_lines + lines[b_end:]
+        new_content = '\n'.join(new_lines)
 
-    if new_content == existing:
-        return {"error": "new_body matches the existing section body; no change would result",
-                "code": "NOOP_PATCH"}
-    if not new_content.strip():
-        return {"error": "Result would be empty content; use delete_entry instead",
-                "code": "EMPTY_RESULT"}
+        if new_content == existing:
+            return {"error": "new_body matches the existing section body; no change would result",
+                    "code": "NOOP_PATCH"}
+        if not new_content.strip():
+            return {"error": "Result would be empty content; use delete_entry instead",
+                    "code": "EMPTY_RESULT"}
 
-    result = _edit_entry_impl(entry_id=entry_id, content=new_content)
-    if isinstance(result, dict) and "error" not in result:
-        result["section_lines_replaced"] = b_end - b_start
-        result["heading_line_index"] = h_idx
-    return result
+        result = _edit_entry_impl(
+            entry_id=entry_id,
+            content=new_content,
+            source=source,
+            locked_entry=entry,
+        )
+        if isinstance(result, dict) and "error" not in result:
+            result["section_lines_replaced"] = b_end - b_start
+            result["heading_line_index"] = h_idx
+        return result
 
 
-def edit_entry(entry_id, content=None, **kwargs):
+def edit_entry(entry_id, content=None, source='api', **kwargs):
     """Deprecated back-compat shim. Preserved undocumented for callers that
     still use the old combined API. New code: edit_entry_metadata for metadata,
     replace_entry_content / append_entry_content for content. This shim
     forwards to _edit_entry_impl with the same semantics as before the split."""
-    return _edit_entry_impl(entry_id=entry_id, content=content, **kwargs)
+    return _edit_entry_impl(
+        entry_id=entry_id, content=content, source=source, **kwargs
+    )
 
 
 def _edit_entry_impl(entry_id, content=None, context=None, clear_context=False,
                      tags=None, event_date=None, event_time=None, clear_event_date=False,
                      priority=None, clear_priority=False, status=None, clear_status=False,
-                     name=None, clear_name=False, keep_time=False, data=None):
-    from .signals import set_changed_by
-    set_changed_by('api')
+                     name=None, clear_name=False, keep_time=False, data=None,
+                     source='api', locked_entry=None):
     if not entry_id:
         return {"error": "entry_id is required"}
     if content is not None and len(content) < 10:
@@ -1288,12 +1316,44 @@ def _edit_entry_impl(entry_id, content=None, context=None, clear_context=False,
     if status is not None and status not in VALID_STATUSES:
         return {"error": f"Invalid status '{status}'. Must be one of: {', '.join(VALID_STATUSES)}"}
 
-    entry = Entry.objects.select_related('context').filter(
-        id=entry_id,
-        deleted_at__isnull=True,
-    ).prefetch_related('tags').first()
-    if not entry:
-        return {"error": f"Entry '{entry_id}' not found or already deleted"}
+    with transaction.atomic():
+        entry = locked_entry
+        if entry is None:
+            entry = Entry.objects.select_for_update(of=('self',)).select_related('context').filter(
+                id=entry_id,
+                deleted_at__isnull=True,
+            ).prefetch_related('tags').first()
+        if not entry:
+            return {"error": f"Entry '{entry_id}' not found or already deleted"}
+
+        return _apply_entry_edit(
+            entry=entry,
+            content=content,
+            context=context,
+            clear_context=clear_context,
+            tags=tags,
+            event_date=event_date,
+            event_time=event_time,
+            clear_event_date=clear_event_date,
+            priority=priority,
+            clear_priority=clear_priority,
+            status=status,
+            clear_status=clear_status,
+            name=name,
+            clear_name=clear_name,
+            keep_time=keep_time,
+            data=data,
+            source=source,
+        )
+
+
+def _apply_entry_edit(entry, content=None, context=None, clear_context=False,
+                      tags=None, event_date=None, event_time=None,
+                      clear_event_date=False, priority=None,
+                      clear_priority=False, status=None, clear_status=False,
+                      name=None, clear_name=False, keep_time=False, data=None,
+                      source='api'):
+    from .signals import entry_change_source
 
     if content is not None:
         actual_content = content
@@ -1392,7 +1452,8 @@ def _edit_entry_impl(entry_id, content=None, context=None, clear_context=False,
     update_fields = ['content', 'context', 'data', 'priority', 'status', 'name', 'is_dirty']
     if not keep_time and not metadata_only:
         update_fields.append('timestamp_modified')
-    entry.save(update_fields=update_fields)
+    with entry_change_source(source):
+        entry.save(update_fields=update_fields)
 
     if tags_changed:
         from .tag_stats import rebuild_tag_stats
@@ -1404,7 +1465,8 @@ def _edit_entry_impl(entry_id, content=None, context=None, clear_context=False,
     return result
 
 
-def change_entry_kind(entry_id, kind):
+@transaction.atomic
+def change_entry_kind(entry_id, kind, source='api'):
     if not entry_id:
         return {"error": "entry_id is required"}
     if not kind:
@@ -1412,7 +1474,7 @@ def change_entry_kind(entry_id, kind):
     if kind not in VALID_KINDS:
         return {"error": f"Invalid kind '{kind}'. Must be one of: {', '.join(VALID_KINDS)}"}
 
-    entry = Entry.objects.select_related('context').filter(
+    entry = Entry.objects.select_for_update(of=('self',)).select_related('context').filter(
         id=entry_id,
         deleted_at__isnull=True,
     ).prefetch_related('tags').first()
@@ -1423,7 +1485,7 @@ def change_entry_kind(entry_id, kind):
         return {"error": f"Entry is already kind '{kind}'"}
 
     entry.kind = kind
-    update_fields = ['kind', 'is_dirty']
+    update_fields = ['kind', 'is_dirty', 'timestamp_modified']
 
     # Promoting to journal: parse any leading date/time prefix from the
     # existing content (e.g. "20260526/12:45 Pick up Mom" or "tomorrow
@@ -1450,7 +1512,10 @@ def change_entry_kind(entry_id, kind):
             pass
 
     entry.is_dirty = 1
-    entry.save(update_fields=update_fields)
+    entry.timestamp_modified = time.time()
+    from .signals import entry_change_source
+    with entry_change_source(source):
+        entry.save(update_fields=update_fields)
 
     result = _format_entry(entry)
     if prefix_warnings:
@@ -1458,13 +1523,14 @@ def change_entry_kind(entry_id, kind):
     return result
 
 
-def delete_entry(entry_id, content):
+@transaction.atomic
+def delete_entry(entry_id, content, source='api'):
     if not entry_id:
         return {"error": "entry_id is required"}
     if not content:
         return {"error": "content is required - use get_entry first to fetch content"}
 
-    entry = Entry.objects.select_related('context').filter(
+    entry = Entry.objects.select_for_update(of=('self',)).select_related('context').filter(
         id=entry_id,
         deleted_at__isnull=True,
     ).prefetch_related('tags').first()
@@ -1475,7 +1541,7 @@ def delete_entry(entry_id, content):
         return {"error": "Content does not match entry. Use get_entry to fetch current content."}
 
     from .models import snapshot_entry
-    snapshot_entry(entry, changed_by='api_delete')
+    snapshot_entry(entry, changed_by=f'{source}_delete')
 
     now = time.time()
     entry.deleted_at = now
@@ -1793,7 +1859,8 @@ def _parse_duration(s):
     return val * multipliers.get(unit, 86400)
 
 
-def restore_version(entry_id, version=None):
+@transaction.atomic
+def restore_version(entry_id, version=None, source='api'):
     """Restore an entry's content from a previous version. Server-side copy.
 
     Args:
@@ -1804,13 +1871,15 @@ def restore_version(entry_id, version=None):
     Returns the updated entry.
     """
     from .models import EntryVersion, Entry
-    from .signals import set_changed_by
+    from .signals import entry_change_source
 
     if version is None:
         version = -1
 
     try:
-        entry = Entry.objects.get(id=entry_id, deleted_at__isnull=True)
+        entry = Entry.objects.select_for_update().get(
+            id=entry_id, deleted_at__isnull=True
+        )
     except Entry.DoesNotExist:
         return {"error": "Entry not found"}
 
@@ -1828,11 +1897,13 @@ def restore_version(entry_id, version=None):
             return {"error": f"Version {version} not found"}
 
     old_content = entry.content
-    set_changed_by('api')
     entry.content = v['content']
     if v['data'] is not None:
         entry.data = v['data']
-    entry.save()
+    entry.timestamp_modified = time.time()
+    entry.is_dirty = 1
+    with entry_change_source(source):
+        entry.save()
 
     result = _format_entry(entry)
     result['diff'] = _content_unified_diff(entry, old_content, entry.content)

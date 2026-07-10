@@ -197,8 +197,8 @@ Tools:
   entry's existing content (preserves existing).
 - copy_calendar_entry(entry_id, event_date, event_time): Copy a journal entry
   to a new date, preserving all fields.
-- change_entry_kind(entry_id, kind): Change entry type without modifying
-  content or timestamp.
+- change_entry_kind(entry_id, kind): Change entry type and advance its
+  modification timestamp.
 - run_action(entry_id): Execute an action entry immediately.
 - delete_entry(entry_id): Soft delete an entry. Requires user approval.
 - create_goal(content, context, tags, priority, status, create_context, data):

@@ -3920,7 +3920,7 @@ def api_entry_save(request, entry_id):
     Accepts ?beacon=1 for sendBeacon saves on tab close (CSRF skipped for
     the beacon case only).
     """
-    from .signals import set_changed_by
+    from .signals import entry_change_source
     # sendBeacon can't set X-CSRFToken header — skip CSRF for beacon saves
     # (still authenticated by session cookie)
     if request.GET.get('beacon') == '1':
@@ -3937,11 +3937,11 @@ def api_entry_save(request, entry_id):
     except (json.JSONDecodeError, KeyError):
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
     if data.get('first_autosave'):
-        set_changed_by('first_autosave')
+        change_source = 'first_autosave'
     elif data.get('autosave'):
-        set_changed_by('autosave')
+        change_source = 'autosave'
     else:
-        set_changed_by('web_ui')
+        change_source = 'web_ui'
     # Strip trailing whitespace from each line (common paste artifact)
     content = '\n'.join(line.rstrip() for line in content.split('\n'))
     # For journal entries: parse leading date/time specs from content.
@@ -4092,7 +4092,8 @@ def api_entry_save(request, entry_id):
     keep_time = data.get('keep_time') is True and not data.get('autosave')
     if not keep_time and not metadata_only:
         entry.timestamp_modified = time.time()
-    entry.save()
+    with entry_change_source(change_source):
+        entry.save()
     created_version = None
     latest_version = EntryVersion.objects.filter(entry_id=entry.id).order_by('-version_num').first()
     if latest_version and EntryVersion.objects.filter(entry_id=entry.id).count() > version_count_before:

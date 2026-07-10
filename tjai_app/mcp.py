@@ -25,7 +25,7 @@ Available tools:
     append_entry_content   - Append text to an entry's existing content
     run_action        - Execute an action entry immediately
     copy_calendar_entry - Copy a journal entry to a new date (preserves all fields)
-    change_entry_kind - Change an entry's type without modifying content or timestamp
+    change_entry_kind - Change an entry's type and modification timestamp
     delete_entry      - Soft delete an entry (requires user approval)
     create_goal       - Create a goal entry (convenience wrapper for create_entry)
     get_goal          - Get a goal entry with all its relations
@@ -779,7 +779,7 @@ async def edit_entry_metadata(
         priority=priority, clear_priority=clear_priority,
         status=status, clear_status=clear_status,
         name=name, clear_name=clear_name, keep_time=keep_time,
-        data=data,
+        data=data, source='mcp',
     )
 
 
@@ -807,7 +807,7 @@ async def replace_entry_content(entry_id: str, content: str) -> dict:
         Returns {"error": "..."} if validation fails.
     """
     return await sync_to_async(services.replace_entry_content)(
-        entry_id=entry_id, content=content,
+        entry_id=entry_id, content=content, source='mcp',
     )
 
 
@@ -854,6 +854,7 @@ async def replace_text_in_entry(
     return await sync_to_async(services.replace_text_in_entry)(
         entry_id=entry_id, old_text=old_text, new_text=new_text,
         replace_all=replace_all, expected_modified_at=expected_modified_at,
+        source='mcp',
     )
 
 
@@ -909,6 +910,7 @@ async def replace_section_in_entry(
         entry_id=entry_id, heading=heading, new_body=new_body,
         level=level, occurrence=occurrence,
         expected_modified_at=expected_modified_at,
+        source='mcp',
     )
 
 
@@ -943,7 +945,7 @@ async def edit_entry(
         priority=priority, clear_priority=clear_priority,
         status=status, clear_status=clear_status,
         name=name, clear_name=clear_name, keep_time=keep_time,
-        data=data,
+        data=data, source='mcp',
     )
 
 
@@ -972,7 +974,7 @@ async def append_entry_content(
         Returns {"error": "..."} if validation fails.
     """
     return await sync_to_async(services.append_entry_content)(
-        entry_id=entry_id, content=content, separator=separator,
+        entry_id=entry_id, content=content, separator=separator, source='mcp',
     )
 
 
@@ -1025,11 +1027,10 @@ async def copy_calendar_entry(
 @mcp.tool()
 async def change_entry_kind(entry_id: str, kind: str) -> dict:
     """
-    Change the kind (type) of an existing entry without modifying its content
-    or timestamp.
+    Change the kind (type) of an existing entry. The modification timestamp is
+    advanced so downstream clients can observe the change.
 
-    Use this to correct an entry's type (e.g., from 'ai' to 'memory') without
-    altering anything else. The modification timestamp is NOT updated.
+    Use this to correct an entry's type (e.g., from 'ai' to 'memory').
 
     Args:
         entry_id: The UUID of the entry to change (required).
@@ -1041,7 +1042,7 @@ async def change_entry_kind(entry_id: str, kind: str) -> dict:
         Returns {"error": "..."} if validation fails.
     """
     return await sync_to_async(services.change_entry_kind)(
-        entry_id=entry_id, kind=kind,
+        entry_id=entry_id, kind=kind, source='mcp',
     )
 
 
@@ -1066,7 +1067,7 @@ async def delete_entry(entry_id: str, content: str) -> dict:
         Returns {"error": "..."} if entry not found, already deleted, or content mismatch.
     """
     return await sync_to_async(services.delete_entry)(
-        entry_id=entry_id, content=content,
+        entry_id=entry_id, content=content, source='mcp',
     )
 
 
@@ -1328,5 +1329,5 @@ async def restore_version(
         Returns {"error": "..."} if entry or version not found.
     """
     return await sync_to_async(services.restore_version)(
-        entry_id=entry_id, version=version,
+        entry_id=entry_id, version=version, source='mcp',
     )

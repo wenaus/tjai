@@ -1,5 +1,6 @@
 """Pre-save signal to snapshot entry state before modification."""
 import contextvars
+from contextlib import contextmanager
 
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
@@ -10,9 +11,14 @@ from .models import Entry, create_entry_version
 _changed_by_var = contextvars.ContextVar('changed_by', default='web_ui')
 
 
-def set_changed_by(who):
-    """Call before entry.save() to record who made the change."""
-    _changed_by_var.set(who)
+@contextmanager
+def entry_change_source(who):
+    """Attribute versions created inside the block, then restore prior state."""
+    token = _changed_by_var.set(who)
+    try:
+        yield
+    finally:
+        _changed_by_var.reset(token)
 
 
 @receiver(pre_save, sender=Entry)
@@ -46,7 +52,6 @@ def snapshot_entry_before_save(sender, instance, **kwargs):
         return
 
     changed_by = _changed_by_var.get()
-    _changed_by_var.set('web_ui')  # always reset immediately
 
     if changed_by == 'autosave':
         return  # skip version for regular autosaves
