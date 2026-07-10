@@ -18,6 +18,7 @@ REPOS = [
     (Path('/home/admin/github/swf-monitor'), 'https://github.com/BNLNPPS/swf-monitor', 'swf-monitor'),
     (Path('/home/admin/github/swf-common-lib'), 'https://github.com/BNLNPPS/swf-common-lib', 'swf-common-lib'),
     (Path('/home/admin/github/swf-remote'), 'https://github.com/BNLNPPS/swf-remote', 'swf-remote'),
+    (Path('/home/admin/github/swf-epicprod'), 'https://github.com/BNLNPPS/swf-epicprod', 'swf-epicprod'),
     (Path('/home/admin/github/BNLNPPS.github.io'), 'https://github.com/BNLNPPS/BNLNPPS.github.io', 'BNLNPPS.github.io'),
     (Path('/home/admin/github/lxr-mcp-server'), 'https://github.com/BNLNPPS/lxr-mcp-server', 'lxr-mcp-server'),
     (Path('/home/admin/github/corun-ai'), 'https://github.com/BNLNPPS/corun-ai', 'corun-ai'),

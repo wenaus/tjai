@@ -26,4 +26,4 @@ PATH=/usr/local/bin:/usr/bin:/bin
 # Daily 02:30 — heal any empty git_daily .md files from prior days (page-load
 # refresh covers today+yesterday; this catches older days whose file was
 # written before that day's commits happened).
-30 2 * * * /var/www/tjai/.venv/bin/python /home/admin/github/tjrepo/tjai/scripts/cron/refresh_git_daily.py >> /tmp/cron_refresh_git_daily.log 2>&1
+30 2 * * * /var/www/tjai/.venv/bin/python /var/www/tjai/scripts/cron/refresh_git_daily.py >> /tmp/cron_refresh_git_daily.log 2>&1
