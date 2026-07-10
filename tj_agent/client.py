@@ -17,7 +17,7 @@ def get_sync_server() -> str:
 
 
 def push(machine_id: str, hostname: str, entries: list, contexts: list,
-         tags: list, sub_notes: list) -> dict[str, Any]:
+         tags: list, sub_notes: list, base_sync_time: float) -> dict[str, Any]:
     """
     Push dirty entries to server.
 
@@ -27,6 +27,7 @@ def push(machine_id: str, hostname: str, entries: list, contexts: list,
     payload = {
         "machine_id": machine_id,
         "hostname": hostname,
+        "base_sync_time": base_sync_time,
         "entries": entries,
         "contexts": contexts,
         "tags": tags,

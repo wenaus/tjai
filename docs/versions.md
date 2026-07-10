@@ -6,7 +6,7 @@ Every content or data change to an entry is automatically versioned via a Django
 
 - **Automatic**: The `pre_save` signal on `Entry` compares old vs new content/data. If either changed, a snapshot is created before the save.
 - **Manual**: `snapshot_entry(entry, changed_by)` can be called explicitly (e.g., before deletion).
-- **Sequential numbering**: Each entry's versions are numbered v1, v2, v3... (`version_num` field).
+- **Sequential numbering**: Each entry's versions are numbered v1, v2, v3... (`version_num` field). Allocation is serialized per entry with a PostgreSQL transaction advisory lock.
 - **Attribution**: `changed_by` records who made the change ('web_ui', 'api_delete', 'autosave', etc.).
 
 ## Model: `EntryVersion`
@@ -20,7 +20,8 @@ Every content or data change to an entry is automatically versioned via a Django
 | `changed_by` | str | Who triggered the change |
 | `timestamp` | float | Unix timestamp of the snapshot |
 
-Table: `entry_versions`. Index on `(entry, -timestamp)`.
+Table: `entry_versions`. Index on `(entry, -timestamp)` and a unique constraint
+on `(entry, version_num)`.
 
 ## Retention
 
@@ -85,3 +86,4 @@ old = get_entry_versions(entry_id=current.id, age="24h")
 - Loads the old entry from DB and compares content + data
 - Skips autosave operations to avoid version spam
 - Uses thread-local `_changed_by` for attribution (set via `set_changed_by()` before save)
+- Calls the shared serialized allocator used by explicit snapshots

@@ -1,155 +1,97 @@
-# Architecture & Design Decisions
+# Architecture
 
-## Multi-Device Sync Architecture
+## System Center
 
-### Problem
-Need multi-device editing with instant local responsiveness and automatic sync, without manual sync commands or accepting stale data.
+TJAI is a server-backed personal knowledge system. PostgreSQL is the canonical
+data store. The web application, MCP tools, automations, Telegram integration,
+and server APIs all operate on that shared state.
 
-### Options Considered
+```text
+Browser --------> Django web and APIs -----> PostgreSQL
+LLM clients ----> authenticated MCP -------> services/ORM ---> PostgreSQL
+Telegram/agents ---------------------------> services/ORM ---> PostgreSQL
 
-**1. Direct REST per command**
-- Every tj command calls server API
-- Rejected: Adds 50-200ms latency to every command, requires internet
+tj CLI ---> local SQLite ---> authenticated tj_agent sync ---> PostgreSQL
+                         (retained secondary/offline path)
 
-**2. Manual sync (tj sync)**
-- User explicitly syncs when switching devices
-- Rejected: Memory aid app cannot depend on memory to sync
-
-**3. Background sync per command**
-- Each tj command spawns detached sync process
-- Rejected: No persistent sync, stale data until next command
-
-**4. Daemon + transparent sync**
-- Persistent local agent continuously syncs SQLite ↔ PostgreSQL server via REST
-- Selected: See below
-
-### Decision: Persistent Local Agent
-
-**Architecture:**
-```
-tj command → Local SQLite (instant read/write)
-                 ↓
-tjai-agent (persistent daemon):
-  - Polls/listens for server updates every 5s
-  - Pushes dirty entries to server REST API
-  - Pulls updates, merges into local SQLite
-  - Detects conflicts → creates conflict entries
-  - Provides MCP server interface for AI
-  - Enables future AI interactions
+corun-ai ---> local work API ---> remote inference worker
 ```
 
-**Truth model:**
-- Server PostgreSQL = single source of truth
-- Local SQLite = synced cache per device
-- Server handles all concurrency (no distributed locking)
-- Agent uses REST API only
+The production web application is served by gunicorn on port 8002 behind
+Apache. The standalone FastMCP ASGI service runs separately on port 8003 so
+long-running LLM traffic cannot consume the web worker pool. Public data and
+control-plane endpoints require their designated authentication.
 
-**Pros:**
-- Instant local response (no network latency)
-- Always fresh data across devices
-- Works offline, syncs when network returns
-- Multi-purpose agent (sync + MCP + AI)
-- Fits into broader agent infrastructure (ActiveMQ-based)
-- Extremely low conflict probability during normal operation
+## Primary Interfaces
 
-**Cons:**
-- Daemon lifecycle management (start, health checks, restart)
-- Network outages cause sync delays
-- Conflicts possible during extended offline periods
-- Additional infrastructure complexity
+### Web Application
 
-**Conflict Resolution:**
-- Rare case: same entry modified on multiple machines while offline
-- Server detects conflict during bulk sync
-- Creates conflict entry (Dropbox-style)
-- User resolves manually (has all data)
+The web application is the main human interface. It provides entry editing,
+search, dashboards, calendars, research views, agent controls, and other
+specialized workflows directly against PostgreSQL.
 
-**Why This Works:**
-Personal app with single user, fast internet when available makes conflicts extremely rare. Agent becomes foundation for AI integration (MCP server) and fits existing agent architecture.
+### MCP
 
-## MCP Gateway Architecture
+The standalone MCP service is the main LLM interface. Its tools use TJAI's
+server models and services rather than a local synchronized database. The tool
+surface includes entry CRUD, search, contexts, AI guidance, version history,
+dialog memory, and knowledge-graph operations.
 
-### Hybrid Local/Server Data Model
+MCP is provider-neutral infrastructure. Individual client configuration and
+authentication details may differ by model vendor or coding assistant.
 
-**Local SQLite (synced):**
-- Recent memories, todos, active projects
-- Frequently accessed context
-- Must work offline
-- Fast, essential data
+### Automations And Integrations
 
-**Server PostgreSQL (query via agent):**
-- Music collection metadata
-- Photo/document archives
-- Email archives
-- Historical data
-- Large datasets that don't need local copies
+Scheduled agents, Telegram, browser integrations, and remote workers are
+server-side or authenticated API clients. They share PostgreSQL state with the
+web and MCP interfaces.
 
-### Agent as Intelligent Router
+## Retained CLI And Sync Path
 
-```
-LLM → Local MCP (tjai-agent) → Local SQLite (fast queries)
-                              → Server REST API (comprehensive data)
-                              → Future: other services
-```
+The `tj` CLI predates the web-centered workflow and remains useful for concise
+commands and offline capture. Each CLI machine has a local SQLite database. A
+persistent `tj_agent` pushes dirty rows and pulls server updates through the
+authenticated REST sync API.
 
-**Query routing:**
-- `tj l =project` → Local SQLite only
-- `tj music beatles` → Server query via agent
-- `tj find "topic"` → Aggregates local + server results
+This path is supported but secondary. It should stay reliable and simple; it is
+not a foundation for new web or LLM features.
 
-**MCP tools provided** (see `tjai_app/mcp.py` for full list):
-- Entry CRUD: `create_entry`, `replace_entry_content`, `append_entry_content`, `edit_entry_metadata`, `delete_entry`, `get_entry`
-- Queries: `get_memories`, `get_todos`, `get_bookmarks`, `search_entries`, `get_calendar`
-- Knowledge graph: `create_goal`, `get_goal`, `create_relation`, `get_relations`, `get_relation_graph`
-- Context: `get_ai_guidance`, `get_profile`, `list_contexts`
+### Truth And Conflict Rules
 
-The production MCP endpoint is served by `tjai_project.mcp_asgi` as a
-standalone FastMCP ASGI service. It is isolated from the main gunicorn web pool
-and accepts only authenticated JSON POST request/response traffic.
+- PostgreSQL is authoritative; SQLite is a per-machine working cache.
+- A push includes the server sync time on which the local edits were based.
+- The server applies each push batch transactionally.
+- A new entry is accepted.
+- An existing entry is accepted when the server has not changed since the
+  client's baseline, or when the submitted state already matches the server.
+- A differing entry changed on the server after the client's baseline is
+  rejected. Its tags and subnotes are left untouched.
+- The client leaves a rejected local entry dirty and reports the stale entry ID
+  in agent status. TJAI does not automatically merge the two states.
+- Pulls do not overwrite dirty or newer local rows.
 
-### Benefits
+This guard prevents an offline CLI edit from silently replacing newer web or
+MCP work without introducing a distributed merge system for a rarely used
+path.
 
-**Independence from LLM vendor:**
-- Works with any LLM supporting local MCP (Claude Desktop, Cursor, etc.)
-- No dependence on vendor's remote MCP support
-- No per-request charges for remote MCP access
-- Complete control over security and authentication
+## Version History
 
-**Gateway abstraction:**
-- LLM never knows data is remote
-- Agent handles authentication, routing, caching, rate limiting
-- Can aggregate multiple remote services through single MCP interface
-- Future-proof: works as local or remote MCP when distributed MCP becomes standard
-
-**Scalability:**
-- Vast remote datasets accessible without local storage
-- Server can host comprehensive "me descriptor" data
-- Local cache remains small and fast
-- Add new data sources without changing LLM integration
-
-## Concrete Use Case: Concurrent Multi-Machine Workflow
-
-**Real-world scenario:**
-- Desktop: Managing calendar, meetings, life admin via tj CLI
-- Dev server (SSH): Django/REST/ActiveMQ development with Claude Code in VSCode
-- Both active simultaneously, switching context frequently
-
-**Example flow:**
-1. Desktop: `tj =projectX decision: use FastAPI for new service`
-2. Dev server (seconds later): Claude Code asks "what framework did we decide on?"
-3. Agent sync: Desktop agent → server PostgreSQL → dev server agent
-4. Claude Code reads answer via local MCP server
-
-**Why agent architecture is required:**
-- Dropbox sync conflicts on SQLite within 2 days of real use (proven)
-- Claude Code on dev server needs local MCP (can't read remote desktop SQLite)
-- Context changes on desktop must reach dev server within seconds (not manual sync)
-- Both machines need fresh data for AI to provide accurate responses
-- Scales to N machines (laptop, home server, etc.) without N² sync complexity
-
-**Key insight:**
-The agent serves dual purpose: keeps local SQLite fresh (sync) AND provides MCP interface for AI on that machine. Single daemon, two critical functions. Deploy on every machine that needs tjai access.
+Content and substantive metadata changes snapshot the displaced entry state.
+Version numbers are unique within each entry and allocated under a PostgreSQL
+transaction advisory lock, so concurrent writers cannot create duplicate
+numbers. See [Entry Versions](versions.md).
 
 ## Local State
 
-Numbered entry mappings (`tj 3 d` → which entry?) stored in `~/.tjai/state.json`, local to each machine. Not synced. Each machine's query context is independent — no cross-machine confusion about entry numbers. Multiple terminals on same machine share state (acceptable trade-off).
+Numbered CLI mappings such as `tj 3 d` are stored in
+`~/.tjai/state.json`. They are intentionally machine-local and are not synced.
+
+## Design Boundaries
+
+- New interactive workflows should normally target the web application.
+- New LLM capabilities should normally use the standalone server-backed MCP
+  service.
+- Shared mutations should live in services or model-level operations that can
+  be used consistently by web, MCP, and automations.
+- CLI sync maintenance should favor data integrity and compatibility over new
+  distributed-system machinery.

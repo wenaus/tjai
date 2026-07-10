@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 import os
 import re
 import time
@@ -272,6 +273,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.urls import reverse
 
+from django.db import transaction
 from django.db.models import Count, Q
 from django.db.models.functions import Lower
 from django.http import Http404
@@ -418,6 +420,7 @@ def sync_push(request):
     Request body:
     {
         "machine_id": "uuid",
+        "base_sync_time": 1234567890.0,
         "entries": [...],
         "contexts": [...],
         "tags": [...],
@@ -427,7 +430,9 @@ def sync_push(request):
     Response:
     {
         "status": "ok",
-        "received": {"entries": N, "contexts": N, "tags": N, "sub_notes": N}
+        "received": {"entries": N, "contexts": N, "tags": N, "sub_notes": N},
+        "conflicts": [...],
+        "context_conflicts": [...]
     }
     """
     try:
@@ -439,48 +444,76 @@ def sync_push(request):
     if not machine_id:
         return JsonResponse({"error": "machine_id required"}, status=400)
 
-    # Update machine last_sync
+    base_sync_time = data.get("base_sync_time")
+    if (isinstance(base_sync_time, bool)
+            or not isinstance(base_sync_time, (int, float))
+            or not math.isfinite(base_sync_time)):
+        return JsonResponse(
+            {"error": "numeric base_sync_time required"}, status=400
+        )
+
     now = time.time()
-    Machine.objects.update_or_create(
-        machine_id=machine_id,
-        defaults={
-            "hostname": data.get("hostname"),
-            "ip_address": request.META.get("REMOTE_ADDR"),
-            "last_sync": now,
-            "timestamp_created": now,
-            "is_active": 1,
-        }
-    )
-
     counts = {"entries": 0, "contexts": 0, "tags": 0, "sub_notes": 0}
+    conflicts = []
+    context_conflicts = []
+    accepted_entry_ids = set()
+    accepted_entries = []
 
-    # Upsert contexts
-    for ctx in data.get("contexts", []):
-        Context.objects.update_or_create(
-            name=ctx["name"],
+    with transaction.atomic():
+        Machine.objects.update_or_create(
+            machine_id=machine_id,
             defaults={
+                "hostname": data.get("hostname"),
+                "ip_address": request.META.get("REMOTE_ADDR"),
+                "last_sync": now,
+                "timestamp_created": now,
+                "is_active": 1,
+            }
+        )
+
+        for ctx in data.get("contexts", []):
+            defaults = {
                 "title": ctx.get("title"),
                 "description": ctx.get("description"),
                 "timestamp_created": ctx["timestamp_created"],
                 "timestamp_modified": ctx.get("timestamp_modified", now),
             }
-        )
-        counts["contexts"] += 1
+            current = (
+                Context.objects.select_for_update()
+                .filter(name=ctx["name"])
+                .first()
+            )
+            if current and current.timestamp_modified > base_sync_time:
+                differs = any(
+                    getattr(current, field) != value
+                    for field, value in defaults.items()
+                    if field not in {"timestamp_created", "timestamp_modified"}
+                )
+                if differs:
+                    context_conflicts.append({
+                        "name": current.name,
+                        "server_timestamp_modified": current.timestamp_modified,
+                    })
+                    continue
+                defaults["timestamp_created"] = current.timestamp_created
+                defaults["timestamp_modified"] = current.timestamp_modified
+            Context.objects.update_or_create(
+                name=ctx["name"], defaults=defaults
+            )
+            counts["contexts"] += 1
 
-    # Upsert entries
-    for entry in data.get("entries", []):
-        # Parse data field if client sent JSON string (SQLite stores as text)
-        entry_data = entry.get("data")
-        if isinstance(entry_data, str):
-            try:
-                entry_data = json.loads(entry_data)
-            except json.JSONDecodeError as e:
-                logger.warning("Malformed JSON in entry %s data during sync: %s",
-                               entry.get("id", "?"), e)
-                entry_data = None
-        Entry.objects.update_or_create(
-            id=entry["id"],
-            defaults={
+        for entry in data.get("entries", []):
+            entry_data = entry.get("data")
+            if isinstance(entry_data, str):
+                try:
+                    entry_data = json.loads(entry_data)
+                except json.JSONDecodeError as e:
+                    logger.warning(
+                        "Malformed JSON in entry %s data during sync: %s",
+                        entry.get("id", "?"), e,
+                    )
+                    entry_data = None
+            defaults = {
                 "parent_id": entry.get("parent_id"),
                 "content": entry["content"],
                 "kind": entry["kind"],
@@ -495,58 +528,88 @@ def sync_push(request):
                 "data": entry_data,
                 "mmdd": entry.get("mmdd"),
             }
-        )
-        counts["entries"] += 1
+            current = (
+                Entry.objects.select_for_update()
+                .filter(id=entry["id"])
+                .first()
+            )
+            if current and current.timestamp_modified > base_sync_time:
+                differs = any(
+                    getattr(current, field) != value
+                    for field, value in defaults.items()
+                    if field not in {
+                        "is_dirty", "timestamp_created", "timestamp_modified"
+                    }
+                )
+                if differs:
+                    conflicts.append({
+                        "id": current.id,
+                        "server_timestamp_modified": current.timestamp_modified,
+                    })
+                    continue
+                defaults["timestamp_created"] = current.timestamp_created
+                defaults["timestamp_modified"] = current.timestamp_modified
+            if current:
+                for field, value in defaults.items():
+                    setattr(current, field, value)
+                current.save()
+            else:
+                Entry.objects.create(id=entry["id"], **defaults)
+            accepted_entry_ids.add(entry["id"])
+            accepted_entries.append(entry)
+            counts["entries"] += 1
 
-    # Replace tags for pushed (dirty) entries: delete existing, then insert new
-    # This ensures tag removals are synced properly
-    pushed_entry_ids = [e["id"] for e in data.get("entries", [])]
-    if pushed_entry_ids:
-        Tag.objects.filter(entry_id__in=pushed_entry_ids).delete()
+        if accepted_entry_ids:
+            Tag.objects.filter(entry_id__in=accepted_entry_ids).delete()
 
-    for tag in data.get("tags", []):
-        Tag.objects.create(
-            tag_name=tag["tag_name"],
-            entry_id=tag["entry_id"],
-        )
-        counts["tags"] += 1
+        for tag in data.get("tags", []):
+            if tag["entry_id"] not in accepted_entry_ids:
+                continue
+            Tag.objects.create(
+                tag_name=tag["tag_name"],
+                entry_id=tag["entry_id"],
+            )
+            counts["tags"] += 1
 
-    # Auto-tag bookmarks arriving via sync
-    from .tagger import tag_bookmark
-    for entry in data.get("entries", []):
-        if entry["kind"] == "bookmark" and not entry.get("deleted_at"):
-            try:
+        from .tagger import tag_bookmark
+        for entry in accepted_entries:
+            if entry["kind"] == "bookmark" and not entry.get("deleted_at"):
                 tag_bookmark(Entry.objects.get(id=entry["id"]))
-            except Entry.DoesNotExist:
-                logger.warning("tag_bookmark: entry %s not found after sync upsert",
-                               entry["id"])
 
-    # Upsert sub_notes
-    for note in data.get("sub_notes", []):
-        note_data = note.get("data")
-        if isinstance(note_data, str):
-            try:
-                note_data = json.loads(note_data)
-            except json.JSONDecodeError as e:
-                logger.warning("Malformed JSON in sub_note %s data during sync: %s",
-                               note.get("id", "?"), e)
-                note_data = None
-        SubNote.objects.update_or_create(
-            id=note["id"],
-            defaults={
-                "parent_id": note["parent_id"],
-                "content": note["content"],
-                "timestamp_created": note["timestamp_created"],
-                "data": note_data,
-            }
-        )
-        counts["sub_notes"] += 1
+        for note in data.get("sub_notes", []):
+            if note["parent_id"] not in accepted_entry_ids:
+                continue
+            note_data = note.get("data")
+            if isinstance(note_data, str):
+                try:
+                    note_data = json.loads(note_data)
+                except json.JSONDecodeError as e:
+                    logger.warning(
+                        "Malformed JSON in sub_note %s data during sync: %s",
+                        note.get("id", "?"), e,
+                    )
+                    note_data = None
+            SubNote.objects.update_or_create(
+                id=note["id"],
+                defaults={
+                    "parent_id": note["parent_id"],
+                    "content": note["content"],
+                    "timestamp_created": note["timestamp_created"],
+                    "data": note_data,
+                }
+            )
+            counts["sub_notes"] += 1
 
-    if counts["tags"] > 0:
-        from .tag_stats import rebuild_tag_stats
-        rebuild_tag_stats()
+        if counts["tags"] > 0:
+            from .tag_stats import rebuild_tag_stats
+            rebuild_tag_stats()
 
-    return JsonResponse({"status": "ok", "received": counts})
+    return JsonResponse({
+        "status": "ok",
+        "received": counts,
+        "conflicts": conflicts,
+        "context_conflicts": context_conflicts,
+    })
 
 
 SYNC_BATCH_SIZE = 500

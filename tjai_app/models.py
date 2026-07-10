@@ -1,7 +1,8 @@
 import logging
 
 from django.contrib.postgres.search import SearchVectorField
-from django.db import models
+from django.db import connection, models, transaction
+from django.db.models import Max
 
 
 class Context(models.Model):
@@ -232,22 +233,43 @@ class EntryVersion(models.Model):
         indexes = [
             models.Index(fields=['entry', '-timestamp'], name='idx_entryver_entry_ts'),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['entry', 'version_num'],
+                name='unique_entry_version_num',
+            ),
+        ]
+
+
+def create_entry_version(entry, changed_by='unknown'):
+    """Create the next version while serializing allocation per entry."""
+    import time as _time
+
+    with transaction.atomic():
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                [str(entry.pk)],
+            )
+        max_num = (
+            EntryVersion.objects.filter(entry_id=entry.pk)
+            .aggregate(Max('version_num'))['version_num__max']
+            or 0
+        )
+        return EntryVersion.objects.create(
+            entry_id=entry.pk,
+            version_num=max_num + 1,
+            content=entry.content,
+            data=entry.data,
+            changed_by=changed_by,
+            timestamp=_time.time(),
+        )
 
 
 def snapshot_entry(entry, changed_by='unknown'):
     """Snapshot an entry's current state into the version history.
     Call before any operation that modifies or deletes content."""
-    import time as _time
-    from django.db.models import Max
-    max_num = EntryVersion.objects.filter(entry_id=entry.pk).aggregate(Max('version_num'))['version_num__max'] or 0
-    EntryVersion.objects.create(
-        entry_id=entry.pk,
-        version_num=max_num + 1,
-        content=entry.content,
-        data=entry.data,
-        changed_by=changed_by,
-        timestamp=_time.time(),
-    )
+    return create_entry_version(entry, changed_by)
 
 
 class SysConfig(models.Model):

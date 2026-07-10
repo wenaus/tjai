@@ -88,11 +88,11 @@ def write_status(last_push: float = None, last_pull: float = None,
 PUSH_BATCH_SIZE = 500
 
 
-def push_dirty_entries() -> int:
+def push_dirty_entries() -> tuple[int, set[str], set[str]]:
     """
     Push dirty entries to server in batches.
 
-    Returns total count of entries pushed.
+    Returns the accepted entry count and stale entry/context identifiers.
     """
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -114,11 +114,14 @@ def push_dirty_entries() -> int:
 
     if not all_entries:
         write_status(entries_pending=0)
-        return 0
+        return 0, set(), set()
 
     machine_id = get_machine_id()
     location_name = get_location_name()
     total_pushed = 0
+    conflict_ids = set()
+    context_conflict_names = set()
+    base_sync_time = get_last_sync_time()
 
     # Push in batches
     for batch_start in range(0, len(all_entries), PUSH_BATCH_SIZE):
@@ -166,16 +169,33 @@ def push_dirty_entries() -> int:
             contexts=contexts,
             tags=tags,
             sub_notes=sub_notes,
+            base_sync_time=base_sync_time,
         )
 
         if response.get("status") == "ok":
-            # Mark batch as clean
-            cursor.execute(
-                f"UPDATE entries SET is_dirty = 0 WHERE id IN ({placeholders})",
-                entry_ids
-            )
+            batch_conflicts = {
+                conflict["id"] for conflict in response.get("conflicts", [])
+            }
+            batch_context_conflicts = {
+                conflict["name"]
+                for conflict in response.get("context_conflicts", [])
+            }
+            accepted_ids = [
+                entry["id"] for entry in entries
+                if entry["id"] not in batch_conflicts
+                and entry.get("context") not in batch_context_conflicts
+            ]
+            if accepted_ids:
+                accepted_placeholders = ",".join("?" * len(accepted_ids))
+                cursor.execute(
+                    f"UPDATE entries SET is_dirty = 0 "
+                    f"WHERE id IN ({accepted_placeholders})",
+                    accepted_ids,
+                )
             conn.commit()
-            total_pushed += len(entries)
+            conflict_ids.update(batch_conflicts)
+            context_conflict_names.update(batch_context_conflicts)
+            total_pushed += len(accepted_ids)
             remaining = len(all_entries) - batch_start - len(entries)
             if remaining > 0:
                 logger.info(f"Pushed batch of {len(entries)} entries, {remaining} remaining...")
@@ -186,7 +206,7 @@ def push_dirty_entries() -> int:
     if total_pushed:
         logger.info(f"Pushed {total_pushed} entries total")
     write_status(last_push=time.time(), entries_pending=len(all_entries) - total_pushed)
-    return total_pushed
+    return total_pushed, conflict_ids, context_conflict_names
 
 
 def _merge_batch(cursor, response) -> int:
@@ -329,8 +349,22 @@ def pull_updates() -> int:
 def sync_cycle() -> dict:
     """Run one sync cycle: push then pull. Returns sysconfig dict."""
     try:
-        push_dirty_entries()
+        base_sync_time = get_last_sync_time()
+        _pushed, conflict_ids, context_conflict_names = push_dirty_entries()
         _count, sysconfig = pull_updates()
+        conflicts = []
+        if conflict_ids:
+            conflicts.append("entries: " + ", ".join(sorted(conflict_ids)))
+        if context_conflict_names:
+            conflicts.append(
+                "contexts: " + ", ".join(sorted(context_conflict_names))
+            )
+        if conflicts:
+            # Keep the edit baseline until the stale local state is resolved.
+            # Otherwise the next pull's timestamp would make a later retry look
+            # current and allow it to overwrite the server.
+            set_last_sync_time(base_sync_time)
+            write_status(last_error="Sync rejected stale local " + "; ".join(conflicts))
         return sysconfig
     except Exception as e:
         logger.error(f"Sync error: {e}")

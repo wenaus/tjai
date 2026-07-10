@@ -68,8 +68,9 @@ already have the variable in its environment. The value matches the server's
 ### Push (local → server)
 
 1. Query local SQLite for entries where `is_dirty = 1`
-2. POST to `https://etaverse.com/tjai/api/sync/push`
-3. On success, set `is_dirty = 0` for pushed entries
+2. POST the entries and the last completed pull time to `https://etaverse.com/tjai/api/sync/push`
+3. The server applies the batch transactionally and reports stale conflicts
+4. Set `is_dirty = 0` only for entries the server accepted
 
 ### Pull (server → local)
 
@@ -105,16 +106,19 @@ Set via: `tj admin agent interval 30`
 
 This calls `/api/command` endpoint using stdlib `urllib.request` (no dependencies).
 
-## Conflict Avoidance
+## Conflict Handling
 
-**Strategy: Last-Write-Wins with Local Priority**
+PostgreSQL is authoritative. Each push states the server sync time on which the
+local edits were based. If an existing server entry changed after that baseline
+and differs from the submitted state, the server rejects that entry without
+changing its tags or subnotes. The local entry remains dirty and agent status
+reports its ID for manual resolution. TJAI does not auto-merge conflicts.
 
-On pull, when merging server data:
-- If local entry has `is_dirty = 1`, skip server version
-- If local `timestamp_modified >= server timestamp_modified`, skip
-- Otherwise, upsert server version
+An exact retry is accepted when the submitted state already matches the server,
+which handles a lost success response without creating a false conflict.
 
-Single user + fast sync = conflicts are rare.
+On pull, dirty or newer local entries are skipped so the unresolved local text
+remains available. Other server updates continue to sync normally.
 
 ## Daemon Lifecycle
 

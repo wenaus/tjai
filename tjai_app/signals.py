@@ -1,11 +1,10 @@
 """Pre-save signal to snapshot entry state before modification."""
 import contextvars
-import time
 
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
 
-from .models import Entry, EntryVersion
+from .models import Entry, create_entry_version
 
 # Thread-safe context variable for changed_by attribution
 _changed_by_var = contextvars.ContextVar('changed_by', default='web_ui')
@@ -55,13 +54,4 @@ def snapshot_entry_before_save(sender, instance, **kwargs):
     # first_autosave: fall through to create version (pre-edit snapshot)
     # web_ui: fall through to create version (manual save)
 
-    from django.db.models import Max
-    max_num = EntryVersion.objects.filter(entry_id=old.pk).aggregate(Max('version_num'))['version_num__max'] or 0
-    EntryVersion.objects.create(
-        entry_id=old.pk,
-        version_num=max_num + 1,
-        content=old.content,
-        data=old.data,
-        changed_by=changed_by,
-        timestamp=time.time(),
-    )
+    create_entry_version(old, changed_by)
