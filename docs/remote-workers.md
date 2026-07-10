@@ -18,7 +18,11 @@ There is no inbound connection to the worker, no fixed worker registry, and no a
 
 ## Trust model
 
-`/api/worker/poll` and `/api/worker/result` are `@csrf_exempt` and have **no authentication** — anyone who can reach them can claim staged work and POST a result that becomes the topic's content. This is intentional and matches the existing `sync_push`/`sync_pull` pattern: tjai assumes a trusted network and treats the server URL itself as the secret. If the server is ever exposed beyond Torre's machines, the first hardening step is a bearer token on these four endpoints; nothing else in the protocol depends on the missing auth.
+`/api/worker/poll`, `/api/worker/result`, and the external `/api/work/*`
+endpoints require the shared REST bearer (`TJAI_API_KEY`, backed by the server's
+`SysConfig.gmail_addon_api_key`). The same authentication protects sync and
+command endpoints. Authenticated Django sessions and direct, unproxied loopback
+calls are also accepted; Apache-proxied public traffic must carry the bearer.
 
 ## Components
 
@@ -538,7 +542,7 @@ The worker reads two secrets from environment variables on startup:
 | Env var | Purpose | Required for |
 |---|---|---|
 | `GITHUB_PERSONAL_ACCESS_TOKEN` | Passed to `github-mcp-server` (which reads it from its own env) so it can authenticate to api.github.com | github MCP tools — server is skipped if missing |
-| `TJAI_API_KEY` | Bearer token for the worker's POSTs to `/api/log`. Same value as the server's SysConfig `gmail_addon_api_key`. | Per-prompt central logging — silently no-ops if missing |
+| `TJAI_API_KEY` | REST bearer matching server SysConfig `gmail_addon_api_key` | Worker polling, result POSTs, and per-prompt central logging |
 
 These are loaded from `~/.tjai/env` (a chmod-600 file outside the repo, outside Dropbox) by `~/.tjai/run_agent.sh` (a wrapper script that sources the env file and execs the venv python). The launchd plist `~/Library/LaunchAgents/com.tj_agent.plist` invokes the wrapper rather than python directly. None of these three files (env, wrapper, plist) is in the repo — they are per-machine local state.
 
@@ -612,7 +616,7 @@ Things that can go wrong and what the system does about them.
 | **MCP server fails to launch** (binary missing, token missing, subprocess error) | The dispatcher logs `WARNING ...mcp_tool_dispatcher: <server> ...; skipping`. Worker keeps running with whatever subset of MCP servers came up. If all fail, the worker proceeds with `tools=[]` — agent loop collapses to single-shot inference. No work is rejected. | Fix the server-specific cause (install binary, set env var, etc.) and bootout/bootstrap the launchd job. |
 | **MCP `call_tool` raises during the agent loop** | The exception is caught per-tool, the error text is fed back to the model as the tool result (`TOOL ERROR: <ExceptionType>: <message>`). The model can choose to retry, try a different tool, or give up and answer in text. The work item completes normally. | None — this is by design. The model gets to see and react to tool failures. |
 | **Worker posts to `/api/log` and the call fails** | Logged locally as a warning; work processing continues unaffected. No retry. | None — central logging is best-effort by design; the local agent.log line is the source of truth. |
-| **`TJAI_API_KEY` not set in `~/.tjai/env`** | `_post_log_sync` silently no-ops on every event. No central logging happens. The worker still works normally. | Add the key to `~/.tjai/env` and bootout/bootstrap. |
+| **`TJAI_API_KEY` not set in `~/.tjai/env`** | Worker poll/result requests fail with `401`; central logging also stops. | Add the key to `~/.tjai/env` and bootout/bootstrap. |
 
 ## Stopping a worker cleanly
 
@@ -816,6 +820,9 @@ curl -s -o /tmp/r.json -w 'HTTP %{http_code} %{time_total}s\n' \
   'http://127.0.0.1:8002/tjai/api/worker/poll?machine_id=test-machine&capabilities=gemma4'
 cat /tmp/r.json
 ```
+
+The direct loopback request is trusted. When testing through the public URL,
+add `Authorization: Bearer $TJAI_API_KEY`.
 
 Note: doing this with the **real** Mac's `machine_id` will steal the claim from the real worker. The Mac's next poll will free-capacity-reset the claim and re-claim cleanly, but the test will briefly show two workers fighting over the same entry. Use a different `machine_id` for safe testing.
 

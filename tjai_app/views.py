@@ -276,6 +276,7 @@ from django.db.models import Count, Q
 from django.db.models.functions import Lower
 from django.http import Http404
 from django.conf import settings as django_settings
+from .api_auth import rest_api_auth_required
 from .models import AppLog, Context, Entry, KozyChat, Relation, RssItem, Tag, TagStats, SubNote, Machine, SysConfig
 
 
@@ -409,6 +410,7 @@ def api_health(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@rest_api_auth_required
 def sync_push(request):
     """
     Receive dirty entries from a client and upsert into server database.
@@ -552,6 +554,7 @@ SYNC_BATCH_SIZE = 500
 
 @csrf_exempt
 @require_http_methods(["GET"])
+@rest_api_auth_required
 def sync_pull(request):
     """
     Return entries modified since a given timestamp, paginated.
@@ -630,10 +633,13 @@ def sync_pull(request):
         )
     )
 
-    # Get all sysconfig (always returned, small table)
+    # Sync clients consume only this setting. Never replicate credentials or
+    # unrelated server control state into every local cache.
     sysconfig = {
         cfg["key"]: cfg["value"]
-        for cfg in SysConfig.objects.values("key", "value")
+        for cfg in SysConfig.objects.filter(
+            key__in={"sync_interval_seconds"}
+        ).values("key", "value")
     }
 
     return JsonResponse({
@@ -756,6 +762,7 @@ def _claim_worker_entry(machine_id, capabilities):
 
 @csrf_exempt
 @require_http_methods(["GET"])
+@rest_api_auth_required
 def worker_poll(request):
     """Long-polling work dispatch for remote inference workers.
 
@@ -895,6 +902,7 @@ def worker_poll(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@rest_api_auth_required
 def worker_result(request):
     """Receive result from a remote worker and finalize the entry.
 
@@ -1009,6 +1017,7 @@ def worker_result(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@rest_api_auth_required
 def api_work_submit(request):
     """External job submission for the remote-worker pipeline.
 
@@ -1095,6 +1104,7 @@ def api_work_submit(request):
 
 @csrf_exempt
 @require_http_methods(["GET", "DELETE"])
+@rest_api_auth_required
 def api_work_result(request, entry_uuid):
     """Poll for / dispose of an externally-submitted work entry.
 
@@ -1171,14 +1181,13 @@ def api_work_result(request, entry_uuid):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@rest_api_auth_required
 def api_command(request):
     """
     Execute a command on the server.
 
-    No @login_required by design. The `tj` CLI/daemon (tj/server.py
-    send_command) POSTs here with no credential for set_sysconfig /
-    get_sysconfig (sync interval, run-action state). Adding @login_required
-    breaks the CLI.
+    Browser callers use their Django session. CLI and hook callers use the
+    shared REST bearer token.
 
     Request body:
     {
@@ -1211,6 +1220,11 @@ def api_command(request):
         value = data.get("value")
         if not key or value is None:
             return JsonResponse({"error": "key and value required"}, status=400)
+        if key in {"gmail_addon_api_key", "mcp_bearer_token"}:
+            return JsonResponse(
+                {"error": "Credential keys cannot be changed through this API"},
+                status=403,
+            )
 
         SysConfig.objects.update_or_create(
             key=key,
@@ -1224,7 +1238,9 @@ def api_command(request):
     elif command == "get_sysconfig":
         sysconfig = {
             cfg["key"]: cfg["value"]
-            for cfg in SysConfig.objects.values("key", "value")
+            for cfg in SysConfig.objects.exclude(
+                key__in={"gmail_addon_api_key", "mcp_bearer_token"}
+            ).values("key", "value")
         }
         return JsonResponse({"status": "ok", "result": sysconfig})
 
@@ -1233,6 +1249,11 @@ def api_command(request):
         field = data.get("field")
         if not key or not field:
             return JsonResponse({"error": "key and field required"}, status=400)
+        if key in {"gmail_addon_api_key", "mcp_bearer_token"}:
+            return JsonResponse(
+                {"error": "Credential keys cannot be changed through this API"},
+                status=403,
+            )
         sc, _ = SysConfig.objects.get_or_create(
             key=key, defaults={"value": "{}", "timestamp_modified": time.time()})
         try:
@@ -1251,6 +1272,7 @@ def api_command(request):
 
 @csrf_exempt
 @require_http_methods(["DELETE"])
+@rest_api_auth_required
 def api_delete_entry(request, entry_id):
     """
     Soft delete an entry by ID.
@@ -1308,6 +1330,7 @@ def api_delete_entry(request, entry_id):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@rest_api_auth_required
 def api_archive_entry(request, entry_id):
     """Archive an entry by setting status='archive', including from Trash."""
     try:
@@ -1351,6 +1374,7 @@ def api_archive_entry(request, entry_id):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@rest_api_auth_required
 def api_restore_entry(request, entry_id):
     """Restore a trashed entry to the normal dashboard."""
     entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=False).first()
@@ -1379,6 +1403,7 @@ def api_restore_entry(request, entry_id):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@rest_api_auth_required
 def api_empty_trash(request):
     """Permanently delete all entries already in Trash."""
     trashed = list(Entry.objects.filter(deleted_at__isnull=False).only('id'))

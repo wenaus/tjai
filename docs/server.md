@@ -76,13 +76,22 @@ cd /home/admin/github/tjrepo/tjai
 | Path | Auth | Description |
 |------|------|-------------|
 | `/tjai/api/health` | — | Health check |
-| `/tjai/api/sync/push` | — | Push dirty entries from client |
-| `/tjai/api/sync/pull` | — | Pull updates (paginated, 500/batch) |
+| `/tjai/api/sync/push` | REST bearer | Push dirty entries from client |
+| `/tjai/api/sync/pull` | REST bearer | Pull updates (paginated, 500/batch) |
+| `/tjai/api/worker/poll` | REST bearer | Claim remote-worker jobs |
+| `/tjai/api/worker/result` | REST bearer | Complete remote-worker jobs |
+| `/tjai/api/work/*` | REST bearer | Submit, inspect, and dispose of external work |
 | `/tjai/api/bulk-import` | Bearer | Bulk import bookmarks |
 | `/tjai/api/add-bookmark` | Bearer | Single bookmark (Chrome extension) |
 | `/tjai/api/add-journal` | Bearer | Journal entry (Gmail add-on) |
 | `/tjai/api/dialog` | Bearer | Claude Code dialog turns GET/POST |
-| `/tjai/api/command` | — | Server commands (sysconfig) |
+| `/tjai/api/command` | REST bearer or session | Server commands (sysconfig) |
+
+The REST bearer is `TJAI_API_KEY`, whose server-side value is stored in
+`SysConfig.gmail_addon_api_key`. Direct, unproxied loopback calls are trusted so
+same-host services can use the control plane without routing a secret through
+their local process configuration. Apache-proxied requests are never treated as
+loopback because they carry `X-Forwarded-For`.
 
 ## Application Logging
 

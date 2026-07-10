@@ -7,6 +7,7 @@ import urllib.error
 from typing import Any
 
 from tj.config import get_config
+from tj.server import api_headers
 
 
 def get_sync_server() -> str:
@@ -36,7 +37,7 @@ def push(machine_id: str, hostname: str, entries: list, contexts: list,
     req = urllib.request.Request(
         url,
         data=data,
-        headers={"Content-Type": "application/json"},
+        headers=api_headers(json_content=True),
         method="POST"
     )
 
@@ -61,7 +62,7 @@ def pull(machine_id: str, since: float, after_id: str = "") -> dict[str, Any]:
     if after_id:
         url += f"&after_id={after_id}"
 
-    req = urllib.request.Request(url, method="GET")
+    req = urllib.request.Request(url, headers=api_headers(), method="GET")
 
     try:
         with urllib.request.urlopen(req, timeout=30) as response:
@@ -87,7 +88,7 @@ def worker_poll(machine_id: str, capabilities: list[str],
     url = (f"{get_sync_server()}/api/worker/poll"
            f"?machine_id={urllib.parse.quote(machine_id)}"
            f"&capabilities={urllib.parse.quote(caps)}")
-    req = urllib.request.Request(url, method="GET")
+    req = urllib.request.Request(url, headers=api_headers(), method="GET")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
@@ -157,7 +158,7 @@ def worker_result(machine_id: str, entry_id: str, status: str,
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         url, data=data,
-        headers={"Content-Type": "application/json"},
+        headers=api_headers(json_content=True),
         method="POST",
     )
     try:

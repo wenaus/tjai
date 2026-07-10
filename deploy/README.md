@@ -71,8 +71,10 @@ ProxyPassReverse /tjai/mcp  http://127.0.0.1:8003/
 curl -s https://etaverse.com/tjai/api/health
 # Should return: {"status": "ok"}
 
-# Sync pull (empty DB)
-curl -s "https://etaverse.com/tjai/api/sync/pull?since=0"
+# Authenticated sync probe without returning entry content
+source ~/.env
+curl -s -H "Authorization: Bearer $TJAI_API_KEY" \
+  "https://etaverse.com/tjai/api/sync/pull?since=9999999999"
 
 # MCP ASGI health check, local only
 curl -s http://127.0.0.1:8003/health
@@ -81,8 +83,8 @@ curl -s http://127.0.0.1:8003/health
 ## API Endpoints
 
 - `GET /tjai/api/health` - Health check
-- `POST /tjai/api/sync/push` - Push entries from client
-- `GET /tjai/api/sync/pull?since=<timestamp>` - Pull entries modified since timestamp
+- `POST /tjai/api/sync/push` - Push entries from client (REST bearer required)
+- `GET /tjai/api/sync/pull?since=<timestamp>` - Pull entries modified since timestamp (REST bearer required)
 
 ## Log Files
 

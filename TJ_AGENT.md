@@ -57,6 +57,14 @@ Colors:
 
 ## Sync Protocol
 
+### Authentication
+
+Sync, command, and remote-worker requests send `Authorization: Bearer` with
+`TJAI_API_KEY` (or the compatible `TJAI_GMAIL_ADDON_API_KEY` name). Put the key
+in `~/.env`; the stdlib client loads that file when the daemon process does not
+already have the variable in its environment. The value matches the server's
+`SysConfig` row `gmail_addon_api_key`.
+
 ### Push (local → server)
 
 1. Query local SQLite for entries where `is_dirty = 1`
@@ -149,12 +157,12 @@ tjai/
 
 ## Server API
 
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/api/health` | GET | Health check |
-| `/api/sync/push` | POST | Push dirty entries |
-| `/api/sync/pull` | GET | Pull updates + sysconfig (paginated, 500/batch) |
-| `/api/command` | POST | Execute commands (set_sysconfig, get_sysconfig) |
+| Endpoint | Method | Auth | Purpose |
+|----------|--------|------|---------|
+| `/api/health` | GET | None | Health check |
+| `/api/sync/push` | POST | REST bearer | Push dirty entries |
+| `/api/sync/pull` | GET | REST bearer | Pull updates + client-safe sysconfig (paginated, 500/batch) |
+| `/api/command` | POST | REST bearer | Execute commands (set_sysconfig, get_sysconfig) |
 
 ## Server Deployment (ec2dev)
 

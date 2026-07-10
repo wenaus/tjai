@@ -1,12 +1,55 @@
 """Server API client using urllib (no external dependencies)."""
 
 import json
+import os
+from functools import lru_cache
+from pathlib import Path
+import subprocess
 import traceback
 import urllib.request
 import urllib.error
 
 # Default server URL
 DEFAULT_SERVER = "https://etaverse.com/tjai"
+
+
+@lru_cache(maxsize=1)
+def get_api_key() -> str:
+    """Load the REST bearer from the process or the standard shell env file."""
+    token = os.environ.get("TJAI_API_KEY") or os.environ.get(
+        "TJAI_GMAIL_ADDON_API_KEY"
+    )
+    if token:
+        return token
+
+    env_file = Path.home() / ".env"
+    if env_file.exists():
+        result = subprocess.run(
+            [
+                "/bin/bash",
+                "-c",
+                'source "$HOME/.env" >/dev/null 2>&1; '
+                'printf %s "${TJAI_API_KEY:-${TJAI_GMAIL_ADDON_API_KEY:-}}"',
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout:
+            return result.stdout
+
+    raise RuntimeError(
+        "TJAI_API_KEY or TJAI_GMAIL_ADDON_API_KEY is required in the "
+        "environment or ~/.env"
+    )
+
+
+def api_headers(*, json_content: bool = False) -> dict[str, str]:
+    headers = {"Authorization": f"Bearer {get_api_key()}"}
+    if json_content:
+        headers["Content-Type"] = "application/json"
+    return headers
 
 
 def get_server_url() -> str:
@@ -41,7 +84,7 @@ def send_command(command: str, **kwargs) -> dict:
     req = urllib.request.Request(
         url,
         data=data,
-        headers={"Content-Type": "application/json"},
+        headers=api_headers(json_content=True),
         method="POST"
     )
 
