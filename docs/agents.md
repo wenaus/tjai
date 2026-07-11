@@ -80,11 +80,11 @@ An AI-driven news curation system that researches tech/science/culture sources o
 
 ### How It Works
 
-1. An AI agent researches configured sources (The Register, Ars Technica, HN, Nature, CERN, ArXiv, NVIDIA, AWS, GitHub, Reddit, etc.)
-2. Creates ~30 bookmark entries per run in the `picks` context, each with precis and rationale
-3. The Picks page (`/tjai/picks/`) presents them grouped by run for triage
+1. `prepare_picks_candidates.py` mechanically gathers recent RSS items and configured-source links, removes URLs already present in Picks, preserves source diversity, and writes a bounded candidate file.
+2. One Codex pass judges that file against the user profile. It may verify only a small finalist set on the web, then creates the selected bookmark entries with precis and rationale.
+3. The Picks page (`/tjai/picks/`) presents them grouped by run for triage.
 
-**Sources:** Defined in a tjai entry (`picks-sources`, editable via the Sources link on the Picks page). The agent reads this before each run.
+**Sources:** Defined in a tjai entry (`picks-sources`, editable via the Sources link on the Picks page). Candidate preparation also uses recent items already collected by the RSS reader. The model does not crawl every source itself.
 
 ### Picks Page (`/tjai/picks/`)
 
@@ -130,6 +130,7 @@ Entry(
 
 - `tjai_app/views.py` — `picks`, `api_picks_data`, `api_picks_update`, `api_picks_archive_run`, `readme_page`, `api_readme_data`, `api_readme_dismiss`
 - `tjai_app/templates/tjai_app/picks.html`, `readme.html`
+- `scripts/prepare_picks_candidates.py` — bounded candidate collection and URL deduplication before model dispatch
 
 ---
 

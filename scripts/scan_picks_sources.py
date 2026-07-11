@@ -18,7 +18,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
-import bootstrap  # noqa: F401 - Django setup
+try:
+    import bootstrap  # noqa: F401 - Django setup
+except ModuleNotFoundError:
+    from scripts import bootstrap  # noqa: F401 - imported from package in tests
 
 from tjai_app.models import Entry
 
