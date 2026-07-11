@@ -109,7 +109,9 @@ The action agent and subsystems log to stdout (supervisord) and the database (Ap
 
 Real-time dashboard at `/tjai/system/` with auto-refresh.
 
-**Monitors:** system (uptime, load, memory, disk), PostgreSQL (connections, cache hit, DB size), tjai (entry counts, agent status, action schedules with real-time tracking), backups (freshness, file presence, dump size), Dropbox (auto-restart if down), processes (Apache, CloudWatch, agents), CloudWatch (24h CPU, memory/swap/disk trends).
+**Monitors:** system (uptime, load, memory, disk), PostgreSQL (connections, cache hit, DB size), tjai (entry counts, agent status, action schedules with real-time tracking), TJAI-launched Codex subscription usage (24h/7d tokens, per-action averages, timeouts, and missing reports), backups (freshness, file presence, dump size), Dropbox (auto-restart if down), processes (Apache, CloudWatch, agents), CloudWatch (24h CPU, memory/swap/disk trends).
+
+Codex accounting is process-level and forward-looking. Each TJAI-launched subscription Codex process writes one `source=llm_usage`, `event=llm_usage` AppLog row. A missing Codex token footer is recorded as `usage_reported=false`, not zero. Interactive Codex sessions and API-billed providers are outside this accounting block.
 
 **Health banner:** Green (normal), Yellow (load > 2x CPUs, memory < 20%, disk > 80%, backup > 1 day), Red (load > 3x CPUs, memory < 10%, disk > 90%, agents down, no backups).
 

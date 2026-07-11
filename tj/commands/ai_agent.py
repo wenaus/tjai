@@ -462,7 +462,15 @@ def _launch_codex(codex_path: str, system_prompt: str, prompt: str, entry_id: st
 
     if action_id:
         scripts_dir = Path(__file__).resolve().parent.parent.parent / 'scripts'
-        completion_cmd = f'{sys.executable} {scripts_dir}/agent_complete.py {shlex.quote(action_id)}'
+        completion_cmd = shlex.join([
+            sys.executable,
+            str(scripts_dir / 'agent_complete.py'),
+            action_id,
+        ])
+        usage_args = shlex.join([
+            'codex', model, 'xhigh' if effort == 'max' else effort,
+            'subscription',
+        ])
         codex_cmd = shlex.join(cmd)
         if timeout_secs > 0:
             codex_cmd = f'timeout {timeout_secs} {codex_cmd}'
@@ -470,7 +478,7 @@ def _launch_codex(codex_path: str, system_prompt: str, prompt: str, entry_id: st
             f'ERRFILE=$(mktemp /tmp/tjai-agent-XXXXXX.err) ; '
             f'{codex_cmd} < {shlex.quote(prompt_file)} >"$ERRFILE" 2>&1 ; '
             f'CODE=$? ; '
-            f'{completion_cmd} $CODE "$ERRFILE" ; '
+            f'{completion_cmd} $CODE "$ERRFILE" {usage_args} ; '
             f'rm -rf {shlex.quote(work_dir)}'
         )
         subprocess.Popen(

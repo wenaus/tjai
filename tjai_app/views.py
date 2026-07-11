@@ -280,6 +280,7 @@ from django.http import Http404
 from django.conf import settings as django_settings
 from .api_auth import rest_api_auth_required
 from .models import AppLog, Context, Entry, KozyChat, Relation, RssItem, Tag, TagStats, SubNote, Machine, SysConfig
+from .llm_usage import summarize_codex_usage
 
 
 AGENT_GRACE_SECONDS = 300  # 5 min — never touch an agent younger than this
@@ -7628,6 +7629,24 @@ def api_system_data(request):
     except Exception as e:
         cron_jobs = [{'schedule': '', 'script': 'ERROR', 'description': str(e)}]
     data['cron'] = cron_jobs
+
+    # TJAI-launched subscription Codex usage. AppLog is the source of truth;
+    # this endpoint only aggregates the structured process-completion events.
+    from django.utils import timezone as usage_tz
+    usage_now = usage_tz.now()
+    usage_rows = AppLog.objects.filter(
+        source='llm_usage',
+        timestamp__gte=usage_now - timedelta(days=7),
+        extra_data__event='llm_usage',
+        extra_data__runner='codex',
+        extra_data__billing='subscription',
+    ).values('timestamp', 'extra_data')
+    usage_events = []
+    for row in usage_rows:
+        event = dict(row['extra_data'] or {})
+        event['timestamp'] = row['timestamp']
+        usage_events.append(event)
+    data['codex_usage'] = summarize_codex_usage(usage_events, usage_now)
 
     return JsonResponse(data)
 

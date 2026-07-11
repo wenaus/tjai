@@ -432,6 +432,37 @@
                 html += '</div>';
             }
 
+            // TJAI-launched subscription Codex usage
+            const cu = data.codex_usage || {};
+            const cuWindows = cu.windows || {};
+            const cu24 = cuWindows['24h'] || {};
+            const cu7 = cuWindows['7d'] || {};
+            html += '<div class="section"><div class="section-title">Codex Subscription Usage — TJAI Automation <a href="/tjai/agent-log/?ref=llm_usage" style="color:#90caf9;font-weight:normal;font-size:11px">logs</a></div>';
+            if (!cu7.runs) {
+                html += '<div style="color:#8a8a8a">No structured Codex runs recorded in the last 7 days.</div>';
+            } else {
+                const usageNote = (w) => {
+                    let parts = [`${fmt(w.runs || 0)} runs`, `${fmt(w.total_tokens || 0)} reported tokens`];
+                    if (w.avg_tokens !== null && w.avg_tokens !== undefined) parts.push(`${fmt(w.avg_tokens)} avg/reported run`);
+                    if (w.timeouts) parts.push(`<span class="metric-crit">${fmt(w.timeouts)} timeout${w.timeouts === 1 ? '' : 's'}</span>`);
+                    if (w.unreported_runs) parts.push(`<span class="metric-warn">${fmt(w.unreported_runs)} usage unreported</span>`);
+                    return parts.join(' · ');
+                };
+                html += '<div class="metric-grid">';
+                html += metric('Last 24h', usageNote(cu24));
+                html += metric('Last 7d', usageNote(cu7));
+                html += '</div>';
+                if (cu.actions && cu.actions.length > 0) {
+                    html += '<table style="margin-top:12px"><tr><th>Action</th><th>Model / Effort</th><th style="text-align:right">24h Runs</th><th style="text-align:right">24h Tokens</th><th style="text-align:right">7d Runs</th><th style="text-align:right">7d Tokens</th><th style="text-align:right">7d Avg</th><th style="text-align:right">Missing / Timeouts</th></tr>';
+                    for (const row of cu.actions) {
+                        const missingClass = row['7d'].unreported_runs || row['7d'].timeouts ? 'metric-warn' : '';
+                        html += `<tr><td>${esc(row.action_id)}</td><td>${esc(row.model)} / ${esc(row.effort)}</td><td class="num">${fmt(row['24h'].runs)}</td><td class="num">${fmt(row['24h'].total_tokens)}</td><td class="num">${fmt(row['7d'].runs)}</td><td class="num">${fmt(row['7d'].total_tokens)}</td><td class="num">${row['7d'].avg_tokens == null ? '-' : fmt(row['7d'].avg_tokens)}</td><td class="num ${missingClass}">${fmt(row['7d'].unreported_runs)} / ${fmt(row['7d'].timeouts)}</td></tr>`;
+                    }
+                    html += '</table>';
+                }
+            }
+            html += '</div>';
+
             // Web Apps section
             const wa = data.web_apps || {};
             html += '<div class="section"><div class="section-title">Web Apps (epic-devcloud)</div>';

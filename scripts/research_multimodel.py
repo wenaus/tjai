@@ -25,6 +25,7 @@ from contextlib import AsyncExitStack
 import bootstrap  # noqa: F401 - Django setup
 
 from tjai_app.db_log_handler import DbLogHandler
+from tjai_app.llm_usage import record_codex_usage
 from tjai_app.action_runner import (
     build_research_prompt,
     load_reader_context,
@@ -219,7 +220,7 @@ def _call_gemini(prompt, initial_tier='flex'):
     )
 
 
-def _call_subscription_codex(prompt):
+def _call_subscription_codex(prompt, entry_uuid=None):
     """Run the Codex research peer through the authenticated subscription."""
     from tj.commands.ai_agent import _find_codex, _toml_literal
 
@@ -256,15 +257,47 @@ def _call_subscription_codex(prompt):
         ])
         env.pop('OPENAI_API_KEY', None)
         env.pop('CODEX_API_KEY', None)
-        proc = subprocess.run(
-            cmd,
-            input=prompt,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=API_TIMEOUT,
-            cwd=work_dir,
-            env=env,
+        started = time.monotonic()
+        proc = None
+        captured_output = ''
+        try:
+            proc = subprocess.run(
+                cmd,
+                input=prompt,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=API_TIMEOUT,
+                cwd=work_dir,
+                env=env,
+            )
+            captured_output = '\n'.join(
+                part for part in (proc.stderr, proc.stdout) if part
+            )
+        except subprocess.TimeoutExpired as e:
+            captured_output = '\n'.join(
+                str(part) for part in (e.stderr, e.stdout) if part
+            )
+            record_codex_usage(
+                action_id='research-agent',
+                model=CODEX_RESEARCH_MODEL,
+                effort=CODEX_RESEARCH_REASONING_EFFORT,
+                exit_code=124,
+                run_status='failed',
+                duration_sec=round(time.monotonic() - started),
+                output=captured_output,
+                entry_id=entry_uuid,
+            )
+            raise
+        record_codex_usage(
+            action_id='research-agent',
+            model=CODEX_RESEARCH_MODEL,
+            effort=CODEX_RESEARCH_REASONING_EFFORT,
+            exit_code=proc.returncode,
+            run_status='completed' if proc.returncode == 0 else 'failed',
+            duration_sec=round(time.monotonic() - started),
+            output=captured_output,
+            entry_id=entry_uuid,
         )
         if proc.returncode != 0:
             detail = (proc.stderr or proc.stdout or '').strip()
@@ -618,7 +651,7 @@ def main():
         if model == 'gemini':
             result = _call_gemini(prompt, initial_tier=gemini_tier)
         elif model == 'chatgpt':
-            result = _call_subscription_codex(prompt)
+            result = _call_subscription_codex(prompt, entry_uuid=entry_uuid)
         else:
             # deepseek-flash / deepseek-pro — Anthropic-compat endpoint
             # with tjai MCP tools exposed through a multi-turn tool loop.

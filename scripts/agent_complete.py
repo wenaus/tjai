@@ -18,6 +18,7 @@ from pathlib import Path
 import bootstrap  # noqa: F401 - Django setup
 
 from tjai_app.db_log_handler import DbLogHandler
+from tjai_app.llm_usage import record_codex_usage
 from tjai_app.models import Entry, SysConfig, Tag
 from django.db.models import Q
 
@@ -284,6 +285,10 @@ def main():
     action_id = sys.argv[1]
     exit_code = int(sys.argv[2]) if len(sys.argv) > 2 else 0
     stderr_file = sys.argv[3] if len(sys.argv) > 3 else None
+    runner = sys.argv[4] if len(sys.argv) > 4 else None
+    model = sys.argv[5] if len(sys.argv) > 5 else None
+    effort = sys.argv[6] if len(sys.argv) > 6 else None
+    billing = sys.argv[7] if len(sys.argv) > 7 else None
     now = time.time()
 
     # Look up which entry this agent was working on for per-entry logging
@@ -298,7 +303,7 @@ def main():
     ).values_list('value', flat=True).first()
     duration_sec = round(now - float(launched_ts)) if launched_ts else None
 
-    status = 'completed' if exit_code in (0, 124) else 'failed'
+    status = 'completed' if exit_code == 0 else 'failed'
     ref_extra = {'action_id': action_id, 'run_status': status,
                  'exit_code': exit_code}
     if current_entry:
@@ -351,6 +356,19 @@ def main():
             status = 'failed'
             ref_extra['run_status'] = status
             logger.error("%s: %s", action_id, completion_error, extra=ref_extra)
+
+    if runner == 'codex' and billing == 'subscription':
+        record_codex_usage(
+            action_id=action_id,
+            model=model or 'unknown',
+            effort=effort or 'unknown',
+            exit_code=exit_code,
+            run_status=status,
+            duration_sec=duration_sec,
+            output=stderr_content,
+            entry_id=current_entry,
+            tracking=tracking_uuid,
+        )
 
     stderr_summary = f"\n{stderr_content}" if stderr_content else ''
     log_fn = logger.error if status == 'failed' else logger.info
