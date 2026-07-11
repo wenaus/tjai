@@ -14,6 +14,7 @@ from tj.repository import Entry
 from tj.repository_factory import RepositoryFactory
 from tj.state import display_context, get_state, save_state
 from tj.timezone_manager import format_time_dashboard, get_timezone_object, get_current_timezone, format_time_in_timezone
+from tj.uuid7 import uuid7
 
 
 def confirm_action(message: str) -> bool:
@@ -101,7 +102,7 @@ def log_operation(operation: str, result: str, details: dict = None) -> None:
 
         content = summary + "\n" + json.dumps(log_data, indent=2)
 
-        entry_id = str(uuid.uuid7())
+        entry_id = str(uuid7())
         now = datetime.now(timezone.utc).timestamp()
 
         entry = Entry(

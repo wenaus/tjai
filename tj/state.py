@@ -61,7 +61,7 @@ def _get_agent_status_brief() -> str:
 
     # Check for errors first
     if status.get("last_error"):
-        return f" {RED}{location_name} agent error.{RESET}"
+        return f" {RED}{location_name} agent error: {status['last_error']}{RESET}"
 
     # Check last sync time
     last_pull = status.get("last_pull")

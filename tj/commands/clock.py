@@ -1,7 +1,6 @@
 """Clock commands for time tracking."""
 
 import sys
-import uuid
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
@@ -11,6 +10,7 @@ from tj.repository_sqlite import encode_entry_data, decode_entry_data
 from tj.state import get_state
 from tj.timezone_manager import get_timezone_object, format_time_only
 from tj.commands.journal import parse_date_spec
+from tj.uuid7 import uuid7
 
 
 def get_active_clock(context: Optional[str] = None, any_context: bool = False) -> Optional[Dict[str, Any]]:
@@ -115,7 +115,7 @@ def handle_clock_start(args) -> None:
 
     # Create journal entry with clock data
     repository = RepositoryFactory.get_repository()
-    entry_id = str(uuid.uuid7())
+    entry_id = str(uuid7())
     now = datetime.now(timezone.utc).timestamp()
 
     entry = Entry(
@@ -174,7 +174,7 @@ def handle_clock_stop(args) -> None:
 
     # Create stop entry with same context as start
     repository = RepositoryFactory.get_repository()
-    stop_entry_id = str(uuid.uuid7())
+    stop_entry_id = str(uuid7())
     now = datetime.now(timezone.utc).timestamp()
 
     stop_entry = Entry(

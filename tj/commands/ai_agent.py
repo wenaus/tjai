@@ -19,7 +19,6 @@ import shutil
 import sys
 import subprocess
 import tempfile
-import uuid
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional
@@ -27,6 +26,7 @@ from typing import Optional
 from tj.repository import Entry
 from tj.repository_factory import RepositoryFactory
 from tj.state import get_state, save_state
+from tj.uuid7 import uuid7
 
 
 def _timestamp() -> str:
@@ -164,7 +164,7 @@ def _fetch_guidance(context: Optional[str], audience: str) -> str:
 def _create_tracking_entry(prompt: str, context: Optional[str]) -> str:
     """Create a tjai entry to track the agent's work."""
     repository = RepositoryFactory.get_repository()
-    entry_id = str(uuid.uuid7())
+    entry_id = str(uuid7())
     now = datetime.now(timezone.utc).timestamp()
 
     state = get_state()

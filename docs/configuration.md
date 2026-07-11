@@ -112,6 +112,8 @@ The dump format outputs all contexts and entries as `tj` commands with timestamp
 ## Development Setup
 
 No external dependencies — uses Python standard library only.
+The CLI and sync agent support Python 3.11 and newer. On Python versions before
+3.14, TJAI supplies its own UUIDv7 implementation.
 
 ```bash
 chmod +x tj.py

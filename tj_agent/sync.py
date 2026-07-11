@@ -4,10 +4,10 @@ import json
 import logging
 import socket
 import time
-import uuid
 from pathlib import Path
 
 from tj.database import get_db_connection, APP_DIR
+from tj.uuid7 import uuid7
 from tj_agent import client
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ def get_machine_id() -> str:
     """Get or create stable machine ID."""
     if MACHINE_ID_FILE.exists():
         return MACHINE_ID_FILE.read_text().strip()
-    machine_id = str(uuid.uuid7())
+    machine_id = str(uuid7())
     MACHINE_ID_FILE.parent.mkdir(parents=True, exist_ok=True)
     MACHINE_ID_FILE.write_text(machine_id)
     return machine_id

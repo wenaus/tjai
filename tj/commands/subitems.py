@@ -2,13 +2,13 @@
 
 import sys
 import traceback
-import uuid
 from datetime import datetime, timezone
 
 from tj.config import get_preview_length
 from tj.repository import Entry
 from tj.repository_factory import RepositoryFactory
 from tj.state import get_state, save_state
+from tj.uuid7 import uuid7
 
 
 def handle_add_subitem(args) -> None:
@@ -56,7 +56,7 @@ def handle_add_subitem(args) -> None:
                     tags.add(tag_name)
 
         # Create sub-item entry
-        entry_id = str(uuid.uuid7())
+        entry_id = str(uuid7())
         now = datetime.now(timezone.utc).timestamp()
 
         entry = Entry(

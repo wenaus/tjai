@@ -2,7 +2,6 @@ import json
 import re
 import sys
 import traceback
-import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -11,6 +10,7 @@ from tj.repository import Entry
 from tj.repository_factory import RepositoryFactory
 from tj.state import get_state, save_state, display_context, set_last_parent, set_last_list
 from tj.commands.lists import detect_list_creation
+from tj.uuid7 import uuid7
 
 def handle_creation(args, entry_type_override: Optional[str] = None, num_identifier: Optional[int] = None) -> None:
     """Handles the creation of a new entry."""
@@ -172,7 +172,7 @@ def handle_creation(args, entry_type_override: Optional[str] = None, num_identif
 
         repository = RepositoryFactory.get_repository()
 
-        entry_id = str(uuid.uuid7())
+        entry_id = str(uuid7())
 
         # Use timestamp_override if provided, otherwise use current time
         if hasattr(args, 'timestamp_override') and args.timestamp_override is not None:

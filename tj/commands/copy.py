@@ -2,13 +2,13 @@
 
 import sys
 import traceback
-import uuid
 from datetime import datetime, date, time, timezone as dt_timezone
 from zoneinfo import ZoneInfo
 
 from tj.commands.common import get_entry_from_recent_list
 from tj.repository_factory import RepositoryFactory
 from tj.timezone_manager import get_current_timezone
+from tj.uuid7 import uuid7
 
 
 def handle_copy(args) -> None:
@@ -102,7 +102,7 @@ def handle_copy(args) -> None:
     repository = RepositoryFactory.get_repository()
 
     # Generate new ID
-    new_id = str(uuid.uuid7())
+    new_id = str(uuid7())
 
     # Create the new entry
     from tj.repository import Entry
