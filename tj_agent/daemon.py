@@ -117,6 +117,11 @@ def _install_launchd() -> bool:
     # Create wrapper script - /bin/sh has Full Disk Access on macOS
     wrapper_script = APP_DIR / "run_agent.sh"
     wrapper_content = f"""#!/bin/sh
+if [ -r "$HOME/.tjai/env" ]; then
+    set -a
+    . "$HOME/.tjai/env"
+    set +a
+fi
 export PYTHONPATH="{agent_module.parent}"
 cd "{agent_module.parent}"
 exec "{python_path}" -m tj_agent run

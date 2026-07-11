@@ -15,21 +15,24 @@ DEFAULT_SERVER = "https://etaverse.com/tjai"
 
 @lru_cache(maxsize=1)
 def get_api_key() -> str:
-    """Load the REST bearer from the process or the standard shell env file."""
+    """Load the REST bearer from the process or standard local env files."""
     token = os.environ.get("TJAI_API_KEY") or os.environ.get(
         "TJAI_GMAIL_ADDON_API_KEY"
     )
     if token:
         return token
 
-    env_file = Path.home() / ".env"
-    if env_file.exists():
+    for env_file in (Path.home() / ".tjai" / "env", Path.home() / ".env"):
+        if not env_file.exists():
+            continue
         result = subprocess.run(
             [
                 "/bin/bash",
                 "-c",
-                'source "$HOME/.env" >/dev/null 2>&1; '
+                'set -a; source "$1" >/dev/null 2>&1; set +a; '
                 'printf %s "${TJAI_API_KEY:-${TJAI_GMAIL_ADDON_API_KEY:-}}"',
+                "bash",
+                str(env_file),
             ],
             capture_output=True,
             text=True,
@@ -41,7 +44,7 @@ def get_api_key() -> str:
 
     raise RuntimeError(
         "TJAI_API_KEY or TJAI_GMAIL_ADDON_API_KEY is required in the "
-        "environment or ~/.env"
+        "environment, ~/.tjai/env, or ~/.env"
     )
 
 
