@@ -13,6 +13,7 @@ with tempfile.TemporaryDirectory() as app_dir:
     os.environ["TJAI_APP_DIR"] = app_dir
 
     from tj.state import _get_agent_status_brief
+    from tj.server import get_api_key
     from tj.uuid7 import uuid7
     from tj_agent import sync
 
@@ -31,5 +32,16 @@ with tempfile.TemporaryDirectory() as app_dir:
     with patch("tj.config.get_location_name", return_value="test-host"):
         status = _get_agent_status_brief()
     assert error in status
+
+    repo_env = Path(app_dir, "repo.env")
+    repo_env.write_text('TJAI_API_KEY="repo-test-key"\n')
+    get_api_key.cache_clear()
+    with (
+        patch.dict(os.environ, {}, clear=True),
+        patch("tj.server.Path.home", return_value=Path(app_dir, "empty-home")),
+        patch("tj.server.REPO_ENV_FILE", repo_env),
+    ):
+        assert get_api_key() == "repo-test-key"
+    get_api_key.cache_clear()
 
 print("client compatibility checks passed")

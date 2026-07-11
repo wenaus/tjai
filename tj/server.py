@@ -11,6 +11,13 @@ import urllib.error
 
 # Default server URL
 DEFAULT_SERVER = "https://etaverse.com/tjai"
+REPO_ENV_FILE = (
+    Path(__file__).resolve().parents[2]
+    / "computers"
+    / "laptop"
+    / "config-files"
+    / ".env"
+)
 
 
 @lru_cache(maxsize=1)
@@ -22,7 +29,12 @@ def get_api_key() -> str:
     if token:
         return token
 
-    for env_file in (Path.home() / ".tjai" / "env", Path.home() / ".env"):
+    env_files = (
+        Path.home() / ".tjai" / "env",
+        Path.home() / ".env",
+        REPO_ENV_FILE,
+    )
+    for env_file in env_files:
         if not env_file.exists():
             continue
         result = subprocess.run(
@@ -44,7 +56,7 @@ def get_api_key() -> str:
 
     raise RuntimeError(
         "TJAI_API_KEY or TJAI_GMAIL_ADDON_API_KEY is required in the "
-        "environment, ~/.tjai/env, or ~/.env"
+        "environment, ~/.tjai/env, ~/.env, or the tjrepo private env file"
     )
 
 

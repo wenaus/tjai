@@ -99,6 +99,15 @@ restart — `claude mcp list` only probes the config. Restart, then confirm with
 
 Note: `sync_interval_seconds` is server-side via `tj admin agent interval`.
 
+## API Authentication
+
+The CLI and sync agent read the REST bearer from `TJAI_API_KEY` or
+`TJAI_GMAIL_ADDON_API_KEY`. Lookup checks the process environment,
+`~/.tjai/env`, `~/.env`, and the private environment file under
+`computers/laptop/config-files/.env` when TJAI runs from a `tjrepo` checkout.
+The repository fallback avoids per-machine secret-file setup for clients with a
+current private checkout.
+
 ## Backup & Restore
 
 ```bash
