@@ -2088,6 +2088,8 @@ def dashboard_status(request):
         deleted_at__isnull=True,
         timestamp_created__gte=cutoff_24h,
         data__clock='start'
+    ).only(
+        'id', 'data', 'timestamp_created', 'context'
     ).order_by('-timestamp_created').first()
 
     if clock_entry and clock_entry.data:
@@ -2097,7 +2099,9 @@ def dashboard_status(request):
         stop_id = data.get('stop_id')
 
         if stop_id:
-            stop_entry = Entry.objects.filter(id=stop_id).first()
+            stop_entry = Entry.objects.filter(id=stop_id).only(
+                'data', 'timestamp_created'
+            ).first()
             if stop_entry and stop_entry.data:
                 end_time = stop_entry.data.get('event_date', stop_entry.timestamp_created)
             else:
@@ -2129,6 +2133,8 @@ def dashboard_status(request):
         deleted_at__isnull=True,
         timestamp_created__gte=cutoff_24h,
         data__clock='start'
+    ).only(
+        'id', 'data', 'timestamp_created', 'context'
     ).order_by('-timestamp_created'):
         data = entry.data
         if not data:
@@ -2139,7 +2145,9 @@ def dashboard_status(request):
         stop_id = data.get('stop_id')
         breaks_min = data.get('breaks', 0)
         if stop_id:
-            stop_entry = Entry.objects.filter(id=stop_id).first()
+            stop_entry = Entry.objects.filter(id=stop_id).only(
+                'data', 'timestamp_created'
+            ).first()
             end_ts = stop_entry.data.get('event_date') if stop_entry and stop_entry.data else now
             stopped = True
         else:
@@ -2285,15 +2293,22 @@ def dashboard_status(request):
     if not show_deleted and (filter_statuses or exclude_statuses):
         base_qs = _apply_status_filter(base_qs, filter_statuses, exclude_statuses)
 
-    base_qs = base_qs.order_by('-timestamp_modified')
+    # The dashboard never reads the stored full-text vector.  It is typically
+    # the largest column in these rows, so do not transfer it from PostgreSQL
+    # for every page refresh.
+    base_qs = base_qs.only(
+        'id', 'content', 'kind', 'timestamp_modified', 'context', 'name', 'data'
+    ).order_by('-timestamp_modified')
 
     recent = list(base_qs[offset:offset + DASHBOARD_PAGE])
 
     # Batch fetch tags for all entries
     entry_ids = [e.id for e in recent]
     tags_by_entry = {}
-    for t in Tag.objects.filter(entry_id__in=entry_ids):
-        tags_by_entry.setdefault(t.entry_id, []).append(t.tag_name)
+    for entry_id, tag_name in Tag.objects.filter(
+        entry_id__in=entry_ids
+    ).values_list('entry_id', 'tag_name'):
+        tags_by_entry.setdefault(entry_id, []).append(tag_name)
     relation_counts = _relation_counts_for_entry_ids(entry_ids)
     expanded_relation_ids = _expanded_relation_ids(request, entry_ids)
     expanded_relations = _relations_for_expanded_entry_ids(expanded_relation_ids)
@@ -2409,15 +2424,17 @@ def dashboard_status(request):
     ).values_list('context_id', flat=True).distinct().order_by('context_id'))
 
     # Tags (alpha sorted, excluding context-only tags) with counts for sparse tags
-    tag_stats = TagStats.objects.filter(is_context_only=False).order_by('tag_name')
-    all_tags = list(tag_stats.values_list('tag_name', flat=True))
+    tag_stats = list(TagStats.objects.filter(
+        is_context_only=False
+    ).order_by('tag_name'))
+    all_tags = [ts.tag_name for ts in tag_stats]
     tag_counts = {ts.tag_name: ts.entry_count for ts in tag_stats if ts.entry_count <= 3}
 
     # Open todos by context
     todos_by_ctx = list(Entry.objects.filter(
         kind='todo',
         deleted_at__isnull=True,
-    ).exclude(status='done').values('context_id').annotate(count=Count('id')).order_by('-count'))
+    ).exclude(status='done').values('context_id').annotate(count=Count('*')).order_by('-count'))
     open_todos = [{'context': t['context_id'], 'count': t['count']} for t in todos_by_ctx]
 
     # Machine sync status - filter out test machines and hostname-less orphans
@@ -2446,7 +2463,7 @@ def dashboard_status(request):
         deleted_at__isnull=True,
     ).exclude(status='archive').exclude(
         context_id__in=DIALOG_CONTEXTS
-    ).values('kind').annotate(cnt=Count('id')).values_list('kind', 'cnt'))
+    ).values('kind').annotate(cnt=Count('*')).values_list('kind', 'cnt'))
 
     # Status counts reflect the entries actually displayed after status
     # include/exclude filters. Active/excluded statuses are forced in at
@@ -2454,18 +2471,27 @@ def dashboard_status(request):
     status_counts = {}
     status_options = []
     if not show_deleted:
-        option_rows = (status_options_qs.values('status')
-                       .annotate(cnt=Count('id'))
-                       .values_list('status', 'cnt'))
+        # Clear the entry-list ordering before aggregation.  Leaving
+        # timestamp_modified ordering in place makes PostgreSQL group by the
+        # timestamp too, producing tens of thousands of rows instead of one
+        # row per status.
+        rows = list(base_qs.order_by().values('status')
+                    .annotate(cnt=Count('*'))
+                    .values_list('status', 'cnt'))
+        if filter_statuses or exclude_statuses:
+            option_rows = (status_options_qs.order_by().values('status')
+                           .annotate(cnt=Count('*'))
+                           .values_list('status', 'cnt'))
+        else:
+            # With no status filter the option and displayed populations are
+            # identical, so reuse the same aggregate query.
+            option_rows = rows
         option_set = set()
         for s, _cnt in option_rows:
             option_set.add(s if s else '_none')
         option_set.update(filter_statuses)
         option_set.update(exclude_statuses)
 
-        rows = (base_qs.values('status')
-                .annotate(cnt=Count('id'))
-                .values_list('status', 'cnt'))
         for s, cnt in rows:
             key = s if s else '_none'
             status_counts[key] = status_counts.get(key, 0) + cnt
@@ -2527,9 +2553,7 @@ def dashboard_search(request):
     qs = Entry.objects.filter(
         search_vector=search_query,
         deleted_at__isnull=not show_deleted,
-    ).annotate(
-        rank=SearchRank('search_vector', search_query, normalization=1, cover_density=True),
-    )
+    ).defer('search_vector')
 
     archive_view = request.GET.get('view') == 'archive'
     if not show_deleted:
@@ -2617,7 +2641,12 @@ def dashboard_search(request):
     # client already has.
     total_count = qs.count() if offset == 0 else None
     if sort == 'rank':
-        entries = list(qs.order_by('-rank', '-timestamp_modified')[offset:offset + SEARCH_PAGE])
+        entries = list(qs.annotate(
+            rank=SearchRank(
+                'search_vector', search_query,
+                normalization=1, cover_density=True,
+            ),
+        ).order_by('-rank', '-timestamp_modified')[offset:offset + SEARCH_PAGE])
     elif sort == 'size':
         entries = list(qs.annotate(content_len=Length('content')).order_by('-content_len')[offset:offset + SEARCH_PAGE])
     else:

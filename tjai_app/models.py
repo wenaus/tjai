@@ -75,6 +75,11 @@ class Entry(models.Model):
                     deleted_at__isnull=True,
                 ),
             ),
+            models.Index(
+                fields=['kind', 'status', 'context'],
+                name='idx_entries_dash_facets',
+                condition=models.Q(deleted_at__isnull=True),
+            ),
         ]
         constraints = [
             models.UniqueConstraint(

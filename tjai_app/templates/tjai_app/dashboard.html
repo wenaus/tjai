@@ -100,6 +100,8 @@
         .entry {
             margin: 4px 0 4px 16px;
             line-height: 1.4;
+            content-visibility: auto;
+            contain-intrinsic-block-size: auto 44px;
         }
         .calendar-detail-link {
             color: inherit;
@@ -911,15 +913,21 @@
             if (!/(^|_)(time|date|timestamp|created|modified|last_run|run)(_|$)/i.test(key)) return false;
             return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value);
         }
+        let dashboardDateFormatter = null;
+        let dashboardDateFormatterTimezone = null;
         function dashFormatDate(date) {
-            const parts = new Intl.DateTimeFormat('en-US', {
-                timeZone: dashboardTimezone,
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false,
-            }).formatToParts(date);
+            if (!dashboardDateFormatter || dashboardDateFormatterTimezone !== dashboardTimezone) {
+                dashboardDateFormatter = new Intl.DateTimeFormat('en-US', {
+                    timeZone: dashboardTimezone,
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false,
+                });
+                dashboardDateFormatterTimezone = dashboardTimezone;
+            }
+            const parts = dashboardDateFormatter.formatToParts(date);
             const p = {};
             parts.forEach(x => p[x.type] = x.value);
             return `${p.month}/${p.day}/${p.hour}:${p.minute}`;
@@ -1086,6 +1094,7 @@
         let hasMoreEntries = false;
         let loadingMore = false;
         let isSearchActive = false;
+        let lastEntriesJson = null;
         let activeMachine = null;
         let activeTags = new Set();
         let activeKind = null;
@@ -1289,6 +1298,7 @@
                 const items = data.entries || data.recent_entries || [];
                 const newHtml = renderEntries(items, dashboardTimezone);
                 document.getElementById('entries-list').insertAdjacentHTML('beforeend', newHtml);
+                lastEntriesJson = null;
                 restoreExpandedRelations(document.getElementById('entries-list'));
                 loadedEntryCount += items.length;
                 hasMoreEntries = data.has_more;
@@ -1526,6 +1536,7 @@
                     : `${totalEntryCount} results`;
                 document.getElementById('entries-label').innerHTML = `Search: "${escapeHtml(query)}"${filterNote} <span style="color:#8a8a8a">(${countStr})</span>`;
                 document.getElementById('entries-list').innerHTML = renderEntries(items, dashboardTimezone);
+                lastEntriesJson = null;
                 restoreExpandedRelations(document.getElementById('entries-list'));
             } catch (err) {
                 document.getElementById('entries-list').innerHTML = `<div style="color:#f44">Search error: ${escapeHtml(err.message)}</div>`;
@@ -1767,11 +1778,15 @@
                 totalEntryCount = data.total_count || entries.length;
                 isFilterActive = buildFilterParams().length > 0;
                 document.getElementById('entries-label').innerHTML = entriesLabel();
-                document.getElementById('entries-list').innerHTML = renderEntries(entries, dashboardTimezone);
-                restoreExpandedRelations(document.getElementById('entries-list'));
+                const entriesJson = JSON.stringify([dashboardTimezone, entries]);
+                if (entriesJson !== lastEntriesJson) {
+                    document.getElementById('entries-list').innerHTML = renderEntries(entries, dashboardTimezone);
+                    lastEntriesJson = entriesJson;
+                    restoreExpandedRelations(document.getElementById('entries-list'));
+                    scrollToHash();
+                }
                 // Highlight tags that co-occur with selected tags
                 highlightAvailableTags(entries);
-                scrollToHash();
             }
         }
 
@@ -2035,6 +2050,7 @@
                 searchClear.style.display = 'none';
             }
             isSearchActive = false;
+            lastEntriesJson = null;
             // Clear all filters
             activeMachine = null;
             activeTags.clear();
@@ -2058,6 +2074,7 @@
         // Restore entries after search clears (re-apply filters if active)
         function restoreFromSearch() {
             isSearchActive = false;
+            lastEntriesJson = null;
             if (isFilterActive) {
                 fetchFilteredEntries();
             } else {
