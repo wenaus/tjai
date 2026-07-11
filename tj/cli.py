@@ -789,16 +789,14 @@ def _check_macos_venv() -> None:
 
 
 def _check_db_dir() -> None:
-    """Ensure configured db_dir exists."""
-    from pathlib import Path
-    from tj.config import get_config
+    """Ensure the effective database directory exists."""
+    from tj.config import get_db_path
 
-    config = get_config()
-    db_dir = Path(config.get("db_dir", "~/Dropbox/Current")).expanduser()
+    db_dir = get_db_path().parent
 
     if not db_dir.exists():
         print(f"ERROR: db_dir '{db_dir}' not found.", file=sys.stderr)
-        print("Set db_dir in ~/.tjai/config.json or create the directory.", file=sys.stderr)
+        print("TJAI could not create the effective database directory.", file=sys.stderr)
         sys.exit(1)
 
 

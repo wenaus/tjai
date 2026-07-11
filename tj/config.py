@@ -1,6 +1,10 @@
 """Configuration management for tjai."""
 
 import json
+import os
+import platform
+import shutil
+import sqlite3
 import traceback
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -81,37 +85,117 @@ def get_location_name() -> str:
     return config['location_name']
 
 
+def _running_under_wsl() -> bool:
+    """Return whether the client is running under Windows Subsystem for Linux."""
+    return bool(
+        os.environ.get("WSL_INTEROP")
+        or os.environ.get("WSL_DISTRO_NAME")
+        or "microsoft" in platform.release().lower()
+    )
+
+
+def _is_windows_mounted_path(path: Path) -> bool:
+    """Return whether a path resolves under WSL's standard Windows mount root."""
+    resolved_parts = path.resolve(strict=False).parts
+    return (
+        len(resolved_parts) >= 3
+        and resolved_parts[1] == "mnt"
+        and len(resolved_parts[2]) == 1
+        and resolved_parts[2].isalpha()
+    )
+
+
+def _migrate_sqlite_database(source: Path, destination: Path) -> None:
+    """Copy a SQLite database to local storage and verify it before use."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(
+        f".{destination.name}.{os.getpid()}.migrating"
+    )
+    temporary.unlink(missing_ok=True)
+
+    source_conn = None
+    destination_conn = None
+    backup_error = None
+    try:
+        try:
+            source_conn = sqlite3.connect(
+                f"{source.resolve().as_uri()}?mode=ro", uri=True
+            )
+            destination_conn = sqlite3.connect(temporary)
+            source_conn.backup(destination_conn)
+            destination_conn.close()
+            destination_conn = None
+            source_conn.close()
+            source_conn = None
+        except sqlite3.Error as exc:
+            backup_error = exc
+            if destination_conn is not None:
+                destination_conn.close()
+                destination_conn = None
+            if source_conn is not None:
+                source_conn.close()
+                source_conn = None
+            temporary.unlink(missing_ok=True)
+            shutil.copyfile(source, temporary)
+
+        validation_conn = sqlite3.connect(temporary)
+        try:
+            integrity = validation_conn.execute("PRAGMA integrity_check").fetchone()
+        finally:
+            validation_conn.close()
+        if not integrity or integrity[0] != "ok":
+            detail = integrity[0] if integrity else "no integrity result"
+            raise sqlite3.DatabaseError(f"integrity check failed: {detail}")
+
+        temporary.replace(destination)
+    except (OSError, sqlite3.Error) as exc:
+        temporary.unlink(missing_ok=True)
+        detail = f"; SQLite backup failed first: {backup_error}" if backup_error else ""
+        raise RuntimeError(
+            f"Failed to migrate SQLite database from {source} to {destination}: "
+            f"{exc}{detail}"
+        ) from exc
+
+
 def get_db_path() -> Path:
     """Get the location-specific database path.
 
-    Returns path like ~/Dropbox/Current/tjai_{location_name}.db
-    On first run, copies from generic tjai.db if it exists.
+    WSL clients keep the live SQLite cache on the Linux filesystem when the
+    configured directory resolves to a Windows mount. Existing data is migrated
+    from the configured location before the local cache is used.
     """
-    import shutil
-
     config = get_config()
     location_name = get_location_name()
 
-    # Build location-specific path
-    base_dir = Path(config.get("db_dir", "~/Dropbox/Current")).expanduser()
+    configured_dir = Path(
+        config.get("db_dir", DEFAULT_CONFIG["db_dir"])
+    ).expanduser()
+    configured_db = configured_dir / f"tjai_{location_name}.db"
+
+    use_local_wsl_cache = (
+        _running_under_wsl() and _is_windows_mounted_path(configured_dir)
+    )
+    base_dir = APP_DIR / "db" if use_local_wsl_cache else configured_dir
     location_db = base_dir / f"tjai_{location_name}.db"
 
-    # Create parent directories if needed
     try:
         base_dir.mkdir(parents=True, exist_ok=True)
     except Exception as e:
         traceback.print_exc()
         print(f"Warning: Could not create database directory: {e}")
 
-    # Bootstrap: copy from generic tjai.db if location-specific doesn't exist
+    if use_local_wsl_cache and not location_db.exists() and configured_db.exists():
+        _migrate_sqlite_database(configured_db, location_db)
+        print(f"Migrated WSL database cache to {location_db}")
+
     if not location_db.exists():
-        generic_db = base_dir / "tjai.db"
+        generic_db = configured_dir / "tjai.db"
         if generic_db.exists():
-            # Use copyfile (not copy2) - copy2 tries to preserve metadata
-            # which fails on WSL2 writing to NTFS/Windows filesystems
-            shutil.copyfile(generic_db, location_db)
+            if use_local_wsl_cache:
+                _migrate_sqlite_database(generic_db, location_db)
+            else:
+                shutil.copyfile(generic_db, location_db)
             print(f"Copied {generic_db} to {location_db}")
-            # Reset sync time so new location pulls all server entries
             _reset_sync_time(location_db)
 
     return location_db

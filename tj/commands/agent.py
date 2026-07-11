@@ -55,10 +55,19 @@ def handle_agent(args) -> None:
                     print(f"Last sync: {int(ago)}s ago")
                 if status.get("last_error"):
                     print(f"Last error: {status['last_error']}")
+                    if status.get("last_error_at"):
+                        error_age = time.time() - status["last_error_at"]
+                        print(f"Error age: {int(error_age)}s")
+                    if status.get("last_traceback"):
+                        print("Last traceback:")
+                        print(status["last_traceback"].rstrip())
                 if status.get("entries_pending", 0) > 0:
                     print(f"Entries pending: {status['entries_pending']}")
-            except (json.JSONDecodeError, OSError):
-                pass
+            except (json.JSONDecodeError, OSError) as exc:
+                print(
+                    f"Agent status error: {type(exc).__name__}: {exc}",
+                    file=sys.stderr,
+                )
 
     elif agent_cmd == 'start':
         if daemon.is_running():

@@ -243,7 +243,7 @@ def run_forever() -> None:
     interval = 30
 
     logger.info(f"tj_agent starting, initial sync interval: {interval}s")
-    write_status(last_error=None)
+    write_status(clear_error=True)
 
     # Optional remote inference worker (runs on daemon thread if
     # worker_enabled=true in config). No-op when disabled.

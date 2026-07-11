@@ -56,8 +56,11 @@ def _get_agent_status_brief() -> str:
 
     try:
         status = json.loads(status_file.read_text())
-    except (json.JSONDecodeError, OSError):
-        return f" {BRIGHT_YELLOW}{location_name} agent starting.{RESET}"
+    except (json.JSONDecodeError, OSError) as exc:
+        return (
+            f" {RED}{location_name} agent status error: "
+            f"{type(exc).__name__}: {exc}{RESET}"
+        )
 
     # Check for errors first
     if status.get("last_error"):

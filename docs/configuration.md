@@ -44,6 +44,12 @@ The primary database is **PostgreSQL** on the server (source of truth). Each cli
 
 Local SQLite location is configurable. Default: `~/Dropbox/Current/tjai_{location}.db` where `{location}` is your machine name. Each machine has its own file; sync happens via REST API, not Dropbox.
 
+Under WSL2, a configured database directory that resolves under `/mnt/<drive>`
+is treated as bootstrap storage rather than the live SQLite location. TJAI
+migrates the existing machine database to `~/.tjai/db/`, validates it with
+SQLite's integrity check, and uses the Linux-local copy thereafter. This keeps
+existing local changes while avoiding SQLite writes through the Windows mount.
+
 ```bash
 tj config show  # Check current database location
 ```
@@ -107,6 +113,13 @@ The CLI and sync agent read the REST bearer from `TJAI_API_KEY` or
 `computers/laptop/config-files/.env` when TJAI runs from a `tjrepo` checkout.
 The repository fallback avoids per-machine secret-file setup for clients with a
 current private checkout.
+
+## Agent Errors
+
+The normal CLI status includes the current exception type and sync phase.
+`tj admin agent` additionally prints the error age and complete stored
+traceback. Status-file read or JSON errors are reported directly rather than
+being represented as an agent-starting state.
 
 ## Backup & Restore
 

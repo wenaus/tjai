@@ -4,6 +4,7 @@ import json
 import logging
 import socket
 import time
+import traceback
 from pathlib import Path
 
 from tj.database import get_db_connection, APP_DIR
@@ -59,14 +60,20 @@ def set_last_sync_time(timestamp: float) -> None:
 
 def write_status(last_push: float = None, last_pull: float = None,
                  last_error: str = None, entries_pending: int = None,
-                 sync_interval: int = None) -> None:
+                 sync_interval: int = None, last_traceback: str = None,
+                 clear_error: bool = False) -> None:
     """Write agent status for tj CLI to read."""
     status = {}
     if STATUS_FILE.exists():
         try:
             status = json.loads(STATUS_FILE.read_text())
-        except (json.JSONDecodeError, OSError):
-            pass
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.error(
+                "Agent status read failed: %s: %s", type(exc).__name__, exc
+            )
+            status = {
+                "status_file_error": f"{type(exc).__name__}: {exc}",
+            }
 
     if last_push is not None:
         status["last_push"] = last_push
@@ -74,8 +81,12 @@ def write_status(last_push: float = None, last_pull: float = None,
         status["last_pull"] = last_pull
     if last_error is not None:
         status["last_error"] = last_error
-    elif "last_error" in status and (last_push or last_pull):
-        status["last_error"] = None  # Clear error on success
+        status["last_error_at"] = time.time()
+        status["last_traceback"] = last_traceback
+    elif clear_error or last_push is not None or last_pull is not None:
+        status["last_error"] = None
+        status["last_error_at"] = None
+        status["last_traceback"] = None
     if entries_pending is not None:
         status["entries_pending"] = entries_pending
     if sync_interval is not None:
@@ -349,9 +360,24 @@ def pull_updates() -> int:
 def sync_cycle() -> dict:
     """Run one sync cycle: push then pull. Returns sysconfig dict."""
     try:
-        base_sync_time = get_last_sync_time()
-        _pushed, conflict_ids, context_conflict_names = push_dirty_entries()
-        _count, sysconfig = pull_updates()
+        try:
+            base_sync_time = get_last_sync_time()
+        except Exception as exc:
+            raise RuntimeError(
+                f"sync baseline read failed: {type(exc).__name__}: {exc}"
+            ) from exc
+        try:
+            _pushed, conflict_ids, context_conflict_names = push_dirty_entries()
+        except Exception as exc:
+            raise RuntimeError(
+                f"push phase failed: {type(exc).__name__}: {exc}"
+            ) from exc
+        try:
+            _count, sysconfig = pull_updates()
+        except Exception as exc:
+            raise RuntimeError(
+                f"pull phase failed: {type(exc).__name__}: {exc}"
+            ) from exc
         conflicts = []
         if conflict_ids:
             conflicts.append("entries: " + ", ".join(sorted(conflict_ids)))
@@ -363,10 +389,18 @@ def sync_cycle() -> dict:
             # Keep the edit baseline until the stale local state is resolved.
             # Otherwise the next pull's timestamp would make a later retry look
             # current and allow it to overwrite the server.
-            set_last_sync_time(base_sync_time)
+            try:
+                set_last_sync_time(base_sync_time)
+            except Exception as exc:
+                raise RuntimeError(
+                    "conflict baseline restore failed: "
+                    f"{type(exc).__name__}: {exc}"
+                ) from exc
             write_status(last_error="Sync rejected stale local " + "; ".join(conflicts))
         return sysconfig
     except Exception as e:
-        logger.error(f"Sync error: {e}")
-        write_status(last_error=str(e))
+        error_traceback = traceback.format_exc()
+        error_summary = f"{type(e).__name__}: {e}"
+        logger.error("Sync error: %s\n%s", error_summary, error_traceback)
+        write_status(last_error=error_summary, last_traceback=error_traceback)
         raise
