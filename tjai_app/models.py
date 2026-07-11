@@ -3,6 +3,7 @@ import logging
 from django.contrib.postgres.search import SearchVectorField
 from django.db import connection, models, transaction
 from django.db.models import Max
+from django.db.models.fields.json import KeyTransform
 
 
 class Context(models.Model):
@@ -46,6 +47,34 @@ class Entry(models.Model):
         db_table = 'entries'
         indexes = [
             models.Index(fields=['search_vector'], name='entries_search_gin'),
+            models.Index(
+                KeyTransform('entry_id', 'data'),
+                name='idx_entries_data_entryid',
+            ),
+            models.Index(
+                KeyTransform('event_date', 'data'),
+                name='idx_entries_journal_event',
+                condition=models.Q(
+                    kind='journal',
+                    deleted_at__isnull=True,
+                    mmdd__isnull=True,
+                ),
+            ),
+            models.Index(
+                KeyTransform('hostname', 'data'),
+                models.F('timestamp_created'),
+                name='idx_entries_dialog_host_ts',
+                condition=models.Q(deleted_at__isnull=True),
+            ),
+            models.Index(
+                KeyTransform('worker_target', 'data'),
+                models.F('timestamp_modified'),
+                name='idx_entries_worker_target',
+                condition=models.Q(
+                    status='active',
+                    deleted_at__isnull=True,
+                ),
+            ),
         ]
         constraints = [
             models.UniqueConstraint(
