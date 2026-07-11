@@ -122,6 +122,9 @@ if [ -r "$HOME/.tjai/env" ]; then
     . "$HOME/.tjai/env"
     set +a
 fi
+if [ -r "$HOME/.ssh/id_rsa" ]; then
+    /usr/bin/ssh-add --apple-use-keychain "$HOME/.ssh/id_rsa" </dev/null >/dev/null 2>&1 || true
+fi
 export PYTHONPATH="{agent_module.parent}"
 cd "{agent_module.parent}"
 exec "{python_path}" -m tj_agent run
@@ -234,6 +237,7 @@ def run_forever() -> None:
     # Lazy import: requires 'requests' which is only in venv on macOS
     from tj_agent.sync import sync_cycle, write_status
     from tj_agent import worker
+    from tj_agent.local_actions import run_due_local_actions
 
     # Default interval, will be updated from server sysconfig
     interval = 30
@@ -261,5 +265,10 @@ def run_forever() -> None:
         except Exception as e:
             logger.exception(f"Sync cycle failed: {e}")
             # Continue running, will retry next cycle
+
+        try:
+            run_due_local_actions()
+        except Exception as e:
+            logger.exception(f"Local action check failed: {e}")
 
         time.sleep(interval)

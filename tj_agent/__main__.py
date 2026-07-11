@@ -16,16 +16,47 @@ def setup_logging():
 
 def main():
     setup_logging()
-    init_db()
-
-    from tj_agent import daemon
 
     if len(sys.argv) < 2:
         print("Usage: python -m tj_agent "
-              "[run|start|stop|restart|status|abort]")
+              "[run|start|stop|restart|status|abort|local-action|git-update]")
         sys.exit(1)
 
     command = sys.argv[1]
+
+    # Local maintenance commands do not need the entry database. Keeping them
+    # ahead of init_db also avoids lock contention with the running sync agent.
+    if command == "local-action":
+        if len(sys.argv) < 3:
+            print("Usage: python -m tj_agent local-action <name>")
+            sys.exit(1)
+        from tj.config import get_config
+        from tj_agent.local_actions import run_action
+        name = sys.argv[2]
+        action_config = (get_config().get("local_actions") or {}).get(name, {})
+        result = run_action(name, action_config)
+        print(result.message)
+        if result.status == "error":
+            sys.exit(1)
+        return
+
+    if command == "git-update":
+        if len(sys.argv) not in (3, 5) or (
+            len(sys.argv) == 5 and sys.argv[3] != "--fetch-url"
+        ):
+            print("Usage: python -m tj_agent git-update <repo> "
+                  "[--fetch-url <url>]")
+            sys.exit(1)
+        from tj_agent.local_actions import update_git_repo
+        fetch_url = sys.argv[4] if len(sys.argv) == 5 else None
+        result = update_git_repo(sys.argv[2], fetch_url=fetch_url)
+        print(result.message)
+        if result.status in ("blocked", "error"):
+            sys.exit(1)
+        return
+
+    init_db()
+    from tj_agent import daemon
 
     if command == "run":
         # Run sync loop (called by systemd/launchd)

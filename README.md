@@ -43,6 +43,7 @@ interfaces, not the center of the system architecture.
 | [Markdown Rendering](docs/rendering.md) | Server-side render pipeline, linkify policy, Prism code blocks, `text` prose fences |
 | [Server & Deployment](docs/server.md) | Production environment, deploy, endpoints, logging, health, backups |
 | [Action Agent](docs/action-agent.md) | Scheduled task daemon, execution pipeline, action entry schema |
+| [Local Maintenance Actions](docs/local-actions.md) | Small machine-local jobs run by the sync agent, separate from EC2 action entries |
 | [Agents](docs/agents.md) | Daily synopsis, AI news curation (Picks), autonomous research, RSS reader |
 | [Browser Offline Cache](docs/offline-cache.md) | Research and generic browser-side offline caching for tjai pages and APIs |
 | [Remote Worker Pipeline](docs/remote-workers.md) | Long-poll protocol for offloading inference (e.g. gemma) to a worker on another machine — capability whitelist, claim lifecycle, display contract, troubleshooting |
