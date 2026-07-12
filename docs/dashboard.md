@@ -85,7 +85,7 @@ The page reads from these endpoints:
 
 Behavior:
 
-- If the current day has no events, a placeholder is inserted so a "Today" marker always exists. On first render the list scrolls to put today a third of the way down; later refreshes preserve scroll position. The "Today" link in the top nav re-centers without reloading.
+- If the current day has no events, a placeholder is inserted so a "Today" marker always exists. On first render and each 20-second auto-refresh, the list scrolls to put today a third of the way down. Other refreshes preserve scroll position. The "Today" link in the top nav re-centers without reloading.
 - The next future event gets a countdown chip. The chip stays on a just-started event and counts negative for up to 15 minutes after its start (`LATE_GRACE_SEC`).
 - Clock entries (`data.clock` = `start`/`stop`), annual events (`data.annual`), daily synopsis entries (`daily-*`), and diary entries (`diary-*`) each render with their own color and link target. Daily entries link to the synopsis page; others link to the entry detail.
 - When the browser's time zone differs from Eastern, an event's local time is shown in parentheses after the Eastern time.

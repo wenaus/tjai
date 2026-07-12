@@ -380,10 +380,10 @@
             renderCalendar({...calendarMeta, entries: calendarEntries});
         }
 
-        async function fetchCalendar() {
+        async function fetchCalendar({centerToday = false} = {}) {
             try {
                 const calContent = document.getElementById('calendar-content');
-                const preserveScroll = window._calendarInitialized && calContent
+                const preserveScroll = !centerToday && window._calendarInitialized && calContent
                     ? calContent.scrollTop : null;
                 const params = [];
                 if (calendarStartTs !== null && calendarEndTs !== null) {
@@ -394,7 +394,9 @@
                 const data = await fetchJson(`/tjai/api/dashboard/calendar${qs}`);
                 updateCalendarState(data, 'replace');
                 renderCalendarState();
-                if (preserveScroll !== null) {
+                if (centerToday) {
+                    window.scrollCalendarToToday();
+                } else if (preserveScroll !== null) {
                     document.getElementById('calendar-content').scrollTop = preserveScroll;
                 }
             } catch (e) {
@@ -1881,11 +1883,11 @@
             }
         });
 
-        async function refresh() {
+        async function refresh({centerCalendar = false} = {}) {
             const start = performance.now();
             const fetches = [fetchStatus()];
             if (!isSimplifiedMode) {
-                fetches.push(fetchCalendar(), fetchNamed());
+                fetches.push(fetchCalendar({centerToday: centerCalendar}), fetchNamed());
             }
             await Promise.all(fetches);
             lastBuildTime = Math.round(performance.now() - start);
@@ -2153,8 +2155,8 @@
             focusContentArea();
         });
 
-        // Refresh every 20 seconds
-        setInterval(refresh, 20000);
+        // Refresh every 20 seconds and return the calendar to today.
+        setInterval(() => refresh({centerCalendar: true}), 20000);
 
         // Update refresh display every second
         setInterval(updateRefreshDisplay, 1000);
