@@ -50,10 +50,16 @@
         }
         #named-section {
             flex: 1;
-            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
             border-top: 1px solid #333;
             padding-top: 12px;
             margin-top: 12px;
+        }
+        #named-content {
+            flex: 1;
+            overflow-y: auto;
         }
         .panel-right {
             flex: 5;
