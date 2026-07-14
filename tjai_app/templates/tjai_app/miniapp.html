@@ -932,8 +932,10 @@
     }
 
     function renderNamed(panel, data) {
+        // Modtime order, newest first (API returns alphabetical)
+        const entries = [...data.entries].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
         let html = '';
-        for (const entry of data.entries) {
+        for (const entry of entries) {
             const ctx = entry.context ? ` <span class="named-context">=${entry.context}</span>` : '';
             const lines = entry.line_count > 1 ? ` <span class="entry-lines">[${entry.line_count}]</span>` : '';
             html += `<div class="named-entry" onclick="openEntryDetail('${entry.id}')">`;
