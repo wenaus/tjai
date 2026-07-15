@@ -220,8 +220,15 @@ def push_dirty_entries() -> tuple[int, set[str], set[str]]:
     return total_pushed, conflict_ids, context_conflict_names
 
 
-def _merge_batch(cursor, response) -> int:
-    """Merge a single batch of pull response into local DB. Returns entry count."""
+def _merge_batch(cursor, response, force_accept_ids=None, resolved_ids=None) -> int:
+    """Merge a single batch of pull response into local DB. Returns entry count.
+
+    force_accept_ids: entry ids whose push the server just rejected as stale.
+    For these the server version is authoritative — accept it even though the
+    local copy is dirty (or has a later local timestamp), clearing is_dirty via
+    the upsert. Ids actually reconciled this way are added to resolved_ids.
+    """
+    force_accept_ids = force_accept_ids or set()
     count = 0
 
     # Merge contexts
@@ -245,10 +252,17 @@ def _merge_batch(cursor, response) -> int:
         local = cursor.fetchone()
 
         if local:
-            if local["is_dirty"] == 1:
+            if entry["id"] in force_accept_ids:
+                # Server rejected our push of this entry as stale, so the
+                # server version wins — fall through to the upsert, which
+                # clears is_dirty. Without this the entry stays dirty forever:
+                # push keeps getting rejected while pull keeps skipping it.
+                if resolved_ids is not None:
+                    resolved_ids.add(entry["id"])
+            elif local["is_dirty"] == 1:
                 # Local has pending changes, skip server version
                 continue
-            if local["timestamp_modified"] > entry["timestamp_modified"]:
+            elif local["timestamp_modified"] > entry["timestamp_modified"]:
                 # Local is newer, skip
                 continue
 
@@ -300,18 +314,23 @@ def _merge_batch(cursor, response) -> int:
     return count
 
 
-def pull_updates() -> int:
+def pull_updates(force_accept_ids=None):
     """
     Pull updates from server and merge into local DB.
     Handles paginated responses, pulling batches until server signals completion.
 
-    Returns (count of entries updated, sysconfig dict).
+    force_accept_ids: entry ids the server just rejected as stale on push;
+    their server versions are accepted over dirty local copies (see
+    _merge_batch).
+
+    Returns (count of entries updated, sysconfig dict, resolved conflict ids).
     """
     machine_id = get_machine_id()
     since = get_last_sync_time()
     after_id = ""
     total_count = 0
     sysconfig = {}
+    resolved_ids = set()
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -324,9 +343,9 @@ def pull_updates() -> int:
 
         if response.get("status") != "ok":
             logger.error(f"Pull batch {batch_num} failed: {response}")
-            return 0, sysconfig
+            return 0, sysconfig, resolved_ids
 
-        count = _merge_batch(cursor, response)
+        count = _merge_batch(cursor, response, force_accept_ids, resolved_ids)
         total_count += count
         conn.commit()
 
@@ -354,7 +373,7 @@ def pull_updates() -> int:
         logger.info(f"Pulled {total_count} entries in {batch_num} batch(es)")
     write_status(last_pull=time.time())
 
-    return total_count, sysconfig
+    return total_count, sysconfig, resolved_ids
 
 
 def sync_cycle() -> dict:
@@ -373,14 +392,20 @@ def sync_cycle() -> dict:
                 f"push phase failed: {type(exc).__name__}: {exc}"
             ) from exc
         try:
-            _count, sysconfig = pull_updates()
+            _count, sysconfig, resolved_ids = pull_updates(conflict_ids)
         except Exception as exc:
             raise RuntimeError(
                 f"pull phase failed: {type(exc).__name__}: {exc}"
             ) from exc
+        if resolved_ids:
+            logger.info(
+                "Reconciled %d push-rejected entries from server versions",
+                len(resolved_ids),
+            )
+        unresolved_ids = conflict_ids - resolved_ids
         conflicts = []
-        if conflict_ids:
-            conflicts.append("entries: " + ", ".join(sorted(conflict_ids)))
+        if unresolved_ids:
+            conflicts.append("entries: " + ", ".join(sorted(unresolved_ids)))
         if context_conflict_names:
             conflicts.append(
                 "contexts: " + ", ".join(sorted(context_conflict_names))
