@@ -2705,7 +2705,7 @@ def dashboard_named(request):
     entries = Entry.objects.filter(
         deleted_at__isnull=True,
         name__isnull=False,
-    ).exclude(name='').order_by(Lower('name'))
+    ).exclude(name='').exclude(status='archive').order_by(Lower('name'))
 
     result = []
     for entry in entries:
