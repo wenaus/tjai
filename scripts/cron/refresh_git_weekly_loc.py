@@ -108,10 +108,13 @@ def collect():
              if d.is_dir() and (d / '.git').exists()]
     for repo in repos:
         try:
+            # -M enables rename detection so pure moves count ~zero lines
+            # (with --no-renames, an in-repo rename booked every moved line
+            # as new — a 2025-08 directory rename inflated primus by 21k).
             result = subprocess.run(
                 ['git', '-c', 'safe.directory=*', 'log',
                  f'--author={AUTHOR}', f'--since={WEEK_ZERO}T00:00:00',
-                 '--numstat', '--no-renames', '--format=@%ad',
+                 '--numstat', '-M', '--format=@%ad',
                  '--date=format-local:%Y-%m-%d'],
                 capture_output=True, timeout=120, cwd=repo,
                 encoding='utf-8', errors='replace',
@@ -150,6 +153,15 @@ def collect():
             if len(parts) != 3 or parts[0] == '-':
                 continue
             path = parts[2].strip('"')  # git C-quotes special-char paths
+            if '=>' in path:
+                # Rename numstat path: 'a/{old => new}/b' or 'old => new'.
+                # Attribute the (usually few) changed lines to the new path.
+                if '{' in path:
+                    pre, rest = path.split('{', 1)
+                    mid, post = rest.split('}', 1)
+                    path = (pre + mid.split('=>')[1].strip() + post).replace('//', '/')
+                else:
+                    path = path.split('=>')[1].strip()
             if _excluded(path):
                 continue
             proj = _project_for(repo.name, path)
