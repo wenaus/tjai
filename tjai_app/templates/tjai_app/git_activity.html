@@ -318,9 +318,13 @@ function buildStats(heatmap) {
 // (dataviz six checks, dark surface #1a1a1a); 'other' is a deliberate
 // neutral gray, not a categorical slot.
 const LOC_COLORS = {
-    'tjai': '#3987e5', 'etaverse': '#008300', 'swf': '#d55181',
-    'corun-ai': '#c98500', 'kozykorner': '#199e70', 'primus': '#d95926',
-    'pax-eden': '#9085e9', 'other': '#8a8983',
+    'tjai': '#4a9df0', 'etaverse': '#00a800', 'SL/OS': '#1ec8e6',
+    'corun-ai': '#ffc61a', 'kozykorner': '#1fc98f',
+    'primus': '#f26b35', 'pax-eden': '#a89bff', 'blender': '#ff7a7a',
+    // swf family: subtle shades of one pink — residual deepest
+    'swf': '#d15c92', 'swf-monitor': '#e86ba0',
+    'swf-epicprod': '#f77fb0', 'swf-testbed': '#ff96c2',
+    'other': '#8a8983',
 };
 
 function buildLocChart(d) {
@@ -416,8 +420,8 @@ function buildLocPie(d) {
         const pct = (frac * 100).toFixed(frac < 0.02 ? 1 : 0);
         const tip = `${t.p}: ${fmt(t.v)} lines (${pct}%)`;
         svg += `<path d="M${cx},${cy} L${x0.toFixed(1)},${y0.toFixed(1)} A${r},${r} 0 ${large} 1 ${x1.toFixed(1)},${y1.toFixed(1)} Z" fill="${LOC_COLORS[t.p] || '#8a8983'}" stroke="#1a1a1a" stroke-width="2" data-tip="${tip}"/>`;
-        // Direct label for slices >= 3%; smaller ones carry the tooltip only
-        if (frac >= 0.03) {
+        // Direct label for slices >= 2.5%; smaller ones carry the tooltip only
+        if (frac >= 0.025) {
             const mid = (a0 + a1) / 2;
             const lx = cx + labelR * Math.cos(mid), ly = cy + labelR * Math.sin(mid);
             const anchor = Math.cos(mid) > 0.25 ? 'start' : (Math.cos(mid) < -0.25 ? 'end' : 'middle');

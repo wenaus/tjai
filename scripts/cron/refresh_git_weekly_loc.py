@@ -31,23 +31,34 @@ AUTHOR = 'wenaus@gmail.com'
 GITHUB_ROOT = Path('/home/admin/github')
 WEEK_ZERO = datetime(2025, 6, 2).date()  # Monday on/after 2025-06-01
 
-# Display order == stacking order (bottom-up) == legend order.
-PROJECTS = ['tjai', 'etaverse', 'swf', 'corun-ai', 'kozykorner',
-            'primus', 'pax-eden', 'other']
+# Display order == stacking order (bottom-up) == legend order. The order is
+# color-validated (adjacent-pair CVD checks) — change it only with the
+# template palette revalidated to match.
+PROJECTS = ['kozykorner', 'tjai', 'corun-ai', 'swf', 'swf-monitor',
+            'swf-epicprod', 'swf-testbed', 'etaverse', 'blender',
+            'SL/OS', 'primus', 'pax-eden', 'other']
 
 # Repo name -> project. Unlisted repos fall to 'other'; tjrepo is
-# attributed per file by top-level directory instead.
+# attributed per file by top-level directory instead. The swf family is
+# factored into shades of one hue: monitor, epicprod, and testbed are
+# called out; 'swf' is the family residual (remote, docs, common-lib).
 REPO_PROJECT = {
-    'swf-testbed': 'swf', 'swf-monitor': 'swf', 'swf-common-lib': 'swf',
-    'swf-remote': 'swf', 'swf-epicprod': 'swf', 'epic-wfms-docs': 'swf',
+    'swf-monitor': 'swf-monitor', 'swf-epicprod': 'swf-epicprod',
+    'swf-testbed': 'swf-testbed',
+    'swf-common-lib': 'swf', 'swf-remote': 'swf', 'epic-wfms-docs': 'swf',
     'corun-ai': 'corun-ai', 'corun-mcp-server': 'corun-ai',
+    'wrangle-ai': 'corun-ai',
 }
 
 # tjrepo top-level directory -> project ('' catches root-level files).
+# blender is its own family: the 3D content pipeline crosses etaverse,
+# SL/OS, and primus, so it carries its own color rather than a guess.
 TJREPO_DIR_PROJECT = {
     'tjai': 'tjai', 'etaverse': 'etaverse', 'kozykorner': 'kozykorner',
     'pax-eden': 'pax-eden', 'primus': 'primus', 'primus-blender': 'primus',
     'primus-sl': 'primus', 'primus-wright': 'primus',
+    'blender': 'blender',
+    'sl': 'SL/OS', 'lsl': 'SL/OS', 'lslp': 'SL/OS', 'wright': 'SL/OS',
 }
 
 # Path fragments excluded from line counts (generated/vendored files).
