@@ -374,7 +374,7 @@ function buildLocChart(d) {
         if (segs.length) topSeg = segs[segs.length - 1];
         for (const s of segs) {
             const rx = s === topSeg ? 2 : 0;
-            svg += `<rect x="${x}" y="${s.y1}" width="${barW}" height="${s.h}" rx="${rx}" fill="${LOC_COLORS[s.p] || '#8a8983'}" data-tip="wk of ${wkLabel} · ${s.p}: ${fmt(s.v)} of ${fmt(totals[i])} lines"/>`;
+            svg += `<rect x="${x}" y="${s.y1}" width="${barW}" height="${s.h}" rx="${rx}" fill="${LOC_COLORS[s.p] || '#8a8983'}" data-tip="${s.p}: ${fmt(s.v)} lines · wk of ${wkLabel} (week total ${fmt(totals[i])})"/>`;
         }
         // Month tick at first week of each month
         if (wk.getMonth() !== lastMonth) {
