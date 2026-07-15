@@ -68,6 +68,20 @@
             line-height: 11px;
         }
         .heatmap-body { display: flex; }
+        /* Weekly LoC chart */
+        .locchart { margin-bottom: 24px; }
+        .locchart-title { font-size: 13px; font-weight: bold; color: #e0e0e0; }
+        .locchart-sub { font-size: 11px; color: #888; margin: 2px 0 8px; }
+        .locchart-legend {
+            display: flex; flex-wrap: wrap; gap: 4px 14px;
+            font-size: 11px; color: #e0e0e0; margin-bottom: 8px;
+        }
+        .locchart-legend .chip {
+            display: inline-block; width: 10px; height: 10px;
+            border-radius: 2px; margin-right: 5px; vertical-align: -1px;
+        }
+        .locchart-legend .tot { color: #888; margin-left: 3px; }
+        .locchart svg { display: block; }
         .stats-row {
             display: flex;
             gap: 12px;
@@ -300,11 +314,93 @@ function buildStats(heatmap) {
     return `<div class="stats-row">${monthHtml}</div><div class="stats-row">${lbHtml}</div>`;
 }
 
+// Weekly lines-added stacked bars, colored by project. Palette validated
+// (dataviz six checks, dark surface #1a1a1a); 'other' is a deliberate
+// neutral gray, not a categorical slot.
+const LOC_COLORS = {
+    'tjai': '#3987e5', 'etaverse': '#008300', 'swf': '#d55181',
+    'corun-ai': '#c98500', 'kozykorner': '#199e70', 'primus': '#d95926',
+    'pax-eden': '#9085e9', 'other': '#8a8983',
+};
+
+function buildLocChart(d) {
+    const weeks = d.week_start || [];
+    const projects = d.projects || [];
+    if (!weeks.length || !projects.length) return '';
+    const n = weeks.length;
+    const fmt = v => v.toLocaleString('en-US');
+    const kfmt = v => v >= 1000 ? (v / 1000) + 'k' : '' + v;
+
+    const totals = weeks.map((_, i) =>
+        projects.reduce((s, p) => s + (d.series[p][i] || 0), 0));
+    const rawMax = Math.max(...totals, 1);
+    const pow = Math.pow(10, Math.floor(Math.log10(rawMax)));
+    const yMax = [1, 1.5, 2, 3, 4, 5, 6, 8, 10].map(m => m * pow).find(m => m >= rawMax);
+
+    const axisW = 34, plotH = 200, topPad = 6, xLabH = 16;
+    const slotW = Math.max(8, Math.floor((836 - axisW) / n));
+    const barW = slotW - 2;
+    const width = axisW + slotW * n, height = topPad + plotH + xLabH;
+    const y = v => topPad + plotH - (v / yMax) * plotH;
+
+    let svg = '';
+    // Recessive gridlines + axis labels
+    for (let g = 0; g <= 4; g++) {
+        const v = yMax * g / 4, gy = y(v);
+        svg += `<line x1="${axisW}" y1="${gy}" x2="${width}" y2="${gy}" stroke="#2e2e2e" stroke-width="1"/>`;
+        svg += `<text x="${axisW - 6}" y="${gy + 3}" text-anchor="end" font-size="10" fill="#888">${kfmt(v)}</text>`;
+    }
+    // Bars: hover column first (under segments), then stacked segments
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    let lastMonth = -1;
+    for (let i = 0; i < n; i++) {
+        const x = axisW + i * slotW;
+        const wk = new Date(weeks[i] + 'T12:00:00');
+        const wkLabel = monthNames[wk.getMonth()] + ' ' + wk.getDate();
+        svg += `<rect x="${x}" y="${topPad}" width="${slotW}" height="${plotH}" fill="transparent" data-tip="wk of ${wkLabel}: ${fmt(totals[i])} lines"/>`;
+        let cum = 0, topSeg = null;
+        const segs = [];
+        for (const p of projects) {
+            const v = d.series[p][i] || 0;
+            if (!v) continue;
+            const y1 = y(cum + v), y0 = y(cum);
+            segs.push({p, v, y1, h: Math.max(y0 - y1 - 1, 1)});
+            cum += v;
+        }
+        if (segs.length) topSeg = segs[segs.length - 1];
+        for (const s of segs) {
+            const rx = s === topSeg ? 2 : 0;
+            svg += `<rect x="${x}" y="${s.y1}" width="${barW}" height="${s.h}" rx="${rx}" fill="${LOC_COLORS[s.p] || '#8a8983'}" data-tip="wk of ${wkLabel} · ${s.p}: ${fmt(s.v)} of ${fmt(totals[i])} lines"/>`;
+        }
+        // Month tick at first week of each month
+        if (wk.getMonth() !== lastMonth) {
+            const lbl = monthNames[wk.getMonth()] + (wk.getMonth() === 0 ? ' ' + String(wk.getFullYear()).slice(2) : '');
+            svg += `<text x="${x}" y="${topPad + plotH + 12}" font-size="10" fill="#888">${lbl}</text>`;
+            lastMonth = wk.getMonth();
+        }
+    }
+
+    let legend = '';
+    for (const p of projects) {
+        const tot = (d.series[p] || []).reduce((a, b) => a + b, 0);
+        legend += `<span><span class="chip" style="background:${LOC_COLORS[p] || '#8a8983'}"></span>${p}<span class="tot">${kfmt(Math.round(tot / 100) * 100)}</span></span>`;
+    }
+
+    return `<div class="locchart">
+        <div class="locchart-title">Lines added per week, by project</div>
+        <div class="locchart-sub">commits authored by wenaus since Jun 2025 · archives and bulk-import commits (&gt;${kfmt(d.bulk_commit_lines || 100000)} lines) excluded</div>
+        <div class="locchart-legend">${legend}</div>
+        <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${svg}</svg>
+    </div>`;
+}
+
 (async function() {
     const el = document.getElementById('content');
     const tooltip = document.getElementById('tooltip');
     focusContentArea();
     try {
+        const locPromise = fetch('/tjai/api/git/weekly-loc?_=' + Date.now())
+            .then(r => r.ok ? r.json() : null).catch(() => null);
         const resp = await fetch('/tjai/api/git/data?_=' + Date.now());
         if (!resp.ok) {
             const text = await resp.text();
@@ -325,11 +421,13 @@ function buildStats(heatmap) {
             }
             html += '</div>';
         }
-        // Heatmap, then stats, then day list
+        // Heatmap, then stats, then weekly LoC chart, then day list
         if (data.heatmap) {
             html += buildHeatmap(data.heatmap);
             html += buildStats(data.heatmap);
         }
+        const locData = await locPromise;
+        if (locData) html += buildLocChart(locData);
         for (const day of data.days) {
             const countBadge = day.commits ? ` <span style="font-size:.8em;color:#888;font-weight:normal;">(${day.commits} commit${day.commits !== 1 ? 's' : ''})</span>` : '';
             html += `<div class="day-header" data-isodate="${day.date}">${day.date_display}${countBadge}</div>`;

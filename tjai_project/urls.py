@@ -56,6 +56,7 @@ urlpatterns = [
     path("api/assessment/dashboard", views.api_assessment_dashboard, name="api_assessment_dashboard"),
     path("git/", views.git_activity, name="git_activity"),
     path("api/git/data", views.git_activity_data, name="git_activity_data"),
+    path("api/git/weekly-loc", views.git_weekly_loc_data, name="git_weekly_loc_data"),
     path("dev/", views.dev_activity, name="dev_activity"),
     path("api/dev/data", views.dev_activity_data, name="dev_activity_data"),
     path("agent-log/", views.agent_log, name="agent_log"),

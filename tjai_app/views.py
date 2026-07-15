@@ -3266,6 +3266,19 @@ def _restructure_git_md(md_text):
 
 
 @login_required
+def git_weekly_loc_data(request):
+    """Weekly lines-added-by-project JSON (built by refresh_git_weekly_loc cron)."""
+    from pathlib import Path
+    f = Path(django_settings.BASE_DIR) / 'data' / 'git_weekly_loc.json'
+    if not f.exists():
+        return JsonResponse({'week_start': [], 'projects': [], 'series': {}})
+    try:
+        return JsonResponse(json.loads(f.read_text(encoding='utf-8')))
+    except Exception as e:
+        logger.error("git_weekly_loc_data failed: %s", e)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
 def git_activity_data(request):
     """Return git activity assembled from daily files."""
     from pathlib import Path
