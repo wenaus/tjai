@@ -128,35 +128,54 @@ def _upsert_entry(entry_id, content, tags):
     return result
 
 
-def _call_claude(prompt):
-    """Direct Anthropic API call. No MCP, no tools — pure summarization.
+CLAUDE_TIMEOUT = 3600  # 1 hour
 
-    Uses streaming because Anthropic's Messages API rejects non-streaming
-    requests whose declared max_tokens implies the operation may take
-    longer than 10 minutes (HTTP 400 "Streaming is required..."). At Opus
-    4.7's documented 128k output ceiling that threshold is tripped, so
-    streaming is mandatory regardless of how long the actual response
-    turns out to be. No cost difference — per-token pricing is identical.
+
+def _find_claude():
+    """Find the claude CLI binary."""
+    import shutil
+    path = shutil.which('claude')
+    if path:
+        return path
+    fallback = os.path.expanduser('~/.local/bin/claude')
+    if os.path.isfile(fallback) and os.access(fallback, os.X_OK):
+        return fallback
+    raise RuntimeError("'claude' CLI not found in PATH or ~/.local/bin")
+
+
+def _call_claude(prompt):
+    """Call Claude via `claude -p` (subscription auth, no API cost).
+
+    No MCP, no tools — pure summarization. Prompt piped via stdin to avoid
+    OS argument length limits.
     """
-    import anthropic
-    api_key = os.environ.get('ANTHROPIC_API_KEY')
-    if not api_key:
-        raise RuntimeError("ANTHROPIC_API_KEY not set in environment")
-    client = anthropic.Anthropic(api_key=api_key)
-    logger.info("workweek: calling Claude (claude-opus-4-7, %d char prompt, streaming)",
+    import subprocess
+    cmd = [
+        _find_claude(),
+        '-p',
+        '--output-format', 'text',
+        '--model', 'opus',
+    ]
+    env = os.environ.copy()
+    env.pop('CLAUDECODE', None)
+    env.pop('ANTHROPIC_API_KEY', None)  # Force subscription auth
+    env['TJAI_ACTION_ID'] = 'workweek-agent'  # Prevent dialog recording
+
+    logger.info("workweek: calling claude -p (opus, subscription, %d char prompt)",
                 len(prompt))
-    text_parts = []
-    with client.messages.stream(
-        model='claude-opus-4-7',
-        max_tokens=128_000,
-        messages=[{'role': 'user', 'content': prompt}],
-    ) as stream:
-        for text in stream.text_stream:
-            text_parts.append(text)
-    result = ''.join(text_parts)
-    if not result:
-        raise RuntimeError("Claude returned empty response (no text in stream)")
-    return result
+    try:
+        result = subprocess.run(
+            cmd, input=prompt, capture_output=True, text=True,
+            timeout=CLAUDE_TIMEOUT, env=env,
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"claude -p timed out after {CLAUDE_TIMEOUT}s")
+    if result.returncode != 0:
+        stderr = result.stderr[:500] if result.stderr else '(no stderr)'
+        raise RuntimeError(f"claude -p exited {result.returncode}: {stderr}")
+    if not result.stdout.strip():
+        raise RuntimeError("claude -p returned empty output")
+    return result.stdout.strip()
 
 
 def main():
