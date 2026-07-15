@@ -79,6 +79,18 @@ Now do the task...
 
 This applies to any `ai_prompt` that uses template variables. Prompts that tell Claude to fetch its own data via MCP calls (e.g. `get_entry()`, `get_memories()`) don't have this problem since nothing is injected.
 
+### Watchdog (disabled)
+
+`scripts/watchdog.py` is an anomaly detector that runs as the `watchdog` action's `mechanical_script` (10-minute interval). Checks: dispatch loops, stale agents, zombie processes, error storms, heartbeat staleness, and resource exhaustion (memory/swap/disk thresholds). Non-OK results are logged to AppLog; full results go to SysConfig (`watchdog_last_results`, `watchdog_status`). On anomaly it sends a capped SES email and triggers the `watchdog-escalation` action, an AI dispatch that diagnoses and recommends without taking destructive actions.
+
+Both action entries (`watchdog`, `watchdog-escalation`) are `status: blocked` — disabled 2026-07-15. During the memory-exhaustion incident of that date the watchdog reported all checks OK minutes before the collapse, could not run during it, and its interrupted dispatch left a stuck `agent_watchdog_status=running` that the agent health check flagged as an error every 30 seconds. To re-enable, set both entries' status to active and add a `timeout` value to the `watchdog` action's data so the agent health check can assess its dispatches.
+
+Independent of the watchdog action, the daemon loop in `action_agent.py` runs its own periodic checks, which remain active:
+
+- **Agent health** (30s) — assesses dispatched agents via tracking-entry activity against the action's `timeout`; auto-recovers `running` status left behind by hard-killed agents.
+- **Entry flood** (5 min) — Jaccard-similarity clustering of recently created entries to catch runaway dispatch loops; alerts via the watchdog email helper.
+- **Multimodel subprocess** (30s) — `heal_research_subprocess_state()` marks a research model failed when its subprocess PID is gone, so research runs reach a terminal state and synthesis can proceed.
+
 ### Date Convention
 
 `get_target_date()` returns **today** in the configured timezone. `daily-2026-03-03` is created on March 3 and covers March 3.
