@@ -3920,14 +3920,24 @@ def entry_detail(request, entry_id=None):
 @login_required
 @require_http_methods(["POST"])
 def api_entry_purge_versions(request, entry_id):
-    """Delete all but the most recent version for an entry."""
+    """Delete all but the most recent version for an entry.
+
+    With ?days=N, delete only versions older than N days (the most recent
+    version is still always kept)."""
     from .models import EntryVersion
     versions = EntryVersion.objects.filter(entry_id=entry_id).order_by('-timestamp')
     keep = versions.first()
-    if keep:
-        deleted, _ = EntryVersion.objects.filter(entry_id=entry_id).exclude(id=keep.id).delete()
-    else:
-        deleted = 0
+    if not keep:
+        return JsonResponse({'ok': True, 'deleted': 0})
+    qs = EntryVersion.objects.filter(entry_id=entry_id).exclude(id=keep.id)
+    days = request.GET.get('days')
+    if days:
+        try:
+            cutoff = time.time() - float(days) * 86400
+        except ValueError:
+            return JsonResponse({'ok': False, 'error': f'invalid days: {days}'}, status=400)
+        qs = qs.filter(timestamp__lt=cutoff)
+    deleted, _ = qs.delete()
     return JsonResponse({'ok': True, 'deleted': deleted})
 
 

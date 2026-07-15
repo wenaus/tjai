@@ -366,7 +366,7 @@
         var el = document.getElementById('version-history');
         var html = '<div style="border-top: 1px solid #333; padding-top: 12px;">';
         html += '<div style="color:#8a8a8a; margin-bottom: 8px; font-size: 12px;">Version History (' + versions.length + ')';
-        if (versions.length > 1) html += ' <button onclick="purgeVersions()" style="background:#333;color:#e0e0e0;border:1px solid #555;padding:2px 8px;border-radius:3px;cursor:pointer;font-family:inherit;font-size:11px;margin-left:8px">Purge</button>';
+        if (versions.length > 1) html += ' <button onclick="purgeVersions()" style="background:#333;color:#e0e0e0;border:1px solid #555;padding:2px 8px;border-radius:3px;cursor:pointer;font-family:inherit;font-size:11px;margin-left:8px">Purge</button> <button onclick="purgeVersions(7)" style="background:#333;color:#e0e0e0;border:1px solid #555;padding:2px 8px;border-radius:3px;cursor:pointer;font-family:inherit;font-size:11px;margin-left:4px">Purge &gt; 1 week</button>';
         html += '</div>';
         if (!versions.length && !hasLocal) {
             html += '<div style="color:#aaa;font-size:12px;">No versions recorded for this entry.</div></div>';
@@ -444,9 +444,10 @@
             location.reload();
         }
     }
-    async function purgeVersions() {
+    async function purgeVersions(days) {
         try {
-            var resp = await fetch('/tjai/api/entry/{{ entry.id }}/purge-versions', {
+            var url = '/tjai/api/entry/{{ entry.id }}/purge-versions' + (days ? '?days=' + days : '');
+            var resp = await fetch(url, {
                 method: 'POST',
                 headers: {'X-CSRFToken': '{{ csrf_token }}'},
             });

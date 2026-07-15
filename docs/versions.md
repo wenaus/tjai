@@ -81,7 +81,7 @@ old = get_entry_versions(entry_id=current.id, age="24h")
 
 ## UI
 
-- **Entry detail page**: Shows version history with version number, timestamp, changed_by, and content preview. Click a version to load it into the editor for restoration.
+- **Entry detail page**: Shows version history with version number, timestamp, changed_by, and content preview. Click a version to load it into the editor for restoration. The history header carries two purge buttons: **Purge** deletes all but the most recent version, and **Purge > 1 week** deletes versions older than seven days. Both keep the most recent version and call `api/entry/<uuid>/purge-versions` (POST, optional `days` parameter).
 - **Versions page** (`/tjai/versions/`): Global reverse-chronological list of recent changes across all entries.
 
 ## Signal Implementation
