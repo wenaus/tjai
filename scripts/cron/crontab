@@ -6,7 +6,11 @@ SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin
 
 # Every 30 min — pull every repo in ~/github (swf-* tracks highest infra/baseline-vNN)
-*/30 * * * * /home/admin/github/tjrepo/tjai/scripts/cron/git_pull_repos.sh >> /tmp/cron_git_pull.log 2>&1
+*/30 * * * * flock -n /tmp/git_pull_repos.lock /home/admin/github/tjrepo/tjai/scripts/cron/git_pull_repos.sh >> /tmp/cron_git_pull.log 2>&1
+
+# Every 5 min — pull swf-* repos only: this machine collaborates with live
+# swf development and must not operate on 30-min-stale swf software.
+*/5 * * * * flock -n /tmp/git_pull_repos.lock /home/admin/github/tjrepo/tjai/scripts/cron/git_pull_repos.sh swf-only >> /tmp/cron_git_pull_swf.log 2>&1
 
 # Daily 03:00 — generate dev activity (upstream repo commits)
 0 3 * * * /var/www/tjai/.venv/bin/python /home/admin/github/tjrepo/tjai/scripts/section_dev.py >> /tmp/cron_section_dev.log 2>&1

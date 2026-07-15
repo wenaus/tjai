@@ -1,13 +1,19 @@
 #!/bin/bash
 # Pull latest for every repo in ~/github, every 30 minutes.
+# With arg "swf-only": pull only the swf-* repos (cron runs this every 5
+# minutes — this machine collaborates with live swf development and must
+# not operate on stale swf software).
 # swf-* repos: checkout and pull the highest infra/baseline-vNN branch.
 # All other repos: pull the current branch.
 # All pulls are --ff-only (never merges or clobbers); a 3s sleep spaces them
-# so a run does not fire ~25 fetches at GitHub at once.
+# so a run does not fire ~25 fetches at GitHub at once. Cron wraps both
+# entries in flock so the two cadences never run concurrently.
 
 set -uo pipefail
 
 GITHUB_DIR=/home/admin/github
+SWF_ONLY=0
+[ "${1:-}" = "swf-only" ] && SWF_ONLY=1
 
 SWF_REPOS=(
     "$GITHUB_DIR/swf-testbed"
@@ -26,7 +32,7 @@ is_swf() {
 }
 
 # Every non-swf git repo under ~/github: pull current branch.
-for dir in "$GITHUB_DIR"/*/; do
+[ "$SWF_ONLY" = 1 ] || for dir in "$GITHUB_DIR"/*/; do
     repo="${dir%/}"
     [ -d "$repo/.git" ] || continue
     is_swf "$repo" && continue
