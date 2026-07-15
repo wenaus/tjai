@@ -533,6 +533,27 @@ def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: 
     user_prompt = ("Begin executing your task per the system prompt now."
                    if os.environ.get('TJAI_PROMPT_IS_SYSTEM') else prompt)
 
+    # Hard subagent cap via PreToolUse hook. Prompt-level limits are not
+    # enforcement: on 2026-07-15 a research run instructed "AT MOST 3
+    # subagent researchers" spawned 74 and took the host down through memory
+    # exhaustion. The hook blocks Agent/Task tool calls past
+    # TJAI_MAX_SUBAGENTS (default 3 in the hook script). Claude Code has no
+    # built-in numeric subagent cap (verified 2026-07-15); PreToolUse is the
+    # supported enforcement point.
+    hook_script = Path(__file__).resolve().parent.parent.parent / 'scripts' / 'claude_subagent_cap.py'
+    cap_settings = json.dumps({
+        'hooks': {
+            'PreToolUse': [{
+                'matcher': 'Agent|Task',
+                'hooks': [{
+                    'type': 'command',
+                    'command': f'{shlex.quote(sys.executable)} {shlex.quote(str(hook_script))}',
+                    'timeout': 10,
+                }],
+            }],
+        },
+    })
+
     cmd = [
         claude_path,
         '-p', user_prompt,
@@ -540,6 +561,7 @@ def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: 
         '--output-format', 'text',
         '--model', model,
         '--effort', effort,
+        '--settings', cap_settings,
     ]
 
     env = os.environ.copy()

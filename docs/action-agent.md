@@ -61,6 +61,8 @@ tj restart-agent      # Graceful restart (after current action completes)
 
 Actions needing intelligence use `tj agent` to launch a detached Claude instance. Runs on Claude subscription (not API credits), has MCP tool access, writes results to a tjai tracking entry.
 
+**Subagent cap:** every `tj agent` claude launch passes `--settings` with a PreToolUse hook (`scripts/claude_subagent_cap.py`) that hard-blocks Agent/Task tool calls past `TJAI_MAX_SUBAGENTS` (default 3), counting per session in a flock-guarded `/tmp` file. Prompt-level limits are not enforcement — a 2026-07-15 research run instructed to spawn at most 3 subagents spawned 74 and exhausted host memory. Claude Code has no built-in numeric subagent cap; PreToolUse is the supported enforcement point.
+
 **XML delimiters in `ai_prompt` templates:** When a prompt templates in variable content (e.g. `{guidance}`, entry content, data), wrap the injected content in XML tags to separate instructions from data. Without delimiters, Claude can confuse injected content with prompt instructions — especially when the injected text itself contains directive-like language.
 
 ```
