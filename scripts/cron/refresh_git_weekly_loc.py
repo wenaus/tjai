@@ -74,6 +74,13 @@ EXCLUDE_TJREPO_TOP = {'etaverse-2014', 'tjai-archive', 'tjweb-old',
 # recipe migration), dropped whole. Stated on the chart.
 BULK_COMMIT_LINES = 100_000
 
+# Cross-repo moves: git rename detection (-M) is per-repo, so code moved
+# between repositories books as new lines. Enumerated manually and dropped.
+CROSS_REPO_MOVE_COMMITS = {
+    # pcs application + docs moved swf-monitor -> swf-epicprod (25k lines)
+    'affc90be498c4f7c8aa2da96c52f24f14faf6883',
+}
+
 
 def _excluded(path):
     if any(part in path for part in EXCLUDE_PARTS):
@@ -114,7 +121,7 @@ def collect():
             result = subprocess.run(
                 ['git', '-c', 'safe.directory=*', 'log',
                  f'--author={AUTHOR}', f'--since={WEEK_ZERO}T00:00:00',
-                 '--numstat', '-M', '--format=@%ad',
+                 '--numstat', '-M', '--format=@%H %ad',
                  '--date=format-local:%Y-%m-%d'],
                 capture_output=True, timeout=120, cwd=repo,
                 encoding='utf-8', errors='replace',
@@ -141,9 +148,13 @@ def collect():
         for line in result.stdout.splitlines():
             if line.startswith('@'):
                 flush()
+                commit_hash, _, date_str = line[1:].partition(' ')
+                if commit_hash in CROSS_REPO_MOVE_COMMITS:
+                    week = None
+                    continue
                 try:
                     week = _week_index(
-                        datetime.strptime(line[1:], '%Y-%m-%d').date())
+                        datetime.strptime(date_str, '%Y-%m-%d').date())
                 except ValueError:
                     week = None
                 continue
