@@ -48,4 +48,20 @@ Other languages are left untouched. `.text-fence` styling is defined in `_prism.
 for pages that include that partial (e.g. the diary) and inherited from the existing
 `.content pre` / `.body-text pre` boxes on the entry-detail and dev-activity pages.
 
-`scripts/test_md_render.py` covers this behavior.
+## LaTeX math
+
+Entries may contain inline `\(...\)` and display `\[...\]` LaTeX (research reports
+routinely carry physics notation). The `pymdownx.arithmatex` extension (generic
+mode) is part of the default extension set in both render copies and is appended
+to the explicit `md_exts` lists in views; it carries the LaTeX through the
+markdown pass intact, wrapped in `.arithmatex` spans/divs. Without it, markdown
+eats `\(` as an escaped paren and the math renders as gunk.
+
+`_katex.html` typesets those elements in the browser with KaTeX, vendored at
+`static/tjai/vendor/katex/<version>/` (same convention as Prism). The partial is
+included by the entry-detail, entry-public, research-detail, daily-synopsis, and
+diary templates. KaTeX glyphs inherit the page text color, so dark mode needs no
+special styling; failed parses leave the LaTeX source visible.
+
+`scripts/test_markdown_render.py` covers rendering behavior, including the math
+pass-through.

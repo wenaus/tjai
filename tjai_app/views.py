@@ -117,9 +117,16 @@ def _render_markdown(text, extensions=None):
     import markdown
     if not text:
         return ''
-    exts = extensions if extensions is not None else ['nl2br', 'tables', 'fenced_code']
+    exts = extensions if extensions is not None else [
+        'nl2br', 'tables', 'fenced_code', 'pymdownx.arithmatex']
+    # arithmatex (generic mode) protects \(...\) / \[...\] LaTeX through the
+    # markdown pass and wraps it in .arithmatex spans/divs; _katex.html
+    # typesets those in the browser. Without it, markdown eats \( as an
+    # escaped paren and physics notation renders as gunk.
+    cfgs = {'pymdownx.arithmatex': {'generic': True}} if 'pymdownx.arithmatex' in exts else {}
     safe_text = _neutralize_raw_html_hazards(text)
-    html = markdown.markdown(_fix_md_list_spacing(safe_text), extensions=exts, tab_length=2)
+    html = markdown.markdown(_fix_md_list_spacing(safe_text), extensions=exts,
+                             extension_configs=cfgs, tab_length=2)
     html = _neutralize_raw_html_hazards(html)
     return _render_text_fences(html)
 
@@ -1640,7 +1647,8 @@ def api_diary_entries(request):
         body_text = '\n'.join(body_lines[1:]).strip() if len(body_lines) > 1 else ''
         data = entry.data if isinstance(entry.data, dict) else {}
         fmt = data.get('format') or 'md'
-        md_exts = ['nl2br', 'tables', 'fenced_code'] if fmt == 'txt' else ['tables', 'fenced_code']
+        md_exts = (['nl2br', 'tables', 'fenced_code'] if fmt == 'txt'
+                   else ['tables', 'fenced_code']) + ['pymdownx.arithmatex']
         content_html = _render_markdown(body_text, extensions=md_exts)
         def _wl(m):
             ref = m.group(1)
@@ -3499,7 +3507,8 @@ def entry_public(request, entry_id=None):
     body_lines = entry.content.split('\n')
     body_text = '\n'.join(body_lines[1:]).strip() if len(body_lines) > 1 else ''
     fmt = data.get('format') or ('txt' if entry.context_id == 'recipe' else 'md')
-    md_exts = ['nl2br', 'tables', 'fenced_code'] if fmt == 'txt' else ['tables', 'fenced_code']
+    md_exts = (['nl2br', 'tables', 'fenced_code'] if fmt == 'txt'
+               else ['tables', 'fenced_code']) + ['pymdownx.arithmatex']
     content_html = _render_markdown(body_text, extensions=md_exts)
     # Linkify wiki-links to public URLs
     def _wiki_link_public(m):
@@ -3798,7 +3807,8 @@ def entry_detail(request, entry_id=None):
     if fmt == 'xml':
         content_html = _render_xml_code(entry.content)
     else:
-        md_exts = ['nl2br', 'tables', 'fenced_code'] if fmt == 'txt' else ['tables', 'fenced_code']
+        md_exts = (['nl2br', 'tables', 'fenced_code'] if fmt == 'txt'
+                   else ['tables', 'fenced_code']) + ['pymdownx.arithmatex']
         content_html = _render_markdown(body_text, extensions=md_exts)
         # [[wiki-links]] first — before bare URL linkification
         def _wiki_link(m):

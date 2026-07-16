@@ -122,9 +122,14 @@ def render_markdown(text, extensions=None):
     import markdown
     if not text:
         return ''
-    exts = extensions if extensions is not None else ['nl2br', 'tables', 'fenced_code']
+    exts = extensions if extensions is not None else [
+        'nl2br', 'tables', 'fenced_code', 'pymdownx.arithmatex']
+    # Kept in sync with tjai_app.views._render_markdown — arithmatex
+    # (generic) carries \(...\) LaTeX through markdown for KaTeX to typeset.
+    cfgs = {'pymdownx.arithmatex': {'generic': True}} if 'pymdownx.arithmatex' in exts else {}
     safe_text = _neutralize_raw_html_hazards(text)
-    html = markdown.markdown(_fix_md_list_spacing(safe_text), extensions=exts, tab_length=2)
+    html = markdown.markdown(_fix_md_list_spacing(safe_text), extensions=exts,
+                             extension_configs=cfgs, tab_length=2)
     html = _neutralize_raw_html_hazards(html)
     return _render_text_fences(html)
 

@@ -4,6 +4,7 @@ Pillow>=10.0.0
 requests>=2.31.0
 psycopg[binary]>=3.2
 markdown>=3.5
+pymdown-extensions>=10.0  # arithmatex: LaTeX math survives markdown, typeset by KaTeX
 mcp>=1.26.0
 starlette>=1.2.1  # security floor: CVE-2026-48710 BadHost; pin at validated version, transitive via mcp/sse-starlette
 feedparser>=6.0

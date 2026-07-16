@@ -134,13 +134,37 @@ def main():
     )
 
     html = _linkify_rendered_html(_render_markdown(
-        "```text\nhttps://example.com/code\n```",
+        "```python\nhttps://example.com/code\n```",
         extensions=["tables", "fenced_code"],
     ))
     assert_not_contains(
         html,
         '<a target="_blank" href="https://example.com/code">',
-        "bare URL in fenced code is not linkified",
+        "bare URL in a code fence is not linkified",
+    )
+
+    html = _linkify_rendered_html(_render_markdown(
+        "```text\nhttps://example.com/code\n```",
+        extensions=["tables", "fenced_code"],
+    ))
+    assert_contains(
+        html,
+        '<a target="_blank" href="https://example.com/code">',
+        "bare URL in a text fence is linkified (text fences are prose)",
+    )
+
+    html = _render_markdown(
+        r"Every SLO names \(t_\mathrm{notify}\) and targets \(t_0+10\) s."
+    )
+    assert_contains(
+        html,
+        'class="arithmatex"',
+        "inline LaTeX math is wrapped for KaTeX",
+    )
+    assert_contains(
+        html,
+        r"t_\mathrm{notify}",
+        "LaTeX body survives the markdown pass unmangled",
     )
 
     print("markdown render tests passed")
