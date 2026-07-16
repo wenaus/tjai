@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Appends ## ToDo to the daily synopsis entry.
 
-Lists all pending todos grouped by context (alphabetical; uncontexted last),
+Lists all pending todos grouped by context under an explicit ### subsection
+heading per context (alphabetical; uncontexted last as "(no context)"),
 reverse modification-time within each context. Title as link to the entry
 detail page with up to 3 lines of subtext. Done and archived todos are
 excluded; no time-depth limit.
@@ -63,11 +64,16 @@ def build(since_ts, target_date):
         return None
 
     lines = []
+    current_ctx = object()  # sentinel: differs from any context incl. None
     for entry in entries:
+        if entry.context_id != current_ctx:
+            current_ctx = entry.context_id
+            if lines:
+                lines.append('')
+            lines.append(f'### {current_ctx or "(no context)"}')
         title, subtext = _title_and_subtext(entry)
-        ctx_suffix = f'   :{entry.context_id}' if entry.context_id else ''
         link = f'/tjai/entry/{entry.id}'
-        lines.append(f'- [{title}]({link}){ctx_suffix}')
+        lines.append(f'- [{title}]({link})')
         for st in subtext:
             lines.append(f'  - {st}')
     return '\n'.join(lines)

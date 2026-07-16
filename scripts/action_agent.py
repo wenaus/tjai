@@ -300,6 +300,15 @@ def _check_entry_flood():
             value='', timestamp_modified=now)
 
 
+# Health-threshold fallback when a dispatched action has no timeout
+# configured (or its action entry is missing). Health assessment and stale
+# auto-recovery must always run: erroring out instead left a stuck
+# 'running' status storming the log every 30s with no self-heal
+# (2026-07-15, watchdog). Used for health thresholds only — never to kill.
+DEFAULT_HEALTH_TIMEOUT = 3600
+_no_timeout_warned = set()
+
+
 def _check_agent_health():
     """Probe health of all running agents using tracking entry activity + /proc.
 
@@ -355,18 +364,21 @@ def _check_agent_health():
         ).values_list('value', flat=True).first()
         launch_age = (now - float(launched_val)) if launched_val else None
 
-        # Use action's configured timeout for health thresholds
+        # Use action's configured timeout for health thresholds, falling
+        # back to DEFAULT_HEALTH_TIMEOUT (warned once per agent) so
+        # assessment and stale auto-recovery always proceed.
         action_entry = Entry.objects.filter(
             data__entry_id=action_id, kind='action', deleted_at__isnull=True,
         ).first()
-        if action_entry:
-            action_timeout = (action_entry.data or {}).get('timeout')
-            if action_timeout is None:
-                logger.error("%s: no timeout configured in action entry — cannot determine health", action_id)
-                continue
-        else:
-            logger.error("%s: action entry not found — cannot determine health", action_id)
-            continue
+        action_timeout = (action_entry.data or {}).get('timeout') if action_entry else None
+        if action_timeout is None:
+            if action_id not in _no_timeout_warned:
+                _no_timeout_warned.add(action_id)
+                logger.warning(
+                    "%s: no timeout in action entry%s — using default %ds for health checks",
+                    action_id, '' if action_entry else ' (entry not found)',
+                    DEFAULT_HEALTH_TIMEOUT)
+            action_timeout = DEFAULT_HEALTH_TIMEOUT
 
         if activity_age is not None and activity_age < 120:
             health = 'active'

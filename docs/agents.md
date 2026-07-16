@@ -56,7 +56,7 @@ No agent restart needed — section scripts run as subprocesses.
 
 | Script | Heading | Data Source |
 |--------|---------|-------------|
-| `section_todos.py` | ToDo | DB: todos added or modified in last 30 days, reverse time order, 3-line subtext |
+| `section_todos.py` | ToDo | DB: all pending todos, `###` subsection per context (alphabetical, uncontexted last), reverse modification time within each, 3-line subtext |
 | `section_keeps.py` | Keeps | DB: saved bookmarks + kept picks, last 24h |
 | `section_goals.py` | Goals | DB: goals created or modified in last 24h |
 | `section_git.py` | Git | `git log --since` on `/home/admin/github/tjrepo` |
@@ -64,7 +64,7 @@ No agent restart needed — section scripts run as subprocesses.
 | `section_health.py` | System Health | `data/health-digest/{date}.json` (written by `health_digest.py`) |
 | `section_mattermost.py` | Mattermost | swf-monitor REST: pandabot/testbedbot channel posts, last 24h |
 
-Sections with a 24h window skip silently on quiet days (`build()` returns None). `section_todos.py` uses a 30-day window specifically so it surfaces something most days.
+Sections with a 24h window skip silently on quiet days (`build()` returns None). `section_todos.py` ignores the window — all pending todos are surfaced regardless of age.
 
 ### Web UI
 

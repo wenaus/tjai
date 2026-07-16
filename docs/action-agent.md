@@ -89,7 +89,7 @@ Both action entries (`watchdog`, `watchdog-escalation`) are `status: blocked` �
 
 Independent of the watchdog action, the daemon loop in `action_agent.py` runs its own periodic checks, which remain active:
 
-- **Agent health** (30s) — assesses dispatched agents via tracking-entry activity against the action's `timeout`; auto-recovers `running` status left behind by hard-killed agents.
+- **Agent health** (30s) — assesses dispatched agents via tracking-entry activity against the action's `timeout`, falling back to a 1-hour default (warned once) when no timeout is configured or the action entry is missing; auto-recovers `running` status left behind by hard-killed agents. The fallback exists because erroring out instead left a stuck status storming the log every cycle with no self-heal (2026-07-15, watchdog).
 - **Entry flood** (5 min) — Jaccard-similarity clustering of recently created entries to catch runaway dispatch loops; alerts via the watchdog email helper.
 - **Multimodel subprocess** (30s) — `heal_research_subprocess_state()` marks a research model failed when its subprocess PID is gone, so research runs reach a terminal state and synthesis can proceed.
 
