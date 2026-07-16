@@ -29,7 +29,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parent.parent / 'scripts'
 # prompt on the entry. REMOTE_WORKER_MODELS maps the research model name to its
 # WORKER_CAPABILITIES entry (which the worker's worker_models config then maps
 # to a local ollama tag).
-RESEARCH_MODELS = ('gemini', 'chatgpt')  # gemma and qwen off — code kept (remote worker, completion handling) so either can be re-enabled by adding it back. qwen off 2026-06-08: the Mac remote worker was offline and qwen jobs accumulated staged. chatgpt is the compatibility key for the subscription-backed Codex CLI peer launched by research_multimodel.py. deepseek-flash/pro off 2026-06-29 — code kept in research_multimodel.py so either can be re-enabled by adding it back. claude off 2026-07-15: a claude research run (74 subagents fetching PDFs) exhausted ec2dev RAM+swap and took the host down for an hour; code kept so it can be re-enabled once memory-capped.
+RESEARCH_MODELS = ('claude', 'gemini', 'chatgpt')  # gemma and qwen off — code kept (remote worker, completion handling) so either can be re-enabled by adding it back. qwen off 2026-06-08: the Mac remote worker was offline and qwen jobs accumulated staged. chatgpt is the compatibility key for the subscription-backed Codex CLI peer launched by research_multimodel.py. deepseek-flash/pro off 2026-06-29 — code kept in research_multimodel.py so either can be re-enabled by adding it back. claude re-enabled 2026-07-16 under the hard 3-subagent PreToolUse cap (TJAI_MAX_SUBAGENTS), after the 2026-07-15 run (74 subagents) exhausted host memory.
 REMOTE_WORKER_MODELS = {'qwen': 'qwen', 'gemma': 'gemma4'}
 TJAI_DIR = SCRIPTS_DIR.parent
 TJ_PY = TJAI_DIR / 'tj.py'
