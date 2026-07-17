@@ -1,8 +1,10 @@
-{# KaTeX math typesetting for entry markdown. The server-side arithmatex
-   extension (see _render_markdown) wraps \(...\) / \[...\] LaTeX in
-   .arithmatex spans/divs; this partial renders them in place. Vendored
-   assets, same convention as Prism. Glyphs inherit the page text color,
-   so dark mode needs no special handling. #}
+{% comment %}
+KaTeX math typesetting for entry markdown. The server-side arithmatex
+extension (see _render_markdown) wraps \(...\) / \[...\] LaTeX in
+.arithmatex spans/divs; this partial renders them in place. Vendored
+assets, same convention as Prism. Glyphs inherit the page text color,
+so dark mode needs no special handling.
+{% endcomment %}
 <link rel="stylesheet" href="/tjai/static/tjai/vendor/katex/0.16.11/katex.min.css">
 <style>.katex { font-size: 1.05em; }</style>
 <script defer src="/tjai/static/tjai/vendor/katex/0.16.11/katex.min.js"
