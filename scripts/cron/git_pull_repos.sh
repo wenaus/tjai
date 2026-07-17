@@ -21,6 +21,7 @@ SWF_REPOS=(
     "$GITHUB_DIR/swf-common-lib"
     "$GITHUB_DIR/swf-remote"
     "$GITHUB_DIR/swf-epicprod"
+    "$GITHUB_DIR/snapper-ai"
 )
 
 is_swf() {

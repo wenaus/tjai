@@ -3074,6 +3074,7 @@ _GIT_REPOS = [
     ('/home/admin/github/swf-common-lib', 'https://github.com/BNLNPPS/swf-common-lib', 'swf-common-lib'),
     ('/home/admin/github/swf-remote', 'https://github.com/BNLNPPS/swf-remote', 'swf-remote'),
     ('/home/admin/github/swf-epicprod', 'https://github.com/BNLNPPS/swf-epicprod', 'swf-epicprod'),
+    ('/home/admin/github/snapper-ai', 'https://github.com/BNLNPPS/snapper-ai', 'snapper-ai'),
     ('/home/admin/github/BNLNPPS.github.io', 'https://github.com/BNLNPPS/BNLNPPS.github.io', 'BNLNPPS.github.io'),
     ('/home/admin/github/lxr-mcp-server', 'https://github.com/BNLNPPS/lxr-mcp-server', 'lxr-mcp-server'),
     ('/home/admin/github/corun-ai', 'https://github.com/BNLNPPS/corun-ai', 'corun-ai'),

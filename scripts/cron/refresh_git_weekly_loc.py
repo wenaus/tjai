@@ -41,11 +41,12 @@ PROJECTS = ['kozykorner', 'tjai', 'corun-ai', 'swf', 'swf-monitor',
 # Repo name -> project. Unlisted repos fall to 'other'; tjrepo is
 # attributed per file by top-level directory instead. The swf family is
 # factored into shades of one hue: monitor, epicprod, and testbed are
-# called out; 'swf' is the family residual (remote, docs, common-lib).
+# called out; 'swf' is the family residual (remote, docs, common-lib, snapper).
 REPO_PROJECT = {
     'swf-monitor': 'swf-monitor', 'swf-epicprod': 'swf-epicprod',
     'swf-testbed': 'swf-testbed',
     'swf-common-lib': 'swf', 'swf-remote': 'swf', 'epic-wfms-docs': 'swf',
+    'snapper-ai': 'swf',
     'corun-ai': 'corun-ai', 'corun-mcp-server': 'corun-ai',
     'wrangle-ai': 'corun-ai',
 }
