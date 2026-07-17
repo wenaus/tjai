@@ -59,7 +59,7 @@ No agent restart needed — section scripts run as subprocesses.
 | `section_todos.py` | ToDo | DB: all pending todos, `###` subsection per context (alphabetical, uncontexted last), reverse modification time within each, 3-line subtext |
 | `section_keeps.py` | Keeps | DB: saved bookmarks + kept picks, last 24h |
 | `section_goals.py` | Goals | DB: goals created or modified in last 24h |
-| `section_git.py` | Git | `git log --since` on `/home/admin/github/tjrepo` |
+| `section_git.py` | Git | previous calendar day's commits across the `_GIT_REPOS` registry (`tjai_app/views.py`); tjrepo grouped by top-level subdir |
 | `section_backup.py` | Backups | `~/Dropbox/tjai-backups/server/` directory scan, 7-day table |
 | `section_health.py` | System Health | `data/health-digest/{date}.json` (written by `health_digest.py`) |
 | `section_mattermost.py` | Mattermost | swf-monitor REST: pandabot/testbedbot channel posts, last 24h |

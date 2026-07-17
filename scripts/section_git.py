@@ -3,28 +3,16 @@
 import logging
 import os
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import bootstrap  # noqa: F401 - Django setup
 from django.conf import settings
 from tjai_app.tjai_utils import get_app_tz
+from tjai_app.views import _GIT_REPOS
 from synopsis_utils import main_section
 GIT_DAILY_DIR = Path(settings.BASE_DIR) / 'data' / 'git_daily'
-REPOS = [
-    (Path('/home/admin/github/tjrepo'), 'https://github.com/wenaus/tjrepo', 'tjrepo'),
-    (Path('/home/admin/github/tjdev'), 'https://github.com/wenaus/tjdev', 'tjdev'),
-    (Path('/home/admin/github/swf-testbed'), 'https://github.com/BNLNPPS/swf-testbed', 'swf-testbed'),
-    (Path('/home/admin/github/swf-monitor'), 'https://github.com/BNLNPPS/swf-monitor', 'swf-monitor'),
-    (Path('/home/admin/github/swf-common-lib'), 'https://github.com/BNLNPPS/swf-common-lib', 'swf-common-lib'),
-    (Path('/home/admin/github/swf-remote'), 'https://github.com/BNLNPPS/swf-remote', 'swf-remote'),
-    (Path('/home/admin/github/swf-epicprod'), 'https://github.com/BNLNPPS/swf-epicprod', 'swf-epicprod'),
-    (Path('/home/admin/github/BNLNPPS.github.io'), 'https://github.com/BNLNPPS/BNLNPPS.github.io', 'BNLNPPS.github.io'),
-    (Path('/home/admin/github/lxr-mcp-server'), 'https://github.com/BNLNPPS/lxr-mcp-server', 'lxr-mcp-server'),
-    (Path('/home/admin/github/corun-ai'), 'https://github.com/BNLNPPS/corun-ai', 'corun-ai'),
-    (Path('/home/admin/github/epic-wfms-docs'), 'https://github.com/eic/epic-wfms-docs', 'epic-wfms-docs'),
-    (Path('/home/admin/github/rucio-eic-mcp-server'), 'https://github.com/BNLNPPS/rucio-eic-mcp-server', 'rucio-eic-mcp-server'),
-]
+REPOS = [(Path(path), url, label) for path, url, label in _GIT_REPOS]
 # Monorepo: attribute commits to top-level subdirectory instead of repo name
 MONOREPO_SUBDIRS = {
     'tjrepo': True,  # repos listed here get per-subdir attribution
@@ -116,10 +104,17 @@ def _group_commits_by_subdir(repo_dir, commits):
 
 
 def build(since_ts, target_date):
-    """Return markdown body or None."""
+    """Return markdown body or None.
+
+    Digests the calendar day before target_date (the 00:10 run for day N
+    covers day N-1). Bounded on both ends so reruns are idempotent and
+    each commit lands in exactly one day's section.
+    """
     tz = get_app_tz()
-    since_dt = datetime.fromtimestamp(since_ts, tz=tz)
+    until_dt = datetime(target_date.year, target_date.month, target_date.day, tzinfo=tz)
+    since_dt = until_dt - timedelta(days=1)
     since_iso = since_dt.strftime('%Y-%m-%dT%H:%M:%S%z')
+    until_iso = until_dt.strftime('%Y-%m-%dT%H:%M:%S%z')
 
     all_lines = []
     for repo_dir, github_url, label in REPOS:
@@ -130,7 +125,7 @@ def build(since_ts, target_date):
                            timeout=30, cwd=repo_dir)
         except Exception as e:
             logger.warning("git fetch failed for %s: %s", label, e)
-        commits = _repo_commits(repo_dir, github_url, since_iso)
+        commits = _repo_commits(repo_dir, github_url, since_iso, until_iso)
         if commits:
             if label in MONOREPO_SUBDIRS:
                 for subdir, md_lines in _group_commits_by_subdir(repo_dir, commits).items():
@@ -162,7 +157,6 @@ def build(since_ts, target_date):
 
 def backfill(days=60):
     """Generate git daily files for the past N days."""
-    from datetime import timedelta
     tz = get_app_tz()
     today = datetime.now(tz=tz).date()
     for i in range(days):

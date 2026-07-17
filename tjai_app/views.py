@@ -3065,7 +3065,8 @@ def git_activity(request):
     return response
 
 
-# Keep in sync with scripts/section_git.py REPOS
+# Single repo registry — scripts/section_git.py and
+# scripts/cron/refresh_git_daily.py import this.
 _GIT_REPOS = [
     ('/home/admin/github/tjrepo', 'https://github.com/wenaus/tjrepo', 'tjrepo'),
     ('/home/admin/github/tjdev', 'https://github.com/wenaus/tjdev', 'tjdev'),
