@@ -439,14 +439,29 @@ def _check_agent_health():
                         status='active',
                     ).first()
                     if stuck:
-                        stuck.status = 'blocked'
                         sd = stuck.data if isinstance(stuck.data, dict) else {}
-                        sd['run_status'] = 'failed'
-                        sd['run_error'] = error_msg
-                        stuck.data = sd
-                        stuck.save(update_fields=['status', 'data'])
-                        logger.warning("%s: marked entry %s as blocked",
-                                       action_id, entry_uuid)
+                        if sd.get('source') == 'multimodel' and sd.get('base_entry_id'):
+                            # Research model sub-entry: use the shared
+                            # terminal path so the base entry's
+                            # {model}_status updates and synthesis can
+                            # still trigger. Marking only the sub-entry
+                            # leaves the base showing the model as
+                            # running forever.
+                            from tjai_app.action_runner import (
+                                _mark_research_model_failed,
+                            )
+                            _mark_research_model_failed(stuck, error_msg)
+                            logger.warning(
+                                "%s: marked research model entry %s failed",
+                                action_id, entry_uuid)
+                        else:
+                            stuck.status = 'blocked'
+                            sd['run_status'] = 'failed'
+                            sd['run_error'] = error_msg
+                            stuck.data = sd
+                            stuck.save(update_fields=['status', 'data'])
+                            logger.warning("%s: marked entry %s as blocked",
+                                           action_id, entry_uuid)
                 # Reset counter
                 SysConfig.objects.filter(key=stale_key).delete()
             else:
