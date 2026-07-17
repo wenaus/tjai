@@ -50,12 +50,15 @@ tj restart-agent      # Graceful restart (after current action completes)
 
 ### Key Operations
 
-- **Deploy code changes:** `deploy/update_from_dev.sh` then `tj restart-agent`
+- **Deploy code changes:** `deploy/update_from_dev.sh` — it schedules a
+  graceful action-agent restart itself (sysconfig flag; the agent
+  finishes any in-progress action, exits, and supervisord restarts it on
+  the new code)
 - **Force-run:** set sysconfig `action_force_run` to action's entry_id, or MCP `run_action(entry_id)`
 - **Wake agent:** set sysconfig `action_agent_wake_requested` to `1` (polled every 3s)
 - **MCP tool:** `run_action(entry_id)` — executes immediately
 
-**Important:** After deploying changes to agent code (`action_agent.py`, `action_runner.py`, `agent_complete.py`), always `tj restart-agent`. Never `supervisorctl restart` — it kills in-progress actions.
+**Important:** The deploy script schedules the graceful restart automatically; `tj restart-agent` serves manual restarts outside a deploy. Never `supervisorctl restart` — it kills in-progress actions.
 
 ### AI Dispatch
 

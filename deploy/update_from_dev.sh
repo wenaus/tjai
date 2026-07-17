@@ -73,7 +73,15 @@ else
 fi
 sudo systemctl restart tjai-tgbot
 echo "[${SECONDS}s] tgbot restarted"
-/var/www/tjai/.venv/bin/supervisorctl -c /var/www/tjai/deploy/supervisord.conf restart action-agent
-echo "[${SECONDS}s] action-agent restarted"
+# Schedule a graceful action-agent restart rather than hard-restarting:
+# a hard restart kills in-progress actions. The agent polls the flag,
+# finishes any current action, exits, and supervisord restarts it on the
+# new code (within seconds when idle).
+(cd /var/www/tjai && sudo -u www-data ./.venv/bin/python manage.py shell -c "
+import time
+from tjai_app.models import SysConfig
+SysConfig.objects.update_or_create(key='action_agent_restart_requested', defaults={'value': '1', 'timestamp_modified': time.time()})
+" >/dev/null)
+echo "[${SECONDS}s] action-agent graceful restart scheduled (restarts after any in-progress action)"
 
 echo "Deployment complete in ${SECONDS}s."
