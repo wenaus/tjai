@@ -302,7 +302,7 @@ function buildStats(heatmap) {
     // Leaderboard — top 5 days
     const ranked = Object.entries(heatmap)
         .filter(([d, c]) => c > 0)
-        .sort((a, b) => b[1] - a[1])
+        .sort((a, b) => b[1] - a[1] || b[0].localeCompare(a[0]))
         .slice(0, 5);
     let lbHtml = '<span class="stats-label">Leaderboard:</span>';
     for (const [date, count] of ranked) {
