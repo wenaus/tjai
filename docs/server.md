@@ -12,7 +12,8 @@
 - **Python:** version requested in `.python-version` (series floor), provisioned by uv; see [Python Environment](python-environment.md)
 - **Web server:** gunicorn on port 8002, managed by systemd (`deploy/tjai-gunicorn.service`), runs as `www-data`
 - **MCP server:** standalone FastMCP/ASGI service on port 8003, managed by systemd (`deploy/tjai-mcp-asgi.service`), runs as `www-data`
-- **Action agent:** managed by supervisord (`deploy/supervisord.conf`), runs as `admin`
+- **Action agent:** managed by supervisord (`deploy/supervisord.conf`), runs as `admin`; supervisord itself runs under systemd (`deploy/tjai-supervisord.service`)
+- **Gunicorn py-spy watchdog:** systemd service (`deploy/tjai-gunicorn-pyspy-watchdog.service`, `scripts/gunicorn_pyspy_watchdog.py`)
 
 MCP operations are documented in `docs/mcp.md`.
 
@@ -23,7 +24,7 @@ cd /home/admin/github/tjrepo/tjai
 ./deploy/update_from_dev.sh
 ```
 
-This rsyncs code to `/var/www/tjai/` (excludes `data/`), installs requirements, runs migrations, collectstatic, and restarts gunicorn, tg_bot, and action-agent.
+This rsyncs code to `/var/www/tjai/` (excludes `data/`), installs requirements, runs migrations, collectstatic, reloads gunicorn, restarts the MCP ASGI and Telegram bot services, and schedules a graceful action-agent restart (the agent finishes any in-progress action, exits, and supervisord restarts it on the new code).
 
 ## Django Commands (Production)
 
@@ -52,23 +53,38 @@ cd /home/admin/github/tjrepo/tjai
 
 | Path | Description |
 |------|-------------|
-| `/tjai/` | Dashboard — entry list, filtering by kind/context/tags/status |
+| `/tjai/` | Public landing page |
 | `/tjai/login/` | Authentication |
+| `/tjai/dashboard/` | Dashboard — entry list, filtering by kind/context/tags/status; see [Dashboard](dashboard.md) |
 | `/tjai/entry/` | Entry detail with human-readable data display |
-| `/tjai/daily/` | Daily synopsis (Today in History) |
+| `/tjai/diary/` | Diary page |
+| `/tjai/versions/` | Recent entry changes across all entries; see [Entry Versions](versions.md) |
+| `/tjai/synopsis/` | Daily synopsis (Today in History) |
 | `/tjai/this-week/` | Current in-progress workweek (Sat–Fri), one row per day |
 | `/tjai/weekly/` | Index of past workweek entries (reverse chronological) |
+| `/tjai/workday/<yyyymmdd>/` | Workday entry get-or-create; redirects to entry detail |
 | `/tjai/workweek/<yyyymmdd>/` | Single workweek entry — topical summary assembled from Sat–Fri workday entries |
+| `/tjai/assessment/` | AI assessment reports |
+| `/tjai/goals/` | Goals browser |
+| `/tjai/git/` | Git activity |
+| `/tjai/dev/` | Development activity |
 | `/tjai/picks/` | AI-curated news picks triage |
 | `/tjai/rss/` | RSS reader with source-grouped triage |
 | `/tjai/readme/` | Reading list (items tagged :readme) |
 | `/tjai/research/` | Research queue with agent status |
 | `/tjai/research/studies/` | Subagent reports for a research topic |
+| `/tjai/research-list/` | Research list |
+| `/tjai/research-detail/` | Research detail |
 | `/tjai/system/` | System health monitoring dashboard |
 | `/tjai/agent-log/` | Action agent execution log |
+| `/tjai/agent-queue/` | Action agent queue |
 | `/tjai/context/<name>/` | Browse entries in a context |
 | `/tjai/tag/<name>/` | Browse entries with a tag |
 | `/tjai/kind/<name>/` | Browse entries by type |
+| `/tjai/poetry/author/<name>/` | Entries by poetry author |
+| `/tjai/relate/<uuid>/` | Relate-to picker, opened from the entry edit panel |
+| `/tjai/p/<entry>/`, `/tjai/p/context/<name>/` | Public entry and context pages (no auth) |
+| `/tjai/m/` | Telegram Mini App |
 | `/tjai/mcp/` | MCP server for AI assistants, proxied to standalone ASGI service |
 
 ### API
@@ -84,7 +100,13 @@ cd /home/admin/github/tjrepo/tjai
 | `/tjai/api/bulk-import` | Bearer | Bulk import bookmarks |
 | `/tjai/api/add-bookmark` | Bearer | Single bookmark (Chrome extension) |
 | `/tjai/api/add-journal` | Bearer | Journal entry (Gmail add-on) |
+| `/tjai/api/add-entry` | Bearer | Generic entry from external sources |
+| `/tjai/api/log` | Bearer | Write to AppLog from external sources |
+| `/tjai/api/kozy-chat` | Bearer | KozyKorner persistent chat |
 | `/tjai/api/dialog` | Bearer | Claude Code dialog turns GET/POST |
+| `/tjai/api/dialog/daily-counts` | Session | Daily dialog turn counts |
+| `/tjai/api/entry/create` | Session | Create entry, returns UUID |
+| `/tjai/api/tg-auth` | Telegram initData | Create session for the Telegram Mini App |
 | `/tjai/api/command` | REST bearer or session | Server commands (sysconfig) |
 
 The REST bearer is `TJAI_API_KEY`, whose server-side value is stored in
@@ -109,11 +131,11 @@ The action agent and subsystems log to stdout (supervisord) and the database (Ap
 
 Real-time dashboard at `/tjai/system/` with auto-refresh.
 
-**Monitors:** system (uptime, load, memory, disk), PostgreSQL (connections, cache hit, DB size), tjai (entry counts, agent status, action schedules with real-time tracking), TJAI-launched Codex subscription usage (24h/7d tokens, per-action averages, timeouts, and missing reports), backups (freshness, file presence, dump size), Dropbox (auto-restart if down), processes (Apache, CloudWatch, agents), CloudWatch (24h CPU, memory/swap/disk trends).
+**Monitors:** system (uptime, load, memory, disk), PostgreSQL (connections, cache hit, DB size — cache hit is computed over the trailing 24h of counter samples stored in SysConfig `pg_cache_hit_samples`, not the cumulative `pg_stat_database` ratio, so it recovers promptly after a postgres restart's cold reads), tjai (entry counts, agent status, action schedules with real-time tracking), TJAI-launched Codex subscription usage (24h/7d tokens, per-action averages, timeouts, and missing reports), backups (freshness, file presence, dump size), web apps (epic-devcloud endpoint probes), processes (Apache, CloudWatch, agents), CloudWatch (24h CPU, memory/swap/disk trends).
 
 Codex accounting is process-level and forward-looking. Each TJAI-launched subscription Codex process writes one `source=llm_usage`, `event=llm_usage` AppLog row. A missing Codex token footer is recorded as `usage_reported=false`, not zero. Interactive Codex sessions and API-billed providers are outside this accounting block.
 
-**Health banner:** Green (normal), Yellow (load > 2x CPUs, memory < 20%, disk > 80%, backup > 1 day), Red (load > 3x CPUs, memory < 10%, disk > 90%, agents down, no backups).
+**Health banner:** Green (normal), Yellow (load > 2x CPUs, memory < 20%, disk > 80%, swap > 20%, backup > 1 day), Red (load > 3x CPUs, memory < 10%, disk > 90%, swap > 50%, agents down, no backups).
 
 `system_health.py` writes to SysConfig (`system_health_data` JSON, `system_health_status` color). Agent execution tracked via SysConfig keys, written by `action_runner.py` and `agent_complete.py`.
 
@@ -121,7 +143,7 @@ Codex accounting is process-level and forward-looking. Each TJAI-launched subscr
 
 ## Server Backups
 
-Automated daily backup to Dropbox (`~/Dropbox/tjai-backups/server/YYYY-MM-DD/`).
+Automated daily backup to `~/tjai-backups/server/YYYY-MM-DD/`, pushed to Dropbox via rclone (`dropbox:tjai-backups/server`).
 
 | Item | Filename | Source |
 |------|----------|--------|
@@ -141,7 +163,7 @@ Runs overnight as a tjai action (`trigger=overnight`, `interval_hours=24`). Heal
 **Full database restore** (nuclear option — replaces everything):
 
 ```bash
-gunzip -c ~/Dropbox/tjai-backups/server/YYYY-MM-DD/tjai-db.sql.gz > /tmp/restore.sql
+gunzip -c ~/tjai-backups/server/YYYY-MM-DD/tjai-db.sql.gz > /tmp/restore.sql
 # Drop and recreate:
 sudo -u postgres dropdb tjai
 sudo -u postgres createdb tjai
@@ -152,7 +174,7 @@ sudo -u postgres psql tjai < /tmp/restore.sql
 
 1. Extract the dump:
    ```bash
-   gunzip -c ~/Dropbox/tjai-backups/server/YYYY-MM-DD/tjai-db.sql.gz > /tmp/restore.sql
+   gunzip -c ~/tjai-backups/server/YYYY-MM-DD/tjai-db.sql.gz > /tmp/restore.sql
    ```
 
 2. Find the COPY block for the table:
@@ -192,4 +214,4 @@ sudo -u postgres psql tjai < /tmp/restore.sql
 
 ### Applog cleanup
 
-The action agent automatically prunes `action_agent` log entries older than 7 days (runs hourly in the main loop). `system_health`, `health_digest`, and other sources are preserved indefinitely.
+The action agent automatically prunes `action_agent` and `system_health` log entries older than 7 days (runs hourly in the main loop). Other sources, e.g. `health_digest` and `llm_usage`, are preserved indefinitely.

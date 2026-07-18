@@ -58,19 +58,21 @@ No agent restart needed — section scripts run as subprocesses.
 |--------|---------|-------------|
 | `section_todos.py` | ToDo | DB: all pending todos, `###` subsection per context (alphabetical, uncontexted last), reverse modification time within each, 3-line subtext |
 | `section_keeps.py` | Keeps | DB: saved bookmarks + kept picks, last 24h |
-| `section_goals.py` | Goals | DB: goals created or modified in last 24h |
+| `section_goals.py` | Goals | DB: goals created or modified in the past 60 days |
 | `section_git.py` | Git | previous calendar day's commits across the `_GIT_REPOS` registry (`tjai_app/views.py`); tjrepo grouped by top-level subdir |
-| `section_backup.py` | Backups | `~/Dropbox/tjai-backups/server/` directory scan, 7-day table |
+| `section_backup.py` | Backups | `~/tjai-backups/server/` directory scan, 7-day table (`backup.py` pushes the same tree to Dropbox via rclone) |
 | `section_health.py` | System Health | `data/health-digest/{date}.json` (written by `health_digest.py`) |
-| `section_mattermost.py` | Mattermost | swf-monitor REST: pandabot/testbedbot channel posts, last 24h |
+| `section_mattermost.py` | Mattermost Bots | swf-monitor REST: pandabot/testbedbot channel posts, last 24h |
 
-Sections with a 24h window skip silently on quiet days (`build()` returns None). `section_todos.py` ignores the window — all pending todos are surfaced regardless of age.
+Sections with a 24h window skip silently on quiet days (`build()` returns None). `section_todos.py` ignores the window — all pending todos are surfaced regardless of age. `section_goals.py` also ignores it, covering 60 days and writing a no-activity line instead of skipping.
+
+`scripts/section_dev.py` is not part of this pipeline despite the name: it runs standalone from cron (daily 03:00) and writes dev-activity reports to `data/dev_daily/`.
 
 ### Web UI
 
-- `/tjai/daily/` — date list + rendered markdown content
+- `/tjai/synopsis/` — date list + rendered markdown content
 - Rerun button triggers `daily_history_rerun_date` sysconfig, wakes agent
-- Markdown rendered with extensions: `tables`, `fenced_code`, `nl2br` (tab_length=2)
+- Markdown rendered with extensions: `tables`, `fenced_code`, `nl2br`, `pymdownx.arithmatex` (tab_length=2)
 
 ---
 
@@ -148,14 +150,14 @@ Entry(
    - **Codex** — `scripts/research_multimodel.py chatgpt` subprocess (the `chatgpt` key is retained for research-history compatibility) via subscription-authenticated Codex CLI (`CODEX_RESEARCH_MODEL`, default `gpt-5.6-sol`; `CODEX_RESEARCH_REASONING_EFFORT`, default `xhigh`) with live web search. The subprocess explicitly removes API-key environment variables, so this branch uses the ChatGPT subscription rather than paid Responses API calls.
    - **Qwen** (and Gemma when re-enabled) — staged for the [remote worker pipeline](remote-workers.md) via the `REMOTE_WORKER_MODELS` mapping (`{'gemma': 'gemma4', 'qwen': 'qwen'}`). The prompt is written to a sub-entry with the mapped `worker_target`; the local research-agent then exits. `tj_agent` on the Mac Studio long-polls `/api/worker/poll`, claims the work, runs the locally-configured ollama model, and POSTs the result back. Adding another remote-worker research model is a one-line add to `REMOTE_WORKER_MODELS` + a matching entry in the Mac's `worker_models` config.
    - **DeepSeek-Flash / DeepSeek-Pro** — `scripts/research_multimodel.py deepseek-flash|deepseek-pro` subprocess via DeepSeek's Anthropic-compat endpoint (`https://api.deepseek.com/anthropic`, accessed with the `anthropic` SDK + `base_url` override; `DEEPSEEK_API_KEY` env var). The script exposes read-only tjai MCP tools (`get_*`, `list_*`, `search_*`) through a multi-turn `tool_use` / `tool_result` loop, then writes DeepSeek's final report text into the research entry.
-4. As each model finishes, `research_model_complete` updates the base entry's `{model}_status`. When **all dispatched models** are terminal (`done`, `failed`, or legacy `blocked`), the base entry transitions to `done` and synthesis is dispatched
+4. As each model finishes, `research_model_complete` updates the base entry's `{model}_status`. When **all dispatched models** are terminal (`done`, `failed`, or legacy `blocked`), synthesis is dispatched; the base entry stays `active` until synthesis completes, when `agent_complete.py` marks it done
 5. **Synthesis** — Claude is dispatched again with the synthesis prompt and links to all per-model reports, producing the final merged analyst's brief
 6. Stops after the topic's synthesis. Starting another topic requires an
    explicit Submit/Run or the next scheduled research-agent run.
 
 ### Scheduling and Ideation Handoff
 
-`research-agent` runs on a daily schedule (`scheduled_time: "0300"`, interval 24h). On each scheduled run it picks up the highest-priority pending `:research_topic` via its AI prompt and runs that single topic through all models and synthesis. Cross-topic chaining is disabled: `_research_queue_drain` in `scripts/agent_complete.py` is a legacy no-op, so the next pending topic waits for an explicit Submit/Run or the next scheduled research-agent run.
+`research-agent` runs on a daily schedule (`scheduled_time: "0300"`, interval 24h). On each scheduled run it picks up the highest-priority pending `:research_topic` via its AI prompt and runs that single topic through all models and synthesis. The action entry is currently `status: blocked`, which suppresses the schedule while still honoring an explicit Submit/Run; scheduled runs — including the same-morning pickup of ideation topics below — resume when the entry is set active. Cross-topic chaining is disabled: `_research_queue_drain` in `scripts/agent_complete.py` is a legacy no-op, so the next pending topic waits for an explicit Submit/Run or the next scheduled research-agent run.
 
 **Ideation handoff:** `ideation-agent` runs daily at `0200` and creates new `:research_topic` entries from the day's material. Because research runs at `0300` — *after* ideation — ideation-created topics are auto-picked up the same morning. If you move research earlier than ideation, ideation-created topics will sit pending for a full 24 hours until the next research run. There is no separate auto-submit hook from ideation to research; the coupling is purely via scheduled-time ordering.
 
@@ -194,7 +196,7 @@ All subagent entries for a topic. Linked via `data.source_uuid`.
 
 ### Quality Controls
 
-System prompt (`research-system-prompt` entry) enforces:
+System prompt (`research-system-prompt-claude` entry) enforces:
 - Depth over breadth
 - Primary sources first (papers, docs, repos)
 - Cross-referencing with contradiction tracking
@@ -252,7 +254,7 @@ Entry(kind='memory',
 
 ### Infrastructure
 
-Uses the Action Agent pipeline. The `research-agent` action entry defines the Claude prompt template, model (Opus), timeout (2h), and references the system prompt entry. Lifecycle via SysConfig keys, monitored by watchdog, finalized by `agent_complete.py`.
+Uses the Action Agent pipeline. The `research-agent` action entry defines the Claude prompt template, model (Opus), timeout (90 min), and references the system prompt entry. Lifecycle via SysConfig keys, monitored by watchdog, finalized by `agent_complete.py`.
 
 The remote-worker side has its own protocol — see [remote-workers.md](remote-workers.md) for the long-poll endpoint, capability whitelist, claim lifecycle, free-capacity reset, stale-claim auto-reclaim, and display contract.
 
@@ -295,7 +297,7 @@ In-app RSS feed reader with source-grouped triage UI.
 Uses `RssItem` Django model (not tjai entries):
 
 ```python
-RssItem(guid, url, title, source, category, published, precis, is_read)
+RssItem(guid, feed_url, source, category, title, url, precis, published, fetched, read, data)
 ```
 
 ### Files
@@ -304,3 +306,17 @@ RssItem(guid, url, title, source, category, published, precis, is_read)
 - `tjai_app/models.py` — `RssItem` model
 - `tjai_app/views.py` — `rss_page`, `api_rss_*` endpoints
 - `tjai_app/templates/tjai_app/rss.html`
+
+---
+
+## Other Scheduled Actions
+
+Further actions on the same pipeline, not covered above:
+
+| Action | Schedule | What it does |
+|--------|----------|--------------|
+| `workweek-agent` | weekly, Sat 05:00 | `workweek_agent.py` builds a `workweek_<yyyymmdd>` entry from the prior Sat–Fri `workday_*` entries |
+| `llm-assessment` / `llm-assessment-gemini` | daily 02:00 / 02:20 | Daily dialog scoring via `assessment_claude.py` / `assessment_gemini.py`; the Claude variant is currently blocked. Reruns and backfills are driven by sysconfig flags (see [action-agent.md](action-agent.md)) |
+| `server-backup` | daily 05:00 | `backup.py` — pg_dump, env files, and data dir to `~/tjai-backups/server/`, pushed to Dropbox via rclone |
+| `system-health` | every 30 min | `system_health.py` metrics collection for the system page |
+| `codoc-prs-delta` / `codoc-prs-full` | every 2h / nightly 03:40 | GitHub PR cache refresh via `codoc_prs_refresh.py` |

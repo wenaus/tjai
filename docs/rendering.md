@@ -28,7 +28,7 @@ left intact.
 ## Code blocks
 
 Fenced code blocks render to `<pre><code class="language-XXX">` and are syntax-highlighted
-by Prism in the browser (`_prism.html`; grammars: bash, python, c, cpp, json, yaml, sql).
+by Prism in the browser (`_prism.html`; grammars: markup, bash, python, c, cpp, json, yaml, sql).
 Prism rebuilds each block's `innerHTML` from its `textContent`, so HTML injected into a
 highlighted block on the server does not survive the highlight pass.
 
@@ -64,4 +64,5 @@ diary templates. KaTeX glyphs inherit the page text color, so dark mode needs no
 special styling; failed parses leave the LaTeX source visible.
 
 `scripts/test_markdown_render.py` covers rendering behavior, including the math
-pass-through.
+pass-through. `scripts/test_md_render.py` exercises the standalone copy's
+`text`-fence handling.

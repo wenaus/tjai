@@ -43,6 +43,26 @@ Apache /tjai/
 This split is deliberate. MCP bugs or long-running client behavior must not be
 able to consume the gunicorn workers that serve the web UI and REST API.
 
+## Tools
+
+34 tools are registered, defined in `tjai_app/mcp.py`:
+
+- Read: `get_server_instructions`, `get_calendar`, `get_profile`,
+  `get_ai_guidance`, `list_contexts`, `get_todos`, `get_memories`,
+  `get_dialog`, `get_logs`, `get_bookmarks`, `search_entries`,
+  `get_named_entries`, `get_entry`, `get_entry_by_entry_id`, `get_goal`,
+  `get_relations`, `get_relation_graph`, `get_entry_versions`
+- Write: `create_entry`, `edit_entry`, `edit_entry_metadata`,
+  `replace_entry_content`, `replace_text_in_entry`,
+  `replace_section_in_entry`, `append_entry_content`, `copy_calendar_entry`,
+  `change_entry_kind`, `delete_entry`, `create_goal`, `create_relation`,
+  `edit_relation`, `delete_relation`, `restore_version`
+- Execute: `run_action`
+
+The startup tools `get_profile` and `get_ai_guidance` return size-bounded
+pages with a 12,000-character budget per response; clients follow
+`next_offset` until `complete` is true.
+
 ## Transport Policy
 
 tjai MCP is finite JSON request/response only:
@@ -53,6 +73,8 @@ tjai MCP is finite JSON request/response only:
   by streamable HTTP MCP clients. FastMCP is configured to answer with JSON.
 - Server-pushed MCP event streams are not used operationally.
 - FastMCP is configured with `stateless_http=True` and `json_response=True`.
+- FastMCP validates the Host header against a `TransportSecuritySettings`
+  allow-list built from Django `ALLOWED_HOSTS` plus localhost forms.
 - An HTTP 202 response from FastMCP is normal and not a sign that SSE has
   returned. The MCP streamable-HTTP transport returns 202 for client-to-server
   notification frames such as `notifications/initialized` (the no-op
@@ -79,7 +101,8 @@ Authorization: Bearer <token>
 
 The token is read from `SysConfig` key `mcp_bearer_token`. Missing token returns
 401, invalid token returns 403, and missing server-side configuration returns
-503.
+503. The token lookup retries once after closing stale database connections,
+so a dropped Postgres socket does not wedge an ASGI worker.
 
 Rotate the token from production:
 
@@ -148,7 +171,9 @@ The deploy script:
 4. Runs migrations and collectstatic.
 5. Reloads gunicorn.
 6. Restarts `tjai-mcp-asgi` if the service exists.
-7. Restarts the telegram bot and action agent.
+7. Restarts the telegram bot and schedules a graceful action-agent restart
+   via the `action_agent_restart_requested` SysConfig flag; the agent
+   finishes any in-progress action before restarting.
 
 ## Verification
 

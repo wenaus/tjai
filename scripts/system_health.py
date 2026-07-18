@@ -90,6 +90,47 @@ def collect_system():
     return metrics
 
 
+PG_CACHE_SAMPLES_KEY = 'pg_cache_hit_samples'
+PG_CACHE_WINDOW_SEC = 24 * 3600
+
+
+def windowed_cache_hit(blks_hit, blks_read):
+    """Shared-buffers hit ratio over the last ~24h of counter samples.
+
+    pg_stat_database counters are cumulative since stats reset, so the
+    lifetime ratio recovers from a cold-read burst only by dilution and
+    stays depressed for days after the burst has passed. Deltas between
+    stored samples give the ratio for recent traffic instead. Returns
+    None until a second sample exists.
+    """
+    now = time.time()
+    row, _ = SysConfig.objects.get_or_create(
+        key=PG_CACHE_SAMPLES_KEY,
+        defaults={'value': '[]', 'timestamp_modified': now})
+    try:
+        samples = json.loads(row.value or '[]')
+    except json.JSONDecodeError:
+        samples = []
+    # Counters lower than the last sample mean a stats reset (postgres
+    # restart); history is incomparable with the new counters.
+    if samples and blks_hit + blks_read < samples[-1][1] + samples[-1][2]:
+        samples = []
+    samples.append([now, blks_hit, blks_read])
+    samples = [s for s in samples if s[0] >= now - PG_CACHE_WINDOW_SEC]
+    row.value = json.dumps(samples)
+    row.timestamp_modified = now
+    row.save(update_fields=['value', 'timestamp_modified'])
+
+    if len(samples) < 2:
+        return None
+    oldest = samples[0]
+    d_hit = blks_hit - oldest[1]
+    d_total = d_hit + (blks_read - oldest[2])
+    if d_total <= 0:
+        return 100.0
+    return round(d_hit / d_total * 100, 2)
+
+
 def collect_postgres():
     """Collect PostgreSQL stats via Django's DB connection."""
     metrics = {}
@@ -109,7 +150,10 @@ def collect_postgres():
             metrics['xact_rollback'] = row[2]
             blks_read, blks_hit = row[3], row[4]
             total_blks = blks_read + blks_hit
-            metrics['cache_hit_ratio'] = round(blks_hit / total_blks * 100, 2) if total_blks else 100.0
+            lifetime_ratio = round(blks_hit / total_blks * 100, 2) if total_blks else 100.0
+            windowed = windowed_cache_hit(blks_hit, blks_read)
+            metrics['cache_hit_ratio'] = lifetime_ratio if windowed is None else windowed
+            metrics['cache_hit_ratio_lifetime'] = lifetime_ratio
             metrics['tup_returned'] = row[5]
             metrics['tup_fetched'] = row[6]
             metrics['tup_inserted'] = row[7]
@@ -640,12 +684,12 @@ def assess_health(system, postgres, tjai=None, backups=None, web_apps=None, **_k
         issues.append(('red', f'Memory available {mem_avail}% < 10%'))
     if disk > 90:
         issues.append(('red', f'Disk {disk}% > 90%'))
-    # cache_hit is the lifetime cumulative shared_buffers ratio
-    # (pg_stat_database, stats never reset). It understates true cache
-    # effectiveness — most "reads" are served from the OS page cache, not
-    # disk — and is dragged down permanently by bulk imports/backups/VACUUM.
-    # A healthy tjai sits ~99% and can only drift down, so thresholds are set
-    # low: real cache starvation shows up well below 90%. Do not raise to 99%.
+    # cache_hit is the shared_buffers ratio over the last ~24h of samples
+    # (windowed_cache_hit), not the lifetime cumulative ratio — cumulative
+    # counters recover from a cold-read burst only by dilution, which held
+    # the banner red for days. It still understates true cache effectiveness
+    # (reads served from the OS page cache count as misses), so thresholds
+    # stay low. Do not raise to 99%.
     if cache_hit < 90:
         issues.append(('red', f'PG cache hit {cache_hit}% < 90%'))
     if swap > 50:

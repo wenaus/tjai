@@ -38,9 +38,9 @@ tjai shares server infrastructure with primus. The following are in `primus/depl
    ./update_from_dev.sh
 
    # Install service files when provisioning a new host
-   sudo cp tjai-gunicorn.service tjai-mcp-asgi.service tjai-tgbot.service tjai-supervisord.service /etc/systemd/system/
+   sudo cp tjai-gunicorn.service tjai-mcp-asgi.service tjai-tgbot.service tjai-supervisord.service tjai-gunicorn-pyspy-watchdog.service /etc/systemd/system/
    sudo systemctl daemon-reload
-   sudo systemctl enable --now tjai-gunicorn tjai-mcp-asgi tjai-tgbot tjai-supervisord
+   sudo systemctl enable --now tjai-gunicorn tjai-mcp-asgi tjai-tgbot tjai-supervisord tjai-gunicorn-pyspy-watchdog
 
    # Create admin user
    ./setup_superuser.sh

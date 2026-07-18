@@ -19,15 +19,22 @@ supervisord → action_agent.py (always-on daemon)
 | Key | Purpose |
 |-----|---------|
 | `entry_id` | Human-readable identifier (e.g. `daily-synopsis`) |
-| `trigger` | When to run: `overnight`, etc. |
+| `trigger` | Trigger class: `daily`, `periodic`, `overnight` (targets the previous day), or `weekly` |
 | `scheduled_time` | HHMM string for daily scheduling (e.g. `0010`) |
+| `scheduled_dow` | Day of week (`mon`..`sun`); with `scheduled_time`, the action runs weekly on that day |
 | `interval_hours` | Fallback interval if no `scheduled_time` |
 | `last_run` | Epoch timestamp of last execution |
+| `retry_after` | Epoch timestamp of a pending retry after a failed dispatch; overrides the normal schedule |
 | `mechanical_script` | Script name or list of scripts to run sequentially |
 | `journal_entry` | Config to create a journal entry before scripts run |
 | `ai_prompt` | Prompt template for AI dispatch via `tj agent` |
-| `model` | Optional model override (default: sonnet) |
+| `model` | Optional model override (default: opus); Codex/GPT model names dispatch via the Codex CLI (default `gpt-5.6-sol`) |
+| `effort` | Optional reasoning-effort override for the dispatched agent |
 | `timeout` | Optional AI dispatch timeout in seconds |
+| `system_prompt_entry_id` | Entry whose content becomes the agent's system prompt |
+| `prompt_is_system_prompt` | If true, `ai_prompt` is used verbatim as the system prompt |
+| `result_url` | Output page link shown in the agent-queue UI |
+| `progress_log` | `entry_id` of a progress-log entry surfaced in the UI |
 
 ### Execution Pipeline
 
@@ -54,9 +61,8 @@ tj restart-agent      # Graceful restart (after current action completes)
   graceful action-agent restart itself (sysconfig flag; the agent
   finishes any in-progress action, exits, and supervisord restarts it on
   the new code)
-- **Force-run:** set sysconfig `action_force_run` to action's entry_id, or MCP `run_action(entry_id)`
+- **Force-run:** MCP `run_action(entry_id)` (or `action_agent.py --queue <id>`) — moves the action's `scheduled_time` so the daemon's next pass picks it up, then wakes the agent; forced runs use the normal scheduler path
 - **Wake agent:** set sysconfig `action_agent_wake_requested` to `1` (polled every 3s)
-- **MCP tool:** `run_action(entry_id)` — executes immediately
 
 **Important:** The deploy script schedules the graceful restart automatically; `tj restart-agent` serves manual restarts outside a deploy. Never `supervisorctl restart` — it kills in-progress actions.
 
@@ -96,9 +102,11 @@ Independent of the watchdog action, the daemon loop in `action_agent.py` runs it
 - **Entry flood** (5 min) — Jaccard-similarity clustering of recently created entries to catch runaway dispatch loops; alerts via the watchdog email helper.
 - **Multimodel subprocess** (30s) — `heal_research_subprocess_state()` marks a research model failed when its subprocess PID is gone, so research runs reach a terminal state and synthesis can proceed.
 
+The daemon also services sysconfig request flags each pass: `agent_kill_requested` kills zombie Claude/Codex agent processes and tracked research subprocess PIDs; `daily_history_rerun_date` and the assessment rerun/backfill flags (`assessment_rerun_date`, `assessment_gemini_rerun_date`, `assessment_backfill_all`, `assessment_gemini_backfill_all`) launch reruns as background subprocesses. Runaway detection stops an action that has run more than 5 times in 30 minutes by stamping `last_run`, blocking retries until its next scheduled time. Action-agent and system-health AppLog rows older than 7 days are pruned hourly.
+
 ### Date Convention
 
-`get_target_date()` returns **today** in the configured timezone. `daily-2026-03-03` is created on March 3 and covers March 3.
+`get_target_date()` returns **today** in the configured timezone. `daily-2026-03-03` is created on March 3 and covers March 3. Actions with `trigger: overnight` are shifted one day back — `execute_action()` targets yesterday, so an overnight action assesses the completed day.
 
 ### Files
 

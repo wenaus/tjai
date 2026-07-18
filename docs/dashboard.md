@@ -1,6 +1,6 @@
 # Dashboard
 
-The dashboard is the main tjai web page: a live calendar, named-entry index, status summary, and filterable entry list. It is served at `/tjai/` and refreshes every 20 seconds. The entire client is one Django template, `tjai_app/templates/tjai_app/dashboard.html`, holding inline CSS and one `<script>` block. There is no build step and no client framework; rendering is hand-written string templating against JSON fetched from a small set of read endpoints. Shared helpers come from `tjai_app/static/tjai/tjai-utils.js`.
+The dashboard is the main tjai web page: a live calendar, named-entry index, status summary, and filterable entry list. It is served at `/tjai/dashboard/` (the site root `/tjai/` is the public landing page) and refreshes every 20 seconds. The entire client is one Django template, `tjai_app/templates/tjai_app/dashboard.html`, holding inline CSS and one `<script>` block. There is no build step and no client framework; rendering is hand-written string templating against JSON fetched from a small set of read endpoints. Shared helpers come from `tjai_app/static/tjai/tjai-utils.js`.
 
 This document describes the client side: page modes, the URL-as-state model, the data-fetch cycle, each panel, filtering and search, the mutations the page can perform, and the server endpoints it depends on.
 
@@ -49,7 +49,7 @@ Query parameters and their state:
 | `machine`, `client`, `model` | match `data.hostname`, `data.client`, `data.model` |
 | `date` | restrict to one day (used by the dialog daily-count chips) |
 | `from_time`, `to_time` | ISO datetime window over modification time |
-| `public` | only entries marked `data.access=public` |
+| `public` | only entries marked `data.access=public`; the `poetry` and `recipe` contexts are excluded |
 | `with_relations` | only entries that participate in a relation |
 | `expand_dialog` | render full content instead of the first line |
 | `rel` | CSV of entry UUIDs whose relations are expanded |
@@ -77,7 +77,7 @@ The page reads from these endpoints:
 | `api/dialog/daily-counts` | GET | Per-day dialog-turn counts for the charts |
 | `api/entry/<uuid>/relations` | GET | Relations for one entry, loaded on demand |
 
-`api/dashboard/status` and `api/dashboard/search` paginate by `offset` with a page size of 1000. They carry no incremental-sync cursor: each poll re-fetches the head of the list, and older entries load by offset. When `offset > 0`, `api/dashboard/status` returns only `recent_entries`, `has_more`, and `total_count`.
+`api/dashboard/status` and `api/dashboard/search` paginate by `offset` with a page size of 1000. They carry no incremental-sync cursor: each poll re-fetches the head of the list, and older entries load by offset. When `offset > 0`, `api/dashboard/status` returns only `recent_entries`, `has_more`, and `total_count`. The status endpoint's `total_count` is approximate — offset plus entries returned, plus one when more remain — avoiding a full count; the search endpoint computes an exact `total_count` on the first page.
 
 ## Calendar panel
 
@@ -85,9 +85,9 @@ The page reads from these endpoints:
 
 Behavior:
 
-- If the current day has no events, a placeholder is inserted so a "Today" marker always exists. On first render and each 20-second auto-refresh, the list scrolls to put today a third of the way down. Other refreshes preserve scroll position. The "Today" link in the top nav re-centers without reloading.
+- If the current day has no events, a placeholder is inserted so a "Today" marker always exists. On first render and each 20-second auto-refresh, the list scrolls to put today a third of the way down. Other refreshes preserve scroll position. The "Today" link in the calendar panel header re-centers without reloading.
 - The next future event gets a countdown chip. The chip stays on a just-started event and counts negative for up to 15 minutes after its start (`LATE_GRACE_SEC`).
-- Clock entries (`data.clock` = `start`/`stop`), annual events (`data.annual`), daily synopsis entries (`daily-*`), and diary entries (`diary-*`) each render with their own color and link target. Daily entries link to the synopsis page; others link to the entry detail.
+- Clock entries (`data.clock` = `start`/`stop`) and annual events (`data.annual`) render with their own colors. Daily synopsis entries (`daily-*`) and diary entries (`diary-*`) render in the default entry color but carry their own link targets: daily entries link to the synopsis page, and all other entries link to the entry detail.
 - When the browser's time zone differs from Eastern, an event's local time is shown in parentheses after the Eastern time.
 - Selecting calendar rows and copying produces both plain text and HTML with the entry links preserved (`data-copy-line` plus a `copy` handler).
 
@@ -125,6 +125,8 @@ Dialog mode replaces most of this with a client/model filter row and a per-day d
 
 `renderEntries()` renders each entry as one line in the `tj l` style: a timestamp, a kind abbreviation, optional event date, context, name, the content (first line, or full when Expand dialog is on), a line count, and inline tags. Server-provided `date_display` is used directly; the client does not format entry timestamps. URLs and markdown links in content are linkified.
 
+Entries in dialog contexts are excluded server-side unless a context filter or the dialog view selects them. On the first unfiltered page the server also injects up to ten ERROR-level application-log rows from the last 24 hours as log pseudo-entries (`id` = `log-<pk>`, kind `log`), sorted into time order with the real entries. A URL hash naming an entry row (`#e-<uuid>`) scrolls that entry into view and highlights it.
+
 Each row carries hidden controls and a metadata bar:
 
 - An **action select** (open / edit / archive / trash / restore / delete) whose options depend on the mode.
@@ -139,7 +141,7 @@ Selecting entry rows and copying yields entry-aware clipboard data: plain text m
 
 ## Filtering
 
-Filter clicks are handled by event delegation on the status block. `toggleFilter()` flips the relevant state variable, updates the active styling, calls `syncStateToUrl()`, and calls `fetchFilteredEntries()`. Status and context support both include (click the name) and exclude (click the minus); a value cannot be both, and selecting one clears the other.
+Filter clicks are handled by event delegation on the status block. `toggleFilter()` flips the relevant state variable, updates the active styling, calls `syncStateToUrl()`, and calls `fetchFilteredEntries()`. Status and context support both include (click the name) and exclude (click the minus). For statuses the two sides are mutually exclusive: selecting one clears the other. Context include and exclude are independent toggles.
 
 `fetchFilteredEntries()` re-runs the active search with the new filters when a search is active; otherwise it fetches `api/dashboard/status` with the filter params and re-renders, or does a full `refresh()` when no filters remain. The Expand-dialog and date-chip changes go through `refresh()` since they affect the whole view.
 
@@ -147,7 +149,7 @@ The **clear** button resets all filters and search and refreshes. Co-occurring t
 
 ## Search
 
-The search box runs `searchEntries()` against `api/dashboard/search`. Sort is chosen by the time/rank/size radios; `rank` uses full-text relevance, `size` orders by length, `time` is the default. Search respects all active filters (they are appended to the query) and paginates by offset like the entry list. Enter runs the search, Escape clears it, and clearing restores the filtered or unfiltered entry list. The entries header shows the query and result count while search is active.
+The search box runs `searchEntries()` against `api/dashboard/search`. Sort is chosen by the time/rank/size radios; `rank` uses full-text relevance, `size` orders by length, `time` is the default. Search respects all active filters (they are appended to the query) and paginates by offset like the entry list. The endpoint also accepts `field=title`, restricting matches to entries whose first line contains the query words; the dashboard search box does not set it. Enter runs the search, Escape clears it, and clearing restores the filtered or unfiltered entry list. The entries header shows the query and result count while search is active.
 
 ## Mutations from the dashboard
 
@@ -158,9 +160,11 @@ The dashboard can change entry state. The delete/restore action depends on the m
 | Delete button (`X`) | archive the entry (`POST api/entry/<id>/archive`) | move to trash (`DELETE api/entry/<id>`) | permanent delete (`DELETE api/entry/<id>?hard=1`) |
 | Action: trash | move to trash (`DELETE api/entry/<id>`) | — | — |
 | Action: archive | — | — | re-archive from trash (`POST .../archive?from_trash=1`) |
-| Action: restore | un-archive (`POST api/picks/update`, `archived=false`) | un-archive | restore from trash (`POST api/entry/<id>/restore`) |
+| Action: restore | — | un-archive (`POST api/picks/update`, `archived=false`) | restore from trash (`POST api/entry/<id>/restore`) |
 
-Log pseudo-entries (`id` = `log-<pk>`) are always a direct `DELETE api/entry/log-<pk>`. Trash mode adds an **Empty Trash** button (`POST api/trash/empty`) behind a confirmation. The Diary, Entry, Workday, Workweek, and Create Entry buttons create or open entries through their own endpoints and navigate to the entry detail.
+The restore action appears only in archive and trash modes.
+
+Log pseudo-entries (`id` = `log-<pk>`) are always a direct `DELETE api/entry/log-<pk>`. Trash mode adds an **Empty Trash** button (`POST api/trash/empty`) behind a confirmation. The Entry, Workday, and Create Entry buttons create or open entries through their own endpoints and navigate to the entry detail; the Diary button opens the `/tjai/diary/` page and the Workweek button opens `/tjai/this-week/`.
 
 ## Preferences
 

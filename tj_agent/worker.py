@@ -95,12 +95,9 @@ TJAI_LOG_SOURCE = "worker-mac"
 # views.py:worker_poll. The intended values are:
 #   'research'  — the multimodel research pipeline
 #   'codoc'     — corun-ai documentation generation
-# Until ec2dev's server-side fix to views.py lands, codoc work
-# currently arrives labelled 'generic' (a docs/implementation drift in
-# views.py — the docstring promises 'research|codoc' but the code
-# emits 'generic' for any non-research work). The dict lookup falls
-# back to the codoc prompt for any unknown work_type, so codoc work
-# gets the right prompt regardless of which label the server emits.
+# The dict lookup falls back to the codoc prompt for any unknown
+# work_type, so codoc work gets the right prompt even if the server
+# emits a label this map doesn't know.
 #
 # - 'codoc' is adapted from Torre's codoc system prompt and extended
 #   with the additional tool surface the Mac worker has beyond LXR.

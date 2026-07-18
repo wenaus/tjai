@@ -11,7 +11,7 @@ A personal AI assistant via Telegram with full tjai access, voice dialogue, and 
 - **Text chat** with Claude Sonnet + all tjai tools (calendar, todos, memories, bookmarks, search)
 - **Calendar reminders** — background job checks every 5 minutes, pushes notification 15 minutes before events
 - **Persistent history** — survives restarts (stored as tjai entries, tag `tgchat`)
-- **Mini App** — Telegram WebApp with tabs for Calendar, Picks, ReadMe, Synopsis, RSS, Named entries, Contexts, Search. Sticky headers, same triage UX as desktop
+- **Mini App** — Telegram WebApp with tabs for Calendar, Synopsis, All (recent entries), Picks, ReadMe, RSS, Named entries, Contexts, Research, Search. Sticky headers, same triage UX as desktop
 - Single-user auth via Telegram user ID
 
 ## Setup
@@ -54,19 +54,17 @@ A personal AI assistant via Telegram with full tjai access, voice dialogue, and 
 
 ## Mini App server access
 
-The Mini App is served at `/tjai/m/` by the `miniapp` view, which is not
-`@login_required` and establishes no Django session. The tjai endpoints the
-Mini App calls are therefore reachable without a Django login; access is gated
-by the Telegram WebApp context and the bot's single-user restriction, not by
-Django authentication.
+The Mini App is served at `/tjai/m/` by the `miniapp` view, which carries no
+`@login_required` so the page can render before authentication. On load the
+app POSTs the Telegram WebApp `initData` to `/tjai/api/tg-auth` (`tg_auth`
+view), which validates the HMAC signature against the bot token, requires a
+recent `auth_date`, checks the Telegram user against `TELEGRAM_USER_ID`, and
+logs in the Django superuser. The Mini App then holds a normal Django session,
+and the `@login_required` API endpoints it calls authenticate against that
+session.
 
-This constrains the server: endpoints the Mini App uses must not carry
-`@login_required`. In particular `api_entry_save` (`api/entry/<uuid>/save`) is
-called by the Mini App editor, and adding `@login_required` to it redirects
-Mini App saves to the login page and breaks editing. Closing this gap would
-require server-side validation of the Telegram `initData` signature to
-authenticate the Mini App, applied across the endpoints it uses, rather than a
-per-endpoint decorator.
+`api_entry_save` (`api/entry/<uuid>/save`), used by the Mini App editor, also
+carries no `@login_required` by design.
 
 ## Management
 
@@ -75,5 +73,8 @@ per-endpoint decorator.
 ./deploy/restart_tgbot.sh --sync   # Sync code from dev and restart
 tj                                  # Shows bot status in CLI
 ```
+
+`deploy/update_from_dev.sh` also restarts the bot (`tjai-tgbot` service) on
+every deploy.
 
 Entries created via Telegram are tagged `fromtg` and `fromai`.

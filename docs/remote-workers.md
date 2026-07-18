@@ -1,8 +1,8 @@
 # Remote Worker Pipeline
 
-The remote-worker pipeline lets the tjai server hand inference work to a worker process running on another machine — typically `tj_agent` running on Torre's Mac Studio with a local ollama instance. This is how the `gemma` model contributes to the multi-model research pipeline: the prompt is built on the server, the inference runs on the Mac, and the result is POSTed back.
+The remote-worker pipeline lets the tjai server hand inference work to a worker process running on another machine — typically `tj_agent` running on the Mac Studio with a local ollama instance. The prompt is built on the server, the inference runs on the Mac, and the result is POSTed back.
 
-The same protocol can in principle dispatch any work item that has a prompt and a string result.
+The protocol dispatches any work item that has a prompt and a string result. Its production use today is external submission via `/api/work/*` (corun-ai codoc jobs). The multi-model research integration is dormant: `RESEARCH_MODELS` in `tjai_app/action_runner.py` currently excludes gemma and qwen (qwen off 2026-06-08), so the research dispatcher stages no remote-worker models. The staging path and the `REMOTE_WORKER_MODELS` mapping are kept so either model can be re-enabled by adding it back to `RESEARCH_MODELS`.
 
 ## Why this exists
 
@@ -28,12 +28,12 @@ calls are also accepted; Apache-proxied public traffic must carry the bearer.
 
 | Layer | File | Role |
 |---|---|---|
-| Dispatcher | `tjai_app/action_runner.py` `_dispatch_research_3way` | When a research topic is submitted, creates per-model sub-entries and stages remote-worker models (gemma, qwen) via the `REMOTE_WORKER_MODELS` mapping |
+| Dispatcher | `tjai_app/action_runner.py` `_dispatch_research_3way` | When a research topic is submitted, creates per-model sub-entries and stages any remote-worker models in `RESEARCH_MODELS` via the `REMOTE_WORKER_MODELS` mapping (currently none — gemma and qwen are excluded from `RESEARCH_MODELS`) |
 | Endpoint (poll) | `tjai_app/views.py` `worker_poll`, `_claim_worker_entry` | Long-polls for matching work, atomically claims under transaction, returns prompt |
 | Endpoint (result) | `tjai_app/views.py` `worker_result` | Receives result, finalizes the sub-entry, calls `research_model_complete` |
-| Per-completion hook | `tjai_app/action_runner.py` `research_model_complete` | Updates base entry's `{model}_status`, triggers synthesis once all dispatched models are done |
+| Per-completion hook | `tjai_app/action_runner.py` `research_model_complete` | Updates base entry's `{model}_status`, triggers synthesis once all dispatched models are terminal (failed counts as done) |
 | Worker (Mac) | `tj_agent/worker.py` | Async loop that polls, runs an agentic chat loop against local ollama (with tools when MCP dispatcher is up), POSTs result, also POSTs `received`/`completed` events to `/api/log` (source `worker-mac`) |
-| MCP tool dispatcher (Mac, R&D) | `tj_agent/mcp_tool_dispatcher.py` `McpToolDispatcher` | Spawns local MCP servers as stdio subprocesses (lxr-mcp-server, github-mcp-server), holds long-lived `mcp.ClientSession`s, advertises the union of their tools to ollama, routes `call_tool` dispatch back to the owning server. Optional — failures degrade to tool-less single-shot inference. |
+| MCP tool dispatcher (Mac, R&D) | `tj_agent/mcp_tool_dispatcher.py` `McpToolDispatcher` | Spawns local MCP servers as stdio subprocesses (lxr, github, fetch, npp_search, web_search), holds long-lived `mcp.ClientSession`s, advertises the union of their tools to ollama, routes `call_tool` dispatch back to the owning server. Optional — failures degrade to tool-less single-shot inference. |
 | Worker thread starter | `tj_agent/daemon.py` `run_forever` | Spawns the worker thread (which itself wraps an asyncio loop) alongside the sync loop on `tj_agent` startup |
 | Display | `tjai_app/views.py` `api_research_data` + `tjai_app/templates/tjai_app/research.html` banner block | Shows the system state on `/tjai/research/` with three named, non-overlapping facts |
 
@@ -64,8 +64,9 @@ Responses:
 //   'multimodel' → 'research'   (research dispatcher sub-entries)
 //   'corun-ai'   → 'codoc'      (api/work/submit from corun-ai)
 //   anything else → 'generic'   (other external submitters)
-// It is informational on the wire — the Mac worker labels logs with it
-// but the agent loop runs identically regardless.
+// On the worker it selects the work-type system prompt for the agent
+// loop (see § MCP tools and agent loop) and labels the worker's log
+// events.
 
 // 200 — hold expired with no matching work
 {"status": "ok", "work": null}
@@ -107,7 +108,7 @@ Stage a unit of work for the next worker that polls for the matching capability.
 {
   "capability":   "gemma4" | "gemma4-fast",
   "prompt":       "<full prompt text>",
-  "timeout_sec":  1800,                   // optional, default 1800
+  "timeout_sec":  3600,                   // optional, default 3600
   "source":       "corun-ai",             // optional caller identifier
   "label":        "codoc:job-42:p3"       // optional caller's job label
 }
@@ -165,7 +166,7 @@ Soft-delete the entry. Callers should issue this **after** successfully retrievi
 | `WORKER_CAPABILITIES` | `{'gemma4', 'gemma4-fast', 'qwen'}` | `tjai_app/views.py` | Capability whitelist. Edit this to add a new capability. |
 | `POLL_CLIENT_TIMEOUT` | 70 | `tj_agent/worker.py` | Worker socket timeout. Must exceed `WORKER_POLL_HOLD_SECONDS` (the 20s margin covers round-trip + safety). |
 | `POLL_BACKOFF_INITIAL` / `MAX` | 1.0 / 60.0 | `tj_agent/worker.py` | Exponential backoff between failed polls. |
-| `DEFAULT_INFERENCE_TIMEOUT` | 3600 | `tj_agent/worker.py` | Worker's local per-call timeout on each ollama request (60 min), overridden by `work.timeout_sec`. The agent loop has no separate wall-clock cap — it terminates naturally when the model emits no further tool_calls. |
+| `DEFAULT_INFERENCE_TIMEOUT` | 5400 | `tj_agent/worker.py` | Floor on the worker's per-call ollama timeout (90 min): the effective timeout is `max(work.timeout_sec, 5400)`, so the server can lengthen the per-call window but not shorten it below the floor. The agent loop has no separate wall-clock cap — it terminates naturally when the model emits no further tool_calls. |
 | `TJAI_LOG_SOURCE` | `'worker-mac'` | `tj_agent/worker.py` | `source` field used when the worker POSTs `received`/`completed`/`failed` events to `/api/log`. Distinct from the server-side `'worker'` events. |
 
 The "no poll for longer than 180s" disconnected threshold is a function-local value inside `api_research_data`, not a top-level constant.
@@ -192,11 +193,11 @@ The local research-agent process (L1) being `idle` while a remote worker is mid-
 | `staged` | `active` | A worker poll claims the sub-entry | `_claim_worker_entry` |
 | `active` | `staged` | Free-capacity reset (the same worker polls again, signaling it has no in-flight work) | `worker_poll` |
 | `active` | `done` | Worker POSTs `status='done'` | `worker_result` → `research_model_complete` |
-| `active` | `failed` | Worker POSTs `status='failed'` | `worker_result` |
+| `active` | `failed` | Worker POSTs `status='failed'` | `worker_result` → `research_model_complete` (`terminal_status='failed'`) |
 | `done` / `failed` | `rerun` | User clicks "Rerun selections" with this model checked | `api_research_rerun_models` |
 | `rerun` | `staged` | Next dispatch loop picks it up | `_dispatch_research_3way` |
 
-For direct-dispatch models (Claude, Gemini, ChatGPT, DeepSeek) the same L3 field is set directly without any `staged` phase.
+For direct-dispatch models (Claude, Gemini, ChatGPT) the same L3 field is set directly without any `staged` phase.
 
 ### Sub-entry status vs L3
 
@@ -204,7 +205,7 @@ A sub-entry's `Entry.status` is set to `'active'` at staging time and stays `'ac
 
 ## Lifecycle of a remote-worker job
 
-The diagram below traces a single research topic where gemma is one of the dispatched models.
+The diagram below traces a single research topic where gemma is one of the dispatched models (the research-integration path — dormant while gemma is out of `RESEARCH_MODELS`; steps 2-7 are the same for work staged via `/api/work/submit`).
 
 ```
 0. User submits "research-foo" via the research page.
@@ -258,9 +259,13 @@ The diagram below traces a single research topic where gemma is one of the dispa
 6. Mac worker (`tj_agent/worker.py` `_process_work_async`)
    - POST `received` event to /api/log (source 'worker-mac')
    - Run an agentic chat loop against local ollama:
-       messages = [{role: user, content: prompt}]
+       messages = []
+       if tools: messages.append({role: system,
+                                  content: SYSTEM_PROMPTS[work_type]})
+       messages.append({role: user, content: prompt})
        while True:
-         response = ollama /api/chat(messages, tools=dispatcher.tools_for_ollama())
+         response = ollama /api/chat(messages, tools=dispatcher.tools_for_ollama(),
+                                     think=true)
          messages.append(response.message)
          if not response.message.tool_calls:
             final_text = response.message.content
@@ -290,18 +295,24 @@ The diagram below traces a single research topic where gemma is one of the dispa
      worker_staged_at, worker_claimed_at, worker_claimed_by, worker_timeout_sec)
      but PRESERVE worker_duration_sec and worker_machine_id as audit trail
    - Set is_dirty=1 so the result syncs out to clients
-   - Call action_runner.research_model_complete(sub_entry)
+   - For source='multimodel' entries: call
+     action_runner.research_model_complete(sub_entry, terminal_status)
+     with terminal_status 'done' or 'failed'
      (failures here are caught and logged; the worker still gets a 200 —
       see Failure modes below)
 
 8. `action_runner.py` `research_model_complete`
    In transaction.atomic():
-     - Set base.gemma_status = 'done'
-     - Compute dispatched models for this base
-     - Check if all dispatched models are done
-     - If yes: base.status = 'done', then trigger synthesis
-   Synthesis dispatches Claude with the synthesis prompt and the per-model
-   source links.
+     - Set base.gemma_status = terminal_status ('done' or 'failed')
+     - Compute dispatched models for this base (those with a
+       {model}_entry_id on the base entry)
+     - Check if all dispatched models are terminal: 'done', 'failed',
+       or legacy 'blocked' — failed counts as done for synthesis
+       purposes
+   If all terminal: set data.synthesis_triggered on the base (idempotency
+   guard against double-enqueue), then enqueue a 'synthesize' item via
+   research_queue.enqueue + drain_if_idle. base.status stays 'active'
+   until the synthesis sub-entry completes (agent_complete.py flips it).
 ```
 
 ## Free-capacity reset
@@ -335,12 +346,7 @@ The threshold is tied to the longest legitimate *work-item* runtime, not the lon
 
 ## Capability whitelist
 
-In `tjai_app/views.py`:
-```python
-WORKER_CAPABILITIES = {'gemma4'}
-```
-
-`worker_poll` rejects any capability name not in this set with HTTP 400. The reason: every poll writes a `worker_capability_{cap}_lastpoll` sysconfig key. Without the whitelist, a typo or stray curl test (`?capabilities=GEMMA4`, `?capabilities=nope`, `?capabilities=other`) would create permanent fake worker rows that the research page would faithfully display as "disconnected workers" forever. This actually happened on 2026-04-06 — the cleanup is documented in the troubleshooting section.
+`WORKER_CAPABILITIES` in `tjai_app/views.py` is the whitelist — current value in the Constants table above. `worker_poll` rejects any capability name not in this set with HTTP 400. The reason: every poll writes a `worker_capability_{cap}_lastpoll` sysconfig key. Without the whitelist, a typo or stray curl test (`?capabilities=GEMMA4`, `?capabilities=nope`, `?capabilities=other`) would create permanent fake worker rows that the research page would faithfully display as "disconnected workers" forever. This actually happened on 2026-04-06 — the cleanup is documented in the troubleshooting section.
 
 To add a new capability:
 1. Add the name to `WORKER_CAPABILITIES` in `views.py`.
@@ -384,13 +390,15 @@ For each base entry where any model is in `staged` or `active`:
 > `• research-foo — claude done · gemini done · gemma in-progress on ed8e0e3a (49s ago)`
 > `• research-bar — gemma awaiting worker (staged 2m ago)`
 
-Per-model phases use **server-formatted ago strings** (`fmt_ago`), not client-clock arithmetic. When the worker_health for the cap is `zombie`, the topic phase renders as `gemma stale claim by aaaaaaaa (22m ago)` rather than `in-progress`, so the topic line cannot disagree with the worker line.
+Per-model phases use **server-formatted ago strings** (`fmt_ago`), not client-clock arithmetic. When the claim-holding machine's derived state is `zombie`, the topic phase renders as `gemma stale claim by aaaaaaaa (22m ago)` rather than `in-progress`, so the topic line cannot disagree with the worker line.
+
+Claimed work staged via `/api/work/submit` (source other than `multimodel`) is returned as `external_work_in_flight` in the `api_research_data` payload — source, label, capability, claiming machine, claim/stage ages — so a worker shown busy on non-research work has a visible explanation. All in-flight claims, research and external alike, feed the worker-health derivation.
 
 ### Activity dot rules
 
 | Color | Rule | Meaning |
 |---|---|---|
-| green pulse | `system_busy` (local running OR any worker busy) | Something is actively working |
+| green pulse | `system_busy` (local agent running OR any worker busy OR any topic has a model in `active`/`launching`) | Something is actively working |
 | red | `anyZombie` OR (`anyDisconnected && stagedWaiting`) | Something is wrong |
 | orange | `stagedWaiting` AND no problems | Work waiting for a free worker |
 | grey | nothing in flight | Idle |
@@ -458,7 +466,7 @@ The thread wraps an asyncio loop (`run_worker_forever()` calls `asyncio.run(_run
 3. If `work` is null, reconnect immediately.
 4. If `work` is present, run it through `_process_work_async`:
    - POST `received` event to /api/log (source `worker-mac`) with capability, ollama_model, prompt_chars, tools_advertised, hostname.
-   - Run the agent loop: send messages + tools to ollama, dispatch any tool_calls via the dispatcher, append results, repeat until ollama returns no further tool_calls. There is no turn cap. With zero tools (no dispatcher) the loop terminates after turn 1, equivalent to the old single-shot path.
+   - Run the agent loop: prepend the work-type system prompt when at least one tool is loaded, then send messages + tools to ollama (`think: true` on every call), dispatch any tool_calls via the dispatcher, append results, repeat until ollama returns no further tool_calls. There is no turn cap. With zero tools (no dispatcher) the loop terminates after turn 1, equivalent to the old single-shot path.
    - POST `completed` (or `failed`) event to /api/log with duration, turns_used, tool_calls count, output_chars (or error).
    - POST result to /api/worker/result.
    - Errors here are caught and logged but don't crash the loop.
@@ -468,12 +476,15 @@ The thread wraps an asyncio loop (`run_worker_forever()` calls `asyncio.run(_run
 
 The Mac worker can additionally run as an **MCP client** for the model — advertising tools from one or more local MCP servers on every ollama call and dispatching the resulting `tool_calls` back to those servers in a multi-turn loop. This is **R&D**, **Mac-side only**: the server doesn't know whether the worker has tools, the wire protocol is unchanged, and the work item shape is unchanged. From the server's perspective the worker is still a black box that takes a prompt and returns a string.
 
-The default deployment on the Mac Studio bundles two MCP servers, both spawned as stdio subprocesses by the worker on startup:
+The default deployment on the Mac Studio bundles five MCP servers, all spawned as stdio subprocesses by the worker on startup (`default_server_specs()` in `mcp_tool_dispatcher.py`):
 
 | Server | Type | Tools | Auth |
 |---|---|---|---|
 | `lxr-mcp-server` | Python (`mcp` SDK FastMCP) | `lxr_ident`, `lxr_search`, `lxr_source`, `lxr_list` — EIC code browser cross-references via the LXR HTTP backend at `eic-code-browser.sdcc.bnl.gov` | none (public LXR instance) |
 | `github-mcp-server` | Go binary v0.32.0, `stdio` mode | 41 tools across the GitHub REST surface (`get_me`, `get_file_contents`, `search_code`, `list_pull_requests`, `add_issue_comment`, etc.) | `GITHUB_PERSONAL_ACCESS_TOKEN` env var |
+| `mcp-server-fetch` | Python package, run as `python -m mcp_server_fetch` | `fetch` — retrieve a URL and return its main content as cleaned markdown; honors robots.txt | none |
+| `npp_search` | Python (`tj_agent/mcp_servers/npp_search.py`) | `npp_search` — Google Programmable Search restricted to a curated nuclear & particle physics software corpus (LXR, ePIC S&C docs, EICrecon docs, PanDA, iDDS) | `GOOGLE_CSE_API_KEY` + `GOOGLE_CSE_CX` env vars |
+| `web_search` | Python (`tj_agent/mcp_servers/web_search.py`) | `web_search` — general web search via SerpAPI (engine selectable: google, bing, duckduckgo, google_scholar, google_news, youtube) | `SERPAPI_API_KEY` env var |
 
 Each MCP server is **optional**: if a server fails to launch (binary missing, token missing, subprocess error), the dispatcher logs the failure loudly (`WARNING ...mcp_tool_dispatcher: github-mcp-server binary not found; skipping`) and the worker keeps running with whatever subset of tools is available — **including zero**, in which case the agent loop collapses to single-shot inference, identical to the pre-MCP behavior.
 
@@ -498,8 +509,8 @@ Each MCP server is **optional**: if a server fails to launch (binary missing, to
                                 │     │     .call_tool   │     │
                                 │     │    append result │     │       github-mcp-server
                                 │     │                  │     │       (go stdio)
-                                │     │  else: break     │     │
-                                │     └──────────────────┘     │
+                                │     │  else: break     │     │       fetch · npp_search ·
+                                │     └──────────────────┘     │       web_search (py stdio)
                                 │                              │
   /api/worker/result  ◄───────  │   POST final assistant text  │
                                 │                              │
@@ -509,14 +520,18 @@ Each MCP server is **optional**: if a server fails to launch (binary missing, to
                                 └──────────────────────────────┘
 ```
 
-`McpToolDispatcher` (in `tj_agent/mcp_tool_dispatcher.py`) holds one long-lived `mcp.ClientSession` per spawned server, discovers each server's tools at startup via `session.list_tools()`, and maintains a `tool_owner: dict[str, str]` map for routing. The dispatcher lives for the lifetime of the worker thread; subprocesses are torn down via `AsyncExitStack.aclose()` when the thread exits (which only happens on cancellation).
+`McpToolDispatcher` (in `tj_agent/mcp_tool_dispatcher.py`) holds one long-lived `mcp.ClientSession` per spawned server, discovers each server's tools at startup via `session.list_tools()`, and maintains a `tool_owner: dict[str, str]` map for routing. When two servers export the same tool name, the first server to register it owns the name; the duplicate is logged and ignored. The dispatcher lives for the lifetime of the worker thread; subprocesses are torn down via `AsyncExitStack.aclose()` when the thread exits (which only happens on cancellation).
 
 ### Agent loop
 
 ```
-1. messages = [{role: user, content: <prompt>}]
+1. messages = []
+   if tools: messages.append({role: system,
+                              content: SYSTEM_PROMPTS[work_type]})
+   messages.append({role: user, content: <prompt>})
 2. while True:
-       response = ollama /api/chat(messages, tools=dispatcher.tools_for_ollama())
+       response = ollama /api/chat(messages, tools=dispatcher.tools_for_ollama(),
+                                   think=true)
        messages.append(response.message)         # always — model sees its prior tool_calls
        if not response.message.tool_calls:
            final_text = response.message.content
@@ -527,22 +542,27 @@ Each MCP server is **optional**: if a server fails to launch (binary missing, to
 3. POST final_text to /api/worker/result
 ```
 
-**There is no turn cap.** The loop terminates the moment the model stops emitting `tool_calls`. The only wall-clock guard is the per-call ollama timeout (`work.timeout_sec`, default 3600s).
+**There is no turn cap.** The loop terminates the moment the model stops emitting `tool_calls`. The only wall-clock guard is the per-call ollama timeout, `max(work.timeout_sec, 5400s)` — see § Constants.
+
+Every `/api/chat` call sends `think: true`; models with the thinking capability emit chain-of-thought reasoning before the final answer, and models without it ignore the parameter.
 
 Tool calls within a single turn are executed sequentially in the order ollama emitted them, results are appended in order as separate `role:tool` messages, and then the next ollama turn is sent.
 
 The dispatcher's `call_tool` is async (`mcp.ClientSession` is async-native), and the worker drives it from inside an asyncio loop in the worker thread. The blocking ollama HTTP call is wrapped in `asyncio.to_thread()` so a long inference doesn't block the event loop.
 
-**Tools are always advertised** when the dispatcher is up. There is no `work_type` gating — the model decides whether to use them. This is intentional R&D: we want to observe how `gemma4:31b` and `gemma4:e4b` actually behave when given tools on a research prompt vs a codoc prompt vs an agentic prompt.
+**Tools are always advertised** when the dispatcher is up, for every `work_type` — the model decides whether to use them. `work_type` selects the system prompt: `SYSTEM_PROMPTS` in `worker.py` maps `codoc` and `research` to prompts that describe the tool surface and direct the model to ground its answer in tool results rather than training data; any other value falls back to the codoc prompt. The system prompt is prepended only when at least one tool is loaded.
 
 ### Local secrets and the wrapper script
 
-The worker reads two secrets from environment variables on startup:
+The worker reads its secrets from environment variables on startup:
 
 | Env var | Purpose | Required for |
 |---|---|---|
 | `GITHUB_PERSONAL_ACCESS_TOKEN` | Passed to `github-mcp-server` (which reads it from its own env) so it can authenticate to api.github.com | github MCP tools — server is skipped if missing |
 | `TJAI_API_KEY` | REST bearer matching server SysConfig `gmail_addon_api_key` | Worker polling, result POSTs, and per-prompt central logging |
+| `GOOGLE_CSE_API_KEY` | Google Cloud API key with the Custom Search API enabled | npp_search server — skipped if either CSE var is missing |
+| `GOOGLE_CSE_CX` | Programmable Search Engine ID configured with the NPP-software site list | npp_search server — skipped if either CSE var is missing |
+| `SERPAPI_API_KEY` | SerpAPI key (serpapi.com) | web_search server — skipped if missing |
 
 These are loaded from `~/.tjai/env` (a chmod-600 file outside the repo, outside Dropbox) by `~/.tjai/run_agent.sh` (a wrapper script that sources the env file and execs the venv python). The launchd plist `~/Library/LaunchAgents/com.tj_agent.plist` invokes the wrapper rather than python directly. None of these three files (env, wrapper, plist) is in the repo — they are per-machine local state.
 
@@ -562,7 +582,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tj_agent.plist
 
 `scripts/kill_worker.sh` is the deterministic kill — it POSTs `status='failed'` for any in-flight claim before running `launchctl bootout`, so the server doesn't see a stale 2h zombie. See § Stopping a worker cleanly. If no work is in flight the abort step is a safe no-op, so the script is fine to run unconditionally.
 
-`launchctl kickstart -k gui/$(id -u)/com.tjai.agent` is **not** sufficient — it only restarts the running job, it does not re-read the plist or re-source the env file. New env vars added to `~/.tjai/env` will not be visible to the worker until the bootout/bootstrap pair is run.
+`launchctl kickstart -k gui/$(id -u)/com.tj_agent` is **not** sufficient — it only restarts the running job, it does not re-read the plist or re-source the env file. New env vars added to `~/.tjai/env` will not be visible to the worker until the bootout/bootstrap pair is run.
 
 The bootout/bootstrap pair is also the correct way to pick up **code changes** to `tj_agent/*.py`. `tj config.json` is re-read on every poll iteration (so toggling `worker_enabled` or reordering `worker_models` is picked up on the next poll without any restart), but edits to the worker Python itself — e.g., changing the poll-capability-order logic in `worker.py` — only take effect on next process start.
 
@@ -574,7 +594,7 @@ The worker posts events to tjai's central `AppLog` via `POST /api/log` (Bearer-a
 |---|---|---|---|
 | received | info | `received <work_type> prompt <entry_id> via <cap>=<ollama_model> (N chars, M tools available) on <hostname>` | `event, entry_id, machine_id, hostname, capability, ollama_model, work_type, prompt_chars, tools_advertised` |
 | completed | info | `completed <entry_id> in Ns (N turn(s), N tool call(s), N output chars) via <cap>=<ollama_model>` | `event, entry_id, machine_id, hostname, capability, ollama_model, duration_sec, turns_used, tool_calls, output_chars` |
-| failed | error | `failed <entry_id> after Ns (turn N/12, M tool call(s)): <error>` | `event, entry_id, machine_id, hostname, capability, ollama_model, duration_sec, turns_used, tool_calls, error` |
+| failed | error | `failed <entry_id> after Ns (turn N, M tool call(s)): <error>` | `event, entry_id, machine_id, hostname, capability, ollama_model, duration_sec, turns_used, tool_calls, error` |
 
 These complement the existing server-side `worker_poll` and `worker_result` log lines (source `worker`) which fire on dispatch and result-receipt. The `worker-mac` lines surface the **worker's** view and include details only the worker knows: actual ollama model used (vs the capability name), prompt char count, tools advertised, turns used in the agent loop, hostname, and the per-loop tool-call total.
 
@@ -582,12 +602,13 @@ Logging failures never disrupt work processing — `_log_to_tjai` swallows all e
 
 ### Worker dependencies
 
-Beyond the stdlib-only base sync daemon, the optional remote worker pulls in three Python packages, listed in `tj_agent/requirements.txt`:
+Beyond the stdlib-only base sync daemon, the optional remote worker pulls in four Python packages, listed in `tj_agent/requirements.txt`:
 
 ```
-mcp>=1.27.0          # client SDK for MCP servers
-httpx>=0.28          # used by lxr-mcp-server (transitive)
-beautifulsoup4>=4.14 # used by lxr-mcp-server (transitive)
+mcp>=1.27.0               # client SDK for MCP servers
+mcp-server-fetch>=2025.4  # official URL-fetcher server, run as python -m mcp_server_fetch
+httpx>=0.28               # lxr-mcp-server and the local mcp_servers/*.py servers
+beautifulsoup4>=4.14      # lxr-mcp-server
 ```
 
 Install them into the same venv that runs `tj_agent`:
@@ -604,7 +625,7 @@ Things that can go wrong and what the system does about them.
 
 | Failure | What happens | Recovery |
 |---|---|---|
-| **A model finishes `failed`** | `research_model_complete` waits — synthesis requires every dispatched model to be `done`. The base entry stays active with the failed model visible in the banner. This is a deliberate human-in-the-loop checkpoint. | Investigate the failure (worker log, prompt size, ollama state, etc.), then click **Rerun selections** on the research page with the failed model checked. The rerun re-dispatches through `_dispatch_research_3way`; on success the all-done check passes and synthesis fires automatically. |
+| **A model finishes `failed`** | Failed counts as terminal — synthesis triggers once every dispatched model is `done`, `failed`, or legacy `blocked`, and runs with the models that succeeded. The failed model stays visible in the banner. | To include the failed model's contribution, investigate the failure (worker log, prompt size, ollama state, etc.), then click **Rerun selections** on the research page with the failed model checked; the rerun re-dispatches through `_dispatch_research_3way`. |
 | **`research_model_complete` raises** | `worker_result` catches the exception, logs it, but still returns `200` to the worker. The base entry's status is silently broken. | Read the gunicorn log for `worker_result: research_model_complete failed:`. No automated recovery. |
 | **Worker POSTs result for a claim it doesn't hold** | A warning is logged; the result is accepted anyway (the work was done — refusing it would just throw away real output). | None needed in normal operation. Two workers fighting over the same claim shouldn't happen in production. |
 | **Worker dies mid-inference (graceful, via `scripts/kill_worker.sh`)** | The script POSTs `status='failed'` for the current claim *before* bootout. Server transitions sub-entry to `failed` immediately; UI stops showing it as running within one refresh. | Intentional — this is the clean path. See § Stopping a worker cleanly. |
@@ -738,7 +759,7 @@ set -a && source /var/www/tjai/.env && set +a
 cd /home/admin/github/tjrepo/tjai
 .venv/bin/python manage.py shell <<'PY'
 from tjai_app.models import SysConfig
-KEEP = {'gemma4'}  # legitimate capability names
+from tjai_app.views import WORKER_CAPABILITIES as KEEP
 for sc in SysConfig.objects.filter(
     key__startswith='worker_capability_', key__endswith='_lastpoll'
 ):
@@ -835,7 +856,7 @@ The pipeline is generic — adding a second model is straightforward:
 3. **Worker: advertise it.** On the worker machine, add an entry in `worker_models` mapping the new capability name to the appropriate local ollama model tag. Put it at the position in the dict that reflects its priority relative to other capabilities (§ Capability order is priority order). Restart `tj_agent` via `launchctl bootout`/`bootstrap`.
 4. **Result handling.** If the work is for the multi-model research pipeline, no further work is needed — `worker_result` calls `research_model_complete`, which is generic over `RESEARCH_MODELS`. If the work is for something else, extend `worker_result` to dispatch on `data.source` and route accordingly.
 
-The display layer is automatic: `api_research_data` synthesizes `worker_health[<cap>]` for any cap that has either a poll record or a held claim, and the banner renders one line per cap.
+The display layer is automatic: `api_research_data` derives the per-machine `workers` list from poll records and held claims, and the banner renders one line per machine listing its advertised caps.
 
 ## Cross-references
 

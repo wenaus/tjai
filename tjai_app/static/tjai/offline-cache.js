@@ -1,6 +1,6 @@
 (function() {
   const META_KEY = 'tjai-offline-material-cache-meta';
-  const CACHE_PREFIX = 'tjai-offline-v1';
+  const CACHE_PREFIX = 'tjai-offline-v2';
   const PAGE_CACHE = `${CACHE_PREFIX}:pages`;
   const API_CACHE = `${CACHE_PREFIX}:api`;
   const STATIC_CACHE = `${CACHE_PREFIX}:static`;
@@ -89,6 +89,12 @@
       : 'offline cache: checking');
 
     await registerWorkers();
+
+    // The warmer wrote v1 buckets while the service worker read v2;
+    // drop the orphaned v1 caches left behind in existing browsers.
+    for (const name of await caches.keys()) {
+      if (name.startsWith('tjai-offline-v1')) await caches.delete(name);
+    }
 
     const manifestResp = await fetch('/tjai/api/offline/material-cache-manifest', {
       credentials: 'same-origin',

@@ -69,45 +69,16 @@ claude mcp add --transport http tjai https://etaverse.com/tjai/mcp/ \
 
 ## Claude Code Settings
 
-Full `~/.claude/settings.json` with tjai MCP, permissions, and status line:
+The canonical settings file is `tjrepo/computers/common/claude-settings.json`,
+symlinked to `~/.claude/settings.json`. tjai-relevant facts:
 
-```json
-{
-  "mcpServers": {
-    "tjai": {
-      "type": "http",
-      "url": "https://etaverse.com/tjai/mcp/",
-      "headers": {
-        "Authorization": "Bearer ${TJAI_MCP_TOKEN}"
-      }
-    }
-  },
-  "statusLine": {
-    "type": "command",
-    "command": "~/.claude/statusline.sh"
-  },
-  "permissions": {
-    "allow": [
-      "Bash(ls:*)", "Bash(wc:*)", "Bash(grep:*)",
-      "mcp__tjai__get_server_instructions",
-      "mcp__tjai__get_calendar", "mcp__tjai__get_profile",
-      "mcp__tjai__get_ai_guidance", "mcp__tjai__list_contexts",
-      "mcp__tjai__get_todos", "mcp__tjai__get_memories",
-      "mcp__tjai__get_bookmarks", "mcp__tjai__search_entries",
-      "mcp__tjai__get_named_entries", "mcp__tjai__get_entry",
-      "mcp__tjai__get_entry_by_entry_id", "mcp__tjai__create_entry",
-      "mcp__tjai__edit_entry_metadata",
-      "mcp__tjai__replace_entry_content",
-      "mcp__tjai__append_entry_content",
-      "mcp__tjai__copy_calendar_entry",
-      "mcp__tjai__change_entry_kind", "mcp__tjai__run_action",
-      "WebSearch", "WebFetch"
-    ],
-    "defaultMode": "default"
-  },
-  "alwaysThinkingEnabled": true
-}
-```
+- The MCP bearer token flows through the repo-level `.mcp.json`
+  (`${TJAI_MCP_TOKEN}` env expansion), enabled by
+  `enabledMcpjsonServers: ["tjai"]`; the settings file's tjai server entry
+  carries only the URL.
+- Permissions allow tjai tools via the `mcp__tjai__*` wildcard, with
+  `defaultMode: "auto"`.
+- The status line command is `python3 ~/.claude/statusline.sh`.
 
 Settings and status line are maintained in `tjrepo/computers/common/`. Symlink them:
 
@@ -116,7 +87,8 @@ ln -s ~/github/tjrepo/computers/common/claude-settings.json ~/.claude/settings.j
 ln -s ~/github/tjrepo/computers/common/claude-statusline.sh ~/.claude/statusline.sh
 ```
 
-The status line shows model, cost, context usage, session duration, and working directory.
+The status line shows machine location, working directory, model, git branch,
+context usage, and session duration.
 
 ## Cross-Session Dialog Memory
 
@@ -134,9 +106,14 @@ any machine can load recent dialog context.
   → HTTP POST /api/dialog → creates tjai entry with role='user'
 
 [Assistant finishes] → Stop hook → record.py / codex_record.py
-  → Extracts last assistant text from JSONL transcript
+  → Extracts new assistant messages from the JSONL transcript
+    (resuming from a per-transcript byte offset)
   → HTTP POST /api/dialog → creates tjai entry with role='assistant'
 ```
+
+The session-start fetch merges turns recorded under this machine's location
+name with turns recorded under the `etaverse` pseudo-host (server-side
+agents), keeps the most recent N, and skips `[DIAG]` diagnostic entries.
 
 Dialog entries: `kind='memory'`, `tag='ccdialog'`, `is_dirty=0`
 (server-only). Dialog writes use `context='co-code'`, meaning
@@ -146,19 +123,30 @@ Uses `Entry.objects.create()` directly (bypasses 60s dedup). Metadata in
 `Entry.data` includes `role`, `client`, `model`, `model_provider`,
 `reasoning_effort`, `session_id`, `project_path`, and `hostname` when the
 recording hook can determine them. Older entries may lack the model fields.
+POSTed content starting with `<task-notification>` (research subagent
+products) is additionally tagged `research-subagent` and annotated with the
+source research action entry.
 
 ### Hook Scripts
 
 Located in `computers/common/claude-hooks/`:
-- `load.py` — SessionStart (synchronous). Prints SYSPROMPT.md, a mandatory
-  session-start bootstrap directive (see below), and dialog history.
+- `load.py` — SessionStart (synchronous). Prints SYSPROMPT.md, the
+  authoritative local date in America/New_York (overriding Claude Code's
+  UTC-derived date context), a mandatory session-start bootstrap directive
+  (see below), and dialog history.
 - `record.py` — UserPromptSubmit + Stop (async). Records prompts and responses.
 - `SYSPROMPT.md` — Static context injected at session start.
+- `stop-phrase-guard.sh` — Stop hook that blocks the assistant from stopping
+  when its last message matches ownership-dodging, session-quitting, or
+  permission-seeking phrases; counts firings by category in SysConfig.
 
 Codex equivalents live in `computers/common/codex-hooks/`:
 - `codex_load.py` — SessionStart context and recent dialog injection.
 - `codex_record.py` — UserPromptSubmit + Stop dialog recording.
 - `codex_sysprompt.md` — Static Codex context injected at session start.
+- `git_guard.py` — PreToolUse hook blocking destructive git commands
+  (`restore`, `clean`, `revert`) in shell calls.
+- `hooks.json` — Codex hook wiring for the above.
 
 ### Session-Start Bootstrap Directive
 
@@ -269,6 +257,9 @@ export TJAI_DIALOG_TURNS=10                         # turns to load (0=disabled)
 # export TJAI_API_URL=https://etaverse.com/tjai    # default
 ```
 
+`load.py` authenticates with `TJAI_API_KEY`; `record.py` authenticates with
+`TJAI_GMAIL_ADDON_API_KEY`. Both must be set for dialog load and record.
+
 Full laptop environment (including API keys) is in `computers/laptop/config-files/.env`. On a new Mac:
 
 ```bash
@@ -279,6 +270,7 @@ ln -s ~/github/tjrepo/computers/laptop/config-files/.env ~/.env
 
 - `TJAI_DIALOG_TURNS` unset → notice printed, no API calls
 - `TJAI_DIALOG_TURNS=0` → disabled, no API calls
+- `TJAI_ACTION_ID` set (action-agent run) → recording disabled
 - Hook issues blocking startup → `export TJAI_DIALOG_TURNS=0` bypasses all network activity
 
-All errors print to stderr (`claude --verbose`). Hooks always exit 0. HTTP calls have 5s timeout. Assistant responses truncated at 4000 chars on record, 2000 on display.
+All errors print to stderr (`claude --verbose`). Hooks always exit 0. HTTP calls have 5s timeout. Dialog content is stored in full and truncated at 2000 chars on display.

@@ -2,52 +2,57 @@
 
 ## Gmail Add-on
 
-A Gmail sidebar add-on that detects calendar invite emails (.ics attachments) and creates tjai journal entries with one click.
+A Gmail sidebar add-on that creates tjai entries from the email being viewed. The card offers three sections — **journal** (calendar entry, prefilled from detected event details), **bookmark**, and **memory** — each posting to `api/add-entry` with the corresponding `kind`.
 
 ### What It Does
 
-- Contextual trigger fires when viewing an email with .ics attachments
+- The contextual trigger is unconditional: the card renders for every open email
+- Journal prefill from event detection, tried in order: `.ics` attachments, ICS in the raw MIME content, then a meeting-details parse of the subject/body (date/time, Zoom URL, Indico URL)
 - Parses ICS VEVENT: summary, date/time, location, Zoom URL
-- Handles Outlook/Exchange Windows timezone names (WINDOWS_TZ_ map), IANA names (validated via probe), and UTC
+- Handles Outlook/Exchange Windows timezone names (WINDOWS_TZ_ map), IANA names (validated via probe), and UTC; body-parsed times with no explicit timezone use one inferred from the sender's country-code TLD
 - Displays time in Eastern with EST/EDT abbreviation
-- Creates journal entry: `Title [Zoom](url) [Gmail](permalink)`
+- Journal prefill format: `Title @ location [zoom](url) [indico](url)`, with `[gmail](permalink)` appended on submit; editable date (YYYYMMDD) and time (HHMM) fields
+- Bookmark and memory sections take free text with `:tag` and `=context` tokens
 - Gmail permalink via `GmailThread.getPermalink()` API
 
 ### Files
 
 - `gmail_addon/Code.gs` — Apps Script code, manually pasted into the [Apps Script project](https://script.google.com/home/projects/18IPT5WjVYnsecm_j9Sv8LSsgbYi9hDM49Pjxc48rWH9tGNLbaN4Fq4jO/edit)
-- `gmail_addon/appsscript.json` — Manifest (OAuth scope: `gmail.readonly`)
-- Server endpoint: `api/add-journal` in `tjai_app/views.py` (Bearer token auth)
+- `gmail_addon/appsscript.json` — Manifest (OAuth scopes: `gmail.addons.execute`, `gmail.readonly`, `script.external_request`)
+- Server endpoint: `api/add-entry` in `tjai_app/views.py` (Bearer token auth)
 
 ### Setup
 
 1. Create a Google Apps Script project at script.google.com
 2. Paste contents of `Code.gs` and `appsscript.json`
-3. In `setApiKey()`, replace `REPLACE_WITH_ACTUAL_KEY` with the value from SysConfig `gmail_addon_api_key` (also in `~/.env` as `TJAI_GMAIL_ADDON_API_KEY`)
-4. Run `setApiKey` once from the editor
-5. Deploy as test deployment (Gmail Add-on type)
+3. From the editor, run `setApiKey("<key>")` once with the value from SysConfig `gmail_addon_api_key` (also in `~/.env` as `TJAI_GMAIL_ADDON_API_KEY`); the key is stored in the script's UserProperties
+4. Deploy as test deployment (Gmail Add-on type)
 
-Server endpoint accepts: `{title, event_timestamp, zoom_url, gmail_url, location}`
+Server endpoint accepts: `{kind, content, tags, context, source, event_date, event_time, all_day}`
 
 ---
 
 ## Chrome Extension (tj-getlink)
 
-A Chrome extension for copying markdown links and saving bookmarks to tjai. Source code in the `tj-getlink/` directory.
+A Chrome extension for copying markdown links and saving bookmarks to tjai. Source code in the `tj-getlink/` directory at the tjrepo root (a sibling of `tjai/`).
 
 ### Features
 
 - Copy page title + URL as markdown link `[Title](url)`
 - Copy with clean URL (strips query params and fragments)
-- Save to tjai as bookmark (kind `bookmark`, tagged `chrome`)
+- Save to tjai as bookmark (kind `bookmark`, tagged `chrome`), with variants that also add a `readme` tag
 - Detect events on the page and add them to the tjai calendar (see below)
+- Curate picks from the current page — two buttons, documented in [picks-curate-page.md](picks-curate-page.md)
+- `Ctrl+Shift+L` (`Cmd+Shift+L` on Mac) opens the popup
 
 ### How Bookmarking Works
 
 - "Save to tjai" POSTs to `api/add-bookmark` with Bearer token auth
 - API key prompted on first use, stored in `chrome.storage.sync`
 - Uses browser tab title as bookmark title
-- Server creates entry with content `[Title](url)`
+- Server creates entry with content `[Title](url)`; a free-text note field is appended, with `:tag`, `@name`, and `=context` tokens parsed out and applied to the entry
+- A bookmark whose URL already exists is updated in place — content replaced, tags added, archived status cleared — rather than duplicated
+- New bookmarks are auto-tagged (`tagger.tag_bookmark`)
 
 ### Event Detection
 

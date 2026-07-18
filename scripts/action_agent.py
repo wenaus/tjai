@@ -734,7 +734,7 @@ def _check_assessment_backfill(flag_key, action_entry_id):
         # 3. Launch — fire and forget. Script updates status in DB when done.
         cmd = [sys.executable, str(script_path), date_str,
                '--action-id', action_entry_id]
-        logger.info("backfill %s: launching %s %s (non-blocking)", flag_key, script_name, date_str)
+        logger.info("backfill %s: launching %s %s (non-blocking)", flag_key, script_file, date_str)
         sp.Popen(cmd, stdout=open('/dev/null', 'w'), stderr=open('/dev/null', 'w'))
         return
 

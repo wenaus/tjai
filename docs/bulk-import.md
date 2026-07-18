@@ -37,8 +37,8 @@ Parsers output, and the server accepts, this format:
 python3 -c "
 from bulk_import.parsers.dynalist import parse_dynalist_zip
 import json
-bm = parse_dynalist_zip('~/Desktop/backup.zip')
-json.dump(bm, open('~/Desktop/bookmarks.json', 'w'), indent=2)
+bm = parse_dynalist_zip('/path/to/backup.zip')
+json.dump(bm, open('/path/to/bookmarks.json', 'w'), indent=2)
 print(f'{len(bm)} bookmarks')
 "
 
@@ -47,7 +47,7 @@ print(f'{len(bm)} bookmarks')
 
 # 3. Upload
 export TJAI_API_KEY='your-key'
-python3 bulk_import/client.py ~/Desktop/bookmarks.json --source-tag dynalist
+python3 bulk_import/client.py /path/to/bookmarks.json --source-tag dynalist
 ```
 
 ## Client Options
@@ -57,10 +57,11 @@ python3 bulk_import/client.py FILE [OPTIONS]
 
 FILE                 JSON file or Dynalist .zip
 --source-tag TAG     Tag added to all entries (e.g., 'dynalist')
+--api-key KEY        API key (or TJAI_API_KEY env var)
 --chunk-size N       Entries per request (default: 100)
 --no-skip-existing   Import duplicates
 --dry-run            Parse only, don't upload
---server URL         Override server URL
+--server URL         Server URL; the TJAI_SERVER env var takes precedence
 ```
 
 ## Writing a Parser
@@ -127,7 +128,8 @@ for bm in bookmarks:
 {
     "items": [{"content": "[Title](url)", "tags": ["t1"], "timestamp": 123.0}],
     "source_tag": "dynalist",
-    "skip_existing": true
+    "skip_existing": true,
+    "create_context": false
 }
 ```
 
@@ -141,6 +143,12 @@ for bm in bookmarks:
     "auto_tags": {"recipe": 10, "video": 3}
 }
 ```
+
+Deduplication compares URLs with the query string stripped, against existing
+bookmarks and within the import batch. An item whose `context` does not exist
+is reported as an error and skipped unless `create_context` is true. Imported
+entries are created with `is_dirty=1`, and tag statistics are rebuilt after
+each import.
 
 ## Sync After Import
 
@@ -161,13 +169,16 @@ Server applies `tjai_app/tagger.py` rules:
 - `arxiv.org` → `paper`
 - "recipe" in title → `recipe`
 
+The tagger also extracts inline `:tag` tokens and a `=context` token from the
+content, applies them, and strips them from the stored content.
+
 Source tags (e.g., Dynalist `#tags`) are preserved and combined with auto-tags.
 
 ## Files
 
 ```
 tjai/
-├── BULK_IMPORT.md           # This doc
+├── docs/bulk-import.md      # This doc
 └── bulk_import/
     ├── __init__.py
     ├── loader.py            # Server-side Django loader

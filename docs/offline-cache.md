@@ -22,13 +22,15 @@ The generic cache uses these Cache Storage buckets:
 
 | Cache | Purpose |
 |-------|---------|
-| `tjai-offline-v1:pages` | HTML page responses |
-| `tjai-offline-v1:api` | JSON API responses |
-| `tjai-offline-v1:static` | shared static assets needed by cached pages |
+| `tjai-offline-v2:pages` | HTML page responses |
+| `tjai-offline-v2:api` | JSON API responses |
+| `tjai-offline-v2:static` | shared static assets needed by cached pages |
 
 The service worker is network-first for navigations and `/tjai/api/` GETs:
 online responses update the cache; offline or failed fetches fall back to a
-cached response. Static files are cache-first.
+cached response. Static files are cache-first. At install time the service
+worker precaches a fixed list of shared static assets: favicon, menu CSS,
+utility scripts, and the CodeMirror and Prism vendor files.
 
 The service worker does not delete old caches during activation. Cache eviction
 is left to explicit future maintenance code or browser storage pressure.
@@ -42,7 +44,10 @@ group counts.
 Current generic coverage includes:
 
 - Diary page, diary entries API, and diary entry edit pages.
-- Dashboard shell plus default calendar, named, status, and dialog count APIs.
+- Dashboard shell in its default, dialog, archive, and trash views, plus
+  calendar, named, per-view status, and dialog count APIs.
+- Assessment dates and dashboard APIs, plus content APIs and entry pages for
+  each stored assessment.
 - Daily synopsis list/content routes and the underlying daily entries.
 - Workday, workweek, weekly, this-week, work highlights, and `@Underway`.
 - Goals page, goals list API, every goal entry page, and every goal detail API.
@@ -51,7 +56,12 @@ Current generic coverage includes:
 - Relation APIs for cached entries, plus related entry pages and relation APIs
   for both sides of goal/todo relations.
 - Main menu pages where offline shell loading is useful: assessment, git, dev,
-  agent log, agent queue, picks, RSS, ReadMe, system, context, tag, and kind.
+  agent log, agent queue, picks, RSS, ReadMe, system, and context (recipe and
+  poetry). Tag and kind pages fall inside the service worker registration
+  scopes and are cached when visited, but are not warmed from the manifest.
+
+Diary entry coverage is capped at the 1000 most recently modified entries, and
+workday/workweek coverage at the 2000 most recent.
 
 Entry pages are cached in both supported URL shapes when an `entry_id` exists:
 

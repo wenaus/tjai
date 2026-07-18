@@ -4,7 +4,7 @@ Every content or data change to an entry is automatically versioned via a Django
 
 ## How It Works
 
-- **Automatic**: The `pre_save` signal on `Entry` compares old vs new content/data. If either changed, a snapshot is created before the save.
+- **Automatic**: The `pre_save` signal on `Entry` compares old vs new content/data. If either changed, a snapshot is created before the save. Operational data keys (`last_run`, `retry_count`, `run_status`, and similar run-state fields) are excluded from the data comparison, so run-state churn does not create versions.
 - **Manual**: `snapshot_entry(entry, changed_by)` can be called explicitly (e.g., before deletion).
 - **Sequential numbering**: Each entry's versions are numbered v1, v2, v3... (`version_num` field). Allocation is serialized per entry with a PostgreSQL transaction advisory lock.
 - **Attribution**: `changed_by` records who made the change ('web_ui', 'api_delete', 'autosave', etc.).

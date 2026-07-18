@@ -34,10 +34,12 @@ duplicates.
 1. Extension button → `POST /api/picks/curate-page` (Bearer `gmail_addon_api_key`,
    multipart: `url, title, source, mode, page_text, pdfs[]`).
 2. The endpoint stages a job directory (`meta.json`, `page.txt`, `pdfs/`) and
-   dispatches `curate_page.py` fire-and-forget, returning `{status:'queued', job_id}`.
+   dispatches `curate_page.py` fire-and-forget, returning `{status:'queued',
+   job_id}` plus `mode`, `pdfs_saved`, and `pdfs_truncated`.
 3. The job curates and creates picks; they appear in the normal `/tjai/picks/`
    triage UI. Per-job status is `SysConfig['curate_<job_id>_status']`; a
-   `result.json` (created/skipped) is written in the job directory.
+   `result.json` (created/skipped) is written in the job directory alongside
+   `model_output.txt` (raw model output) and `job.log`.
 
 ## Components
 

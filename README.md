@@ -39,12 +39,16 @@ interfaces, not the center of the system architecture.
 | [Python Environment](docs/python-environment.md) | Interpreter pin, requirements layout, uv-based venv build (single source of truth) |
 | [CLI Reference](docs/cli.md) | Complete command reference for `tj` |
 | [Architecture](docs/architecture.md) | Sync design, MCP gateway, design decisions |
+| [Sync Agent](TJ_AGENT.md) | `tj_agent` sync daemon: per-machine SQLite, push/pull protocol, conflict handling, daemon lifecycle |
 | [Dashboard](docs/dashboard.md) | Web dashboard client: page modes, URL-state model, panels, filtering, search, endpoints |
 | [Markdown Rendering](docs/rendering.md) | Server-side render pipeline, linkify policy, Prism code blocks, `text` prose fences |
 | [Server & Deployment](docs/server.md) | Production environment, deploy, endpoints, logging, health, backups |
+| [MCP Server](docs/mcp.md) | Standalone MCP ASGI service: transport policy, bearer auth, Apache routing, deployment; related read-only Postgres MCP |
 | [Action Agent](docs/action-agent.md) | Scheduled task daemon, execution pipeline, action entry schema |
 | [Local Maintenance Actions](docs/local-actions.md) | Small machine-local jobs run by the sync agent, separate from EC2 action entries |
 | [Agents](docs/agents.md) | Daily synopsis, AI news curation (Picks), autonomous research, RSS reader |
+| [Picks Page Curation](docs/picks-curate-page.md) | Curating picks from the page being viewed: browser extension flow, curate-page endpoint, background job |
+| [Indico Access](docs/indico-access.md) | Authenticated CERN Indico fetching via a logged-in Chrome session |
 | [Browser Offline Cache](docs/offline-cache.md) | Research and generic browser-side offline caching for tjai pages and APIs |
 | [Remote Worker Pipeline](docs/remote-workers.md) | Long-poll protocol for offloading inference (e.g. gemma) to a worker on another machine — capability whitelist, claim lifecycle, display contract, troubleshooting |
 | [Claude Integration](docs/claude-integration.md) | MCP setup, Claude Code settings, dialog memory, Claude.ai, OAuth |

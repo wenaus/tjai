@@ -93,14 +93,21 @@ restart — `claude mcp list` only probes the config. Restart, then confirm with
 
 ## Configuration File
 
-`~/.tjai/config.json` — created automatically on first run:
+`~/.tjai/config.json` — created automatically on first run. The `~/.tjai`
+directory itself can be relocated with the `TJAI_APP_DIR` environment variable.
 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `db_dir` | `~/Dropbox/Current` | Database directory (any local path) |
-| `backup_dir` | — | Backup directory location |
+| `backup_dir` | `~/Dropbox/Current/tjai_backups` | Backup directory location |
 | `backup_interval_hours` | 1 | Auto-backup frequency |
+| `backup_retention_days` | 14 | Days to keep all backups; older ones thinned to one per week |
 | `recent_entries_hours` | 24 | Hours included in "recent" queries |
+| `calendar_default_days` | 30 | Default day span for calendar views |
+| `content_truncate_length` | 5 | Lines of content shown in truncated listings |
+| `status_list_limit` | 20 | Entries shown in the status listing |
+| `line_wrap_width` | 100 | Line wrap width for CLI output |
+| `preview_length` | 50 | Characters in content previews |
 | `location_name` | — | Machine identifier (e.g., "StudioMax", "ec2dev") |
 
 Note: `sync_interval_seconds` is server-side via `tj admin agent interval`.
@@ -124,7 +131,7 @@ being represented as an agent-starting state.
 ## Backup & Restore
 
 ```bash
-tj backup                    # Manual backup
+tj admin backup              # Manual backup
 tj dump > restore.sh         # Database as executable commands
 # Later: source restore.sh   # Recreate database
 ```
