@@ -23,6 +23,7 @@ SWF_REPOS=(
     "$GITHUB_DIR/swf-epicprod"
     "$GITHUB_DIR/snapper-ai"
     "$GITHUB_DIR/site-canary"
+    "$GITHUB_DIR/epic-wfms-docs"
 )
 
 is_swf() {
