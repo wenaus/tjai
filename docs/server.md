@@ -6,7 +6,7 @@
 - **Shell:** Bash only
 - **Git repo (dev):** `/home/admin/github/tjrepo/tjai`
 - **Production deployment:** `/var/www/tjai` (not a git repo)
-- **Database:** PostgreSQL. `DJANGO_DATABASE_URL` is in `/var/www/tjai/.env` only.
+- **Database:** PostgreSQL 15. `DJANGO_DATABASE_URL` is in `/var/www/tjai/.env` only. Server config: `shared_buffers = 1GB` and `shared_preload_libraries = 'pg_stat_statements'` (set 2026-07-19 in `/etc/postgresql/15/main/postgresql.conf`; the 128MB Debian default made every seq scan of `entries` bypass the buffer cache).
 - **Django settings:** `tjai_project/settings/base.py` (split settings dir)
 - **Static files:** `tjai_app/static/tjai/` → served via Apache Alias at `/tjai/static/`
 - **Python:** version requested in `.python-version` (series floor), provisioned by uv; see [Python Environment](python-environment.md)

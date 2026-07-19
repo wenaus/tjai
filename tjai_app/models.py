@@ -80,6 +80,11 @@ class Entry(models.Model):
                 name='idx_entries_dash_facets',
                 condition=models.Q(deleted_at__isnull=True),
             ),
+            models.Index(
+                KeyTransform('worker_claimed_by', 'data'),
+                name='idx_entries_worker_claimed',
+                condition=models.Q(deleted_at__isnull=True),
+            ),
         ]
         constraints = [
             models.UniqueConstraint(
