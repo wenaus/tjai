@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 import traceback
+import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -1300,11 +1301,16 @@ def run_action(entry_id):
     if not entry_id:
         return {"error": "entry_id is required"}
 
-    action = Entry.objects.filter(
-        id=entry_id,
-        kind='action',
-        deleted_at__isnull=True,
-    ).first()
+    # Accept either the entry UUID or the human-readable data.entry_id slug.
+    actions = Entry.objects.filter(kind='action', deleted_at__isnull=True)
+    action = None
+    try:
+        uuid.UUID(str(entry_id))
+        action = actions.filter(id=entry_id).first()
+    except ValueError:
+        pass
+    if not action:
+        action = actions.filter(data__entry_id=entry_id).first()
     if not action:
         return {"error": f"Action entry '{entry_id}' not found"}
 

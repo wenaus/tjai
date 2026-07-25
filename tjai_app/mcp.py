@@ -987,7 +987,8 @@ async def run_action(entry_id: str) -> dict:
     AI dispatch, and updates last_run. Returns execution result.
 
     Args:
-        entry_id: The UUID of the action entry to execute (required).
+        entry_id: The action entry's UUID or human-readable entry_id slug
+            (e.g. "workweek-agent") (required).
 
     Returns:
         Result dict with success status, action content, and entry_id.
