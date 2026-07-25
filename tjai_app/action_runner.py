@@ -1337,23 +1337,38 @@ def run_action(entry_id):
 
 
 def _wake_agent():
-    """Send SIGHUP to the action agent daemon."""
+    """Wake the action agent daemon.
+
+    The authoritative wake is the sysconfig flag the daemon polls every few
+    seconds — it works across the www-data/admin user boundary, where a
+    SIGHUP from the web tier gets EPERM (run_action's wake silently failed
+    that way on 2026-07-25). The SIGHUP is kept as a best-effort fast path
+    for same-user callers.
+    """
     import os
     import signal
+
+    now = time.time()
+    SysConfig.objects.update_or_create(
+        key='action_agent_wake_requested',
+        defaults={'value': '1', 'timestamp_modified': now},
+    )
 
     pid_str = SysConfig.objects.filter(
         key='action_agent_pid'
     ).values_list('value', flat=True).first()
     if not pid_str or not pid_str.isdigit():
-        logger.warning("Cannot wake agent: no PID in sysconfig")
+        logger.info("Wake flag set; no agent PID in sysconfig for SIGHUP")
         return
     try:
         os.kill(int(pid_str), signal.SIGHUP)
         logger.info("Agent woken (PID %s)", pid_str)
     except ProcessLookupError:
-        logger.warning("Agent PID %s not found (stale)", pid_str)
+        logger.warning("Agent PID %s not found (stale); wake flag set",
+                       pid_str)
     except PermissionError:
-        logger.warning("Permission denied waking agent PID %s", pid_str)
+        logger.info("SIGHUP to agent PID %s denied (cross-user); wake flag "
+                    "set — daemon picks it up within seconds", pid_str)
 
 
 def write_heartbeat():

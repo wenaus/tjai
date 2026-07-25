@@ -164,6 +164,15 @@ def dispatch_run(target_entry: Entry) -> tuple[bool, dict]:
         data['scheduled_time_config'] = original_scheduled
         data['scheduled_time'] = datetime.now(_get_app_tz()).strftime('%H%M')
     data['last_run'] = 0
+    # An explicit run is a human override of any failure backoff — clear
+    # retry state so next_run_time() cannot silently defer this dispatch
+    # (retry_after outranks the staged schedule; swallowed a user Submit
+    # for an hour on 2026-07-25).
+    if data.pop('retry_after', None) is not None:
+        data.pop('retry_count', None)
+        _record_log(logging.WARNING,
+                    "Explicit run cleared a pending failure backoff on "
+                    "research-agent", target_uuid)
     ra.data = data
     ra.timestamp_modified = now
     ra.save(update_fields=['data', 'timestamp_modified'])
@@ -213,6 +222,13 @@ def dispatch_rerun(target_entry: Entry, models: list) -> tuple[bool, dict]:
             rdata['scheduled_time_config'] = original_scheduled
             rdata['scheduled_time'] = datetime.now(_get_app_tz()).strftime('%H%M')
         rdata['last_run'] = 0
+        # Same human-override rule as dispatch_run: explicit rerun clears
+        # any pending failure backoff.
+        if rdata.pop('retry_after', None) is not None:
+            rdata.pop('retry_count', None)
+            _record_log(logging.WARNING,
+                        "Explicit rerun cleared a pending failure backoff "
+                        "on research-agent", str(base.id))
         rdata['next_target'] = (
             f"SPECIFIC TARGET:\nEntry UUID: {base.id}\nTopic: {base.content}"
         )

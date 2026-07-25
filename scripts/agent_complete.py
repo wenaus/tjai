@@ -261,6 +261,29 @@ def _clear_retry(action_id):
         action.save(update_fields=['data'])
 
 
+def _artifact_delivered(entry, launched_ts):
+    """True when the run's work entry received substantive content during
+    the run — the artifact-based success signal that outranks an error
+    phrase appearing in the transcript. Model prose ABOUT a failure (a
+    synthesis describing a failed source branch said "authentication
+    failed" and was wrongly marked failed, 2026-07-25) matches the phrase
+    scan without being a failure of this run."""
+    if entry is None:
+        return False
+    content = (entry.content or '').strip()
+    if len(content) < RESEARCH_MIN_REPORT_CHARS:
+        return False
+    try:
+        launched = float(launched_ts)
+    except (TypeError, ValueError):
+        return False
+    try:
+        modified = float(entry.timestamp_modified or 0)
+    except (TypeError, ValueError):
+        return False
+    return modified >= launched
+
+
 def _research_completion_error(action_id, entry):
     """Return a failure reason when a Claude research run produced no report."""
     if action_id != 'research-agent' or not entry:
@@ -325,15 +348,13 @@ def main():
 
     # Scan output for error indicators even on exit_code=0.
     # An agent that exits 0 but says "authentication failed" is not a success.
+    # The verdict is deferred until the work entry is fetched below: a
+    # phrase match is overridden when the run demonstrably delivered its
+    # artifact (see _artifact_delivered).
     ERROR_PHRASES = ('authentication failed', 'mcp tools aren\'t available',
                      'failed to connect', 'connection refused',
                      'http connection closed after')
     output_has_error = any(p in stderr_content.lower() for p in ERROR_PHRASES)
-    if output_has_error and exit_code == 0:
-        status = 'failed'
-        ref_extra['run_status'] = status
-        logger.error("%s: exit_code=0 but output contains errors, marking failed",
-                     action_id, extra=ref_extra)
 
     # On timeout, wait for subagents before finalizing
     subagent_count = 0
@@ -348,6 +369,22 @@ def main():
         entry = Entry.objects.filter(
             id=current_entry, deleted_at__isnull=True
         ).first()
+
+    # Deferred phrase-match verdict (see scan above).
+    if output_has_error and exit_code == 0 and status == 'completed':
+        if _artifact_delivered(entry, launched_ts):
+            logger.info(
+                "%s: exit_code=0 output matches an error phrase, but the "
+                "work entry carries a substantive artifact written during "
+                "the run — treating as success (prose about a failure is "
+                "not a failure)", action_id, extra=ref_extra)
+        else:
+            status = 'failed'
+            ref_extra['run_status'] = status
+            logger.error(
+                "%s: exit_code=0 but output contains errors and no "
+                "artifact was delivered, marking failed",
+                action_id, extra=ref_extra)
 
     completion_error = None
     if status == 'completed':
