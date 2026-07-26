@@ -47,6 +47,11 @@ TOPICAL summary of the week organized by project / area / theme — NOT day by
 day. Each topic gets a `### <Topic>` section with bulleted points covering what
 was done across the week in that area.
 
+Do not attach day-of-week attributions to items — no "(Sat)", "(Mon/Tue)",
+"On Friday", or the like. The daily reports carry the timeline; this report
+covers what was done, not when. Day names appear only where they are the
+substance of an item (e.g. hours worked, a meeting's identity).
+
 Cover everything substantive — code shipped, debugging, exploration,
 discussions, decisions. Do not editorialize, hype, or invent. If a day is
 sparse or empty, that is fine — do not pad. Be concrete: name the project,
