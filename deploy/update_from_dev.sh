@@ -77,11 +77,29 @@ echo "[${SECONDS}s] tgbot restarted"
 # a hard restart kills in-progress actions. The agent polls the flag,
 # finishes any current action, exits, and supervisord restarts it on the
 # new code (within seconds when idle).
-(cd /var/www/tjai && sudo -u www-data ./.venv/bin/python manage.py shell -c "
+# Set, then verify with an independent psql read-back: the set has
+# exited 0 without landing, so success is judged by the observed flag
+# state, not the exit code.
+if ! (cd "$TARGET_DIR" && sudo -u www-data ./.venv/bin/python manage.py shell -c "
 import time
 from tjai_app.models import SysConfig
 SysConfig.objects.update_or_create(key='action_agent_restart_requested', defaults={'value': '1', 'timestamp_modified': time.time()})
-" >/dev/null)
-echo "[${SECONDS}s] action-agent graceful restart scheduled (restarts after any in-progress action)"
+" >/dev/null); then
+  echo "[${SECONDS}s] WARNING: restart-flag set command failed (see errors above)"
+fi
+RESTART_FLAG=$( (set -a; source "$TARGET_DIR/.env"; set +a
+  psql "$DJANGO_DATABASE_URL" -tAc \
+    "SELECT value FROM sysconfig WHERE key='action_agent_restart_requested'") 2>/dev/null \
+  || echo READBACK_FAILED)
+if [[ "$RESTART_FLAG" == "1" ]]; then
+  echo "[${SECONDS}s] action-agent graceful restart scheduled (restarts after any in-progress action)"
+else
+  echo "[${SECONDS}s] WARNING: action-agent restart flag not verified (read back: '${RESTART_FLAG}')."
+  echo "  The agent may still be running OLD code. Either the agent consumed the"
+  echo "  flag already (agent log shows 'Restart requested — exiting' just now)"
+  echo "  or the set never landed. Set it manually with:"
+  echo "  cd $TARGET_DIR && sudo -u www-data ./.venv/bin/python manage.py shell -c \\"
+  echo "    \"import time; from tjai_app.models import SysConfig; SysConfig.objects.update_or_create(key='action_agent_restart_requested', defaults={'value': '1', 'timestamp_modified': time.time()})\""
+fi
 
 echo "Deployment complete in ${SECONDS}s."
