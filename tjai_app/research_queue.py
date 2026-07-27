@@ -161,7 +161,10 @@ def dispatch_run(target_entry: Entry) -> tuple[bool, dict]:
     now = time.time()
     original_scheduled = data.get('scheduled_time')
     if original_scheduled:
-        data['scheduled_time_config'] = original_scheduled
+        # A repeat submit before agent pick-up must not overwrite the
+        # saved original with the previously injected time.
+        if 'scheduled_time_config' not in data:
+            data['scheduled_time_config'] = original_scheduled
         data['scheduled_time'] = datetime.now(_get_app_tz()).strftime('%H%M')
     data['last_run'] = 0
     # An explicit run is a human override of any failure backoff — clear
@@ -219,7 +222,9 @@ def dispatch_rerun(target_entry: Entry, models: list) -> tuple[bool, dict]:
         rdata = ra.data or {}
         original_scheduled = rdata.get('scheduled_time')
         if original_scheduled:
-            rdata['scheduled_time_config'] = original_scheduled
+            # Same overwrite guard as dispatch_run.
+            if 'scheduled_time_config' not in rdata:
+                rdata['scheduled_time_config'] = original_scheduled
             rdata['scheduled_time'] = datetime.now(_get_app_tz()).strftime('%H%M')
         rdata['last_run'] = 0
         # Same human-override rule as dispatch_run: explicit rerun clears

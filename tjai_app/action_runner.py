@@ -1113,11 +1113,16 @@ def update_last_run(action, clear_retry_state=True):
         data.pop('retry_after', None)
         data.pop('retry_count', None)
 
-    # Restore scheduled_time after a force-run
+    # Restore scheduled_time after a force-run. A falsy saved value means
+    # the action never had one — remove the injected time entirely.
     if 'scheduled_time_config' in data:
-        data['scheduled_time'] = data.pop('scheduled_time_config')
+        original = data.pop('scheduled_time_config')
+        if original:
+            data['scheduled_time'] = original
+        else:
+            data.pop('scheduled_time', None)
         logger.info("Force-run complete, restored scheduled_time to %s",
-                     data['scheduled_time'])
+                    original)
 
     action.data = data
     action.timestamp_modified = time.time()
@@ -1316,15 +1321,19 @@ def run_action(entry_id):
 
     data = action.data or {}
 
-    # Save original scheduled_time so it can be restored after the run
+    # Inject a current-HHMM scheduled_time only for actions that already
+    # have one (needed when today's configured moment is still ahead).
+    # Interval actions become due from last_run=0 alone, and an injected
+    # time would permanently override their interval since scheduled_time
+    # takes precedence in get_next_scheduled_time. scheduled_time_config
+    # keeps the true original across repeated force-runs so the post-run
+    # restore never writes back an injected value.
     original_scheduled = data.get('scheduled_time')
     if original_scheduled:
-        data['scheduled_time_config'] = original_scheduled
-
-    # Set scheduled_time to current HHMM so scheduler sees it as due
-    tz = services.get_timezone()
-    now_local = datetime.now(tz)
-    data['scheduled_time'] = now_local.strftime('%H%M')
+        if 'scheduled_time_config' not in data:
+            data['scheduled_time_config'] = original_scheduled
+        tz = services.get_timezone()
+        data['scheduled_time'] = datetime.now(tz).strftime('%H%M')
     data['last_run'] = 0  # Clear so scheduler sees it as due
     action.data = data
     action.timestamp_modified = time.time()
