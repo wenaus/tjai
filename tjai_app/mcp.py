@@ -347,6 +347,9 @@ async def create_entry(
 
     Args:
         content: The entry text (required). Do NOT include time in content - use event_time.
+                 For journal (calendar) entries, meeting links (zoom, gmail, indico,
+                 notes doc) go as markdown links on content line 1 after the title:
+                 'Meeting name [zoom](url) [notes](url)'.
         kind: Entry type. One of: memory (general notes, default), todo (tasks),
               journal (calendar events with event_date), profile (facts about user),
               ai (instructions for AI assistants), bookmark (URLs), list (lists),
@@ -375,9 +378,10 @@ async def create_entry(
     It is the human-readable identifier used in URLs, cross-references (rel_goal),
     and the get_entry_by_entry_id() lookup. Omitting it forces UUID-only access.
 
-    Example for calendar event "Meeting at 9am on Jan 28, 2026":
-        create_entry(content="Meeting", kind="journal", event_date="20260128",
-                     event_time="0900", data={"entry_id": "meeting-hsf-20260128"})
+    Example for calendar event "HSF meeting at 9am on Jan 28, 2026" with a zoom link:
+        create_entry(content="HSF meeting [zoom](https://zoom.us/j/123)",
+                     kind="journal", event_date="20260128", event_time="0900",
+                     data={"entry_id": "meeting-hsf-20260128"})
 
     Example for a research topic:
         create_entry(content="Why LLMs fail at CSS", kind="memory",
@@ -1007,8 +1011,8 @@ async def copy_calendar_entry(
     Copy a calendar/journal entry to a new date.
 
     ALWAYS use this tool when asked to copy a calendar entry. Do NOT manually
-    create a new entry — this tool copies content, data (links, zoom URLs, etc.),
-    context, and tags exactly from the source.
+    create a new entry — this tool copies content (with its line-1 meeting
+    links), data, context, and tags exactly from the source.
 
     Args:
         entry_id: UUID of the source journal entry to copy.
