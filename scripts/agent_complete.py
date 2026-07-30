@@ -284,6 +284,30 @@ def _artifact_delivered(entry, launched_ts):
     return modified >= launched
 
 
+def _tracking_result_delivered(tracking_uuid, launched_ts):
+    """Fallback delivery signal for runs with no registered work entry:
+    every dispatch's system prompt mandates appending [RESULT] to the
+    tracking entry on completion, so a [RESULT] written during the run is
+    the artifact. Scheduled runs set no agent_<action>_entry (only UI
+    dispatches carrying next_target_entry_id do), which left
+    _artifact_delivered blind — daily-assessment delivered its assessment
+    three times on 2026-07-30 and was marked failed each time because its
+    report prose quoted the MiniPower 'authentication failed' error."""
+    if not tracking_uuid:
+        return False
+    entry = Entry.objects.filter(
+        id=tracking_uuid, deleted_at__isnull=True,
+    ).first()
+    if entry is None or '[RESULT]' not in (entry.content or ''):
+        return False
+    try:
+        launched = float(launched_ts)
+        modified = float(entry.timestamp_modified or 0)
+    except (TypeError, ValueError):
+        return False
+    return modified >= launched
+
+
 def _research_completion_error(action_id, entry):
     """Return a failure reason when a Claude research run produced no report."""
     if action_id != 'research-agent' or not entry:
@@ -372,11 +396,12 @@ def main():
 
     # Deferred phrase-match verdict (see scan above).
     if output_has_error and exit_code == 0 and status == 'completed':
-        if _artifact_delivered(entry, launched_ts):
+        if (_artifact_delivered(entry, launched_ts)
+                or _tracking_result_delivered(tracking_uuid, launched_ts)):
             logger.info(
-                "%s: exit_code=0 output matches an error phrase, but the "
-                "work entry carries a substantive artifact written during "
-                "the run — treating as success (prose about a failure is "
+                "%s: exit_code=0 output matches an error phrase, but a "
+                "substantive artifact was written during the run — "
+                "treating as success (prose about a failure is "
                 "not a failure)", action_id, extra=ref_extra)
         else:
             status = 'failed'
