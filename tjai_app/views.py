@@ -2553,15 +2553,22 @@ def dashboard_search(request):
         return JsonResponse({'entries': []})
 
     from django.contrib.postgres.search import SearchQuery, SearchRank
-    try:
-        search_query = SearchQuery(q, search_type='websearch', config='english')
-    except Exception:
-        search_query = SearchQuery(q, config='english')
+    search_query = None
+    if not re.search(r'\w', q):
+        # Punctuation-only queries (e.g. the !!! take-note marker) compile to
+        # an empty tsquery and match nothing; search them as literal substrings.
+        search_filter = {'content__icontains': q}
+    else:
+        try:
+            search_query = SearchQuery(q, search_type='websearch', config='english')
+        except Exception:
+            search_query = SearchQuery(q, config='english')
+        search_filter = {'search_vector': search_query}
 
     show_deleted = request.GET.get('deleted') == '1'
     qs = Entry.objects.filter(
-        search_vector=search_query,
         deleted_at__isnull=not show_deleted,
+        **search_filter,
     ).defer('search_vector')
 
     archive_view = request.GET.get('view') == 'archive'
@@ -2649,7 +2656,7 @@ def dashboard_search(request):
     # show "N of TOTAL". Subsequent paginated fetches reuse the value the
     # client already has.
     total_count = qs.count() if offset == 0 else None
-    if sort == 'rank':
+    if sort == 'rank' and search_query is not None:
         entries = list(qs.annotate(
             rank=SearchRank(
                 'search_vector', search_query,

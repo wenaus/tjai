@@ -867,21 +867,30 @@ def search_entries(query=None, kind=None, context=None, limit=50, offset=0, star
     qs = Entry.objects.filter(deleted_at__isnull=True).select_related('context').prefetch_related('tags')
 
     if query:
-        from django.contrib.postgres.search import SearchQuery, SearchRank
+        if not re.search(r'\w', query):
+            # Punctuation-only queries (e.g. the !!! take-note marker) compile
+            # to an empty tsquery under websearch_to_tsquery and match nothing;
+            # search them as literal substrings instead.
+            from django.db.models import FloatField, Value
+            qs = qs.filter(content__icontains=query).annotate(
+                rank=Value(0.0, output_field=FloatField()),
+            )
+        else:
+            from django.contrib.postgres.search import SearchQuery, SearchRank
 
-        # Full-text search with relevance ranking (replaces icontains substring match)
-        # Uses websearch_to_tsquery for Google-style syntax: quoted phrases, -exclusions.
-        try:
-            search_query = SearchQuery(query, search_type='websearch', config='english')
-        except Exception:
-            # Fallback for malformed queries
-            search_query = SearchQuery(query, config='english')
+            # Full-text search with relevance ranking (replaces icontains substring match)
+            # Uses websearch_to_tsquery for Google-style syntax: quoted phrases, -exclusions.
+            try:
+                search_query = SearchQuery(query, search_type='websearch', config='english')
+            except Exception:
+                # Fallback for malformed queries
+                search_query = SearchQuery(query, config='english')
 
-        qs = qs.filter(
-            search_vector=search_query,
-        ).annotate(
-            rank=SearchRank('search_vector', search_query, normalization=1, cover_density=True),
-        )
+            qs = qs.filter(
+                search_vector=search_query,
+            ).annotate(
+                rank=SearchRank('search_vector', search_query, normalization=1, cover_density=True),
+            )
 
     if kind:
         qs = qs.filter(kind=kind)
