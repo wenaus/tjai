@@ -86,6 +86,9 @@
         .save-btn:hover { background: #3a6a3a; }
         .status { color: #9ccc65; font-size: 12px; margin-left: 8px; }
         #editMode { display: none; }
+        /* Landing line for edit-at-line arrivals (e.g. todo-bangs): the
+           lightest blue that keeps white text readable. */
+        .cm-landing-line { background: #1976d2; }
         .edit-toolbar { margin-top: 8px; }
         .CodeMirror { height: calc({{ line_count|add:10 }} * 1.4em) !important; max-height: 70vh !important; }
         .CodeMirror, .CodeMirror-scroll, .CodeMirror-gutters,
@@ -943,6 +946,10 @@
 
         function cancelEdit() {
             if (typeof _stopAutosave === 'function') _stopAutosave();
+            // Arrived from another page (e.g. todo-bangs): cancel returns
+            // there, same as save, instead of dropping to the detail view.
+            var cancelReturn = new URLSearchParams(window.location.search).get('return');
+            if (cancelReturn) { location.replace(cancelReturn); return; }
             _isVersionRestore = false;
             document.title = baseTitle;
             document.getElementById('viewMode').style.display = 'block';
@@ -1126,7 +1133,21 @@
         document.getElementById('relateBtn').addEventListener('click', function() {
             window.open('/tjai/relate/{{ entry.id }}/', '_blank');
         });
-        if (new URLSearchParams(window.location.search).get('edit') === '1') startEdit();
+        (function(){
+            var params = new URLSearchParams(window.location.search);
+            if (params.get('edit') !== '1') return;
+            startEdit();
+            // Optional line target (e.g. from todo-bangs): cursor + centered scroll.
+            var line = parseInt(params.get('line'), 10);
+            if (cm && line > 0) {
+                var l = Math.min(line - 1, cm.lineCount() - 1);
+                cm.setCursor(l, (cm.getLine(l) || '').length);
+                cm.scrollIntoView({line: l, ch: 0},
+                    Math.round(cm.getScrollerElement().clientHeight / 2));
+                cm.addLineClass(l, 'background', 'cm-landing-line');
+                cm.focus();
+            }
+        })();
 
         function _startAutosave() {
             _isFirstAutosave = true;

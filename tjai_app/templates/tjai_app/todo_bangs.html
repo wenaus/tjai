@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/tjai/static/tjai/favicon.svg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>!!! todo-bangs</title>
+    <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 13px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+        .page-content { padding: 16px; }
+        a { color: #90caf9; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        #bangs { display: grid; grid-template-columns: fit-content(30%) 1fr; }
+        .lcell {
+            padding: 3px 12px 3px 0;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .lcell.num { text-align: right; }
+        .rcell { padding: 3px 0; cursor: pointer; }
+        .rcell:hover { background: #212121; }
+        .hdr { border-top: 1px solid #2a2a2a; margin-top: 5px; padding-top: 8px; }
+        .date { color: #8a8a8a; margin-left: 8px; font-size: 11.5px; }
+        .lineno { color: #7a7a7a; }
+        .rcell code { background: #252525; padding: 0 4px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    {% with current_page="todo_bangs" %}{% include "tjai_app/_menu.html" %}{% endwith %}
+    <div class="page-content">
+        <div id="bangs"></div>
+    </div>
+    <script>
+    (function(){
+        var container = document.getElementById('bangs');
+        var RETURN = encodeURIComponent('/tjai/todo-bangs/');
+        function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+        function editUrl(base, line) {
+            return base + '&edit=1&line=' + line + '&return=' + RETURN;
+        }
+        function render(entries) {
+            var html = '';
+            entries.forEach(function(e){
+                e.bang_lines.forEach(function(b, i){
+                    var hdr = i === 0 ? ' hdr' : '';
+                    var left, num = '';
+                    if (i === 0) {
+                        left = '<a href="' + editUrl(e.edit_base, b.line) + '">' + esc(e.title) + '</a>'
+                             + '<span class="date">' + esc(e.date) + '</span>';
+                    } else {
+                        left = '<a class="lineno" href="' + editUrl(e.edit_base, b.line) + '">' + b.line + '</a>';
+                        num = ' num';
+                    }
+                    html += '<div class="lcell' + hdr + num + '">' + left + '</div>';
+                    html += '<div class="rcell' + hdr + '" data-edit="'
+                          + editUrl(e.edit_base, b.line) + '">' + b.html + '</div>';
+                });
+            });
+            container.innerHTML = html;
+        }
+        // The bang line itself is the edit target; embedded links keep
+        // right-of-way — a click landing on an <a> navigates the link.
+        container.addEventListener('click', function(ev){
+            if (ev.target.closest('a')) return;
+            var cell = ev.target.closest('.rcell');
+            if (cell && cell.dataset.edit) window.location.href = cell.dataset.edit;
+        });
+        function refresh(restoreScroll) {
+            fetch('/tjai/api/todo-bangs').then(function(r){ return r.json(); }).then(function(d){
+                render(d.entries || []);
+                if (restoreScroll) {
+                    var y = sessionStorage.getItem('todobangs-scroll');
+                    if (y) window.scrollTo(0, parseInt(y, 10));
+                }
+            }).catch(function(){});
+        }
+        // Save position at departure — the one reliable moment; a throttled
+        // scroll listener loses the final position when a click follows
+        // scrolling inside the throttle window.
+        window.addEventListener('pagehide', function(){
+            sessionStorage.setItem('todobangs-scroll', String(window.scrollY));
+        });
+        document.addEventListener('visibilitychange', function(){
+            if (document.visibilityState === 'visible') refresh(false);
+        });
+        // First render is inlined server-side — one round trip, no fetch.
+        render(JSON.parse('{{ entries_json|escapejs }}'));
+        var y0 = sessionStorage.getItem('todobangs-scroll');
+        if (y0) window.scrollTo(0, parseInt(y0, 10));
+    })();
+    </script>
+</body>
+</html>

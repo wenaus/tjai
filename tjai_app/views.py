@@ -1,3 +1,4 @@
+import functools
 import json
 import logging
 import math
@@ -110,6 +111,9 @@ def _neutralize_raw_html_hazards(text):
     return _RAW_HTML_TAG_RE.sub(repl, text)
 
 
+_MD_INSTANCES = {}
+
+
 def _render_markdown(text, extensions=None):
     """Unified entry-content render: list-spacing fix + markdown + hazard-tag
     neutralization. Use this instead of markdown.markdown() directly so that
@@ -124,9 +128,16 @@ def _render_markdown(text, extensions=None):
     # typesets those in the browser. Without it, markdown eats \( as an
     # escaped paren and physics notation renders as gunk.
     cfgs = {'pymdownx.arithmatex': {'generic': True}} if 'pymdownx.arithmatex' in exts else {}
+    # Building the Markdown machinery dominates short renders; reuse one
+    # instance per extension set via the documented reset() pattern.
+    key = tuple(exts)
+    md = _MD_INSTANCES.get(key)
+    if md is None:
+        md = markdown.Markdown(extensions=exts, extension_configs=cfgs,
+                               tab_length=2)
+        _MD_INSTANCES[key] = md
     safe_text = _neutralize_raw_html_hazards(text)
-    html = markdown.markdown(_fix_md_list_spacing(safe_text), extensions=exts,
-                             extension_configs=cfgs, tab_length=2)
+    html = md.reset().convert(_fix_md_list_spacing(safe_text))
     html = _neutralize_raw_html_hazards(html)
     return _render_text_fences(html)
 
@@ -1603,6 +1614,95 @@ def _entry_ids_with_relations():
     return Entry.objects.filter(
         Q(relations_as_entry1__isnull=False) | Q(relations_as_entry2__isnull=False)
     ).values_list('id', flat=True).distinct()
+
+
+# --- todo-bangs -------------------------------------------------------------
+# A todo bang line opens with 3+ bangs, modulo a markdown list prefix: the
+# lightweight in-flow todo marker. /tjai/todo-bangs/ presents the live
+# extraction — derived every time, no stored state, nothing to go stale.
+# Completion is editing the bangs out of the source line.
+
+TODO_BANG_RE = re.compile(r'^\s*(?:[-*+]\s+|\d+[.)]\s+)?!{3,}')
+
+# SQL twin of TODO_BANG_RE, served by the partial index entries_todo_bangs
+# (migration 0019) — keep the two literally identical or the planner
+# cannot prove the index applies and the query degrades to a full scan.
+TODO_BANG_SQL_RE = r'(^|\n)[ \t]*([-*+][ \t]+|[0-9]+[.)][ \t]+)?!{3,}'
+
+
+@functools.lru_cache(maxsize=4096)
+def _render_bang_line(line):
+    """Inline-render one bang line's markdown, unwrapping the block wrapper
+    (<p>, or <ul><li> for a list-prefixed line) so the cell holds inline
+    content only. Cached by line text — the render is ~1ms/line and bang
+    lines rarely change, so repeat page loads skip rendering entirely."""
+    html = _linkify_rendered_html(_render_markdown(line))
+    for pat in (r'^<p>(.*)</p>\s*$',
+                r'^<[ou]l>\s*<li>(.*)</li>\s*</[ou]l>\s*$'):
+        m = re.match(pat, html, flags=re.S)
+        if m:
+            return m.group(1).strip()
+    return html
+
+
+def _todo_bang_entries():
+    """Entries carrying bang lines, newest-modified first. Per entry: every
+    bang line in document order, untouched — no reordering by bang count or
+    recency. Dialog, archived, and deleted entries are excluded."""
+    qs = Entry.objects.filter(
+        deleted_at__isnull=True,
+        content__regex=TODO_BANG_SQL_RE,
+    ).exclude(status='archive').exclude(
+        # AI-session contexts: bang lines there are conversation artifacts,
+        # not todos. 'claude-code' is the legacy dialog context name.
+        context__name__in=('claude-code',) + DIALOG_CONTEXTS,
+    )
+    candidates = list(qs.select_related('context').order_by('-timestamp_modified'))
+    # Dialog exclusion as a candidate-scoped membership check — an
+    # exclude() anti-join against every dialog tag row costs ~60ms.
+    dialog_ids = set(Tag.objects.filter(
+        tag_name=DIALOG_TAG, entry_id__in=[e.id for e in candidates],
+    ).values_list('entry_id', flat=True))
+    tz = get_app_tz()
+    out = []
+    for e in candidates:
+        if e.id in dialog_ids:
+            continue
+        bang_lines = [
+            {'line': i, 'html': _render_bang_line(line)}
+            for i, line in enumerate(e.content.split('\n'), start=1)
+            if TODO_BANG_RE.match(line)
+        ]
+        if not bang_lines:
+            continue
+        data = e.data if isinstance(e.data, dict) else {}
+        eid = data.get('entry_id')
+        first_line = e.content.split('\n', 1)[0].strip().lstrip('#').strip()
+        title = e.name or eid or first_line
+        edit_base = (f'/tjai/entry/?entry_id={quote(eid)}' if eid
+                     else f'/tjai/entry/?uuid={e.id}')
+        out.append({
+            'title': title[:60],
+            'kind': e.kind,
+            'date': datetime.fromtimestamp(
+                float(e.timestamp_modified), tz).strftime('%m/%d'),
+            'edit_base': edit_base,
+            'bang_lines': bang_lines,
+        })
+    return out
+
+
+@login_required
+def todo_bangs(request):
+    """The todo-bangs page: live two-column extraction of bang lines,
+    inlined server-side so the page renders in one round trip."""
+    return render(request, 'tjai_app/todo_bangs.html',
+                  {'entries_json': json.dumps(_todo_bang_entries())})
+
+
+@login_required
+def api_todo_bangs(request):
+    return JsonResponse({'entries': _todo_bang_entries()})
 
 
 @login_required
