@@ -22,7 +22,7 @@
         a:hover { text-decoration: underline; }
         .container { flex: 1; display: flex; overflow: hidden; }
         .left-panel {
-            width: 280px; min-width: 280px;
+            flex: 0 0 30%;
             overflow-y: auto;
             border-right: 1px solid #333;
             padding: 12px;
@@ -61,6 +61,9 @@
         .tile.green { border-left-color: #9ccc65; } .tile.green .t-value { color: #9ccc65; }
         .tile.yellow { border-left-color: #ffd54f; } .tile.yellow .t-value { color: #ffd54f; }
         .tile.red { border-left-color: #ef5350; } .tile.red .t-value { color: #ef5350; }
+        .tile.meeting-tile { border-left-color: #90caf9; cursor: default; }
+        .tile.meeting-tile .t-value { color: #e0e0e0; }
+        .tile.meeting-tile .t-ago { color: #e57373; font-weight: bold; }
 
         /* Pins */
         .pin { position: relative; display: flex; align-items: baseline; gap: 6px; padding: 4px 4px;
@@ -272,6 +275,17 @@
         return Math.floor(s / 86400) + 'd';
     }
 
+    function meetingCountdown(epoch) {
+        const seconds = Math.max(0, Math.floor(epoch - Date.now() / 1000));
+        if (seconds >= 3600) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            return 'in ' + hours + 'h ' + minutes + 'm';
+        }
+        if (seconds >= 60) return 'in ' + Math.floor(seconds / 60) + 'm';
+        return 'in <1m';
+    }
+
     function renderState() {
         if (stateDragging) return;
         const el = document.getElementById('state-tiles');
@@ -288,11 +302,10 @@
         });
         const keys = savedKnown.concat(allKeys.filter(k => !savedSet.has(k)).sort());
         stateOrder = keys;
-        if (!keys.length) { el.innerHTML = '<div class="feed-note">No state reports yet.</div>'; return; }
         const updateable = new Set(((lastData && lastData.sources) || [])
             .filter(s => s.kind === 'state' && s.mode === 'poll' && s.enabled)
             .map(s => s.source));
-        el.innerHTML = keys.map(k => {
+        const stateHtml = keys.map(k => {
             const s = st[k];
             const color = ['green', 'yellow', 'red'].includes(s.color) ? s.color : '';
             const tag = s.url ? 'a' : 'div';
@@ -313,6 +326,18 @@
                    '</span><span class="t-ago">' + stateAgo(s.updated) +
                    '</span></span></' + tag + '>' + menu + '</div>';
         }).join('');
+        const meeting = lastData && lastData.next_meeting;
+        const meetingHtml = meeting
+            ? '<div class="tile meeting-tile"><a class="tile-main" href="' +
+              escapeHtml(meeting.edit_url) + '" target="_blank" rel="noopener">' +
+              '<span class="t-source">next meeting</span>' +
+              '<span class="t-reading"><span class="t-value">' +
+              escapeHtml(meeting.time_display + ' · ' + meeting.title) +
+              '</span><span class="t-ago">' + meetingCountdown(meeting.event_date) +
+              '</span></span></a></div>'
+            : '';
+        el.innerHTML = stateHtml + meetingHtml ||
+            '<div class="feed-note">No state reports yet.</div>';
     }
 
     function closeStateMenus(except) {
@@ -681,7 +706,7 @@
 
     new Sortable(document.getElementById('state-tiles'), {
         animation: 120,
-        draggable: '.tile',
+        draggable: '.tile:not(.meeting-tile)',
         filter: '.state-menu-btn, .state-popover, .state-popover *',
         preventOnFilter: false,
         onStart: () => {
@@ -691,7 +716,7 @@
         onEnd: () => {
             stateDragging = false;
             stateOrder = Array.from(new Set(
-                Array.from(document.querySelectorAll('#state-tiles .tile'))
+                Array.from(document.querySelectorAll('#state-tiles .tile[data-state-key]'))
                     .map(el => el.dataset.stateKey)
             ));
             if (lastData) lastData.state_order = stateOrder;

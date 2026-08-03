@@ -8709,7 +8709,45 @@ def api_capcom_feed(request):
 
     unread_count = Notice.objects.filter(archived=False, was_read=False).count()
 
-    from datetime import timedelta
+    now_ts = time.time()
+    app_tz = get_app_tz()
+    now_dt = datetime.fromtimestamp(now_ts, tz=app_tz)
+    tomorrow_ts = (now_dt.replace(
+        hour=0, minute=0, second=0, microsecond=0,
+    ) + timedelta(days=1)).timestamp()
+    next_meeting = None
+    meeting_entries = Entry.objects.filter(
+        kind='journal', deleted_at__isnull=True,
+        data__event_date__gte=now_ts,
+        data__event_date__lt=tomorrow_ts,
+    ).order_by('data__event_date')
+    for meeting in meeting_entries:
+        meeting_data = meeting.data or {}
+        meeting_entry_id = str(meeting_data.get('entry_id') or '')
+        if meeting_data.get('clock') or meeting_entry_id.startswith(
+                ('daily-', 'diary-')):
+            continue
+        try:
+            meeting_ts = float(meeting_data['event_date'])
+        except (KeyError, TypeError, ValueError) as e:
+            logger.error("capcom: invalid meeting event_date for %s: %s", meeting.id, e)
+            continue
+        if meeting_entry_id:
+            edit_url = (f'/tjai/entry/?entry_id='
+                        f'{quote(meeting_entry_id, safe="")}&edit=1')
+        elif meeting.name:
+            edit_url = f'/tjai/entry/?name={quote(meeting.name, safe="")}&edit=1'
+        else:
+            edit_url = f'/tjai/entry/?uuid={meeting.id}&edit=1'
+        meeting_dt = datetime.fromtimestamp(meeting_ts, tz=app_tz)
+        next_meeting = {
+            'title': (meeting.content or '').split('\n', 1)[0] or 'Untitled meeting',
+            'event_date': meeting_ts,
+            'time_display': meeting_dt.strftime('%H:%M'),
+            'edit_url': edit_url,
+        }
+        break
+
     from django.db.models import Count
     from django.utils import timezone as _tz
     counts_24h = {
@@ -8777,6 +8815,7 @@ def api_capcom_feed(request):
         'unread_count': unread_count,
         'state': capcom_lib.get_state(),
         'state_order': capcom_lib._get_json_config('capcom_state_order', []),
+        'next_meeting': next_meeting,
         'diary_pin': diary_pin,
         'pins': {'top': top, 'rest': rest},
         'sources': capcom_lib.get_sources(),

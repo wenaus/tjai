@@ -30,7 +30,10 @@ Two panels:
   indicators for sources with a meaningful present state (service health,
   testbed and production activity, the Ahbazon gate camp). Tile values are
   read from a `capcom_state` sysconfig key that sources update alongside
-  their event posts, so state never derives from feed rows. Below the tiles,
+  their event posts, so state never derives from feed rows. When a timed
+  calendar entry remains today, a synthetic **next meeting** tile is always
+  last and shows its start time, title, and live countdown. It links to the
+  entry editor in a new tab. Below the tiles,
   a pinned shelf listing entries carrying the `:pin` tag.
   Pinning by tag means any entry can be promoted to or removed from the
   shelf from wherever it is displayed, there is no separate curated document
@@ -204,8 +207,9 @@ Candidate sources and features considered and not adopted:
   carried, per the contract above.
 - **Git and development activity** — already sufficiently visible through
   existing views and workflow.
-- **Calendar and todos** — each has its established home (the dashboard
-  calendar; the priority page). Capcom does not duplicate them.
+- **Calendar and todos** — the full calendar and todo lists remain in their
+  established views. Capcom shows only today's next timed calendar entry as
+  compact current state.
 - **Weather alerts and KozyKorner presence** — neither needs a place here;
   KozyKorner already has higher visibility on its own.
 - **Push alerting** — no outbound push channel (Telegram or otherwise) is in
