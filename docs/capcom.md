@@ -31,6 +31,16 @@ Two panels:
   Pinning by tag means any bookmark can be promoted to or removed from the
   shelf from wherever it is displayed, there is no separate curated document
   to maintain, and the capture flows (Chrome extension, MCP) are unchanged.
+  The shelf has a hand-ordered top group over a reverse-time remainder:
+  pins whose UUIDs appear in a `capcom_pin_order` sysconfig key render
+  first, in key order, and the remaining pins follow in reverse time order.
+  A pin-to-top control adds a pin to the key; drag reordering within the
+  group rewrites the key through `set_sysconfig` per the dashboard
+  preference pattern (see [Dashboard](dashboard.md)). Top-group membership
+  and order both live in the sysconfig key — the bookmark entry carries
+  nothing beyond `:pin` — so ordering touches no entry state and needs no
+  new server endpoint. Key UUIDs whose entries are no longer pinned are
+  ignored at render and dropped on the next write.
 - **Right panel — the feed.** Reverse-chronological notices with read/unread
   rendering, filter controls, and an unread count.
 
