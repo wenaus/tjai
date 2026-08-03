@@ -7,7 +7,8 @@ is served at `/tjai/capcom/`. The name is the Mission Control capsule
 communicator (CAPCOM), the one console permitted to speak to the crew: only
 deliberate, curated emissions from followed systems reach the feed.
 
-This is a design document; implementation has not started.
+The page, notice store, ingest endpoint, and dispatcher are implemented;
+per-source collectors and push hooks land one at a time.
 
 ## Purpose
 
@@ -26,7 +27,9 @@ Two panels:
 
 - **Left panel — state and pins.** Current-state tiles at the top: compact
   indicators for sources with a meaningful present state (service health,
-  testbed and production activity, the Ahbazon gate camp). Below the tiles,
+  testbed and production activity, the Ahbazon gate camp). Tile values are
+  read from a `capcom_state` sysconfig key that sources update alongside
+  their event posts, so state never derives from feed rows. Below the tiles,
   a pinned-bookmark shelf listing bookmark entries carrying the `:pin` tag.
   Pinning by tag means any bookmark can be promoted to or removed from the
   shelf from wherever it is displayed, there is no separate curated document
@@ -41,8 +44,12 @@ Two panels:
   nothing beyond `:pin` — so ordering touches no entry state and needs no
   new server endpoint. Key UUIDs whose entries are no longer pinned are
   ignored at render and dropped on the next write.
-- **Right panel — the feed.** Reverse-chronological notices with read/unread
-  rendering, filter controls, and an unread count.
+- **Right panel — selectable views.** A row at the panel's top left selects
+  the view, carried in the URL. **Feed** (default): reverse-chronological
+  notices with read/unread rendering, filter controls, an unread count, and
+  an Update button at the panel's top right that runs all poll sources
+  immediately. **Config**: the source registry and retention settings,
+  displayed and edited in place.
 
 The feed carries events; the tiles carry state. Collectors emit a notice on
 a state transition (camp up, run finished), not while a condition persists,
@@ -54,16 +61,20 @@ keeps the feed quiet enough to trust.
 Notices are high-volume operational rows and live outside the entry system,
 following the precedent of `RssItem` and `AppLog`. A `Notice` row carries:
 
-- `timestamp`
-- `source` — registry key of the emitting collector or poster
+- `timestamp` — last update
+- `first_seen`
+- `source` — registry key of the emitting system or collector
 - `severity` — informational through alarm
 - `title` — the one-line notice text
 - `url` — deep link into the page or system the notice concerns
 - `was_read`
+- `archived`
 - `dedup_key` — groups repeated notices on one ongoing condition
+- `count` — occurrences threaded into the row
 
-Repeated notices sharing a `dedup_key` thread into a single feed item that
-returns to unread when it updates, rather than accumulating rows. Read state
+Threading is applied at ingest: a notice whose `dedup_key` matches an
+unarchived row updates that row — the timestamp and count advance and
+`was_read` clears — rather than inserting a new one. Read state
 follows inbox semantics: a read notice remains in the feed greyed out; an
 archived notice leaves the feed but remains searchable. Old notices are
 purged on a retention schedule, as entry versions are.
@@ -74,20 +85,42 @@ it is not.
 
 ## Collection
 
-Collection is polling-first. Collectors are standalone scripts run from
-cron, each polling a public read endpoint of a followed system and posting
-resulting notices to the ingest endpoint. A bearer-authenticated REST ingest
-endpoint is the single write path for notices: local collectors post through
-it, and it also admits the few sources able to push directly — for example
-Second Life LSL scripts via `llHTTPRequest` — with no collector in between.
+Ownership determines how a source is collected. Systems maintained within
+this ecosystem — the tjai pipeline, corun-ai, primus, pax-eden — are never
+polled: each registers as a source and calls the ingest endpoint at the
+moment an event occurs. Polling is reserved for systems that cannot be
+instrumented; their collectors are standalone scripts reading public
+endpoints.
+
+All notices pass through one implementation: an `emit_notice()` helper
+holds the threading and dedup logic. The bearer-authenticated
+`POST api/capcom/notice` endpoint wraps it for posting systems and
+collectors; in-process emitters such as the overnight pipeline call it
+directly. Second Life LSL scripts reach the endpoint via `llHTTPRequest`
+with no intermediary.
+
+Poll sources run from a dispatcher on a ten-minute cron tick. Each source
+declares its cadence in the registry as a multiple of the tick; the
+dispatcher runs the sources that are due and records last-run times back in
+the registry. The Feed panel's Update button invokes the dispatcher with a
+force flag, running every enabled poll source immediately; listen sources
+have no on-demand action.
 
 ### Source registry
 
-Each source is registered with its collection mode:
+The registry lives in a `capcom_sources` sysconfig key, displayed and
+edited in the Config view. Each source carries its collection mode, plus —
+for poll sources — cadence, an enabled flag, and last-run time:
 
+- **listen** — the source posts to the ingest endpoint
 - **poll** — a collector polls a read endpoint
-- **push** — the source posts to the ingest endpoint
 - **missing** — the system exposes no usable status endpoint or hook
+
+A system may register any number of sources: separate subscriptions — for
+example several SWF feeds, or visitor sensors at different Second Life
+places — are separate registry rows, each with its own source name. The
+source name is the join key: notices, state tiles, and (for poll sources)
+the dispatcher's collector table all reference it.
 
 The `missing` state is deliberate: it records where a followed system needs
 a status endpoint or callback that does not yet exist, so the gap is tracked
@@ -102,17 +135,24 @@ Capcom carries as a notice like any other.
 
 ## Initial sources
 
-- **ePIC/SWF** — testbed activity and production status via the swf-monitor
-  REST API, and new ePIC Mattermost postings from the same source that feeds
-  the synopsis, at live cadence.
-- **Overnight pipeline** — completion notices for research syntheses, Picks,
-  the daily synopsis, and ideation, each deep-linking to its page, so
-  morning triage starts from one place.
-- **EVE Online** — Ahbazon gate-camp status polled from the zKillboard API;
-  the gate-checker logic exists in pax-eden.
-- **Second Life** — visitor presence at monitored places via primus. Live
-  data gathering there does not exist today (the capability is in legacy
-  LSL scripts); this is the motivating case for the push path.
+- **ePIC/SWF** (poll) — testbed activity and production status via the
+  swf-monitor REST API, and new ePIC Mattermost postings from the same
+  source that feeds the synopsis, at live cadence. Polled because
+  collaboration systems do not hold the feed's ingest credential.
+- **Overnight pipeline** (listen, in-process) — completion notices for
+  research syntheses, Picks, the daily synopsis, and ideation, each
+  deep-linking to its page, so morning triage starts from one place.
+- **corun-ai** (listen) — a notice when an interactive run is submitted,
+  emitted from the submit path of the registration mechanism; runs
+  submitted through the programmatic REST interface do not pass that point
+  and generate no notice.
+- **EVE Online** (poll) — Ahbazon gate-camp status from the zKillboard API;
+  the gate-checker logic exists in pax-eden. Becomes a listen source fed
+  by pax-eden if its checker runs as a live service.
+- **Second Life** (listen) — visitor presence at monitored places via
+  primus. Live data gathering there does not exist today (the capability
+  is in legacy LSL scripts); this is the motivating case for direct posts
+  to the ingest endpoint.
 - **Curated alarms** — alarm-severity notices from systems that do their own
   monitoring, as they add that capability.
 
@@ -142,3 +182,17 @@ Candidate sources and features considered and not adopted:
 - `j`/`k` keyboard navigation through the feed.
 - Filters (source, severity, read state) encoded in the URL, following the
   dashboard's URL-as-state convention, so every view is bookmarkable.
+
+## Files
+
+- `tjai_app/models.py` — `Notice` model (`capcom_notices` table)
+- `tjai_app/capcom.py` — `emit_notice()`, state tiles, source registry,
+  retention purge
+- `tjai_app/views.py` — `capcom_page`, `api_capcom_feed`, `api_capcom_mark`,
+  `api_capcom_notice` (ingest), `api_capcom_run`
+- `tjai_app/templates/tjai_app/capcom.html` — the page (feed and config
+  views, tiles, pinned shelf)
+- `tjai_app/static/tjai/sortable.min.js` — vendored SortableJS for pin drag
+- `scripts/capcom_dispatcher.py` — poll dispatcher, run by the
+  `capcom-dispatcher` action (periodic, 10 minutes)
+- `scripts/capcom_test.py` — functionality test (emit, threading, purge)

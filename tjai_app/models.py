@@ -254,6 +254,29 @@ class RssItem(models.Model):
         ]
 
 
+class Notice(models.Model):
+    """Capcom notice feed rows — high-volume, outside the entry system (docs/capcom.md)."""
+    timestamp = models.DateTimeField(db_index=True)  # last update
+    first_seen = models.DateTimeField()
+    source = models.TextField()       # registry key of the emitting system or collector
+    severity = models.TextField(default='info')  # info | warning | alarm
+    title = models.TextField()
+    url = models.TextField(default='')
+    was_read = models.BooleanField(default=False, db_index=True)
+    archived = models.BooleanField(default=False, db_index=True)
+    dedup_key = models.TextField(default='', db_index=True)
+    count = models.IntegerField(default=1)
+    data = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = 'capcom_notices'
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['archived', 'was_read']),
+            models.Index(fields=['source', '-timestamp']),
+        ]
+
+
 class EntryVersion(models.Model):
     """Revision history for entries — snapshots previous state before each save."""
     entry = models.ForeignKey(

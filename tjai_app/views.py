@@ -8643,3 +8643,195 @@ def api_goals_unrelate(request):
     if isinstance(result, dict) and 'error' in result:
         return JsonResponse(result, status=400)
     return JsonResponse(result)
+
+
+# ---------------------------------------------------------------------------
+# Capcom — live notice page (docs/capcom.md)
+
+@login_required
+def capcom_page(request):
+    """Render the Capcom live notice page."""
+    return render(request, 'tjai_app/capcom.html')
+
+
+@login_required
+def api_capcom_feed(request):
+    """Feed page + state tiles + pinned shelf + source registry, one poll."""
+    from . import capcom as capcom_lib
+    from .models import Notice
+
+    try:
+        offset = int(request.GET.get('offset', 0))
+    except ValueError:
+        offset = 0
+    page_size = 100
+
+    notices = Notice.objects.all()
+    if request.GET.get('archived') == '1':
+        notices = notices.filter(archived=True)
+    else:
+        notices = notices.filter(archived=False)
+    if request.GET.get('unread') == '1':
+        notices = notices.filter(was_read=False)
+    source = request.GET.get('source', '')
+    if source:
+        notices = notices.filter(source=source)
+    severity = request.GET.get('severity', '')
+    if severity:
+        notices = notices.filter(severity=severity)
+
+    rows = list(notices.order_by('-timestamp')[offset:offset + page_size + 1])
+    has_more = len(rows) > page_size
+    rows = rows[:page_size]
+
+    unread_count = Notice.objects.filter(archived=False, was_read=False).count()
+
+    # Pinned shelf: :pin bookmarks, top group ordered by capcom_pin_order
+    pin_entry_ids = Tag.objects.filter(tag_name='pin').values_list('entry_id', flat=True)
+    pin_entries = Entry.objects.filter(
+        id__in=pin_entry_ids, deleted_at__isnull=True,
+    ).order_by('-timestamp_modified')
+    pins_by_id = {}
+    for e in pin_entries:
+        first_line = (e.content or '').split('\n', 1)[0]
+        pins_by_id[str(e.id)] = {
+            'id': str(e.id),
+            'title': first_line,
+            'url': (e.data or {}).get('url', ''),
+        }
+    order = capcom_lib._get_json_config('capcom_pin_order', [])
+    if not isinstance(order, list):
+        logger.error("capcom: capcom_pin_order is not a list: %r", order)
+        order = []
+    top = [pins_by_id[i] for i in order if i in pins_by_id]
+    top_ids = set(i for i in order if i in pins_by_id)
+    rest = [p for eid, p in pins_by_id.items() if eid not in top_ids]
+
+    return JsonResponse({
+        'timestamp': fmt_datetime(time.time()),
+        'notices': [{
+            'id': n.id,
+            'time_display': fmt_datetime(n.timestamp),
+            'ago': fmt_ago(n.timestamp.timestamp()),
+            'source': n.source,
+            'severity': n.severity,
+            'title': n.title,
+            'url': n.url,
+            'was_read': n.was_read,
+            'archived': n.archived,
+            'count': n.count,
+        } for n in rows],
+        'has_more': has_more,
+        'offset': offset,
+        'unread_count': unread_count,
+        'state': capcom_lib.get_state(),
+        'pins': {'top': top, 'rest': rest},
+        'sources': capcom_lib.get_sources(),
+        'retention_days': capcom_lib._get_json_config('capcom_retention_days',
+                                                      capcom_lib.DEFAULT_RETENTION_DAYS),
+    })
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_capcom_mark(request):
+    """Mark notices: {ids: [...], action: read|unread|archive} or {all: true, action: read}."""
+    from .models import Notice
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    action = data.get('action', 'read')
+    if action not in ('read', 'unread', 'archive'):
+        return JsonResponse({"error": f"unknown action {action}"}, status=400)
+
+    if data.get('all'):
+        qs = Notice.objects.filter(archived=False, was_read=False)
+    else:
+        ids = data.get('ids', [])
+        if not ids:
+            return JsonResponse({"error": "ids or all required"}, status=400)
+        qs = Notice.objects.filter(id__in=ids)
+
+    if action == 'read':
+        updated = qs.update(was_read=True)
+    elif action == 'unread':
+        updated = qs.update(was_read=False)
+    else:
+        updated = qs.update(archived=True, was_read=True)
+    return JsonResponse({'status': 'ok', 'updated': updated})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@rest_api_auth_required
+def api_capcom_notice(request):
+    """Ingest endpoint — the REST wrapper around emit_notice() (docs/capcom.md).
+
+    Body: {source, title, severity?, url?, dedup_key?, data?, state?}
+    state: {value, color?} updates the source's tile alongside (or instead of)
+    the event; a body with only source+state is a state-only post.
+    """
+    from . import capcom as capcom_lib
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    source = (data.get('source') or '').strip()
+    if not source:
+        return JsonResponse({"error": "source is required"}, status=400)
+    title = (data.get('title') or '').strip()
+    state = data.get('state')
+    if not title and not state:
+        return JsonResponse({"error": "title or state is required"}, status=400)
+
+    result = {'status': 'ok'}
+    if title:
+        notice = capcom_lib.emit_notice(
+            source=source,
+            title=title,
+            severity=data.get('severity', 'info'),
+            url=data.get('url', ''),
+            dedup_key=data.get('dedup_key', ''),
+            data=data.get('data'),
+        )
+        result['id'] = notice.id
+    if isinstance(state, dict) and 'value' in state:
+        capcom_lib.set_state(source, state['value'], color=state.get('color'))
+        result['state'] = 'updated'
+    elif state is not None and not isinstance(state, dict):
+        return JsonResponse({"error": "state must be an object with value"}, status=400)
+    return JsonResponse(result)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@rest_api_auth_required
+def api_capcom_run(request):
+    """Run all enabled poll sources now: force flag + clear last_run + wake agent."""
+    dispatcher_action = Entry.objects.filter(
+        kind='action', deleted_at__isnull=True,
+        data__entry_id='capcom-dispatcher',
+    ).first()
+    if not dispatcher_action:
+        logger.error("api_capcom_run: capcom-dispatcher action entry not found")
+        return JsonResponse({'error': 'capcom-dispatcher action not found'}, status=404)
+
+    SysConfig.objects.update_or_create(
+        key='capcom_force_run',
+        defaults={'value': '1', 'timestamp_modified': time.time()},
+    )
+    data = dispatcher_action.data or {}
+    data['last_run'] = 0
+    dispatcher_action.data = data
+    dispatcher_action.timestamp_modified = time.time()
+    dispatcher_action.save(update_fields=['data', 'timestamp_modified'])
+
+    wake_ok, wake_msg = _wake_action_agent()
+    if not wake_ok:
+        return JsonResponse({'ok': True, 'warning': wake_msg})
+    logger.info("api_capcom_run: triggered, action agent woken")
+    return JsonResponse({'ok': True})
