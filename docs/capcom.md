@@ -52,7 +52,9 @@ Two panels:
   and order both live in the sysconfig key — the bookmark entry carries
   nothing beyond `:pin` — so ordering touches no entry state and needs no
   new server endpoint. Key UUIDs whose entries are no longer pinned are
-  ignored at render and dropped on the next write.
+  ignored at render and dropped on the next write. Duplicate UUIDs are
+  collapsed on render, insertion, and drag save; feed refreshes do not
+  rerender the group while a drag is active.
 - **Right panel — selectable views.** A row at the panel's top left selects
   the view, carried in the URL. **Feed** (default): reverse-chronological
   notices with read/unread rendering, filter controls, an unread count, and

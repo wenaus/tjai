@@ -193,6 +193,7 @@
     let selIdx = -1;
     let lastData = null;
     let pinOrder = [];
+    let pinDragging = false;
     let stateOrder = [];
     let stateDragging = false;
     let configSaveQueue = Promise.resolve();
@@ -347,6 +348,7 @@
     }
 
     function renderPins() {
+        if (pinDragging) return;
         const pins = (lastData && lastData.pins) || {top: [], rest: []};
         const diary = lastData && lastData.diary_pin;
         document.getElementById('pins-special').innerHTML = diary
@@ -359,7 +361,7 @@
             : (pins.top.length ? '' : '<div class="feed-note">No pinned bookmarks.</div>');
         document.getElementById('pins-divider').style.display =
             (pins.top.length && pins.rest.length) ? '' : 'none';
-        pinOrder = pins.top.map(p => p.id);
+        pinOrder = Array.from(new Set(pins.top.map(p => p.id)));
     }
 
     const expandedIds = new Set();
@@ -413,6 +415,7 @@
     }
 
     async function savePinOrder() {
+        pinOrder = Array.from(new Set(pinOrder));
         try {
             await fetchJson('/tjai/api/command', {
                 method: 'POST',
@@ -576,7 +579,11 @@
             saveConfig(sources);
             return;
         }
-        if (t.dataset.totop) { pinOrder.push(t.dataset.totop); savePinOrder(); return; }
+        if (t.dataset.totop) {
+            if (!pinOrder.includes(t.dataset.totop)) pinOrder.push(t.dataset.totop);
+            savePinOrder();
+            return;
+        }
         if (t.dataset.untop) {
             pinOrder = pinOrder.filter(id => id !== t.dataset.untop); savePinOrder(); return;
         }
@@ -637,9 +644,13 @@
 
     new Sortable(document.getElementById('pins-top'), {
         animation: 120,
+        onStart: () => { pinDragging = true; },
         onEnd: () => {
-            pinOrder = Array.from(document.querySelectorAll('#pins-top .pin'))
-                .map(el => el.dataset.id);
+            pinDragging = false;
+            pinOrder = Array.from(new Set(
+                Array.from(document.querySelectorAll('#pins-top .pin'))
+                    .map(el => el.dataset.id)
+            ));
             savePinOrder();
         },
     });

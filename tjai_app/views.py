@@ -8725,6 +8725,7 @@ def api_capcom_feed(request):
     if not isinstance(order, list):
         logger.error("capcom: capcom_pin_order is not a list: %r", order)
         order = []
+    order = list(dict.fromkeys(str(entry_id) for entry_id in order))
     top = [pins_by_id[i] for i in order if i in pins_by_id]
     top_ids = set(i for i in order if i in pins_by_id)
     rest = [p for eid, p in pins_by_id.items() if eid not in top_ids]
