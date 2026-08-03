@@ -48,8 +48,10 @@ Two panels:
   action, **update**, which forces only that state source; grouped sources
   still share their transport fetch, but only the selected returned state is
   applied. Linked tiles continue to open their source page in a new tab.
-  A pin-to-top control adds a pin to the key; drag reordering within the
-  group rewrites the key through `set_sysconfig` per the dashboard
+  Each real pin has a compact vertical-dot menu. Regular pins offer **pin to
+  top** and **Unpin**; top-group pins offer **unpin from top** and **Unpin**.
+  Unpin removes the `:pin` tag and the entry from the shelf. Drag reordering
+  within the group rewrites the key through `set_sysconfig` per the dashboard
   preference pattern (see [Dashboard](dashboard.md)). Top-group membership
   and order both live in the sysconfig key — the entry carries
   nothing beyond `:pin` — so ordering touches no entry state and needs no
@@ -235,7 +237,7 @@ Candidate sources and features considered and not adopted:
 - `tjai_app/capcom.py` — `emit_notice()`, state tiles, source registry,
   retention purge
 - `tjai_app/views.py` — `capcom_page`, `api_capcom_feed`, `api_capcom_mark`,
-  `api_capcom_notice` (ingest), `api_capcom_run`
+  `api_capcom_pin`, `api_capcom_notice` (ingest), `api_capcom_run`
 - `tjai_app/templates/tjai_app/capcom.html` — the page (feed and config
   views, tiles, pinned shelf)
 - `tjai_app/static/tjai/sortable.min.js` — vendored SortableJS for pin drag

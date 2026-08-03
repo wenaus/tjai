@@ -8818,6 +8818,30 @@ def api_capcom_mark(request):
     return JsonResponse({'status': 'ok', 'updated': updated})
 
 
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_capcom_pin(request):
+    """Apply a pin-shelf action to one TJAI entry."""
+    from . import capcom as capcom_lib
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    entry_id = (data.get('entry_id') or '').strip()
+    action = data.get('action')
+    if not entry_id or action != 'unpin':
+        return JsonResponse({'error': 'entry_id and action=unpin required'}, status=400)
+    entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
+    if not entry:
+        return JsonResponse({'error': 'Entry not found'}, status=404)
+
+    removed, _ = Tag.objects.filter(entry_id=entry.id, tag_name='pin').delete()
+    capcom_lib.remove_pin_from_top(entry.id)
+    return JsonResponse({'status': 'ok', 'removed': bool(removed)})
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 @rest_api_auth_required

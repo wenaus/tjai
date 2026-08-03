@@ -63,13 +63,10 @@
         .tile.red { border-left-color: #ef5350; } .tile.red .t-value { color: #ef5350; }
 
         /* Pins */
-        .pin { display: flex; align-items: baseline; gap: 6px; padding: 4px 4px;
+        .pin { position: relative; display: flex; align-items: baseline; gap: 6px; padding: 4px 4px;
                border-bottom: 1px solid #262626; }
         .pin a { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .pin .p-btn { background: none; border: 1px solid #444; color: #8a8a8a;
-                      cursor: pointer; font-size: 11px; font-family: inherit;
-                      padding: 1px 6px; border-radius: 3px; }
-        .pin .p-btn:hover { color: #e0e0e0; border-color: #666; }
+        .pin .state-popover { min-width: 88px; }
         #pins-top .pin { cursor: grab; background: #212121; }
         #pins-top .pin.sortable-ghost { opacity: 0.4; }
         .pins-divider { border-bottom: 1px solid #333; margin: 6px 0; }
@@ -340,11 +337,15 @@
                    escapeHtml(p.date) + '" target="_blank" rel="noopener">' +
                    escapeHtml(p.title) + '</a></div>';
         }
-        const btn = inTop
-            ? '<button class="p-btn" data-untop="' + p.id + '" title="Remove from top group">&#x2715;</button>'
-            : '<button class="p-btn" data-totop="' + p.id + '" title="Pin to top">&#x25B2;</button>';
+        const action = inTop
+            ? '<button type="button" data-untop="' + p.id + '">unpin from top</button>'
+            : '<button type="button" data-totop="' + p.id + '">pin to top</button>';
+        const unpin = '<button type="button" data-unpin="' + p.id + '">Unpin</button>';
+        const menu = '<button type="button" class="state-menu-btn" data-pin-menu="' + p.id +
+                     '" aria-label="Actions for ' + escapeHtml(p.title) + '">&#8942;</button>' +
+                     '<div class="state-popover" hidden>' + action + unpin + '</div>';
         return '<div class="pin" data-id="' + p.id + '"><a href="' + escapeHtml(p.edit_url) +
-               '" target="_blank" rel="noopener">' + escapeHtml(p.title) + '</a>' + btn + '</div>';
+               '" target="_blank" rel="noopener">' + escapeHtml(p.title) + '</a>' + menu + '</div>';
     }
 
     function renderPins() {
@@ -515,9 +516,9 @@
 
     document.addEventListener('click', async (ev) => {
         const t = ev.target;
-        const stateMenuButton = t.closest('[data-state-menu]');
-        if (stateMenuButton) {
-            const menu = stateMenuButton.parentElement.querySelector('.state-popover');
+        const menuButton = t.closest('[data-state-menu], [data-pin-menu]');
+        if (menuButton) {
+            const menu = menuButton.parentElement.querySelector('.state-popover');
             const open = menu.hidden;
             closeStateMenus(menu);
             menu.hidden = !open;
@@ -586,12 +587,27 @@
             return;
         }
         if (t.dataset.totop) {
+            closeStateMenus();
             if (!pinOrder.includes(t.dataset.totop)) pinOrder.push(t.dataset.totop);
             savePinOrder();
             return;
         }
         if (t.dataset.untop) {
+            closeStateMenus();
             pinOrder = pinOrder.filter(id => id !== t.dataset.untop); savePinOrder(); return;
+        }
+        if (t.dataset.unpin) {
+            const entryId = t.dataset.unpin;
+            closeStateMenus();
+            try {
+                await fetchJson('/tjai/api/capcom/pin', {
+                    method: 'POST',
+                    body: JSON.stringify({entry_id: entryId, action: 'unpin'}),
+                });
+                pinOrder = pinOrder.filter(id => id !== entryId);
+                await fetchData();
+            } catch (e) { flashNotice('Unpin failed: ' + e.message, '#ef5350'); }
+            return;
         }
         if (t.classList.contains('n-source')) {
             filterSource = (filterSource === t.dataset.source) ? '' : t.dataset.source;
@@ -650,6 +666,8 @@
 
     new Sortable(document.getElementById('pins-top'), {
         animation: 120,
+        filter: '.state-menu-btn, .state-popover, .state-popover *',
+        preventOnFilter: false,
         onStart: () => { pinDragging = true; },
         onEnd: () => {
             pinDragging = false;

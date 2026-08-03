@@ -94,6 +94,7 @@ urlpatterns = [
     path("capcom/", views.capcom_page, name="capcom"),
     path("api/capcom/feed", views.api_capcom_feed, name="api_capcom_feed"),
     path("api/capcom/mark", views.api_capcom_mark, name="api_capcom_mark"),
+    path("api/capcom/pin", views.api_capcom_pin, name="api_capcom_pin"),
     path("api/capcom/notice", views.api_capcom_notice, name="api_capcom_notice"),
     path("api/capcom/run", views.api_capcom_run, name="api_capcom_run"),
     path("picks/", views.picks, name="picks"),
