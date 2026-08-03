@@ -199,6 +199,28 @@ def _check_kill_request():
     logger.info("Kill request completed: %d process(es) killed", killed)
 
 
+def _check_capcom_refresh_request():
+    """Service a manual Capcom refresh without touching periodic last_run."""
+    from tjai_app.models import SysConfig
+
+    req = SysConfig.objects.filter(key='capcom_force_run').first()
+    if not req or not req.value or req.value == '0':
+        return
+    requested_value = req.value
+    target = '*' if requested_value in ('1', '*') else requested_value
+    cleared = SysConfig.objects.filter(
+        pk=req.pk, value=requested_value,
+    ).update(value='', timestamp_modified=time.time())
+    if not cleared:
+        return
+
+    try:
+        from capcom_dispatcher import run as run_capcom_dispatcher
+        run_capcom_dispatcher(force_target=target)
+    except Exception as e:
+        logger.error("Capcom manual refresh failed: %s", e, exc_info=True)
+
+
 HEALTH_CHECK_INTERVAL = 30  # seconds between agent health checks
 MULTIMODEL_WATCHDOG_INTERVAL = 30  # seconds between local API subprocess checks
 
@@ -836,6 +858,7 @@ def main():
             _check_assessment_gemini_rerun()
             _check_assessment_backfill('assessment_backfill_all', 'llm-assessment')
             _check_assessment_backfill('assessment_gemini_backfill_all', 'llm-assessment-gemini')
+            _check_capcom_refresh_request()
 
             # Prune old operational log entries (once per hour)
             now_ts = time.time()

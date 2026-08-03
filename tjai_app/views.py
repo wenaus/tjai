@@ -8868,23 +8868,10 @@ def api_capcom_run(request):
                 status=400,
             )
 
-    dispatcher_action = Entry.objects.filter(
-        kind='action', deleted_at__isnull=True,
-        data__entry_id='capcom-dispatcher',
-    ).first()
-    if not dispatcher_action:
-        logger.error("api_capcom_run: capcom-dispatcher action entry not found")
-        return JsonResponse({'error': 'capcom-dispatcher action not found'}, status=404)
-
     SysConfig.objects.update_or_create(
         key='capcom_force_run',
         defaults={'value': source or '*', 'timestamp_modified': time.time()},
     )
-    data = dispatcher_action.data or {}
-    data['last_run'] = 0
-    dispatcher_action.data = data
-    dispatcher_action.timestamp_modified = time.time()
-    dispatcher_action.save(update_fields=['data', 'timestamp_modified'])
 
     wake_ok, wake_msg = _wake_action_agent()
     if not wake_ok:
