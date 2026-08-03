@@ -337,7 +337,8 @@
     function pinRow(p, inTop) {
         if (p.special === 'diary') {
             return '<div class="pin special"><a href="/tjai/diary/" data-diary-date="' +
-                   escapeHtml(p.date) + '">' + escapeHtml(p.title) + '</a></div>';
+                   escapeHtml(p.date) + '" target="_blank" rel="noopener">' +
+                   escapeHtml(p.title) + '</a></div>';
         }
         const href = p.url || ('/tjai/entry/' + p.id + '/');
         const btn = inTop
@@ -539,15 +540,21 @@
         const diaryLink = t.closest('[data-diary-date]');
         if (diaryLink) {
             ev.preventDefault();
+            const diaryTab = window.open('about:blank', '_blank');
+            if (diaryTab) diaryTab.opener = null;
             try {
                 const d = await fetchJson('/tjai/api/diary/today?date=' +
                     encodeURIComponent(diaryLink.dataset.diaryDate), {
                         method: 'POST', body: '{}',
                     });
                 if (!d.entry_id) throw new Error('Diary entry was not returned');
-                location.href = '/tjai/entry/?entry_id=' +
+                const diaryUrl = '/tjai/entry/?entry_id=' +
                     encodeURIComponent(d.entry_id) + '&edit=1';
-            } catch (e) { flashNotice('Diary open failed: ' + e.message, '#ef5350'); }
+                if (diaryTab) diaryTab.location.replace(diaryUrl);
+            } catch (e) {
+                if (diaryTab) diaryTab.close();
+                flashNotice('Diary open failed: ' + e.message, '#ef5350');
+            }
             return;
         }
         if (t.classList.contains('view-tab')) {

@@ -39,7 +39,7 @@ Two panels:
   pins whose UUIDs appear in a `capcom_pin_order` sysconfig key render
   first, in key order, and the remaining pins follow in reverse time order.
   A synthetic `Diary - <current date>` pin is always first and opens the
-  current diary entry directly in edit mode; it is independent of bookmark
+  current diary entry directly in edit mode in a new tab; it is independent of bookmark
   membership and pin ordering.
   State tiles are click-drag ordered through the `capcom_state_order`
   sysconfig key. An enabled poll tile has a compact three-dot menu with one
@@ -111,12 +111,13 @@ collectors; in-process emitters such as the overnight pipeline call it
 directly. Second Life LSL scripts reach the endpoint via `llHTTPRequest`
 with no intermediary.
 
-Poll sources run from a dispatcher on a ten-minute cron tick. Each source
-declares its cadence in the registry as a multiple of the tick; the
-dispatcher runs the sources that are due and records last-run times back in
-the registry. The Feed panel's Update button invokes the dispatcher with a
-force flag, running every enabled poll source immediately; listen sources
-have no on-demand action.
+Poll sources run from a dispatcher on a ten-minute periodic action. Each
+source declares its cadence in the registry as a multiple of the tick; the
+dispatcher runs the sources that are due and records scheduled last-run
+times back in the registry. A state tile's Update command queues a separate
+request that the action agent services immediately. Manual refreshes update
+the tile without changing either the source or dispatcher periodic clock;
+listen sources have no on-demand action.
 
 ### Source registry
 
