@@ -39,7 +39,8 @@ A Chrome extension for copying markdown links and saving bookmarks to tjai. Sour
 ### Features
 
 - Copy page title + URL as markdown link `[Title](url)`
-- Copy with clean URL (strips query params and fragments)
+- Each full-URL action shares one row with a **without suffix** variant that strips query parameters and fragments
+- Optional **pin** and **top** checkboxes; **pin** is equivalent to adding `:pin` in the text field, while **top** also adds the saved entry to Capcom's ordered top pin group
 - Save to tjai as bookmark (kind `bookmark`, tagged `chrome`), with variants that also add a `readme` tag
 - Detect events on the page and add them to the tjai calendar (see below)
 - Curate picks from the current page — two buttons, documented in [picks-curate-page.md](picks-curate-page.md)
@@ -51,6 +52,7 @@ A Chrome extension for copying markdown links and saving bookmarks to tjai. Sour
 - API key prompted on first use, stored in `chrome.storage.sync`
 - Uses browser tab title as bookmark title
 - Server creates entry with content `[Title](url)`; a free-text note field is appended, with `:tag`, `@name`, and `=context` tokens parsed out and applied to the entry
+- Bookmark updates preserve existing tags. Checked pin controls add metadata without removing tags such as `:readme`
 - A bookmark whose URL already exists is updated in place — content replaced, tags added, archived status cleared — rather than duplicated
 - New bookmarks are auto-tagged (`tagger.tag_bookmark`)
 

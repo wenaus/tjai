@@ -161,7 +161,7 @@
             <div id="pins-special"></div>
             <div id="pins-top"></div>
             <div class="pins-divider" id="pins-divider" style="display:none"></div>
-            <div id="pins-rest"><div class="feed-note">No pinned bookmarks.</div></div>
+            <div id="pins-rest"></div>
         </div>
         <div class="right-panel">
             <div class="pane-header">
@@ -359,7 +359,7 @@
         topEl.innerHTML = pins.top.map(p => pinRow(p, true)).join('');
         restEl.innerHTML = pins.rest.length
             ? pins.rest.map(p => pinRow(p, false)).join('')
-            : (pins.top.length ? '' : '<div class="feed-note">No pinned bookmarks.</div>');
+            : '';
         document.getElementById('pins-divider').style.display =
             (pins.top.length && pins.rest.length) ? '' : 'none';
         pinOrder = Array.from(new Set(pins.top.map(p => p.id)));

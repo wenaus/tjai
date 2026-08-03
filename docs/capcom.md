@@ -31,16 +31,16 @@ Two panels:
   testbed and production activity, the Ahbazon gate camp). Tile values are
   read from a `capcom_state` sysconfig key that sources update alongside
   their event posts, so state never derives from feed rows. Below the tiles,
-  a pinned-bookmark shelf listing bookmark entries carrying the `:pin` tag.
-  Pinning by tag means any bookmark can be promoted to or removed from the
+  a pinned shelf listing entries carrying the `:pin` tag.
+  Pinning by tag means any entry can be promoted to or removed from the
   shelf from wherever it is displayed, there is no separate curated document
-  to maintain, and the capture flows (Chrome extension, MCP) are unchanged.
+  to maintain.
   The shelf has a hand-ordered top group over a reverse-time remainder:
   pins whose UUIDs appear in a `capcom_pin_order` sysconfig key render
   first, in key order, and the remaining pins follow in reverse time order.
   A synthetic `Diary - <current date>` pin is always first and opens the
-  current diary entry directly in edit mode in a new tab; it is independent of bookmark
-  membership and pin ordering.
+  current diary entry directly in edit mode in a new tab; it is independent
+  of entry membership and pin ordering.
   State tiles are click-drag ordered through the `capcom_state_order`
   sysconfig key. An enabled poll tile has a compact three-dot menu with one
   action, **update**, which forces only that state source; grouped sources
@@ -49,10 +49,11 @@ Two panels:
   A pin-to-top control adds a pin to the key; drag reordering within the
   group rewrites the key through `set_sysconfig` per the dashboard
   preference pattern (see [Dashboard](dashboard.md)). Top-group membership
-  and order both live in the sysconfig key — the bookmark entry carries
+  and order both live in the sysconfig key — the entry carries
   nothing beyond `:pin` — so ordering touches no entry state and needs no
-  new server endpoint. Key UUIDs whose entries are no longer pinned are
-  ignored at render and dropped on the next write. Duplicate UUIDs are
+  new Capcom-specific entry state. The Chrome extension can add `:pin` and
+  top-group membership while saving an entry. Key UUIDs whose entries are
+  no longer pinned are ignored at render and dropped on the next write. Duplicate UUIDs are
   collapsed on render, insertion, and drag save; feed refreshes do not
   rerender the group while a drag is active.
 - **Right panel — selectable views.** A row at the panel's top left selects

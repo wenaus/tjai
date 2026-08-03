@@ -4570,7 +4570,7 @@ def api_add_bookmark(request):
 
     Requires Bearer token matching SysConfig 'gmail_addon_api_key'.
 
-    Request body: {title, url}
+    Request body: {title, url, text?, readme?, pin?, top?}
     """
     auth_header = request.META.get('HTTP_AUTHORIZATION', '')
     if not auth_header.startswith('Bearer '):
@@ -4594,12 +4594,16 @@ def api_add_bookmark(request):
     url = data.get("url", "").strip()
     text = data.get("text", "").strip()
     readme = data.get("readme", False)
+    pin = data.get("pin", False)
+    top = data.get("top", False)
 
     if not url:
         return JsonResponse({"error": "url is required"}, status=400)
 
     # Parse :tags, @name, =context from text
     inline_tags = re.findall(r':(\w[\w-]*)', text)
+    if (pin or top) and 'pin' not in inline_tags:
+        inline_tags.append('pin')
     name_match = re.search(r'@(\w[\w-]*)', text)
     inline_name = name_match.group(1) if name_match else None
     ctx_match = re.search(r'=(\w[\w-]*)', text)
@@ -4636,6 +4640,9 @@ def api_add_bookmark(request):
             Tag.objects.get_or_create(entry_id=duplicate.id, tag_name=t)
         if readme:
             Tag.objects.get_or_create(entry_id=duplicate.id, tag_name='readme')
+        if top:
+            from . import capcom as capcom_lib
+            capcom_lib.add_pin_to_top(duplicate.id)
         entry_url = request.build_absolute_uri(reverse('entry_detail', args=[duplicate.id]))
         entry_link = f"[{title}]({entry_url})" if title else entry_url
         return JsonResponse({
@@ -4663,6 +4670,9 @@ def api_add_bookmark(request):
         Tag.objects.get_or_create(entry_id=entry.id, tag_name=t)
     if readme:
         Tag.objects.create(tag_name='readme', entry=entry)
+    if top:
+        from . import capcom as capcom_lib
+        capcom_lib.add_pin_to_top(entry.id)
 
     from .tagger import tag_bookmark
     auto_tags = tag_bookmark(entry)

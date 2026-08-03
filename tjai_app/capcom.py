@@ -98,6 +98,21 @@ def save_sources(sources):
     _set_json_config('capcom_sources', sources)
 
 
+def add_pin_to_top(entry_id):
+    """Append an entry to the hand-ordered top pin group, without duplicates."""
+    order = _get_json_config('capcom_pin_order', [])
+    if not isinstance(order, list):
+        logger.error("capcom: capcom_pin_order is not a list: %r", order)
+        order = []
+    original_order = order
+    order = list(dict.fromkeys(str(item) for item in order))
+    entry_id = str(entry_id)
+    if entry_id not in order:
+        order.append(entry_id)
+    if order != original_order:
+        _set_json_config('capcom_pin_order', order)
+
+
 def ensure_source(source, kind='feed', mode='listen', note=''):
     """Register an emitting source if it is not already in Capcom config."""
     sources = get_sources()
