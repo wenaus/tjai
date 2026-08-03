@@ -8686,6 +8686,15 @@ def api_capcom_feed(request):
 
     unread_count = Notice.objects.filter(archived=False, was_read=False).count()
 
+    from datetime import timedelta
+    from django.db.models import Count
+    from django.utils import timezone as _tz
+    counts_24h = {
+        r['source']: r['c']
+        for r in Notice.objects.filter(timestamp__gte=_tz.now() - timedelta(hours=24))
+                 .values('source').annotate(c=Count('id'))
+    }
+
     # Pinned shelf: :pin bookmarks, top group ordered by capcom_pin_order
     pin_entry_ids = Tag.objects.filter(tag_name='pin').values_list('entry_id', flat=True)
     pin_entries = Entry.objects.filter(
@@ -8712,6 +8721,7 @@ def api_capcom_feed(request):
         'notices': [{
             'id': n.id,
             'time_display': fmt_datetime(n.timestamp),
+            'first_display': fmt_datetime(n.first_seen),
             'ago': fmt_ago(n.timestamp.timestamp()),
             'source': n.source,
             'severity': n.severity,
@@ -8720,6 +8730,7 @@ def api_capcom_feed(request):
             'was_read': n.was_read,
             'archived': n.archived,
             'count': n.count,
+            'detail': (n.data or {}).get('detail', ''),
         } for n in rows],
         'has_more': has_more,
         'offset': offset,
@@ -8727,6 +8738,7 @@ def api_capcom_feed(request):
         'state': capcom_lib.get_state(),
         'pins': {'top': top, 'rest': rest},
         'sources': capcom_lib.get_sources(),
+        'counts_24h': counts_24h,
         'retention_days': capcom_lib._get_json_config('capcom_retention_days',
                                                       capcom_lib.DEFAULT_RETENTION_DAYS),
     })

@@ -66,7 +66,8 @@ following the precedent of `RssItem` and `AppLog`. A `Notice` row carries:
 - `source` — registry key of the emitting system or collector
 - `severity` — informational through alarm
 - `title` — the one-line notice text
-- `url` — deep link into the page or system the notice concerns
+- `url` — deep link into the page or system the notice concerns; optional,
+  and never self-referential — link-free notices are a normal category
 - `was_read`
 - `archived`
 - `dedup_key` — groups repeated notices on one ongoing condition
@@ -74,10 +75,10 @@ following the precedent of `RssItem` and `AppLog`. A `Notice` row carries:
 
 Threading is applied at ingest: a notice whose `dedup_key` matches an
 unarchived row updates that row — the timestamp and count advance and
-`was_read` clears — rather than inserting a new one. Read state
-follows inbox semantics: a read notice remains in the feed greyed out; an
-archived notice leaves the feed but remains searchable. Old notices are
-purged on a retention schedule, as entry versions are.
+`was_read` clears — rather than inserting a new one. A read notice remains
+in the feed greyed out; `archived` is an internal threading boundary with
+no interface surface. Old notices are purged on a retention schedule, as
+entry versions are.
 
 The feed is deterministic — no ranking or model-based selection. Curation
 happens at the source level: a source is either admitted to the registry or
@@ -109,8 +110,12 @@ have no on-demand action.
 ### Source registry
 
 The registry lives in a `capcom_sources` sysconfig key, displayed and
-edited in the Config view. Each source carries its collection mode, plus —
-for poll sources — cadence, an enabled flag, and last-run time:
+edited in the Config view as two sections: **feed** sources, which emit
+notices, and **state** sources, which maintain a left-panel tile. A
+registry row carries its kind, its collection mode, plus — for poll
+sources — cadence, an enabled flag, and last-run time. The feed section
+also shows each source's notice count over the trailing 24 hours. Row
+deletion asks for confirmation and takes effect on save:
 
 - **listen** — the source posts to the ingest endpoint
 - **poll** — a collector polls a read endpoint
@@ -146,9 +151,10 @@ Capcom carries as a notice like any other.
   emitted from the submit path of the registration mechanism; runs
   submitted through the programmatic REST interface do not pass that point
   and generate no notice.
-- **EVE Online** (poll) — Ahbazon gate-camp status from the zKillboard API;
-  the gate-checker logic exists in pax-eden. Becomes a listen source fed
-  by pax-eden if its checker runs as a live service.
+- **EVE Online** (poll, state) — whether the Ahbazon gate camp is up: an
+  always-visible green/red tile, polled from the zKillboard API; the
+  gate-checker logic exists in pax-eden. Becomes a listen source fed by
+  pax-eden if its checker runs as a live service.
 - **Second Life** (listen) — visitor presence at monitored places via
   primus. Live data gathering there does not exist today (the capability
   is in legacy LSL scripts); this is the motivating case for direct posts
@@ -177,8 +183,16 @@ Candidate sources and features considered and not adopted:
 ## Feed mechanics
 
 - Unread count in the page title, visible on the browser tab.
-- Click marks read; a mark-all-read control; an unread-only toggle.
-- Read notices grey out; archiving removes them from the feed.
+- A row click marks the notice read and, when the notice carries more than
+  its row shows — a detail body in `data.detail`, or threading history on a
+  coalesced item — expands that inline; clicking the row again or the
+  expansion itself collapses it. The title of a linked notice opens its
+  deep link in a new tab; a link-free notice is a normal category and
+  renders as plain text.
+- Each row carries a mark-read / mark-as-unread toggle immediately after
+  the title, at row font size in a visible color; mark-all-read and
+  unread-only controls sit in the header.
+- Read notices grey out, the whole line.
 - `j`/`k` keyboard navigation through the feed.
 - Filters (source, severity, read state) encoded in the URL, following the
   dashboard's URL-as-state convention, so every view is bookmarkable.

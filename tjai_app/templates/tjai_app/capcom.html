@@ -28,7 +28,7 @@
             padding: 12px;
         }
         .right-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-        .section-head { color: #8a8a8a; font-size: 11px; text-transform: uppercase;
+        .section-head { color: #e0e0e0; font-size: 11px; text-transform: uppercase;
                         letter-spacing: 1px; margin: 14px 0 8px; }
         .section-head:first-child { margin-top: 0; }
 
@@ -66,7 +66,7 @@
         .hdr-btn { background: none; border: 1px solid #444; color: #bbb; cursor: pointer;
                    font-size: 12px; font-family: inherit; padding: 3px 10px; border-radius: 3px; }
         .hdr-btn:hover { color: #e0e0e0; border-color: #666; }
-        #unread-chip { color: #ffd54f; }
+        #unread-chip { color: #9ccc65; }
 
         /* Feed */
         .feed-area { flex: 1; overflow-y: auto; padding: 8px 16px 40px; }
@@ -79,12 +79,21 @@
         .notice .n-dot.warning { color: #ffd54f; }
         .notice .n-dot.alarm { color: #ef5350; }
         .notice .n-source { color: #b39ddb; font-size: 11px; white-space: nowrap; cursor: pointer; }
-        .notice .n-title { flex: 1; }
-        .notice.read .n-title, .notice.read .n-source { color: #777; }
+        .notice .n-spacer { flex: 1; }
+        .notice.read, .notice.read .n-title, .notice.read .n-source,
+        .notice.read .n-dot, .notice.read .n-count,
+        .notice.read .n-title a { color: #777; }
         .notice .n-count { color: #ffd54f; font-size: 11px; }
-        .notice .n-x { background: none; border: none; color: #555; cursor: pointer;
-                       font-family: inherit; font-size: 12px; }
-        .notice .n-x:hover { color: #ef5350; }
+        .notice .n-mark { background: none; border: 1px solid #666; color: #9ccc65;
+                          cursor: pointer; font-family: inherit; font-size: 13px;
+                          padding: 1px 9px; border-radius: 3px; }
+        .notice.read .n-mark { color: #90caf9; border-color: #666; }
+        .notice .n-mark:hover { color: #e0e0e0; border-color: #999; }
+        .notice-detail { margin: 0 6px 6px 60px; padding: 6px 10px;
+                         border-left: 3px solid #444; background: #212121;
+                         color: #bbb; font-size: 12px; }
+        .notice-detail .d-meta { color: #8a8a8a; font-size: 11px; margin-bottom: 4px; }
+        .notice-detail .d-text { white-space: pre-wrap; }
         .feed-note { color: #8a8a8a; padding: 20px; text-align: center; }
         #load-more { display: block; margin: 12px auto; }
 
@@ -133,7 +142,6 @@
                 <span id="unread-chip"></span>
                 <div class="hdr-controls" id="feed-controls">
                     <label><input type="checkbox" id="unread-only"> unread only</label>
-                    <label><input type="checkbox" id="show-archived"> archived</label>
                     <button class="hdr-btn" id="mark-all">Mark all read</button>
                     <button class="hdr-btn" id="update-now">Update</button>
                 </div>
@@ -149,7 +157,7 @@
     <script src="/tjai/static/tjai/sortable.min.js"></script>
     <script>
     let view = 'feed';
-    let unreadOnly = false, showArchived = false;
+    let unreadOnly = false;
     let filterSource = '', filterSeverity = '';
     let offset = 0, notices = [], hasMore = false;
     let selIdx = -1;
@@ -160,7 +168,6 @@
         const p = new URLSearchParams(location.search);
         view = p.get('view') === 'config' ? 'config' : 'feed';
         unreadOnly = p.get('unread') === '1';
-        showArchived = p.get('archived') === '1';
         filterSource = p.get('source') || '';
         filterSeverity = p.get('severity') || '';
     }
@@ -168,7 +175,6 @@
         const p = new URLSearchParams();
         if (view !== 'feed') p.set('view', view);
         if (unreadOnly) p.set('unread', '1');
-        if (showArchived) p.set('archived', '1');
         if (filterSource) p.set('source', filterSource);
         if (filterSeverity) p.set('severity', filterSeverity);
         const qs = p.toString();
@@ -188,7 +194,6 @@
         const p = new URLSearchParams();
         if (off) p.set('offset', off);
         if (unreadOnly) p.set('unread', '1');
-        if (showArchived) p.set('archived', '1');
         if (filterSource) p.set('source', filterSource);
         if (filterSeverity) p.set('severity', filterSeverity);
         return p.toString();
@@ -272,6 +277,19 @@
         pinOrder = pins.top.map(p => p.id);
     }
 
+    const expandedIds = new Set();
+
+    function expandable(n) { return !!(n.detail || n.count > 1); }
+
+    function detailBlock(n) {
+        return '<div class="notice-detail" data-collapse="' + n.id + '">' +
+               (n.count > 1 ? '<div class="d-meta">first ' + escapeHtml(n.first_display) +
+                    ' &middot; latest ' + escapeHtml(n.time_display) +
+                    ' &middot; &times;' + n.count + '</div>' : '') +
+               (n.detail ? '<div class="d-text">' + escapeHtml(n.detail) + '</div>' : '') +
+               '</div>';
+    }
+
     function renderFeed() {
         const el = document.getElementById('feed-area');
         if (!notices.length) {
@@ -289,8 +307,12 @@
                    : escapeHtml(n.title)) +
             '</span>' +
             (n.count > 1 ? '<span class="n-count">&times;' + n.count + '</span>' : '') +
-            (n.archived ? '' : '<button class="n-x" data-archive="' + n.id + '" title="Archive">&#x2715;</button>') +
-            '</div>'
+            '<button class="n-mark" data-mark="' + n.id + '" title="' +
+                (n.was_read ? 'Mark as unread' : 'Mark read') + '">' +
+                (n.was_read ? '&#8634;' : '&#10003;') + '</button>' +
+            '<span class="n-spacer"></span>' +
+            '</div>' +
+            (expandable(n) && expandedIds.has(n.id) ? detailBlock(n) : '')
         ).join('') +
         (hasMore ? '<button class="hdr-btn" id="load-more">Load more</button>' : '');
     }
@@ -316,31 +338,46 @@
         } catch (e) { flashNotice('Pin order save failed: ' + e.message, '#ef5350'); }
     }
 
-    function renderConfig() {
-        const el = document.getElementById('config-area');
-        if (view !== 'config' || !lastData) return;
-        const sources = lastData.sources || [];
-        const rows = sources.map((s, i) =>
-            '<tr data-i="' + i + '">' +
+    function cfgRow(s, i, withCounts) {
+        return '<tr data-i="' + i + '" data-kind="' + escapeHtml(s.kind || 'feed') +
+            '" data-cadence="' + (s.cadence || 10) + '" data-lastrun="' + (s.last_run || 0) + '">' +
             '<td><input type="checkbox" class="src-enabled"' + (s.enabled ? ' checked' : '') + '></td>' +
             '<td><input type="text" class="src-name" value="' + escapeHtml(s.source || '') + '"></td>' +
             '<td><select class="src-mode">' +
                 ['listen', 'poll', 'missing'].map(m =>
                     '<option' + (s.mode === m ? ' selected' : '') + '>' + m + '</option>').join('') +
             '</select></td>' +
-            '<td><input type="number" class="src-cadence" step="10" min="10" value="' +
-                (s.cadence || 10) + '"></td>' +
+            '<td>' + (s.mode === 'poll'
+                ? '<input type="number" class="src-cadence" step="10" min="10" value="' + (s.cadence || 10) + '">'
+                : '') + '</td>' +
             '<td class="cfg-last">' + (s.last_run ? stateAgo(s.last_run) + ' ago' : '—') + '</td>' +
+            (withCounts ? '<td class="cfg-last">' + ((lastData.counts_24h || {})[s.source] || 0) + '</td>' : '') +
             '<td><input type="text" class="src-note" value="' + escapeHtml(s.note || '') + '"></td>' +
-            '<td><button class="cfg-row-btn" data-del="' + i + '">delete</button></td>' +
-            '</tr>'
-        ).join('');
+            '<td><button class="cfg-row-btn cfg-del">delete</button></td>' +
+            '</tr>';
+    }
+
+    function cfgTable(pairs, withCounts) {
+        return '<table class="cfg-table"><tr><th>on</th><th>source</th><th>mode</th>' +
+            '<th>cadence</th><th>last run</th>' + (withCounts ? '<th>24h</th>' : '') +
+            '<th>note</th><th></th></tr>' +
+            pairs.map(([s, i]) => cfgRow(s, i, withCounts)).join('') + '</table>';
+    }
+
+    function renderConfig() {
+        const el = document.getElementById('config-area');
+        if (view !== 'config' || !lastData) return;
+        const sources = lastData.sources || [];
+        const feed = [], state = [];
+        sources.forEach((s, i) => ((s.kind === 'state') ? state : feed).push([s, i]));
         el.innerHTML =
-            '<table class="cfg-table"><tr><th>on</th><th>source</th><th>mode</th>' +
-            '<th>cadence (min, poll)</th><th>last run</th><th>note</th><th></th></tr>' +
-            rows + '</table>' +
+            '<div class="section-head">Feed sources</div>' +
+            cfgTable(feed, true) +
+            '<div class="cfg-actions"><button class="cfg-row-btn" id="cfg-add-feed">Add feed source</button></div>' +
+            '<div class="section-head">State sources</div>' +
+            cfgTable(state, false) +
+            '<div class="cfg-actions"><button class="cfg-row-btn" id="cfg-add-state">Add state source</button></div>' +
             '<div class="cfg-actions">' +
-            '<button class="cfg-row-btn" id="cfg-add">Add source</button>' +
             '<button class="cfg-row-btn" id="cfg-save">Save</button>' +
             '<label>retention days <input type="number" id="cfg-retention" class="src-cadence" value="' +
             (lastData.retention_days || 30) + '"></label>' +
@@ -350,16 +387,18 @@
 
     function collectConfig() {
         const out = [];
-        document.querySelectorAll('.cfg-table tr[data-i]').forEach(tr => {
+        document.querySelectorAll('#config-area tr[data-i]').forEach(tr => {
             const name = tr.querySelector('.src-name').value.trim();
             if (!name) return;
-            const prev = (lastData.sources || [])[Number(tr.dataset.i)] || {};
+            const cadenceInput = tr.querySelector('.src-cadence');
             out.push({
                 source: name,
+                kind: tr.dataset.kind || 'feed',
                 mode: tr.querySelector('.src-mode').value,
-                cadence: Number(tr.querySelector('.src-cadence').value) || 10,
+                cadence: cadenceInput ? (Number(cadenceInput.value) || 10)
+                                      : (Number(tr.dataset.cadence) || 10),
                 enabled: tr.querySelector('.src-enabled').checked,
-                last_run: prev.last_run || 0,
+                last_run: Number(tr.dataset.lastrun) || 0,
                 note: tr.querySelector('.src-note').value.trim(),
             });
         });
@@ -391,9 +430,10 @@
             return;
         }
         if (t.id === 'load-more') { offset += 100; fetchData(true); return; }
-        if (t.id === 'cfg-add') {
+        if (t.id === 'cfg-add-feed' || t.id === 'cfg-add-state') {
             lastData.sources = collectConfig();
-            lastData.sources.push({source: '', mode: 'poll', cadence: 10, enabled: false, note: ''});
+            lastData.sources.push({source: '', kind: t.id === 'cfg-add-state' ? 'state' : 'feed',
+                                   mode: 'poll', cadence: 10, enabled: false, note: ''});
             renderConfig(); return;
         }
         if (t.id === 'cfg-save') {
@@ -403,24 +443,39 @@
             setSysconfig('capcom_retention_days',
                          document.getElementById('cfg-retention').value, 'Retention saved'); return;
         }
-        if (t.dataset.del !== undefined && t.classList.contains('cfg-row-btn')) {
+        if (t.classList.contains('cfg-del')) {
+            const tr = t.closest('tr');
+            const name = tr.querySelector('.src-name').value.trim();
+            if (name && !confirm('Delete source "' + name + '"? (takes effect on Save)')) return;
+            tr.remove();
             lastData.sources = collectConfig();
-            lastData.sources.splice(Number(t.dataset.del), 1);
             renderConfig(); return;
         }
         if (t.dataset.totop) { pinOrder.push(t.dataset.totop); savePinOrder(); return; }
         if (t.dataset.untop) {
             pinOrder = pinOrder.filter(id => id !== t.dataset.untop); savePinOrder(); return;
         }
-        if (t.dataset.archive) { ev.stopPropagation(); mark([Number(t.dataset.archive)], 'archive'); return; }
         if (t.classList.contains('n-source')) {
             filterSource = (filterSource === t.dataset.source) ? '' : t.dataset.source;
             syncStateToUrl(); fetchData(); return;
         }
+        if (t.dataset.mark) {
+            ev.stopPropagation();
+            const n = notices.find(x => x.id === Number(t.dataset.mark));
+            if (n) mark([n.id], n.was_read ? 'unread' : 'read');
+            return;
+        }
+        const det = t.closest('.notice-detail');
+        if (det) { expandedIds.delete(Number(det.dataset.collapse)); renderFeed(); return; }
         const row = t.closest('.notice');
         if (row && !t.closest('a')) {
             const n = notices[Number(row.dataset.idx)];
-            if (n) mark([n.id], n.was_read ? 'unread' : 'read');
+            if (!n) return;
+            if (expandable(n)) {
+                if (expandedIds.has(n.id)) expandedIds.delete(n.id);
+                else expandedIds.add(n.id);
+            }
+            if (!n.was_read) mark([n.id], 'read'); else renderFeed();
             return;
         }
         if (t.closest('a') && t.closest('.notice')) {
@@ -432,10 +487,11 @@
     document.getElementById('unread-only').addEventListener('change', (ev) => {
         unreadOnly = ev.target.checked; syncStateToUrl(); fetchData();
     });
-    document.getElementById('show-archived').addEventListener('change', (ev) => {
-        showArchived = ev.target.checked; syncStateToUrl(); fetchData();
+    document.addEventListener('change', (ev) => {
+        if (ev.target.classList.contains('src-mode')) {
+            lastData.sources = collectConfig(); renderConfig();
+        }
     });
-
     document.addEventListener('keydown', (ev) => {
         if (ev.target.tagName === 'INPUT' || ev.target.tagName === 'SELECT') return;
         if (ev.key === 'j' || ev.key === 'k') {
@@ -461,7 +517,6 @@
 
     loadStateFromUrl();
     document.getElementById('unread-only').checked = unreadOnly;
-    document.getElementById('show-archived').checked = showArchived;
     fetchData();
     setInterval(() => { if (view === 'feed') fetchData(); }, 20000);
     </script>
