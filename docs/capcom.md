@@ -41,6 +41,11 @@ Two panels:
   A synthetic `Diary - <current date>` pin is always first and opens the
   current diary entry directly in edit mode; it is independent of bookmark
   membership and pin ordering.
+  State tiles are click-drag ordered through the `capcom_state_order`
+  sysconfig key. An enabled poll tile has a compact three-dot menu with one
+  action, **update**, which forces only that state source; grouped sources
+  still share their transport fetch, but only the selected returned state is
+  applied. Linked tiles continue to open their source page in a new tab.
   A pin-to-top control adds a pin to the key; drag reordering within the
   group rewrites the key through `set_sysconfig` per the dashboard
   preference pattern (see [Dashboard](dashboard.md)). Top-group membership

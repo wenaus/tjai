@@ -44,7 +44,7 @@ SWF_MONITOR_STATE_URL = (
 SWF_MONITOR_HEADERS = {'Host': 'pandaserver02.sdcc.bnl.gov'}
 
 
-def collect_eve_ahbazon():
+def collect_eve_ahbazon(target_source=None):
     """Store the complete Ahbazon state payload supplied by Pax Eden."""
     code = (
         "import json; "
@@ -74,7 +74,7 @@ def collect_eve_ahbazon():
     capcom.set_state(**data)
 
 
-def collect_swf_monitor():
+def collect_swf_monitor(target_source=None):
     """Store every tile-exact state payload supplied by swf-monitor."""
     try:
         with warnings.catch_warnings():
@@ -102,7 +102,14 @@ def collect_swf_monitor():
     for entry in states:
         if not isinstance(entry, dict) or 'source' not in entry or 'value' not in entry:
             raise RuntimeError('swf-monitor returned an invalid state entry')
-    for entry in states:
+    selected = [
+        entry for entry in states
+        if target_source is None or entry['source'] == target_source
+    ]
+    if target_source is not None and not selected:
+        raise RuntimeError(
+            f'swf-monitor returned no state entry for {target_source!r}')
+    for entry in selected:
         capcom.set_state(**entry)
 
 
@@ -115,19 +122,20 @@ COLLECTORS = {
 }
 
 
-def _consume_force_flag():
-    """Read and clear capcom_force_run. Returns True if a force was requested."""
+def _consume_force_target():
+    """Read and clear capcom_force_run; return '*', one source, or None."""
     row = SysConfig.objects.filter(key='capcom_force_run').first()
-    if row and row.value == '1':
+    if row and row.value and row.value != '0':
+        target = '*' if row.value == '1' else row.value
         row.value = '0'
         row.timestamp_modified = time.time()
         row.save(update_fields=['value', 'timestamp_modified'])
-        return True
-    return False
+        return target
+    return None
 
 
 def run():
-    force = _consume_force_flag()
+    force_target = _consume_force_target()
     sources = capcom.get_sources()
     if not sources:
         logger.info("capcom_dispatcher: registry empty, nothing to do")
@@ -143,10 +151,16 @@ def run():
 
     ran = 0
     for collector_name, group in poll_groups.items():
-        due = force or any(
-            now >= (src.get('last_run') or 0) + (src.get('cadence') or 10) * 60
-            for src in group
-        )
+        if force_target:
+            if force_target != '*' and not any(
+                    src.get('source') == force_target for src in group):
+                continue
+            due = True
+        else:
+            due = any(
+                now >= (src.get('last_run') or 0) + (src.get('cadence') or 10) * 60
+                for src in group
+            )
         if not due:
             continue
         collector = COLLECTORS.get(collector_name)
@@ -157,7 +171,9 @@ def run():
             )
             continue
         try:
-            collector()
+            selected_source = (
+                force_target if force_target and force_target != '*' else None)
+            collector(selected_source)
             ran += 1
         except Exception as e:
             logger.error(
@@ -168,12 +184,14 @@ def run():
                 dedup_key=f"capcom-collector-fail-{collector_name}",
             )
         for src in group:
-            src['last_run'] = now
+            if not force_target or force_target == '*' \
+                    or src.get('source') == force_target:
+                src['last_run'] = now
     capcom.save_sources(sources)
 
     purged = capcom.purge_old_notices()
     logger.info("capcom_dispatcher: %d collector(s) run%s, %d notice(s) purged",
-                ran, " (forced)" if force else "", purged)
+                ran, f" (forced {force_target})" if force_target else "", purged)
 
 
 if __name__ == '__main__':

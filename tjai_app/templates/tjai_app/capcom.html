@@ -33,14 +33,31 @@
         .section-head:first-child { margin-top: 0; }
 
         /* State tiles */
-        .tile { display: flex; justify-content: space-between; align-items: baseline;
-                padding: 5px 8px; margin-bottom: 4px; background: #222;
-                border-left: 3px solid #444; }
-        a.tile { color: inherit; text-decoration: none; }
-        a.tile:hover { background: #292929; }
+        .tile { display: flex; align-items: stretch; position: relative;
+                margin-bottom: 4px; background: #222;
+                border-left: 3px solid #444; cursor: grab; }
+        .tile:hover { background: #292929; }
+        .tile.sortable-ghost { opacity: 0.4; }
+        .tile-main { display: flex; flex: 1; justify-content: space-between;
+                     align-items: baseline; min-width: 0; padding: 5px 3px 5px 8px;
+                     color: inherit; text-decoration: none; }
+        a.tile-main:hover { text-decoration: none; }
         .tile .t-source { color: #bbb; }
+        .tile .t-reading { margin-left: 6px; text-align: right; }
         .tile .t-value { font-weight: bold; }
         .tile .t-ago { color: #777; font-size: 11px; margin-left: 6px; }
+        .state-menu-btn { width: 17px; padding: 0; border: 0; background: none;
+                          color: #777; cursor: pointer; font-family: inherit;
+                          font-size: 15px; line-height: 1; }
+        .state-menu-btn:hover { color: #ccc; }
+        .state-popover { position: absolute; z-index: 20; right: 2px; top: calc(100% - 2px);
+                         min-width: 68px; padding: 2px; background: #292929;
+                         border: 1px solid #555; box-shadow: 0 3px 8px #111; }
+        .state-popover[hidden] { display: none; }
+        .state-popover button { width: 100%; padding: 3px 7px; border: 0;
+                                background: none; color: #ccc; cursor: pointer;
+                                font: 11px inherit; text-align: left; }
+        .state-popover button:hover { background: #383838; color: #fff; }
         .tile.green { border-left-color: #9ccc65; } .tile.green .t-value { color: #9ccc65; }
         .tile.yellow { border-left-color: #ffd54f; } .tile.yellow .t-value { color: #ffd54f; }
         .tile.red { border-left-color: #ef5350; } .tile.red .t-value { color: #ef5350; }
@@ -176,6 +193,8 @@
     let selIdx = -1;
     let lastData = null;
     let pinOrder = [];
+    let stateOrder = [];
+    let stateDragging = false;
     let configSaveQueue = Promise.resolve();
 
     function loadStateFromUrl() {
@@ -256,22 +275,62 @@
     }
 
     function renderState() {
+        if (stateDragging) return;
         const el = document.getElementById('state-tiles');
         const st = (lastData && lastData.state) || {};
-        const keys = Object.keys(st).sort();
+        const saved = Array.isArray(lastData && lastData.state_order)
+            ? lastData.state_order : [];
+        const allKeys = Object.keys(st);
+        const known = new Set(allKeys);
+        const savedSet = new Set();
+        const savedKnown = saved.filter(k => {
+            if (!known.has(k) || savedSet.has(k)) return false;
+            savedSet.add(k);
+            return true;
+        });
+        const keys = savedKnown.concat(allKeys.filter(k => !savedSet.has(k)).sort());
+        stateOrder = keys;
         if (!keys.length) { el.innerHTML = '<div class="feed-note">No state reports yet.</div>'; return; }
+        const updateable = new Set(((lastData && lastData.sources) || [])
+            .filter(s => s.kind === 'state' && s.mode === 'poll' && s.enabled)
+            .map(s => s.source));
         el.innerHTML = keys.map(k => {
             const s = st[k];
             const color = ['green', 'yellow', 'red'].includes(s.color) ? s.color : '';
             const tag = s.url ? 'a' : 'div';
             const href = s.url ? ' href="' + escapeHtml(s.url) +
                 '" target="_blank" rel="noopener"' : '';
-            return '<' + tag + ' class="tile ' + color + '"' + href +
+            const menu = updateable.has(k)
+                ? '<button type="button" class="state-menu-btn" data-state-menu="' +
+                  escapeHtml(k) + '" aria-label="Actions for ' + escapeHtml(k) +
+                  '">&#8942;</button><div class="state-popover" hidden>' +
+                  '<button type="button" data-state-update="' + escapeHtml(k) +
+                  '">update</button></div>'
+                : '';
+            return '<div class="tile ' + color + '" data-state-key="' + escapeHtml(k) +
+                   '"><' + tag + ' class="tile-main"' + href +
                    '><span class="t-source">' + escapeHtml(k) +
-                   '</span><span><span class="t-value">' + escapeHtml(String(s.value)) +
+                   '</span><span class="t-reading"><span class="t-value">' +
+                   escapeHtml(String(s.value)) +
                    '</span><span class="t-ago">' + stateAgo(s.updated) +
-                   '</span></span></' + tag + '>';
+                   '</span></span></' + tag + '>' + menu + '</div>';
         }).join('');
+    }
+
+    function closeStateMenus(except) {
+        document.querySelectorAll('.state-popover').forEach(menu => {
+            if (menu !== except) menu.hidden = true;
+        });
+    }
+
+    async function saveStateOrder() {
+        try {
+            await fetchJson('/tjai/api/command', {
+                method: 'POST',
+                body: JSON.stringify({command: 'set_sysconfig', key: 'capcom_state_order',
+                                      value: JSON.stringify(stateOrder)}),
+            });
+        } catch (e) { flashNotice('State order save failed: ' + e.message, '#ef5350'); }
     }
 
     function pinRow(p, inTop) {
@@ -453,6 +512,27 @@
 
     document.addEventListener('click', async (ev) => {
         const t = ev.target;
+        const stateMenuButton = t.closest('[data-state-menu]');
+        if (stateMenuButton) {
+            const menu = stateMenuButton.parentElement.querySelector('.state-popover');
+            const open = menu.hidden;
+            closeStateMenus(menu);
+            menu.hidden = !open;
+            return;
+        }
+        const stateUpdate = t.closest('[data-state-update]');
+        if (stateUpdate) {
+            const source = stateUpdate.dataset.stateUpdate;
+            closeStateMenus();
+            try {
+                await fetchJson('/tjai/api/capcom/run', {
+                    method: 'POST', body: JSON.stringify({source: source}),
+                });
+                flashNotice('Update triggered: ' + source, '#9ccc65');
+            } catch (e) { flashNotice('Update failed: ' + e.message, '#ef5350'); }
+            return;
+        }
+        if (!t.closest('.state-popover')) closeStateMenus();
         const diaryLink = t.closest('[data-diary-date]');
         if (diaryLink) {
             ev.preventDefault();
@@ -561,6 +641,26 @@
             pinOrder = Array.from(document.querySelectorAll('#pins-top .pin'))
                 .map(el => el.dataset.id);
             savePinOrder();
+        },
+    });
+
+    new Sortable(document.getElementById('state-tiles'), {
+        animation: 120,
+        draggable: '.tile',
+        filter: '.state-menu-btn, .state-popover, .state-popover *',
+        preventOnFilter: false,
+        onStart: () => {
+            stateDragging = true;
+            closeStateMenus();
+        },
+        onEnd: () => {
+            stateDragging = false;
+            stateOrder = Array.from(new Set(
+                Array.from(document.querySelectorAll('#state-tiles .tile'))
+                    .map(el => el.dataset.stateKey)
+            ));
+            if (lastData) lastData.state_order = stateOrder;
+            saveStateOrder();
         },
     });
 

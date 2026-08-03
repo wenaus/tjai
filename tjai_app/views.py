@@ -8757,6 +8757,7 @@ def api_capcom_feed(request):
         'offset': offset,
         'unread_count': unread_count,
         'state': capcom_lib.get_state(),
+        'state_order': capcom_lib._get_json_config('capcom_state_order', []),
         'diary_pin': diary_pin,
         'pins': {'top': top, 'rest': rest},
         'sources': capcom_lib.get_sources(),
@@ -8845,7 +8846,27 @@ def api_capcom_notice(request):
 @require_http_methods(["POST"])
 @rest_api_auth_required
 def api_capcom_run(request):
-    """Run all enabled poll sources now: force flag + clear last_run + wake agent."""
+    """Run all poll collectors, or the state source named in {source}."""
+    try:
+        payload = json.loads(request.body or b'{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    source = (payload.get('source') or '').strip()
+    if source:
+        from . import capcom as capcom_lib
+        registered = any(
+            row.get('source') == source
+            and row.get('kind') == 'state'
+            and row.get('mode') == 'poll'
+            and row.get('enabled')
+            for row in capcom_lib.get_sources()
+        )
+        if not registered:
+            return JsonResponse(
+                {'error': f'No enabled poll state source named {source!r}'},
+                status=400,
+            )
+
     dispatcher_action = Entry.objects.filter(
         kind='action', deleted_at__isnull=True,
         data__entry_id='capcom-dispatcher',
@@ -8856,7 +8877,7 @@ def api_capcom_run(request):
 
     SysConfig.objects.update_or_create(
         key='capcom_force_run',
-        defaults={'value': '1', 'timestamp_modified': time.time()},
+        defaults={'value': source or '*', 'timestamp_modified': time.time()},
     )
     data = dispatcher_action.data or {}
     data['last_run'] = 0
@@ -8867,5 +8888,5 @@ def api_capcom_run(request):
     wake_ok, wake_msg = _wake_action_agent()
     if not wake_ok:
         return JsonResponse({'ok': True, 'warning': wake_msg})
-    logger.info("api_capcom_run: triggered, action agent woken")
-    return JsonResponse({'ok': True})
+    logger.info("api_capcom_run: triggered %s, action agent woken", source or 'all')
+    return JsonResponse({'ok': True, 'source': source or 'all'})
