@@ -340,11 +340,10 @@
                    escapeHtml(p.date) + '" target="_blank" rel="noopener">' +
                    escapeHtml(p.title) + '</a></div>';
         }
-        const href = p.url || ('/tjai/entry/' + p.id + '/');
         const btn = inTop
             ? '<button class="p-btn" data-untop="' + p.id + '" title="Remove from top group">&#x2715;</button>'
             : '<button class="p-btn" data-totop="' + p.id + '" title="Pin to top">&#x25B2;</button>';
-        return '<div class="pin" data-id="' + p.id + '"><a href="' + escapeHtml(href) +
+        return '<div class="pin" data-id="' + p.id + '"><a href="' + escapeHtml(p.edit_url) +
                '" target="_blank" rel="noopener">' + escapeHtml(p.title) + '</a>' + btn + '</div>';
     }
 

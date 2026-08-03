@@ -34,7 +34,9 @@ Two panels:
   a pinned shelf listing entries carrying the `:pin` tag.
   Pinning by tag means any entry can be promoted to or removed from the
   shelf from wherever it is displayed, there is no separate curated document
-  to maintain.
+  to maintain. A named entry is labeled `@name`; an unnamed entry uses its
+  first content line. Clicking a pin opens that TJAI entry directly in edit
+  mode in a new tab.
   The shelf has a hand-ordered top group over a reverse-time remainder:
   pins whose UUIDs appear in a `capcom_pin_order` sysconfig key render
   first, in key order, and the remaining pins follow in reverse time order.

@@ -8718,7 +8718,7 @@ def api_capcom_feed(request):
                  .values('source').annotate(c=Count('id'))
     }
 
-    # Pinned shelf: :pin bookmarks, top group ordered by capcom_pin_order
+    # Pinned shelf: :pin entries, top group ordered by capcom_pin_order
     pin_entry_ids = Tag.objects.filter(tag_name='pin').values_list('entry_id', flat=True)
     pin_entries = Entry.objects.filter(
         id__in=pin_entry_ids, deleted_at__isnull=True,
@@ -8726,10 +8726,18 @@ def api_capcom_feed(request):
     pins_by_id = {}
     for e in pin_entries:
         first_line = (e.content or '').split('\n', 1)[0]
+        entry_data = e.data or {}
+        if entry_data.get('entry_id'):
+            edit_url = (f'/tjai/entry/?entry_id='
+                        f'{quote(str(entry_data["entry_id"]), safe="")}&edit=1')
+        elif e.name:
+            edit_url = f'/tjai/entry/?name={quote(e.name, safe="")}&edit=1'
+        else:
+            edit_url = f'/tjai/entry/?uuid={e.id}&edit=1'
         pins_by_id[str(e.id)] = {
             'id': str(e.id),
-            'title': first_line,
-            'url': (e.data or {}).get('url', ''),
+            'title': f'@{e.name}' if e.name else first_line,
+            'edit_url': edit_url,
         }
     order = capcom_lib._get_json_config('capcom_pin_order', [])
     if not isinstance(order, list):
