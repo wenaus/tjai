@@ -13,9 +13,12 @@ import logging
 import subprocess
 import sys
 import time
+import warnings
 from pathlib import Path
 
 import bootstrap  # noqa: F401 - Django setup
+import requests
+from urllib3.exceptions import InsecureRequestWarning
 
 from tjai_app import capcom
 from tjai_app.db_log_handler import DbLogHandler
@@ -35,6 +38,10 @@ if not logger.handlers:
 
 PAX_EDEN_DIR = Path('/var/www/pax-eden')
 PAX_EDEN_PYTHON = PAX_EDEN_DIR / '.venv/bin/python'
+SWF_MONITOR_STATE_URL = (
+    'https://localhost:18443/swf-monitor/api/capcom/state/'
+)
+SWF_MONITOR_HEADERS = {'Host': 'pandaserver02.sdcc.bnl.gov'}
 
 
 def collect_eve_ahbazon():
@@ -67,11 +74,44 @@ def collect_eve_ahbazon():
     capcom.set_state(**data)
 
 
+def collect_swf_monitor():
+    """Store every tile-exact state payload supplied by swf-monitor."""
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', InsecureRequestWarning)
+            response = requests.get(
+                SWF_MONITOR_STATE_URL,
+                headers=SWF_MONITOR_HEADERS,
+                timeout=30,
+                verify=False,
+            )
+    except requests.RequestException as e:
+        raise RuntimeError(f'swf-monitor state fetch failed: {e}') from e
+    if response.status_code != 200:
+        detail = response.text.strip()[:300] or 'no response body'
+        raise RuntimeError(
+            f'swf-monitor state fetch returned HTTP {response.status_code}: {detail}')
+    try:
+        data = response.json()
+    except ValueError as e:
+        raise RuntimeError('swf-monitor state fetch returned invalid JSON') from e
+
+    states = data.get('states') if isinstance(data, dict) else None
+    if not isinstance(states, list) or not states:
+        raise RuntimeError('swf-monitor state payload has no states list')
+    for entry in states:
+        if not isinstance(entry, dict) or 'source' not in entry or 'value' not in entry:
+            raise RuntimeError('swf-monitor returned an invalid state entry')
+    for entry in states:
+        capcom.set_state(**entry)
+
+
 # Poll collectors, keyed by registry source name. Each is a no-argument
 # callable that polls its system and calls capcom.emit_notice()/set_state().
 # Poll sources land one at a time (docs/capcom.md § Initial sources).
 COLLECTORS = {
     'eve-ahbazon': collect_eve_ahbazon,
+    'swf-monitor': collect_swf_monitor,
 }
 
 
@@ -94,30 +134,41 @@ def run():
         return
 
     now = time.time()
-    ran = 0
+    poll_groups = {}
     for src in sources:
         if src.get('mode') != 'poll' or not src.get('enabled'):
             continue
-        name = src.get('source', '')
-        cadence_min = src.get('cadence') or 10
-        due = force or now >= (src.get('last_run') or 0) + cadence_min * 60
+        collector_name = src.get('collector') or src.get('source', '')
+        poll_groups.setdefault(collector_name, []).append(src)
+
+    ran = 0
+    for collector_name, group in poll_groups.items():
+        due = force or any(
+            now >= (src.get('last_run') or 0) + (src.get('cadence') or 10) * 60
+            for src in group
+        )
         if not due:
             continue
-        collector = COLLECTORS.get(name)
+        collector = COLLECTORS.get(collector_name)
         if collector is None:
-            logger.warning("capcom_dispatcher: enabled poll source %r has no collector", name)
+            logger.warning(
+                "capcom_dispatcher: enabled poll collector %r has no implementation",
+                collector_name,
+            )
             continue
         try:
             collector()
             ran += 1
         except Exception as e:
-            logger.error("capcom_dispatcher: collector %r failed: %s", name, e)
+            logger.error(
+                "capcom_dispatcher: collector %r failed: %s", collector_name, e)
             capcom.emit_notice(
-                source=name, severity='warning',
+                source=group[0].get('source', collector_name), severity='warning',
                 title=f"collector failed: {e}",
-                dedup_key=f"capcom-collector-fail-{name}",
+                dedup_key=f"capcom-collector-fail-{collector_name}",
             )
-        src['last_run'] = now
+        for src in group:
+            src['last_run'] = now
     capcom.save_sources(sources)
 
     purged = capcom.purge_old_notices()

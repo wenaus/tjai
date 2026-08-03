@@ -366,7 +366,8 @@
 
     function cfgRow(s, i, withCounts) {
         return '<tr data-i="' + i + '" data-kind="' + escapeHtml(s.kind || 'feed') +
-            '" data-cadence="' + (s.cadence || 10) + '" data-lastrun="' + (s.last_run || 0) + '">' +
+            '" data-cadence="' + (s.cadence || 10) + '" data-lastrun="' + (s.last_run || 0) +
+            '" data-collector="' + escapeHtml(s.collector || '') + '">' +
             '<td><input type="checkbox" class="src-enabled"' + (s.enabled ? ' checked' : '') + '></td>' +
             '<td><input type="text" class="src-name" value="' + escapeHtml(s.source || '') + '"></td>' +
             '<td><select class="src-mode">' +
@@ -415,7 +416,7 @@
             const name = tr.querySelector('.src-name').value.trim();
             if (!name) return;
             const cadenceInput = tr.querySelector('.src-cadence');
-            out.push({
+            const row = {
                 source: name,
                 kind: tr.dataset.kind || 'feed',
                 mode: tr.querySelector('.src-mode').value,
@@ -424,7 +425,9 @@
                 enabled: tr.querySelector('.src-enabled').checked,
                 last_run: Number(tr.dataset.lastrun) || 0,
                 note: tr.querySelector('.src-note').value.trim(),
-            });
+            };
+            if (tr.dataset.collector) row.collector = tr.dataset.collector;
+            out.push(row);
         });
         return out;
     }

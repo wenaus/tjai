@@ -129,7 +129,9 @@ A system may register any number of sources: separate subscriptions — for
 example several SWF feeds, or visitor sensors at different Second Life
 places — are separate registry rows, each with its own source name. The
 source name is the join key: notices, state tiles, and (for poll sources)
-the dispatcher's collector table all reference it.
+the dispatcher's collector table all reference it. Multiple state rows
+returned by one endpoint may share a `collector` key; the dispatcher then
+fetches that endpoint once and advances every grouped row's last-run time.
 
 The `missing` state is deliberate: it records where a followed system needs
 a status endpoint or callback that does not yet exist, so the gap is tracked
@@ -144,10 +146,14 @@ Capcom carries as a notice like any other.
 
 ## Initial sources
 
-- **ePIC/SWF** (poll) — testbed activity and production status via the
-  swf-monitor REST API, and new ePIC Mattermost postings from the same
-  source that feeds the synopsis, at live cadence. Polled because
-  collaboration systems do not hold the feed's ingest credential.
+- **ePIC/SWF** (poll, state) — one swf-monitor endpoint returns complete
+  Capcom payloads for `swf-system` (the System page verdict) and `swf-panda`
+  (running jobs and 12-hour success percentage). Both registry rows share
+  the `swf-monitor` collector, so the tunnel endpoint is fetched once per
+  cadence and each returned entry is stored verbatim with `set_state(**entry)`.
+  Section failures are source-owned `UNAVAILABLE` tiles; transport or contract
+  failures raise a collector warning. The Mattermost feed subscription remains
+  future work and is unrelated to these state tiles.
 - **TJAI pipeline** (listen, in-process) — completion notices for research
   syntheses, Picks, the daily synopsis, ideation, AI performance
   assessments, and the weekly workweek summary. Each notice deep-links to
