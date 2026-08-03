@@ -48,6 +48,7 @@ interfaces, not the center of the system architecture.
 | [Local Maintenance Actions](docs/local-actions.md) | Small machine-local jobs run by the sync agent, separate from EC2 action entries |
 | [Agents](docs/agents.md) | Daily synopsis, AI news curation (Picks), autonomous research, RSS reader |
 | [Picks Page Curation](docs/picks-curate-page.md) | Curating picks from the page being viewed: browser extension flow, curate-page endpoint, background job |
+| [Capcom](docs/capcom.md) | Design for the live notice page: notice feed with read/unread, state tiles and pinned bookmarks, Notice model, polling collectors, source registry |
 | [Indico Access](docs/indico-access.md) | Authenticated CERN Indico fetching via a logged-in Chrome session |
 | [Browser Offline Cache](docs/offline-cache.md) | Research and generic browser-side offline caching for tjai pages and APIs |
 | [Remote Worker Pipeline](docs/remote-workers.md) | Long-poll protocol for offloading inference (e.g. gemma) to a worker on another machine — capability whitelist, claim lifecycle, display contract, troubleshooting |
