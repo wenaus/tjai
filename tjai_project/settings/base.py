@@ -15,6 +15,8 @@ env = environ.Env(
     DJANGO_LOG_LEVEL=(str, "INFO"),
     DJANGO_CSRF_COOKIE_PATH=(str, ""),
     DJANGO_SESSION_COOKIE_PATH=(str, ""),
+    DJANGO_CSRF_COOKIE_NAME=(str, "tjai_csrftoken"),
+    DJANGO_SESSION_COOKIE_NAME=(str, "tjai_sessionid"),
 )
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -96,6 +98,8 @@ STATIC_URL = env("DJANGO_STATIC_URL")
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Cookie paths: default to subpath when FORCE_SCRIPT_NAME is set
+CSRF_COOKIE_NAME = env("DJANGO_CSRF_COOKIE_NAME")
+SESSION_COOKIE_NAME = env("DJANGO_SESSION_COOKIE_NAME")
 _subpath = FORCE_SCRIPT_NAME or ""
 if not env("DJANGO_CSRF_COOKIE_PATH") and _subpath:
     CSRF_COOKIE_PATH = _subpath

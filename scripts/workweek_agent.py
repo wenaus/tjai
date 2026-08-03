@@ -213,6 +213,15 @@ def main():
     workweek_eid = f'workweek_{last_sat_str}'
     _upsert_entry(workweek_eid, content, tags='workweek-log,fromai')
     logger.info("workweek: done")
+    try:
+        from tjai_app import capcom
+        capcom.emit_tjai_notice(
+            title=f'Workweek summary ready — {start.isoformat()} to {end.isoformat()}',
+            url=f'/tjai/workweek/{last_sat_str}/',
+            dedup_key=f'tjai-workweek-{last_sat_str}',
+        )
+    except Exception as e:
+        logger.error("workweek: Capcom notice failed: %s", e)
 
 
 if __name__ == '__main__':

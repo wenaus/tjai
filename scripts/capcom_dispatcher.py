@@ -8,9 +8,12 @@ the capcom_force_run sysconfig flag is set by the page's Update button —
 records last-run times back in the registry, and purges notices past the
 retention window. Listen sources are never touched here.
 """
+import json
 import logging
+import subprocess
 import sys
 import time
+from pathlib import Path
 
 import bootstrap  # noqa: F401 - Django setup
 
@@ -30,10 +33,46 @@ if not logger.handlers:
     _sh.setFormatter(_fmt)
     logger.addHandler(_sh)
 
+PAX_EDEN_DIR = Path('/var/www/pax-eden')
+PAX_EDEN_PYTHON = PAX_EDEN_DIR / '.venv/bin/python'
+
+
+def collect_eve_ahbazon():
+    """Store the complete Ahbazon state payload supplied by Pax Eden."""
+    code = (
+        "import json; "
+        "from pax_eden.gatecheck import capcom_ahbazon_state; "
+        "print(json.dumps(capcom_ahbazon_state()))"
+    )
+    try:
+        result = subprocess.run(
+            [str(PAX_EDEN_PYTHON), '-c', code],
+            cwd=PAX_EDEN_DIR,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise RuntimeError(f'Pax Eden gatecheck could not run: {e}') from e
+    if result.returncode != 0:
+        error = result.stderr.strip() or result.stdout.strip() or 'no error output'
+        raise RuntimeError(
+            f'Pax Eden gatecheck exited {result.returncode}: {error}')
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(
+            f'Pax Eden gatecheck returned invalid JSON: {result.stdout}') from e
+
+    capcom.set_state(**data)
+
+
 # Poll collectors, keyed by registry source name. Each is a no-argument
 # callable that polls its system and calls capcom.emit_notice()/set_state().
 # Poll sources land one at a time (docs/capcom.md § Initial sources).
-COLLECTORS = {}
+COLLECTORS = {
+    'eve-ahbazon': collect_eve_ahbazon,
+}
 
 
 def _consume_force_flag():

@@ -784,6 +784,9 @@ def main():
         'web_apps': web_apps,
     }
 
+    previous_status = SysConfig.objects.filter(
+        key='system_health_status',
+    ).values_list('value', flat=True).first()
     now = time.time()
     SysConfig.objects.update_or_create(
         key='system_health_status',
@@ -793,6 +796,19 @@ def main():
         key='system_health_data',
         defaults={'value': json.dumps(health_data), 'timestamp_modified': now},
     )
+
+    if previous_status in ('green', 'yellow', 'red') and previous_status != status:
+        try:
+            from tjai_app import capcom
+            capcom.emit_tjai_notice(
+                source=capcom.TJAI_SYSTEM_SOURCE,
+                title=f'System state {previous_status} → {status}',
+                url='/tjai/system/',
+                severity={'green': 'info', 'yellow': 'warning', 'red': 'alarm'}[status],
+                detail=('\n'.join(issues) if issues else 'All monitored systems normal.'),
+            )
+        except Exception as e:
+            logger.error("System transition Capcom notice failed: %s", e)
 
     if issues:
         logger.info("Health: %s (%s)", status.upper(), '; '.join(issues))

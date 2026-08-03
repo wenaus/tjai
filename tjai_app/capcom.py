@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 SEVERITIES = ('info', 'warning', 'alarm')
 DEFAULT_RETENTION_DAYS = 30
+TJAI_PIPELINE_SOURCE = 'tjai-pipeline'
+TJAI_SYSTEM_SOURCE = 'tjai-system'
 
 
 def emit_notice(source, title, severity='info', url='', dedup_key='', data=None):
@@ -75,12 +77,14 @@ def get_state():
     return _get_json_config('capcom_state', {})
 
 
-def set_state(source, value, color=None):
+def set_state(source, value, color=None, url=None):
     """Update one source's tile in the capcom_state sysconfig JSON."""
     states = get_state()
     entry = {'value': value, 'updated': time.time()}
     if color:
         entry['color'] = color
+    if url:
+        entry['url'] = url
     states[source] = entry
     _set_json_config('capcom_state', states)
 
@@ -92,6 +96,40 @@ def get_sources():
 
 def save_sources(sources):
     _set_json_config('capcom_sources', sources)
+
+
+def ensure_source(source, kind='feed', mode='listen', note=''):
+    """Register an emitting source if it is not already in Capcom config."""
+    sources = get_sources()
+    if any(row.get('source') == source for row in sources):
+        return
+    sources.append({
+        'source': source,
+        'kind': kind,
+        'mode': mode,
+        'cadence': 10,
+        'enabled': True,
+        'last_run': 0,
+        'note': note,
+    })
+    save_sources(sources)
+
+
+def emit_tjai_notice(title, url='', dedup_key='', detail='', severity='info',
+                     source=TJAI_PIPELINE_SOURCE):
+    """Emit a curated notice from TJAI and ensure its source is registered."""
+    note = ('TJAI system health transitions' if source == TJAI_SYSTEM_SOURCE
+            else 'Completed TJAI products and curated terminal failures')
+    ensure_source(source, note=note)
+    data = {'detail': detail} if detail else None
+    return emit_notice(
+        source=source,
+        title=title,
+        severity=severity,
+        url=url,
+        dedup_key=dedup_key,
+        data=data,
+    )
 
 
 def purge_old_notices():

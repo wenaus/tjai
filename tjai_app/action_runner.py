@@ -1130,6 +1130,40 @@ def update_last_run(action, clear_retry_state=True):
     action.save(update_fields=['data', 'timestamp_modified', 'is_dirty'])
 
 
+CAPCOM_FAILURE_ACTIONS = {
+    'daily-synopsis': ('Daily synopsis', '/tjai/synopsis/', 'daily-synopsis'),
+    'daily-history': ('Daily synopsis', '/tjai/synopsis/', 'daily-synopsis'),
+    'daily-assessment': ('Daily synopsis', '/tjai/synopsis/', 'daily-synopsis'),
+    'picks-agent': ('Picks run', '/tjai/picks/', 'picks'),
+    'ideation-agent': ('Ideation', '/tjai/research/', 'ideation'),
+    'research-agent': ('Research', '/tjai/research/', 'research'),
+    'llm-assessment': ('AI performance assessment', '/tjai/assessment/', 'assessment'),
+    'llm-assessment-gemini': ('AI performance assessment', '/tjai/assessment/', 'assessment'),
+    'llm-assessment-mcp': ('AI performance assessment', '/tjai/assessment/', 'assessment'),
+    'workweek-agent': ('Workweek summary', '/tjai/weekly/', 'workweek'),
+}
+
+
+def _emit_capcom_action_failure(action_id, error_msg, target_date):
+    """Emit one curated failure for a named Capcom producer."""
+    config = CAPCOM_FAILURE_ACTIONS.get(action_id)
+    if not config:
+        return
+    product, url, key = config
+    date_str = target_date.isoformat() if target_date else 'unknown-date'
+    try:
+        from . import capcom
+        capcom.emit_tjai_notice(
+            title=f'{product} failed',
+            url=url,
+            severity='warning',
+            detail=error_msg,
+            dedup_key=f'tjai-failure-{key}-{date_str}',
+        )
+    except Exception as e:
+        logger.error("Capcom failure notice for %s failed: %s", action_id, e)
+
+
 def execute_action(action, target_date=None):
     """Execute a single action's full pipeline: mechanical -> journal -> AI -> update.
 
@@ -1184,10 +1218,14 @@ def execute_action(action, target_date=None):
         if entry_id is None:
             logger.error("Journal entry creation failed, aborting")
             _write_agent_error(action_id, "Journal entry creation failed")
+            _emit_capcom_action_failure(
+                action_id, "Journal entry creation failed", target_date)
             return False
 
         if not run_mechanical(action, target_date=target_date):
             _write_agent_error(action_id, "Mechanical step failed")
+            _emit_capcom_action_failure(
+                action_id, "Mechanical step failed", target_date)
             update_last_run(action)  # prevent infinite retry on next loop
             return False
 
@@ -1252,6 +1290,8 @@ def execute_action(action, target_date=None):
                                target_date=target_date):
                 logger.error("AI dispatch failed")
                 _write_agent_error(action_id, "AI dispatch failed")
+                _emit_capcom_action_failure(
+                    action_id, "AI dispatch failed", target_date)
                 update_last_run(action)
                 return False
 

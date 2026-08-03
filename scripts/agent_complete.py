@@ -40,6 +40,49 @@ MAX_RETRIES = 3
 RETRY_BACKOFF_MINUTES = [15, 60, 240]  # 15min, 1h, 4h
 RESEARCH_MIN_REPORT_CHARS = 1000
 
+CAPCOM_FAILURE_PRODUCTS = {
+    'daily-history': ('Daily synopsis', '/tjai/synopsis/', 'daily-synopsis'),
+    'daily-assessment': ('Daily synopsis', '/tjai/synopsis/', 'daily-synopsis'),
+    'picks-agent': ('Picks run', '/tjai/picks/', 'picks'),
+    'ideation-agent': ('Ideation', '/tjai/research/', 'ideation'),
+    'llm-assessment-mcp': ('AI performance assessment', '/tjai/assessment/', 'assessment'),
+}
+
+
+def _local_date():
+    from datetime import datetime
+    from tjai_app.services import get_timezone
+    return datetime.now(get_timezone()).date()
+
+
+def _emit_capcom(title, url, dedup_key, detail='', severity='info'):
+    try:
+        from tjai_app import capcom
+        capcom.emit_tjai_notice(
+            title=title,
+            url=url,
+            dedup_key=dedup_key,
+            detail=detail,
+            severity=severity,
+        )
+    except Exception as e:
+        logger.error("Capcom notice failed: %s", e)
+
+
+def _emit_terminal_failure(action_id, detail):
+    config = CAPCOM_FAILURE_PRODUCTS.get(action_id)
+    if not config:
+        return
+    product, url, key = config
+    date_str = _local_date().isoformat()
+    _emit_capcom(
+        title=f'{product} failed',
+        url=url,
+        dedup_key=f'tjai-failure-{key}-{date_str}',
+        detail=detail,
+        severity='warning',
+    )
+
 
 def _count_subagent_entries(source_entry_id):
     """Count subagent report entries for a given source_entry_id."""
@@ -475,6 +518,8 @@ def main():
                           'timestamp_modified': now})
 
     # Structured error reporting and retry scheduling
+    retry_scheduled = False
+    failure_message = ''
     if status == 'failed':
         error_msg = f"Agent exited {exit_code}"
         if output_has_error:
@@ -490,7 +535,8 @@ def main():
             key=f'agent_{action_id}_last_error_time',
             defaults={'value': str(now), 'timestamp_modified': now})
         # Schedule retry with backoff
-        _schedule_retry(action_id, ref_extra)
+        retry_scheduled = _schedule_retry(action_id, ref_extra)
+        failure_message = error_msg
     else:
         SysConfig.objects.filter(key=f'agent_{action_id}_last_error').update(
             value='', timestamp_modified=now)
@@ -616,8 +662,23 @@ def main():
                     logger.error("daily-history: no history section for %s "
                                  "after retry — giving up", date_str)
                     SysConfig.objects.filter(key='daily_history_postcheck_retries').delete()
+                    _emit_capcom(
+                        title='Daily synopsis failed',
+                        url='/tjai/synopsis/',
+                        dedup_key=f'tjai-failure-daily-synopsis-{date_str}',
+                        detail='Today in History was still missing after retry.',
+                        severity='warning',
+                    )
         except Exception as e:
             logger.error("daily-history: extract_history failed: %s", e)
+            date_str = _local_date().isoformat()
+            _emit_capcom(
+                title='Daily synopsis failed',
+                url='/tjai/synopsis/',
+                dedup_key=f'tjai-failure-daily-synopsis-{date_str}',
+                detail=f'Today in History post-processing failed: {e}',
+                severity='warning',
+            )
 
     # Post-process picks: record the number of real picks created.
     # A zero-pick run is allowed: the curation prompt explicitly permits an
@@ -644,6 +705,12 @@ def main():
             else:
                 logger.info("picks-agent: %d picks created", picks_count,
                             extra=ref_extra)
+            noun = 'pick' if picks_count == 1 else 'picks'
+            _emit_capcom(
+                title=f'Picks run completed — {picks_count} {noun}',
+                url='/tjai/picks/',
+                dedup_key=f'tjai-picks-{int(cutoff)}',
+            )
         except Exception as e:
             logger.error("picks-agent: post-check failed: %s", e)
 
@@ -739,6 +806,21 @@ def main():
                 else:
                     logger.warning("ideation-agent: no '## Workday' section in log; "
                                    "workday entry not created")
+            cutoff = float(launched_ts) if launched_ts else now - 7200
+            topic_ids = Tag.objects.filter(
+                tag_name='research_topic',
+            ).values_list('entry_id', flat=True)
+            topic_count = Entry.objects.filter(
+                id__in=topic_ids,
+                deleted_at__isnull=True,
+                timestamp_created__gte=cutoff,
+            ).exclude(data__source='multimodel').count()
+            noun = 'topic' if topic_count == 1 else 'topics'
+            _emit_capcom(
+                title=f'Ideation ready — {topic_count} {noun}',
+                url=(f'/tjai/entry/{entry_id}/' if log_entry else '/tjai/research/'),
+                dedup_key=f'tjai-ideation-{yyyymmdd}',
+            )
         except Exception as e:
             logger.error("ideation-agent: failed to post-process ideation: %s", e)
 
@@ -809,15 +891,46 @@ def main():
                     if base:
                         base.status = 'done' if status == 'completed' else 'failed'
                         base.save(update_fields=['status'])
+                        base_data = base.data if isinstance(base.data, dict) else {}
+                        base_entry_id = base_data.get('entry_id')
+                        topic_title = (base.content or '').split('\n', 1)[0].strip()
+                        research_url = (f'/tjai/research-detail/{base_entry_id}/'
+                                        if base_entry_id else '/tjai/research/')
+                        notice_key = base_entry_id or str(base.id)
+                        if status == 'completed':
+                            _emit_capcom(
+                                title=f'Research completed — {topic_title}',
+                                url=research_url,
+                                dedup_key=f'tjai-research-{notice_key}',
+                            )
+                        elif not retry_scheduled:
+                            _emit_capcom(
+                                title=f'Research failed — {topic_title}',
+                                url=research_url,
+                                dedup_key=f'tjai-failure-research-{notice_key}',
+                                detail=failure_message,
+                                severity='warning',
+                            )
                         logger.info(
                             "Base %s marked %s after synthesis completion",
-                            (base.data or {}).get('entry_id', base.id),
+                            base_entry_id or base.id,
                             base.status,
                         )
                 except Exception as e:
                     logger.error(
                         "Failed to propagate synthesis status to base: %s",
                         e, extra=ref_extra)
+
+    if action_id == 'daily-assessment' and status == 'completed':
+        date_str = _local_date().isoformat()
+        _emit_capcom(
+            title=f'Daily synopsis ready — {date_str}',
+            url=f'/tjai/entry/daily-{date_str}/',
+            dedup_key=f'tjai-daily-synopsis-{date_str}',
+        )
+
+    if status == 'failed' and not retry_scheduled:
+        _emit_terminal_failure(action_id, failure_message)
 
 
 

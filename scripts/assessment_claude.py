@@ -191,6 +191,16 @@ def main():
         duration = round(time.time() - start_time)
         logger.info("Claude assessment complete for %s in %ds", date_str, duration)
         _set_status(action_id, 'completed')
+        try:
+            from tjai_app import capcom
+            capcom.emit_tjai_notice(
+                title=f'AI performance assessment completed — {date_str}',
+                url=f'/tjai/entry/assessment-{date_str}/',
+                dedup_key=f'tjai-assessment-{date_str}',
+                detail='Claude assessment completed.',
+            )
+        except Exception as e:
+            logger.error("Claude assessment Capcom notice failed: %s", e)
 
     except Exception as e:
         duration = round(time.time() - start_time)

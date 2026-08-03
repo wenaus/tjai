@@ -36,6 +36,8 @@
         .tile { display: flex; justify-content: space-between; align-items: baseline;
                 padding: 5px 8px; margin-bottom: 4px; background: #222;
                 border-left: 3px solid #444; }
+        a.tile { color: inherit; text-decoration: none; }
+        a.tile:hover { background: #292929; }
         .tile .t-source { color: #bbb; }
         .tile .t-value { font-weight: bold; }
         .tile .t-ago { color: #777; font-size: 11px; margin-left: 6px; }
@@ -73,7 +75,7 @@
         .notice { display: flex; align-items: baseline; gap: 8px; padding: 5px 6px;
                   border-bottom: 1px solid #242424; cursor: pointer; }
         .notice.selected { outline: 1px solid #90caf9; }
-        .notice .n-time { color: #777; font-size: 11px; white-space: nowrap; }
+        .notice .n-time { color: #aaa; font-size: 11px; white-space: nowrap; }
         .notice .n-dot { font-size: 11px; }
         .notice .n-dot.info { color: #90caf9; }
         .notice .n-dot.warning { color: #ffd54f; }
@@ -81,14 +83,17 @@
         .notice .n-source { color: #b39ddb; font-size: 11px; white-space: nowrap; cursor: pointer; }
         .notice .n-spacer { flex: 1; }
         .notice.read, .notice.read .n-title, .notice.read .n-source,
-        .notice.read .n-dot, .notice.read .n-count,
+        .notice.read .n-time, .notice.read .n-dot, .notice.read .n-count,
         .notice.read .n-title a { color: #777; }
         .notice .n-count { color: #ffd54f; font-size: 11px; }
-        .notice .n-mark { background: none; border: 1px solid #666; color: #9ccc65;
-                          cursor: pointer; font-family: inherit; font-size: 13px;
-                          padding: 1px 9px; border-radius: 3px; }
-        .notice.read .n-mark { color: #90caf9; border-color: #666; }
-        .notice .n-mark:hover { color: #e0e0e0; border-color: #999; }
+        .notice .n-mark { background: #242424; border: 1px solid #555; color: #aaa;
+                          cursor: pointer; font-family: inherit; font-size: 12px;
+                          font-weight: normal; line-height: 1.15;
+                          padding: 1px 6px; border-radius: 3px; white-space: nowrap; }
+        .notice.read .n-mark { background: #242424; color: #999; border-color: #555; }
+        .notice .n-mark:hover, .notice.read .n-mark:hover {
+            background: #2d2d2d; color: #ccc; border-color: #777;
+        }
         .notice-detail { margin: 0 6px 6px 60px; padding: 6px 10px;
                          border-left: 3px solid #444; background: #212121;
                          color: #bbb; font-size: 12px; }
@@ -99,6 +104,13 @@
 
         /* Config */
         .config-area { flex: 1; overflow-y: auto; padding: 16px; }
+        .cfg-section { border: 1px solid #333; border-left-width: 4px;
+                       margin-bottom: 24px; padding: 0 12px 12px; }
+        .cfg-section.feed { border-left-color: #607d8b; }
+        .cfg-section.state { border-left-color: #6f8054; }
+        .cfg-section-title { background: #242424; border-bottom: 1px solid #333;
+                             color: #ddd; font-size: 13px; font-weight: 600;
+                             margin: 0 -12px 10px; padding: 7px 10px; }
         .cfg-table { border-collapse: collapse; margin-bottom: 14px; }
         .cfg-table th { color: #8a8a8a; font-size: 11px; text-align: left;
                         padding: 4px 10px 4px 0; border-bottom: 1px solid #333; }
@@ -129,6 +141,7 @@
             <div class="section-head">State</div>
             <div id="state-tiles"><div class="feed-note">No state reports yet.</div></div>
             <div class="section-head">Pins</div>
+            <div id="pins-special"></div>
             <div id="pins-top"></div>
             <div class="pins-divider" id="pins-divider" style="display:none"></div>
             <div id="pins-rest"><div class="feed-note">No pinned bookmarks.</div></div>
@@ -163,6 +176,7 @@
     let selIdx = -1;
     let lastData = null;
     let pinOrder = [];
+    let configSaveQueue = Promise.resolve();
 
     function loadStateFromUrl() {
         const p = new URLSearchParams(location.search);
@@ -249,13 +263,22 @@
         el.innerHTML = keys.map(k => {
             const s = st[k];
             const color = ['green', 'yellow', 'red'].includes(s.color) ? s.color : '';
-            return '<div class="tile ' + color + '"><span class="t-source">' + escapeHtml(k) +
+            const tag = s.url ? 'a' : 'div';
+            const href = s.url ? ' href="' + escapeHtml(s.url) +
+                '" target="_blank" rel="noopener"' : '';
+            return '<' + tag + ' class="tile ' + color + '"' + href +
+                   '><span class="t-source">' + escapeHtml(k) +
                    '</span><span><span class="t-value">' + escapeHtml(String(s.value)) +
-                   '</span><span class="t-ago">' + stateAgo(s.updated) + '</span></span></div>';
+                   '</span><span class="t-ago">' + stateAgo(s.updated) +
+                   '</span></span></' + tag + '>';
         }).join('');
     }
 
     function pinRow(p, inTop) {
+        if (p.special === 'diary') {
+            return '<div class="pin special"><a href="/tjai/diary/" data-diary-date="' +
+                   escapeHtml(p.date) + '">' + escapeHtml(p.title) + '</a></div>';
+        }
         const href = p.url || ('/tjai/entry/' + p.id + '/');
         const btn = inTop
             ? '<button class="p-btn" data-untop="' + p.id + '" title="Remove from top group">&#x2715;</button>'
@@ -266,6 +289,9 @@
 
     function renderPins() {
         const pins = (lastData && lastData.pins) || {top: [], rest: []};
+        const diary = lastData && lastData.diary_pin;
+        document.getElementById('pins-special').innerHTML = diary
+            ? pinRow({special: 'diary', title: diary.title, date: diary.date}, true) : '';
         const topEl = document.getElementById('pins-top');
         const restEl = document.getElementById('pins-rest');
         topEl.innerHTML = pins.top.map(p => pinRow(p, true)).join('');
@@ -308,8 +334,8 @@
             '</span>' +
             (n.count > 1 ? '<span class="n-count">&times;' + n.count + '</span>' : '') +
             '<button class="n-mark" data-mark="' + n.id + '" title="' +
-                (n.was_read ? 'Mark as unread' : 'Mark read') + '">' +
-                (n.was_read ? '&#8634;' : '&#10003;') + '</button>' +
+                (n.was_read ? 'Mark as unread' : 'Mark as read') + '">' +
+                (n.was_read ? 'Mark as unread' : 'Mark as read') + '</button>' +
             '<span class="n-spacer"></span>' +
             '</div>' +
             (expandable(n) && expandedIds.has(n.id) ? detailBlock(n) : '')
@@ -371,18 +397,16 @@
         const feed = [], state = [];
         sources.forEach((s, i) => ((s.kind === 'state') ? state : feed).push([s, i]));
         el.innerHTML =
-            '<div class="section-head">Feed sources</div>' +
+            '<section class="cfg-section feed">' +
+            '<div class="cfg-section-title">Feed sources</div>' +
             cfgTable(feed, true) +
             '<div class="cfg-actions"><button class="cfg-row-btn" id="cfg-add-feed">Add feed source</button></div>' +
-            '<div class="section-head">State sources</div>' +
+            '</section>' +
+            '<section class="cfg-section state">' +
+            '<div class="cfg-section-title">State sources</div>' +
             cfgTable(state, false) +
             '<div class="cfg-actions"><button class="cfg-row-btn" id="cfg-add-state">Add state source</button></div>' +
-            '<div class="cfg-actions">' +
-            '<button class="cfg-row-btn" id="cfg-save">Save</button>' +
-            '<label>retention days <input type="number" id="cfg-retention" class="src-cadence" value="' +
-            (lastData.retention_days || 30) + '"></label>' +
-            '<button class="cfg-row-btn" id="cfg-save-retention">Save retention</button>' +
-            '</div>';
+            '</section>';
     }
 
     function collectConfig() {
@@ -416,8 +440,30 @@
         } catch (e) { flashNotice('Save failed: ' + e.message, '#ef5350'); }
     }
 
+    function saveConfig(sources) {
+        const value = JSON.stringify(sources);
+        configSaveQueue = configSaveQueue.then(() => fetchJson('/tjai/api/command', {
+            method: 'POST',
+            body: JSON.stringify({command: 'set_sysconfig', key: 'capcom_sources', value: value}),
+        })).catch(e => { flashNotice('Config save failed: ' + e.message, '#ef5350'); });
+    }
+
     document.addEventListener('click', async (ev) => {
         const t = ev.target;
+        const diaryLink = t.closest('[data-diary-date]');
+        if (diaryLink) {
+            ev.preventDefault();
+            try {
+                const d = await fetchJson('/tjai/api/diary/today?date=' +
+                    encodeURIComponent(diaryLink.dataset.diaryDate), {
+                        method: 'POST', body: '{}',
+                    });
+                if (!d.entry_id) throw new Error('Diary entry was not returned');
+                location.href = '/tjai/entry/?entry_id=' +
+                    encodeURIComponent(d.entry_id) + '&edit=1';
+            } catch (e) { flashNotice('Diary open failed: ' + e.message, '#ef5350'); }
+            return;
+        }
         if (t.classList.contains('view-tab')) {
             view = t.dataset.view; syncStateToUrl(); renderAll(); return;
         }
@@ -436,20 +482,16 @@
                                    mode: 'poll', cadence: 10, enabled: false, note: ''});
             renderConfig(); return;
         }
-        if (t.id === 'cfg-save') {
-            setSysconfig('capcom_sources', JSON.stringify(collectConfig()), 'Registry saved'); return;
-        }
-        if (t.id === 'cfg-save-retention') {
-            setSysconfig('capcom_retention_days',
-                         document.getElementById('cfg-retention').value, 'Retention saved'); return;
-        }
         if (t.classList.contains('cfg-del')) {
             const tr = t.closest('tr');
             const name = tr.querySelector('.src-name').value.trim();
-            if (name && !confirm('Delete source "' + name + '"? (takes effect on Save)')) return;
+            if (name && !confirm('Delete source "' + name + '"?')) return;
             tr.remove();
-            lastData.sources = collectConfig();
-            renderConfig(); return;
+            const sources = collectConfig();
+            lastData.sources = sources;
+            renderConfig();
+            saveConfig(sources);
+            return;
         }
         if (t.dataset.totop) { pinOrder.push(t.dataset.totop); savePinOrder(); return; }
         if (t.dataset.untop) {
@@ -488,8 +530,12 @@
         unreadOnly = ev.target.checked; syncStateToUrl(); fetchData();
     });
     document.addEventListener('change', (ev) => {
-        if (ev.target.classList.contains('src-mode')) {
-            lastData.sources = collectConfig(); renderConfig();
+        if (ev.target.closest('#config-area') &&
+            ev.target.matches('.src-enabled, .src-name, .src-mode, .src-cadence, .src-note')) {
+            const sources = collectConfig();
+            lastData.sources = sources;
+            if (ev.target.classList.contains('src-mode')) renderConfig();
+            saveConfig(sources);
         }
     });
     document.addEventListener('keydown', (ev) => {

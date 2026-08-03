@@ -7,8 +7,9 @@ is served at `/tjai/capcom/`. The name is the Mission Control capsule
 communicator (CAPCOM), the one console permitted to speak to the crew: only
 deliberate, curated emissions from followed systems reach the feed.
 
-The page, notice store, ingest endpoint, and dispatcher are implemented;
-per-source collectors and push hooks land one at a time.
+The page, notice store, ingest endpoint, dispatcher, and in-process TJAI
+emission hooks are implemented. External collectors and listen hooks land
+one at a time.
 
 ## Purpose
 
@@ -37,6 +38,9 @@ Two panels:
   The shelf has a hand-ordered top group over a reverse-time remainder:
   pins whose UUIDs appear in a `capcom_pin_order` sysconfig key render
   first, in key order, and the remaining pins follow in reverse time order.
+  A synthetic `Diary - <current date>` pin is always first and opens the
+  current diary entry directly in edit mode; it is independent of bookmark
+  membership and pin ordering.
   A pin-to-top control adds a pin to the key; drag reordering within the
   group rewrites the key through `set_sysconfig` per the dashboard
   preference pattern (see [Dashboard](dashboard.md)). Top-group membership
@@ -48,8 +52,8 @@ Two panels:
   the view, carried in the URL. **Feed** (default): reverse-chronological
   notices with read/unread rendering, filter controls, an unread count, and
   an Update button at the panel's top right that runs all poll sources
-  immediately. **Config**: the source registry and retention settings,
-  displayed and edited in place.
+  immediately. **Config**: the source registry, displayed and edited in
+  place. Registry changes save automatically.
 
 The feed carries events; the tiles carry state. Collectors emit a notice on
 a state transition (camp up, run finished), not while a condition persists,
@@ -115,7 +119,7 @@ notices, and **state** sources, which maintain a left-panel tile. A
 registry row carries its kind, its collection mode, plus — for poll
 sources — cadence, an enabled flag, and last-run time. The feed section
 also shows each source's notice count over the trailing 24 hours. Row
-deletion asks for confirmation and takes effect on save:
+deletion asks for confirmation and saves immediately:
 
 - **listen** — the source posts to the ingest endpoint
 - **poll** — a collector polls a read endpoint
@@ -144,17 +148,28 @@ Capcom carries as a notice like any other.
   swf-monitor REST API, and new ePIC Mattermost postings from the same
   source that feeds the synopsis, at live cadence. Polled because
   collaboration systems do not hold the feed's ingest credential.
-- **Overnight pipeline** (listen, in-process) — completion notices for
-  research syntheses, Picks, the daily synopsis, and ideation, each
-  deep-linking to its page, so morning triage starts from one place.
+- **TJAI pipeline** (listen, in-process) — completion notices for research
+  syntheses, Picks, the daily synopsis, ideation, AI performance
+  assessments, and the weekly workweek summary. Each notice deep-links to
+  its output. A producer emits one warning only after a terminal failure;
+  retries and individual research-model completions do not emit notices.
+- **TJAI system** (listen, in-process) — a notice when aggregate system
+  health changes between green, yellow, and red. Routine health collection
+  does not emit. The transition notice carries the current causes and links
+  to the System page.
 - **corun-ai** (listen) — a notice when an interactive run is submitted,
   emitted from the submit path of the registration mechanism; runs
   submitted through the programmatic REST interface do not pass that point
   and generate no notice.
-- **EVE Online** (poll, state) — whether the Ahbazon gate camp is up: an
-  always-visible green/red tile, polled from the zKillboard API; the
-  gate-checker logic exists in pax-eden. Becomes a listen source fed by
-  pax-eden if its checker runs as a live service.
+- **EVE Online** (poll, state) — the `eve-ahbazon` tile shows `CLEAR`,
+  `ACTIVITY`, or `GATECAMPED`, mapped from Pax Eden's green, amber, and red
+  logic for the Ahbazon side of the Hykkota and Lor gates only; the extra
+  Shera gate and the reverse sides in Hykkota and Lor do not affect the tile.
+  Pax Eden owns the gate selection, severity mapping, display value, color,
+  and destination URL, returning a complete Capcom state payload. The Capcom
+  dispatcher invokes that production Pax Eden producer every ten minutes and
+  stores the returned payload verbatim. The tile links directly to that
+  route's Pax Eden gatecheck page.
 - **Second Life** (listen) — visitor presence at monitored places via
   primus. Live data gathering there does not exist today (the capability
   is in legacy LSL scripts); this is the motivating case for direct posts
@@ -209,4 +224,10 @@ Candidate sources and features considered and not adopted:
 - `tjai_app/static/tjai/sortable.min.js` — vendored SortableJS for pin drag
 - `scripts/capcom_dispatcher.py` — poll dispatcher, run by the
   `capcom-dispatcher` action (periodic, 10 minutes)
+- `scripts/agent_complete.py`, `scripts/assessment_claude.py`,
+  `scripts/assessment_gemini.py`, `scripts/workweek_agent.py`, and
+  `scripts/system_health.py` — in-process TJAI completion, terminal-failure,
+  and system-transition emitters
+- `tjai_app/action_runner.py` — terminal mechanical and dispatch failures
+  from named Capcom producers
 - `scripts/capcom_test.py` — functionality test (emit, threading, purge)

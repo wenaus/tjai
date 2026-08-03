@@ -1499,8 +1499,20 @@ def api_empty_trash(request):
 
 def login_view(request):
     """Custom login page."""
+    def clear_bad_root_cookies(response):
+        # Pax Eden previously issued Django's generic cookies at Path=/,
+        # colliding with TJAI's Path=/tjai cookies on etaverse.com.
+        response.delete_cookie('sessionid', path='/')
+        response.delete_cookie('csrftoken', path='/')
+        return response
+
+    raw_cookies = request.META.get('HTTP_COOKIE', '')
+    if request.method == 'GET' and raw_cookies.count('sessionid=') > 1:
+        next_url = request.GET.get('next') or 'dashboard'
+        return clear_bad_root_cookies(redirect(next_url))
+
     if request.user.is_authenticated:
-        return redirect('dashboard')
+        return clear_bad_root_cookies(redirect('dashboard'))
 
     form_errors = False
     if request.method == 'POST':
@@ -1510,14 +1522,15 @@ def login_view(request):
         if user is not None:
             login(request, user)
             next_url = request.POST.get('next') or request.GET.get('next') or 'dashboard'
-            return redirect(next_url)
+            return clear_bad_root_cookies(redirect(next_url))
         else:
             form_errors = True
 
-    return render(request, 'tjai_app/login.html', {
+    response = render(request, 'tjai_app/login.html', {
         'form': type('Form', (), {'errors': form_errors})(),
         'next': request.GET.get('next', ''),
     })
+    return clear_bad_root_cookies(response)
 
 
 def auto_login(request):
@@ -8716,6 +8729,14 @@ def api_capcom_feed(request):
     top_ids = set(i for i in order if i in pins_by_id)
     rest = [p for eid, p in pins_by_id.items() if eid not in top_ids]
 
+    from datetime import datetime as _datetime
+    from zoneinfo import ZoneInfo as _ZoneInfo
+    diary_date = _datetime.now(_ZoneInfo('America/New_York')).date()
+    diary_pin = {
+        'title': diary_date.strftime('Diary - %a %b %-d %Y'),
+        'date': diary_date.isoformat(),
+    }
+
     return JsonResponse({
         'timestamp': fmt_datetime(time.time()),
         'notices': [{
@@ -8736,6 +8757,7 @@ def api_capcom_feed(request):
         'offset': offset,
         'unread_count': unread_count,
         'state': capcom_lib.get_state(),
+        'diary_pin': diary_pin,
         'pins': {'top': top, 'rest': rest},
         'sources': capcom_lib.get_sources(),
         'counts_24h': counts_24h,
