@@ -403,7 +403,7 @@
             var baseUrl = window.location.pathname + '?uuid={{ entry.id }}';
             var editUrl = baseUrl + '&version=' + v.id + '&edit=1';
             html += '<tr style="border-top:1px solid #2a2a2a;">';
-            html += '<td style="padding:4px 8px;color:#daa520;white-space:nowrap">v' + v.version_num + '</td>';
+            html += '<td style="padding:4px 8px;white-space:nowrap"><a href="' + editUrl + '" style="color:#daa520">v' + v.version_num + '</a></td>';
             html += '<td style="padding:4px 8px;color:#aaa;white-space:nowrap">' + v.datetime + '</td>';
             html += '<td style="padding:4px 8px;color:#ce93d8;white-space:nowrap">' + v.changed_by + '</td>';
             html += '<td style="padding:4px 8px;color:#888;white-space:nowrap">' + v.line_count + '</td>';
