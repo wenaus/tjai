@@ -49,8 +49,8 @@ Two panels:
   still share their transport fetch, but only the selected returned state is
   applied. Linked tiles continue to open their source page in a new tab.
   Each real pin has a compact vertical-dot menu. Regular pins offer **pin to
-  top** and **Unpin**; top-group pins offer **unpin from top** and **Unpin**.
-  Unpin removes the `:pin` tag and the entry from the shelf. Drag reordering
+  top** and **unpin**; top-group pins offer **unpin from top** and **unpin**.
+  The **unpin** action removes the `:pin` tag and the entry from the shelf. Drag reordering
   within the group rewrites the key through `set_sysconfig` per the dashboard
   preference pattern (see [Dashboard](dashboard.md)). Top-group membership
   and order both live in the sysconfig key — the entry carries

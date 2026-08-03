@@ -67,7 +67,7 @@
                border-bottom: 1px solid #262626; }
         .pin a { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .pin .state-popover { min-width: 88px; }
-        #pins-top .pin { cursor: grab; background: #212121; }
+        #pins-top .pin { cursor: grab; }
         #pins-top .pin.sortable-ghost { opacity: 0.4; }
         .pins-divider { border-bottom: 1px solid #333; margin: 6px 0; }
 
@@ -340,7 +340,7 @@
         const action = inTop
             ? '<button type="button" data-untop="' + p.id + '">unpin from top</button>'
             : '<button type="button" data-totop="' + p.id + '">pin to top</button>';
-        const unpin = '<button type="button" data-unpin="' + p.id + '">Unpin</button>';
+        const unpin = '<button type="button" data-unpin="' + p.id + '">unpin</button>';
         const menu = '<button type="button" class="state-menu-btn" data-pin-menu="' + p.id +
                      '" aria-label="Actions for ' + escapeHtml(p.title) + '">&#8942;</button>' +
                      '<div class="state-popover" hidden>' + action + unpin + '</div>';
