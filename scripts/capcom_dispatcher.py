@@ -91,9 +91,7 @@ def collect_swf_monitor(target_source=None):
     except requests.RequestException as e:
         raise RuntimeError(f'swf-monitor state fetch failed: {e}') from e
     if response.status_code != 200:
-        detail = response.text.strip()[:300] or 'no response body'
-        raise RuntimeError(
-            f'swf-monitor state fetch returned HTTP {response.status_code}: {detail}')
+        raise RuntimeError(f'swf-monitor returned HTTP {response.status_code}')
     try:
         data = response.json()
     except ValueError as e:

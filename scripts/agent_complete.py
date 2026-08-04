@@ -696,8 +696,9 @@ def main():
                 timestamp_created__gte=cutoff,
             ).exclude(
                 content__iexact='__noop__',
-            ).exclude(
-                data__entry_id='__noop__',
+            ).filter(
+                Q(data__entry_id__isnull=True)
+                | ~Q(data__entry_id='__noop__'),
             ).count()
             if picks_count == 0:
                 logger.info("picks-agent: completed with 0 picks created",

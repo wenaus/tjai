@@ -120,19 +120,28 @@ it is not.
 
 ## Collection
 
-Ownership determines how a source is collected. Systems maintained within
-this ecosystem — the tjai pipeline, corun-ai, primus, pax-eden — are never
-polled: each registers as a source and calls the ingest endpoint at the
-moment an event occurs. Polling is reserved for systems that cannot be
-instrumented; their collectors are standalone scripts reading public
-endpoints.
+The kind of information determines how it is collected. Discrete events are
+pushed to the ingest endpoint by the producing system at the moment they
+occur; cron completion, report creation, transition, and failure notices must
+not be rediscovered by polling. Continuously sampled state may be polled when
+that is the natural interface. One system may therefore expose polled state
+tiles while separately pushing feed notices. A state collector is not a
+template for feed delivery, and feed notices must not be added to a state
+endpoint for Capcom to discover later.
+
+Systems maintained within this ecosystem — the tjai pipeline, corun-ai,
+primus, pax-eden, and SWF — push their discrete events. Polling is reserved
+for current state or for systems that cannot be instrumented; those collectors
+are standalone scripts reading purpose-built endpoints.
 
 All notices pass through one implementation: an `emit_notice()` helper
 holds the threading and dedup logic. The bearer-authenticated
-`POST api/capcom/notice` endpoint wraps it for posting systems and
-collectors; in-process emitters such as the overnight pipeline call it
-directly. Second Life LSL scripts reach the endpoint via `llHTTPRequest`
-with no intermediary.
+`POST /tjai/api/capcom/notice` endpoint wraps it for posting systems;
+in-process emitters such as the overnight pipeline call it directly. A remote
+producer POSTs `source`, `title`, `severity`, `url`, and `dedup_key` after its
+event has been committed, and must not repeat a successfully accepted
+one-time event. Second Life LSL scripts reach the endpoint via
+`llHTTPRequest` with no intermediary.
 
 Poll sources run from a dispatcher on a ten-minute periodic action. Each
 source declares its cadence in the registry as a multiple of the tick; the
@@ -183,8 +192,13 @@ Capcom carries as a notice like any other.
   the `swf-monitor` collector, so the tunnel endpoint is fetched once per
   cadence and each returned entry is stored verbatim with `set_state(**entry)`.
   Section failures are source-owned `UNAVAILABLE` tiles; transport or contract
-  failures raise a collector warning. The Mattermost feed subscription remains
-  future work and is unrelated to these state tiles.
+  failures raise a collector warning. SWF feed events are pushed independently
+  when they occur; they are not returned by this state endpoint.
+- **ePIC campaign delivery** (listen, feed) — the nightly SWF delivery rebuild
+  POSTs one notice when the recorded delivery day advances, or a warning when
+  that rebuild fails. The producer supplies the title, direct URL, severity,
+  and stable day-specific dedup key at job completion. It does not wait for the
+  ten-minute state collector.
 - **ePIC production report** (poll, state) — the `epicprod-report` tile shows
   the verdict from the latest daily campaign report and the time since that
   report. corun-ai owns the canonical assessment Page and returns its verdict,
