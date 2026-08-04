@@ -31,6 +31,19 @@
         .section-head { color: #e0e0e0; font-size: 11px; text-transform: uppercase;
                         letter-spacing: 1px; margin: 14px 0 8px; }
         .section-head:first-child { margin-top: 0; }
+        .notepad-section {
+            color: #ddd;
+            background: #222;
+            border-left: 3px solid #555;
+            cursor: pointer;
+            font-size: 11px;
+            letter-spacing: 1px;
+            margin-bottom: 14px;
+            padding: 6px 8px;
+            text-transform: uppercase;
+        }
+        .notepad-section:hover { background: #292929; }
+        .notepad-section.active { border-left-color: #90caf9; }
 
         /* State tiles */
         .tile { display: flex; align-items: stretch; position: relative;
@@ -63,12 +76,17 @@
         .tile.red { border-left-color: #ef5350; } .tile.red .t-value { color: #ef5350; }
         .tile.meeting-tile { border-left-color: #90caf9; cursor: default; }
         .tile.meeting-tile .t-value { color: #e0e0e0; }
-        .tile.meeting-tile .t-ago { color: #e57373; font-weight: bold; }
+        .tile.meeting-tile .t-ago { color: #aaa; }
+        .tile.meeting-tile .meeting-time { color: inherit; }
+        .tile[data-state-key="corun-ai"] .t-value { font-size: 11px; }
 
         /* Pins */
         .pin { position: relative; display: flex; align-items: baseline; gap: 6px; padding: 4px 4px;
                border-bottom: 1px solid #262626; }
         .pin a { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .pin.special { gap: 0; }
+        .pin.special a { flex: 0 0 auto; overflow: visible; }
+        .pin.special .pin-sep { color: #777; white-space: pre; }
         .pin .state-popover { min-width: 88px; }
         #pins-top .pin { cursor: grab; }
         #pins-top .pin.sortable-ghost { opacity: 0.4; }
@@ -121,6 +139,8 @@
 
         /* Config */
         .config-area { flex: 1; overflow-y: auto; padding: 16px; }
+        .notepad-area { flex: 1; min-height: 0; }
+        .notepad-area iframe { display: block; width: 100%; height: 100%; border: 0; }
         .cfg-section { border: 1px solid #333; border-left-width: 4px;
                        margin-bottom: 24px; padding: 0 12px 12px; }
         .cfg-section.feed { border-left-color: #607d8b; }
@@ -155,6 +175,7 @@
     {% with current_page="capcom" %}{% include "tjai_app/_menu.html" %}{% endwith %}
     <div class="container">
         <div class="left-panel">
+            <div class="notepad-section" id="notepad-section" data-view="notepad">Notepad</div>
             <div class="section-head">State</div>
             <div id="state-tiles"><div class="feed-note">No state reports yet.</div></div>
             <div class="section-head">Pins</div>
@@ -180,6 +201,10 @@
                 <div class="feed-note">Loading…</div>
             </div>
             <div class="config-area" id="config-area" style="display:none"></div>
+            <div class="notepad-area" id="notepad-area" style="display:none">
+                <iframe id="notepad-frame" data-src="{% url 'capcom_notepad' %}"
+                        title="Capcom Notepad"></iframe>
+            </div>
         </div>
     </div>
 
@@ -200,7 +225,7 @@
 
     function loadStateFromUrl() {
         const p = new URLSearchParams(location.search);
-        view = p.get('view') === 'config' ? 'config' : 'feed';
+        view = ['feed', 'config', 'notepad'].includes(p.get('view')) ? p.get('view') : 'feed';
         unreadOnly = p.get('unread') === '1';
         filterSource = p.get('source') || '';
         filterSeverity = p.get('severity') || '';
@@ -264,6 +289,31 @@
         document.getElementById('feed-area').style.display = view === 'feed' ? '' : 'none';
         document.getElementById('feed-controls').style.display = view === 'feed' ? '' : 'none';
         document.getElementById('config-area').style.display = view === 'config' ? '' : 'none';
+        document.getElementById('notepad-area').style.display = view === 'notepad' ? '' : 'none';
+        document.getElementById('notepad-section').classList.toggle('active', view === 'notepad');
+        if (view === 'notepad') {
+            const frame = document.getElementById('notepad-frame');
+            if (!frame.dataset.loaded) {
+                frame.addEventListener('load', () => {
+                    frame.contentWindow.postMessage(
+                        {type: 'tjai-capcom-notepad-focus'}, location.origin
+                    );
+                }, {once: true});
+                frame.src = frame.dataset.src;
+                frame.dataset.loaded = '1';
+            } else {
+                frame.contentWindow.postMessage(
+                    {type: 'tjai-capcom-notepad-focus'}, location.origin
+                );
+            }
+        }
+    }
+
+    function flushNotepad() {
+        const frame = document.getElementById('notepad-frame');
+        if (frame && frame.contentWindow) {
+            frame.contentWindow.postMessage({type: 'tjai-capcom-notepad-flush'}, location.origin);
+        }
     }
 
     function stateAgo(epoch) {
@@ -277,13 +327,19 @@
 
     function meetingCountdown(epoch) {
         const seconds = Math.max(0, Math.floor(epoch - Date.now() / 1000));
+        if (seconds >= 86400) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            return days + 'd' + (hours ? ' ' + hours + 'h' : '');
+        }
+        if (seconds >= 36000) return Math.floor(seconds / 3600) + 'h';
         if (seconds >= 3600) {
             const hours = Math.floor(seconds / 3600);
             const minutes = Math.floor((seconds % 3600) / 60);
-            return 'in ' + hours + 'h ' + minutes + 'm';
+            return hours + 'h' + (minutes ? ' ' + minutes + 'm' : '');
         }
-        if (seconds >= 60) return 'in ' + Math.floor(seconds / 60) + 'm';
-        return 'in <1m';
+        if (seconds >= 60) return Math.floor(seconds / 60) + 'm';
+        return '<1m';
     }
 
     function renderState() {
@@ -328,13 +384,15 @@
         }).join('');
         const meeting = lastData && lastData.next_meeting;
         const meetingHtml = meeting
-            ? '<div class="tile meeting-tile"><a class="tile-main" href="' +
+            ? '<div class="tile meeting-tile"><div class="tile-main">' +
+              '<a class="t-source" href="' + escapeHtml(meeting.edit_url) +
+              '" target="_blank" rel="noopener">meeting</a>' +
+              '<span class="t-reading"><span class="t-value"><a class="meeting-time" href="' +
               escapeHtml(meeting.edit_url) + '" target="_blank" rel="noopener">' +
-              '<span class="t-source">next meeting</span>' +
-              '<span class="t-reading"><span class="t-value">' +
-              escapeHtml(meeting.time_display + ' · ' + meeting.title) +
+              escapeHtml(meeting.time_display) + '</a> · ' +
+              linkifyContent(escapeHtml(meeting.title)) +
               '</span><span class="t-ago">' + meetingCountdown(meeting.event_date) +
-              '</span></span></a></div>'
+              '</span></span></div></div>'
             : '';
         el.innerHTML = stateHtml + meetingHtml ||
             '<div class="feed-note">No state reports yet.</div>';
@@ -358,18 +416,26 @@
 
     function pinRow(p, inTop) {
         if (p.special === 'diary') {
-            return '<div class="pin special"><a href="/tjai/diary/" data-diary-date="' +
-                   escapeHtml(p.date) + '" target="_blank" rel="noopener">' +
-                   escapeHtml(p.title) + '</a></div>';
+            const sep = '<span class="pin-sep"> · </span>';
+            return '<div class="pin special"><span>' + escapeHtml(p.title) + '</span>' +
+                   sep + '<a href="/tjai/diary/" data-diary-date="' +
+                   escapeHtml(p.date) + '" target="_blank" rel="noopener">Diary</a>' +
+                   sep + '<a href="' + escapeHtml(p.synopsis_url) +
+                   '" target="_blank" rel="noopener">Synopsis</a>' +
+                   sep + '<a href="' + escapeHtml(p.ideation_url) +
+                   '" target="_blank" rel="noopener">Ideation</a></div>';
         }
         const action = inTop
             ? '<button type="button" data-untop="' + p.id + '">unpin from top</button>'
             : '<button type="button" data-totop="' + p.id + '">pin to top</button>';
+        const edit = p.is_bookmark
+            ? '<button type="button" data-pin-edit="' + escapeHtml(p.edit_url) +
+              '">edit</button>' : '';
         const unpin = '<button type="button" data-unpin="' + p.id + '">unpin</button>';
         const menu = '<button type="button" class="state-menu-btn" data-pin-menu="' + p.id +
                      '" aria-label="Actions for ' + escapeHtml(p.title) + '">&#8942;</button>' +
-                     '<div class="state-popover" hidden>' + action + unpin + '</div>';
-        return '<div class="pin" data-id="' + p.id + '"><a href="' + escapeHtml(p.edit_url) +
+                     '<div class="state-popover" hidden>' + action + unpin + edit + '</div>';
+        return '<div class="pin" data-id="' + p.id + '"><a href="' + escapeHtml(p.url) +
                '" target="_blank" rel="noopener">' + escapeHtml(p.title) + '</a>' + menu + '</div>';
     }
 
@@ -378,7 +444,7 @@
         const pins = (lastData && lastData.pins) || {top: [], rest: []};
         const diary = lastData && lastData.diary_pin;
         document.getElementById('pins-special').innerHTML = diary
-            ? pinRow({special: 'diary', title: diary.title, date: diary.date}, true) : '';
+            ? pinRow({special: 'diary', ...diary}, true) : '';
         const topEl = document.getElementById('pins-top');
         const restEl = document.getElementById('pins-rest');
         topEl.innerHTML = pins.top.map(p => pinRow(p, true)).join('');
@@ -582,7 +648,8 @@
             }
             return;
         }
-        if (t.classList.contains('view-tab')) {
+        if (t.classList.contains('view-tab') || t.id === 'notepad-section') {
+            if (view === 'notepad' && t.dataset.view !== 'notepad') flushNotepad();
             view = t.dataset.view; syncStateToUrl(); renderAll(); return;
         }
         if (t.id === 'mark-all') { mark('all', 'read'); return; }
@@ -620,6 +687,11 @@
         if (t.dataset.untop) {
             closeStateMenus();
             pinOrder = pinOrder.filter(id => id !== t.dataset.untop); savePinOrder(); return;
+        }
+        if (t.dataset.pinEdit) {
+            closeStateMenus();
+            window.open(t.dataset.pinEdit, '_blank', 'noopener');
+            return;
         }
         if (t.dataset.unpin) {
             const entryId = t.dataset.unpin;
@@ -677,6 +749,7 @@
     });
     document.addEventListener('keydown', (ev) => {
         if (ev.target.tagName === 'INPUT' || ev.target.tagName === 'SELECT') return;
+        if (view !== 'feed') return;
         if (ev.key === 'j' || ev.key === 'k') {
             selIdx = ev.key === 'j' ? Math.min(selIdx + 1, notices.length - 1) : Math.max(selIdx - 1, 0);
             renderFeed();
@@ -726,8 +799,14 @@
 
     loadStateFromUrl();
     document.getElementById('unread-only').checked = unreadOnly;
+    renderTabs();
     fetchData();
     setInterval(() => { if (view === 'feed') fetchData(); }, 20000);
+    window.addEventListener('blur', flushNotepad);
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') flushNotepad();
+    });
+    window.addEventListener('pagehide', flushNotepad);
     </script>
 </body>
 </html>

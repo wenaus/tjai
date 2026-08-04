@@ -92,6 +92,7 @@ urlpatterns = [
     path("api/goals/unrelate", views.api_goals_unrelate, name="api_goals_unrelate"),
     path("api/goals/create-note", views.api_goal_create_note, name="api_goal_create_note"),
     path("capcom/", views.capcom_page, name="capcom"),
+    path("capcom/notepad/", views.capcom_notepad, name="capcom_notepad"),
     path("api/capcom/feed", views.api_capcom_feed, name="api_capcom_feed"),
     path("api/capcom/mark", views.api_capcom_mark, name="api_capcom_mark"),
     path("api/capcom/pin", views.api_capcom_pin, name="api_capcom_pin"),

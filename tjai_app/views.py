@@ -4098,6 +4098,7 @@ def api_entry_tag_delete(request, entry_id, tag_name):
     return JsonResponse({'ok': deleted > 0})
 
 
+@transaction.atomic
 def api_entry_save(request, entry_id):
     """Save entry content from the inline editor.
 
@@ -4115,7 +4116,11 @@ def api_entry_save(request, entry_id):
     if request.GET.get('beacon') == '1':
         from django.middleware.csrf import CsrfViewMiddleware
         setattr(request, '_dont_enforce_csrf_checks', True)
-    entry = Entry.objects.filter(id=entry_id, deleted_at__isnull=True).first()
+    # Serialize saves for one entry so near-simultaneous browser tabs cannot
+    # both read the same old state and then last-write-wins over each other.
+    entry = Entry.objects.select_for_update().filter(
+        id=entry_id, deleted_at__isnull=True,
+    ).first()
     if not entry:
         return JsonResponse({'error': 'Entry not found'}, status=404)
     from .models import EntryVersion
@@ -4211,8 +4216,20 @@ def api_entry_save(request, entry_id):
             entry.context_id = ctx
         else:
             entry.context_id = None
-    # Sync tags: explicit field takes precedence, then extract from content
-    if 'tags' in data:
+    # Sync tags: explicit field takes precedence, then extract from content.
+    # The Capcom notepad is deliberately content-only: colons jotted there
+    # are text, not an implicit request to mutate entry metadata.
+    entry_data = entry.data if isinstance(entry.data, dict) else {}
+    content_only_notepad = (
+        entry_data.get('entry_id') == CAPCOM_NOTEPAD_ENTRY_ID
+        and data.get('autosave') is True
+        and 'tags' not in data
+    )
+    if content_only_notepad:
+        desired_tags = set(Tag.objects.filter(
+            entry_id=entry.id
+        ).values_list('tag_name', flat=True))
+    elif 'tags' in data:
         raw_tags = data['tags'] or ''
         desired_tags = set(t.lstrip(':') for t in re.split(r'[,\s]+', raw_tags) if t.strip())
     else:
@@ -8677,6 +8694,42 @@ def capcom_page(request):
     return render(request, 'tjai_app/capcom.html')
 
 
+CAPCOM_NOTEPAD_ENTRY_ID = 'capcom-notepad'
+CAPCOM_NOTEPAD_UUID = '09d846c3-9163-5019-8138-14af8fbb648c'
+
+
+def _capcom_notepad_entry():
+    """Return the one canonical Capcom notepad entry, creating it once."""
+    entry = Entry.objects.filter(
+        data__entry_id=CAPCOM_NOTEPAD_ENTRY_ID,
+        deleted_at__isnull=True,
+    ).first()
+    if entry:
+        return entry
+    entry, _created = Entry.objects.get_or_create(
+        id=CAPCOM_NOTEPAD_UUID,
+        defaults={
+            'content': '',
+            'kind': 'memory',
+            'timestamp_created': time.time(),
+            'timestamp_modified': time.time(),
+            'is_dirty': 1,
+            'data': {'entry_id': CAPCOM_NOTEPAD_ENTRY_ID},
+        },
+    )
+    return entry
+
+
+@login_required
+@xframe_options_exempt
+def capcom_notepad(request):
+    """Minimal content-only editor for the Capcom notepad entry."""
+    entry = _capcom_notepad_entry()
+    return render(request, 'tjai_app/capcom_notepad.html', {
+        'entry': entry,
+    })
+
+
 @login_required
 def api_capcom_feed(request):
     """Feed page + state tiles + pinned shelf + source registry, one poll."""
@@ -8711,15 +8764,11 @@ def api_capcom_feed(request):
 
     now_ts = time.time()
     app_tz = get_app_tz()
-    now_dt = datetime.fromtimestamp(now_ts, tz=app_tz)
-    tomorrow_ts = (now_dt.replace(
-        hour=0, minute=0, second=0, microsecond=0,
-    ) + timedelta(days=1)).timestamp()
+    today = datetime.fromtimestamp(now_ts, tz=app_tz).date()
     next_meeting = None
     meeting_entries = Entry.objects.filter(
         kind='journal', deleted_at__isnull=True,
         data__event_date__gte=now_ts,
-        data__event_date__lt=tomorrow_ts,
     ).order_by('data__event_date')
     for meeting in meeting_entries:
         meeting_data = meeting.data or {}
@@ -8732,6 +8781,9 @@ def api_capcom_feed(request):
         except (KeyError, TypeError, ValueError) as e:
             logger.error("capcom: invalid meeting event_date for %s: %s", meeting.id, e)
             continue
+        meeting_dt = datetime.fromtimestamp(meeting_ts, tz=app_tz)
+        if not (meeting_dt.hour or meeting_dt.minute):
+            continue
         if meeting_entry_id:
             edit_url = (f'/tjai/entry/?entry_id='
                         f'{quote(meeting_entry_id, safe="")}&edit=1')
@@ -8739,11 +8791,12 @@ def api_capcom_feed(request):
             edit_url = f'/tjai/entry/?name={quote(meeting.name, safe="")}&edit=1'
         else:
             edit_url = f'/tjai/entry/?uuid={meeting.id}&edit=1'
-        meeting_dt = datetime.fromtimestamp(meeting_ts, tz=app_tz)
         next_meeting = {
             'title': (meeting.content or '').split('\n', 1)[0] or 'Untitled meeting',
             'event_date': meeting_ts,
-            'time_display': meeting_dt.strftime('%H:%M'),
+            'time_display': meeting_dt.strftime(
+                '%H:%M' if meeting_dt.date() == today else '%a %H:%M'
+            ),
             'edit_url': edit_url,
         }
         break
@@ -8764,6 +8817,15 @@ def api_capcom_feed(request):
     pins_by_id = {}
     for e in pin_entries:
         first_line = (e.content or '').split('\n', 1)[0]
+        bookmark_match = re.fullmatch(
+            r'\[([^\]]+)\]\((https?://.+)\)\s*', first_line,
+        )
+        first_line_label = re.sub(
+            r'\[([^\]]+)\]\([^)]*\)', r'\1', first_line,
+        )
+        bookmark_url = bookmark_match.group(2) if bookmark_match else ''
+        if bookmark_match:
+            first_line_label = bookmark_match.group(1)
         entry_data = e.data or {}
         if entry_data.get('entry_id'):
             edit_url = (f'/tjai/entry/?entry_id='
@@ -8774,8 +8836,10 @@ def api_capcom_feed(request):
             edit_url = f'/tjai/entry/?uuid={e.id}&edit=1'
         pins_by_id[str(e.id)] = {
             'id': str(e.id),
-            'title': f'@{e.name}' if e.name else first_line,
+            'title': f'@{e.name}' if e.name else first_line_label,
             'edit_url': edit_url,
+            'url': bookmark_url or edit_url,
+            'is_bookmark': bool(bookmark_url),
         }
     order = capcom_lib._get_json_config('capcom_pin_order', [])
     if not isinstance(order, list):
@@ -8789,9 +8853,16 @@ def api_capcom_feed(request):
     from datetime import datetime as _datetime
     from zoneinfo import ZoneInfo as _ZoneInfo
     diary_date = _datetime.now(_ZoneInfo('America/New_York')).date()
+    diary_yyyymmdd = diary_date.strftime('%Y%m%d')
     diary_pin = {
-        'title': diary_date.strftime('Diary - %a %b %-d %Y'),
+        'title': diary_date.strftime('%a %b %-d'),
         'date': diary_date.isoformat(),
+        'synopsis_url': (
+            f'/tjai/synopsis/?entry_id=daily-{diary_date.isoformat()}'
+        ),
+        'ideation_url': (
+            f'/tjai/entry/?entry_id=ideation_{diary_yyyymmdd}'
+        ),
     }
 
     return JsonResponse({
@@ -8830,6 +8901,7 @@ def api_capcom_feed(request):
 @require_http_methods(["POST"])
 def api_capcom_mark(request):
     """Mark notices: {ids: [...], action: read|unread|archive} or {all: true, action: read}."""
+    from django.utils import timezone as _tz
     from .models import Notice
     try:
         data = json.loads(request.body)
@@ -8851,7 +8923,7 @@ def api_capcom_mark(request):
     if action == 'read':
         updated = qs.update(was_read=True)
     elif action == 'unread':
-        updated = qs.update(was_read=False)
+        updated = qs.update(was_read=False, timestamp=_tz.now())
     else:
         updated = qs.update(archived=True, was_read=True)
     return JsonResponse({'status': 'ok', 'updated': updated})

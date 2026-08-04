@@ -39,6 +39,8 @@ if not logger.handlers:
 
 PAX_EDEN_DIR = Path('/var/www/pax-eden')
 PAX_EDEN_PYTHON = PAX_EDEN_DIR / '.venv/bin/python'
+CORUN_DIR = Path('/var/www/corun-ai')
+CORUN_PYTHON = CORUN_DIR / '.venv/bin/python'
 SWF_MONITOR_STATE_URL = (
     'https://localhost:18443/swf-monitor/api/capcom/state/'
 )
@@ -114,10 +116,56 @@ def collect_swf_monitor(target_source=None):
         capcom.set_state(**entry)
 
 
+def collect_corun_ai(target_source=None):
+    """Store every tile-exact state payload supplied by corun-ai."""
+    code = (
+        "import json, os, sys; "
+        "sys.path.insert(0, 'src'); "
+        "os.environ['DJANGO_SETTINGS_MODULE'] = 'corun_project.settings'; "
+        "import django; django.setup(); "
+        "from corun_app.capcom import capcom_states; "
+        "print(json.dumps(capcom_states()))"
+    )
+    try:
+        result = subprocess.run(
+            [str(CORUN_PYTHON), '-c', code],
+            cwd=CORUN_DIR,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise RuntimeError(f'corun-ai state could not run: {e}') from e
+    if result.returncode != 0:
+        error = result.stderr.strip() or result.stdout.strip() or 'no error output'
+        raise RuntimeError(
+            f'corun-ai state exited {result.returncode}: {error}')
+    try:
+        states = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(
+            f'corun-ai state returned invalid JSON: {result.stdout}') from e
+    if not isinstance(states, list) or not states:
+        raise RuntimeError('corun-ai state payload has no states list')
+    for entry in states:
+        if not isinstance(entry, dict) or 'source' not in entry or 'value' not in entry:
+            raise RuntimeError('corun-ai returned an invalid state entry')
+    selected = [
+        entry for entry in states
+        if target_source is None or entry['source'] == target_source
+    ]
+    if target_source is not None and not selected:
+        raise RuntimeError(
+            f'corun-ai returned no state entry for {target_source!r}')
+    for entry in selected:
+        capcom.set_state(**entry)
+
+
 # Poll collectors, keyed by registry source name. Each is a no-argument
 # callable that polls its system and calls capcom.emit_notice()/set_state().
 # Poll sources land one at a time (docs/capcom.md § Initial sources).
 COLLECTORS = {
+    'corun-ai': collect_corun_ai,
     'eve-ahbazon': collect_eve_ahbazon,
     'swf-monitor': collect_swf_monitor,
 }
@@ -178,8 +226,8 @@ def run(force_target=None):
     capcom.save_sources(sources)
 
     purged = capcom.purge_old_notices()
-    logger.info("capcom_dispatcher: %d collector(s) run%s, %d notice(s) purged",
-                ran, f" (forced {force_target})" if force_target else "", purged)
+    logger.debug("capcom_dispatcher: %d collector(s) run%s, %d notice(s) purged",
+                 ran, f" (forced {force_target})" if force_target else "", purged)
 
 
 if __name__ == '__main__':

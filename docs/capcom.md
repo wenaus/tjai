@@ -26,26 +26,41 @@ by source; Capcom is one stream with filtered views over it.
 
 Two panels:
 
-- **Left panel — state and pins.** Current-state tiles at the top: compact
+- **Left panel — notepad, state, and pins.** A fixed **Notepad** section at
+  the top opens a content-only editor in the right panel for the canonical
+  TJAI memory entry whose `entry_id` is `capcom-notepad`. It has no Save
+  button or metadata controls. Content writes immediately to a per-tab local
+  recovery draft, autosaves after a short pause, and forces a server flush
+  when the editor, Capcom tab, or Chrome window loses focus and when the page
+  is hidden or closed. Saves use the ordinary versioned entry endpoint and
+  its inclusive stale-content merge. Database row locking serializes nearly
+  simultaneous tab saves. The first save of each focus/edit session creates
+  a pre-edit version; a compact **history** link opens the conventional entry
+  editor and version history in a new tab. Only save failures are surfaced.
+  Current-state tiles follow: compact
   indicators for sources with a meaningful present state (service health,
   testbed and production activity, the Ahbazon gate camp). Tile values are
   read from a `capcom_state` sysconfig key that sources update alongside
-  their event posts, so state never derives from feed rows. When a timed
-  calendar entry remains today, a synthetic **next meeting** tile is always
-  last and shows its start time, title, and live countdown. It links to the
+  their event posts, so state never derives from feed rows. When a future
+  timed calendar entry exists, a synthetic **meeting** tile is always
+  last and shows its start time, weekday when beyond today, title, and compact
+  live countdown. It links to the
   entry editor in a new tab. Below the tiles,
   a pinned shelf listing entries carrying the `:pin` tag.
   Pinning by tag means any entry can be promoted to or removed from the
   shelf from wherever it is displayed, there is no separate curated document
   to maintain. A named entry is labeled `@name`; an unnamed entry uses its
-  first content line. Clicking a pin opens that TJAI entry directly in edit
-  mode in a new tab.
+  first content line, with Markdown links flattened to their visible labels.
+  A bookmark entry whose entire first line is an HTTP(S) Markdown link opens
+  that destination in a new tab; its dot menu adds **edit** to open the TJAI
+  bookmark entry. Other pins open their TJAI entry directly in edit mode.
   The shelf has a hand-ordered top group over a reverse-time remainder:
   pins whose UUIDs appear in a `capcom_pin_order` sysconfig key render
   first, in key order, and the remaining pins follow in reverse time order.
-  A synthetic `Diary - <current date>` pin is always first and opens the
-  current diary entry directly in edit mode in a new tab; it is independent
-  of entry membership and pin ordering.
+  A synthetic `<weekday> <month> <day> · Diary · Synopsis · Ideation` line is
+  always first. Its date is plain text; the three labels open that Eastern
+  date's diary editor, daily synopsis, and ideation entry in new tabs. It is
+  independent of entry membership and pin ordering.
   State tiles are click-drag ordered through the `capcom_state_order`
   sysconfig key. An enabled poll tile has a compact three-dot menu with one
   action, **update**, which forces only that state source; grouped sources
@@ -170,6 +185,16 @@ Capcom carries as a notice like any other.
   Section failures are source-owned `UNAVAILABLE` tiles; transport or contract
   failures raise a collector warning. The Mattermost feed subscription remains
   future work and is unrelated to these state tiles.
+- **ePIC production report** (poll, state) — the `epicprod-report` tile shows
+  the verdict from the latest daily campaign report and the time since that
+  report. corun-ai owns the canonical assessment Page and returns its verdict,
+  report timestamp, and direct report URL as a neutral Capcom payload;
+  the dispatcher stores it without interpretation.
+- **corun-ai run** (poll, state) — the `corun-ai` tile shows a short description
+  of the latest run not submitted through the REST API, with time since that
+  run and a direct result link when one exists. New Jobs carry explicit
+  submission provenance; corun-ai's API audit log identifies historical REST
+  runs. This tile and `epicprod-report` share one source-owned collection.
 - **TJAI pipeline** (listen, in-process) — completion notices for research
   syntheses, Picks, the daily synopsis, ideation, AI performance
   assessments, and the weekly workweek summary. Each notice deep-links to
@@ -199,6 +224,12 @@ Capcom carries as a notice like any other.
 - **Curated alarms** — alarm-severity notices from systems that do their own
   monitoring, as they add that capability.
 
+## Planned state additions
+
+- **SWF DISpatcher** — one tile showing two rolling 24-hour counts: channel
+  posts, and all queries to the bot including direct messages. SWF must own the
+  counting semantics and return the display-ready state payload.
+
 ## Excluded by design
 
 Candidate sources and features considered and not adopted:
@@ -208,7 +239,7 @@ Candidate sources and features considered and not adopted:
 - **Git and development activity** — already sufficiently visible through
   existing views and workflow.
 - **Calendar and todos** — the full calendar and todo lists remain in their
-  established views. Capcom shows only today's next timed calendar entry as
+  established views. Capcom shows only the next timed calendar entry as
   compact current state.
 - **Weather alerts and KozyKorner presence** — neither needs a place here;
   KozyKorner already has higher visibility on its own.
@@ -229,7 +260,9 @@ Candidate sources and features considered and not adopted:
   renders as plain text.
 - Each row carries a mark-read / mark-as-unread toggle immediately after
   the title, at row font size in a visible color; mark-all-read and
-  unread-only controls sit in the header.
+  unread-only controls sit in the header. Marking a notice unread advances
+  its notice timestamp, moving it to the top of the reverse-time feed while
+  preserving its original `first_seen` time.
 - Read notices grey out, the whole line.
 - `j`/`k` keyboard navigation through the feed.
 - Filters (source, severity, read state) encoded in the URL, following the
@@ -247,6 +280,9 @@ Candidate sources and features considered and not adopted:
 - `tjai_app/static/tjai/sortable.min.js` — vendored SortableJS for pin drag
 - `scripts/capcom_dispatcher.py` — poll dispatcher, run by the
   `capcom-dispatcher` action (periodic, 10 minutes)
+- Routine successful dispatcher cycles are deliberately absent from AppLog;
+  collector failures, missing implementations, and meaningful cleanup remain
+  logged.
 - `scripts/agent_complete.py`, `scripts/assessment_claude.py`,
   `scripts/assessment_gemini.py`, `scripts/workweek_agent.py`, and
   `scripts/system_health.py` — in-process TJAI completion, terminal-failure,

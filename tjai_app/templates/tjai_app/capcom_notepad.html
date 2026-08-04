@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Capcom Notepad</title>
+    <link rel="stylesheet" href="/tjai/static/tjai/vendor/codemirror/5.65.18/codemirror.min.css">
+    <link rel="stylesheet" href="/tjai/static/tjai/vendor/codemirror/5.65.18/theme/material-darker.min.css">
+    <style>
+        * { box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+        body {
+            display: flex;
+            flex-direction: column;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            font: 13px 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+        }
+        .notepad-bar {
+            min-height: 27px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding: 3px 9px;
+            border-bottom: 1px solid #2b2b2b;
+        }
+        #save-error { display: none; margin-right: auto; color: #ef5350; }
+        .history { color: #777; text-decoration: none; font-size: 11px; }
+        .history:hover { color: #bbb; text-decoration: underline; }
+        #editor-shell { flex: 1; min-height: 0; }
+        #editor { display: none; }
+        .CodeMirror { width: 100%; height: 100% !important; font: inherit; }
+        .CodeMirror, .CodeMirror-scroll, .CodeMirror-gutters,
+        .CodeMirror-sizer, .CodeMirror-gutter-filler,
+        .CodeMirror-hscrollbar, .CodeMirror-vscrollbar,
+        .CodeMirror-scrollbar-filler { background: #1a1a1a !important; }
+        .CodeMirror-gutters { border-right: 1px solid #2b2b2b; }
+        .CodeMirror-selected, .CodeMirror-focused .CodeMirror-selected {
+            background: #264f78 !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="notepad-bar">
+        <span id="save-error"></span>
+        <a class="history" href="/tjai/entry/?entry_id=capcom-notepad&amp;edit=1"
+           target="_blank" rel="noopener">history</a>
+    </div>
+    <div id="editor-shell"><textarea id="editor">{{ entry.content }}</textarea></div>
+
+    <script src="/tjai/static/tjai/vendor/codemirror/5.65.18/codemirror.min.js"></script>
+    <script src="/tjai/static/tjai/vendor/codemirror/5.65.18/mode/markdown/markdown.min.js"></script>
+    <script>
+    (function() {
+        const initialContent = "{{ entry.content|escapejs }}";
+        const saveUrl = "{% url 'api_entry_save' entry.id %}";
+        const csrfToken = "{{ csrf_token }}";
+        const entryUuid = "{{ entry.id }}";
+        const draftPrefix = 'tjai-capcom-notepad-draft:' + entryUuid + ':';
+        const instanceId = (window.crypto && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : Date.now().toString(36) + Math.random().toString(36).slice(2);
+        const draftKey = draftPrefix + instanceId;
+        let serverTimestamp = Number("{{ entry.timestamp_modified }}") || 0;
+        let lastServerContent = initialContent;
+        let saveInFlight = null;
+        let savePending = false;
+        let idleTimer = null;
+        let firstSaveForFocus = true;
+        let applyingMerge = false;
+
+        function parseJsonResponse(response) {
+            return response.text().then(function(text) {
+                let data = {};
+                try { data = text ? JSON.parse(text) : {}; }
+                catch (e) { throw new Error('HTTP ' + response.status + ' returned non-JSON'); }
+                if (!response.ok) throw new Error(data.error || ('HTTP ' + response.status));
+                return data;
+            });
+        }
+
+        function unionLines(primary, secondary) {
+            const lines = primary.split('\n');
+            const seen = new Set(lines);
+            secondary.split('\n').forEach(function(line) {
+                if (line.trim() && !seen.has(line)) {
+                    lines.push(line);
+                    seen.add(line);
+                }
+            });
+            return lines.join('\n');
+        }
+
+        function recoverDrafts(content) {
+            let recovered = content;
+            try {
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (!key || !key.startsWith(draftPrefix)) continue;
+                    const draft = JSON.parse(localStorage.getItem(key));
+                    if (!draft || typeof draft.content !== 'string') continue;
+                    if (Number(draft.written_at) <= serverTimestamp + 0.5) continue;
+                    recovered = unionLines(recovered, draft.content);
+                }
+            } catch (e) {}
+            return recovered;
+        }
+
+        const recoveredContent = recoverDrafts(initialContent);
+        const editor = CodeMirror.fromTextArea(document.getElementById('editor'), {
+            mode: 'markdown',
+            theme: 'material-darker',
+            lineWrapping: true,
+            lineNumbers: true,
+            indentUnit: 2,
+            tabSize: 2,
+            indentWithTabs: false,
+            extraKeys: {
+                'Tab': function(cm) {
+                    if (cm.somethingSelected()) cm.indentSelection('add');
+                    else cm.replaceSelection('  ', 'end');
+                },
+                'Shift-Tab': function(cm) { cm.indentSelection('subtract'); },
+                'Ctrl-S': function() { flushSave(); },
+                'Cmd-S': function() { flushSave(); },
+            },
+        });
+        editor.setValue(recoveredContent);
+
+        function writeDraft() {
+            try {
+                localStorage.setItem(draftKey, JSON.stringify({
+                    content: editor.getValue(),
+                    written_at: Date.now() / 1000,
+                    base_timestamp: serverTimestamp,
+                }));
+            } catch (e) {
+                showError('LOCAL RECOVERY FAILED: ' + e.message);
+            }
+        }
+
+        function clearSatisfiedDrafts() {
+            try {
+                const keys = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && key.startsWith(draftPrefix)) keys.push(key);
+                }
+                keys.forEach(function(key) {
+                    const draft = JSON.parse(localStorage.getItem(key));
+                    if (!draft || typeof draft.content !== 'string') return;
+                    const missing = draft.content.split('\n').some(function(line) {
+                        return line.trim() && !lastServerContent.split('\n').includes(line);
+                    });
+                    if (!missing) localStorage.removeItem(key);
+                });
+            } catch (e) {}
+        }
+
+        function showError(message) {
+            const el = document.getElementById('save-error');
+            el.textContent = message;
+            el.style.display = '';
+        }
+
+        function clearError() {
+            const el = document.getElementById('save-error');
+            el.textContent = '';
+            el.style.display = 'none';
+        }
+
+        function applyServerMerge(mergedContent) {
+            const current = editor.getValue();
+            const combined = unionLines(current, mergedContent || '');
+            if (combined === current) return;
+            applyingMerge = true;
+            const end = editor.posFromIndex(current.length);
+            editor.replaceRange(combined.slice(current.length), end, end, '+remote');
+            applyingMerge = false;
+            writeDraft();
+        }
+
+        function scheduleSave(delay) {
+            savePending = true;
+            if (idleTimer) clearTimeout(idleTimer);
+            idleTimer = setTimeout(flushSave, delay == null ? 1200 : delay);
+        }
+
+        function flushSave() {
+            if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+            writeDraft();
+            savePending = true;
+            if (saveInFlight) return saveInFlight;
+
+            const sentContent = editor.getValue();
+            if (sentContent === lastServerContent) {
+                savePending = false;
+                clearSatisfiedDrafts();
+                return Promise.resolve();
+            }
+
+            const wasFirstSave = firstSaveForFocus;
+            const body = {
+                content: sentContent,
+                autosave: true,
+                expected_ts: serverTimestamp,
+            };
+            if (wasFirstSave) body.first_autosave = true;
+            savePending = false;
+            let failed = false;
+            saveInFlight = fetch(saveUrl, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+                body: JSON.stringify(body),
+            }).then(parseJsonResponse).then(function(data) {
+                if (!data.ok) throw new Error(data.error || 'save failed');
+                firstSaveForFocus = false;
+                serverTimestamp = Number(data.timestamp_modified) || serverTimestamp;
+                if (data.merged) applyServerMerge(data.merged_content);
+                lastServerContent = data.merged ? data.merged_content : sentContent;
+                clearSatisfiedDrafts();
+                clearError();
+            }).catch(function(error) {
+                failed = true;
+                savePending = true;
+                if (wasFirstSave) firstSaveForFocus = true;
+                showError('AUTOSAVE FAILED: ' + error.message);
+            }).finally(function() {
+                saveInFlight = null;
+                if (!failed && (savePending || editor.getValue() !== lastServerContent)) {
+                    setTimeout(flushSave, 0);
+                }
+            });
+            return saveInFlight;
+        }
+
+        function finalFlush() {
+            writeDraft();
+            const content = editor.getValue();
+            if (content === lastServerContent) return;
+            const body = {
+                content: content,
+                autosave: true,
+                expected_ts: serverTimestamp,
+            };
+            if (firstSaveForFocus) body.first_autosave = true;
+            try {
+                fetch(saveUrl, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+                    body: JSON.stringify(body),
+                    keepalive: true,
+                });
+            } catch (e) {}
+        }
+
+        editor.on('change', function() {
+            if (applyingMerge) return;
+            writeDraft();
+            scheduleSave();
+        });
+        editor.on('focus', function() { firstSaveForFocus = true; });
+        editor.on('blur', flushSave);
+        window.addEventListener('blur', flushSave);
+        window.addEventListener('online', flushSave);
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'hidden') flushSave();
+        });
+        window.addEventListener('message', function(event) {
+            if (event.origin !== window.location.origin) return;
+            if (event.data && event.data.type === 'tjai-capcom-notepad-flush') flushSave();
+            if (event.data && event.data.type === 'tjai-capcom-notepad-focus') editor.focus();
+        });
+        window.addEventListener('pagehide', finalFlush);
+
+        if (recoveredContent !== initialContent) {
+            writeDraft();
+            scheduleSave(0);
+        } else {
+            clearSatisfiedDrafts();
+        }
+        editor.focus();
+        setInterval(function() {
+            if (editor.getValue() !== lastServerContent) flushSave();
+        }, 10000);
+    })();
+    </script>
+</body>
+</html>

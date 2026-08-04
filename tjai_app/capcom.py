@@ -77,10 +77,13 @@ def get_state():
     return _get_json_config('capcom_state', {})
 
 
-def set_state(source, value, color=None, url=None):
-    """Update one source's tile in the capcom_state sysconfig JSON."""
+def set_state(source, value, color=None, url=None, updated=None):
+    """Update a tile, retaining a source-supplied observation time."""
     states = get_state()
-    entry = {'value': value, 'updated': time.time()}
+    entry = {
+        'value': value,
+        'updated': time.time() if updated is None else updated,
+    }
     if color:
         entry['color'] = color
     if url:

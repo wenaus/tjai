@@ -1185,9 +1185,10 @@ def execute_action(action, target_date=None):
         last_run_str = datetime.fromtimestamp(float(last_run)).strftime('%b %-d %H:%M')
     else:
         last_run_str = 'never'
-    # Watchdog runs every 10 min and reports its own anomalies — keep log quiet
+    # Frequent mechanical monitors report their own anomalies — keep routine
+    # successful dispatches out of the operator log.
     entry_id = data.get('entry_id', '')
-    quiet_actions = ('watchdog', 'system-health')
+    quiet_actions = ('watchdog', 'system-health', 'capcom-dispatcher')
     log_level = logging.DEBUG if entry_id in quiet_actions else logging.INFO
     logger.log(log_level, "Action: %s (last: %s)", action.content[:80], last_run_str)
 
