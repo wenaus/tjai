@@ -11,6 +11,7 @@ touched here.
 """
 import json
 import logging
+import os
 import subprocess
 import sys
 import time
@@ -44,7 +45,11 @@ CORUN_PYTHON = CORUN_DIR / '.venv/bin/python'
 SWF_MONITOR_STATE_URL = (
     'https://localhost:18443/swf-monitor/api/capcom/state/'
 )
+SWF_MONITOR_USER_STATE_URL = (
+    'https://localhost:18443/swf-monitor/api/capcom/user-state/'
+)
 SWF_MONITOR_HEADERS = {'Host': 'pandaserver02.sdcc.bnl.gov'}
+SWF_MONITOR_USERNAME = os.environ.get('CAPCOM_SWF_USERNAME', 'wenauseic')
 
 
 def collect_eve_ahbazon(target_source=None):
@@ -77,14 +82,15 @@ def collect_eve_ahbazon(target_source=None):
     capcom.set_state(**data)
 
 
-def collect_swf_monitor(target_source=None):
-    """Store every tile-exact state payload supplied by swf-monitor."""
+def _fetch_swf_monitor_states(url, params=None):
+    """Fetch and validate one swf-monitor Capcom state response."""
     try:
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', InsecureRequestWarning)
             response = requests.get(
-                SWF_MONITOR_STATE_URL,
+                url,
                 headers=SWF_MONITOR_HEADERS,
+                params=params,
                 timeout=30,
                 verify=False,
             )
@@ -103,6 +109,16 @@ def collect_swf_monitor(target_source=None):
     for entry in states:
         if not isinstance(entry, dict) or 'source' not in entry or 'value' not in entry:
             raise RuntimeError('swf-monitor returned an invalid state entry')
+    return states
+
+
+def collect_swf_monitor(target_source=None):
+    """Store global and configured-user state supplied by swf-monitor."""
+    states = _fetch_swf_monitor_states(SWF_MONITOR_STATE_URL)
+    states.extend(_fetch_swf_monitor_states(
+        SWF_MONITOR_USER_STATE_URL,
+        params={'username': SWF_MONITOR_USERNAME},
+    ))
     selected = [
         entry for entry in states
         if target_source is None or entry['source'] == target_source

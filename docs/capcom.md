@@ -187,11 +187,14 @@ Capcom carries as a notice like any other.
 
 ## Initial sources
 
-- **ePIC/SWF** (poll, state) — one swf-monitor endpoint returns complete
-  Capcom payloads for `swf-system` (the System page verdict) and `swf-panda`
-  (running jobs and 12-hour success percentage). Both registry rows share
-  the `swf-monitor` collector, so the tunnel endpoint is fetched once per
-  cadence and each returned entry is stored verbatim with `set_state(**entry)`.
+- **ePIC/SWF** (poll, state) — the generic swf-monitor endpoint returns
+  complete Capcom payloads for `swf-system` (infrastructure/operations health
+  only) and `swf-panda` (global running jobs and 12-hour success percentage).
+  A second generic endpoint receives the username configured by
+  `CAPCOM_SWF_USERNAME` (default `wenauseic`) and returns `swf-user`, a one-line
+  summary of that user's testbed and PanDA activity/state. The registry rows
+  share the `swf-monitor` collector; each returned entry is stored verbatim
+  with `set_state(**entry)`.
   Section failures are source-owned `UNAVAILABLE` tiles; transport or contract
   failures raise a collector warning. SWF feed events are pushed independently
   when they occur; they are not returned by this state endpoint.
