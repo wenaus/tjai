@@ -515,8 +515,9 @@ def dispatch_ai(action, entry_id=None, target_date=None, data_overrides=None):
 def load_reader_context():
     """Load reader profile and AI guidance from DB, return as inline text.
 
-    Used to build research prompts for models that can't call MCP (gemini,
-    chatgpt, gemma). Claude gets this via the tjai MCP interface directly.
+    Used to build research prompts for models that cannot call tjai MCP
+    directly (Gemini and remote-worker models). Claude and subscription Codex
+    load this context through the tjai MCP interface.
     """
     parts = []
 
@@ -566,12 +567,13 @@ def build_research_prompt(topic, model, reader_context=None):
 
     The per-model entry (research-system-prompt-<model>) holds the full prompt
     body — tailored for that model's runtime, tool surface, and dispatch path.
-    This function appends reader context (profile + guidance), the topic, and
-    the output instructions, and returns the composed text ready to hand to
-    the model.
+    This function appends reader context (profile + guidance) for runtimes that
+    cannot call tjai MCP, then appends the topic and output instructions. Codex
+    receives no duplicated inline reader context because its normal session
+    bootstrap loads complete, current context through MCP.
     """
     if reader_context is None:
-        reader_context = load_reader_context()
+        reader_context = '' if model == 'chatgpt' else load_reader_context()
 
     prompt = _system_prompt_content_for_model(model)
 

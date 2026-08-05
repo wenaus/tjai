@@ -6,11 +6,12 @@ Usage: research_multimodel.py <model> <entry_uuid> [gemini_tier]
   entry_uuid: UUID of the model-specific research entry (already created)
   gemini_tier: "flex" (default) or "standard" (gemini only)
 
-Loads the entry, builds a prompt from research-system-prompt-v2,
-calls the selected model with web search enabled (or MCP tools for DeepSeek),
-writes the result to the entry, and checks whether all dispatched models are
-done to trigger synthesis. The historical "chatgpt" key runs Codex CLI through
-the authenticated ChatGPT subscription; it does not use the OpenAI API.
+Loads the entry, builds the model-specific research prompt, calls the selected
+model, writes the result to the entry, and checks whether all dispatched models
+are done to trigger synthesis. The historical "chatgpt" key runs Codex CLI
+through the authenticated ChatGPT subscription with the normal Codex user
+configuration, required tjai MCP access, live web search, and read-only access
+to the tjrepo checkout; it does not use the OpenAI API.
 """
 import asyncio
 import os
@@ -28,7 +29,6 @@ from tjai_app.db_log_handler import DbLogHandler
 from tjai_app.llm_usage import record_codex_usage
 from tjai_app.action_runner import (
     build_research_prompt,
-    load_reader_context,
     research_model_complete,
 )
 from tjai_app.models import Entry
@@ -220,33 +220,73 @@ def _call_gemini(prompt, initial_tier='flex'):
     )
 
 
+def _codex_research_workdir():
+    """Return the git checkout Codex must use for local research context."""
+    configured = os.environ.get('TJAI_RESEARCH_WORKDIR', '').strip()
+    candidates = []
+    if configured:
+        candidates.append(Path(configured).expanduser())
+    candidates.extend([
+        Path.home() / 'github' / 'tjrepo',
+        Path(__file__).resolve().parents[2],
+    ])
+
+    checked = []
+    for candidate in candidates:
+        candidate = candidate.resolve()
+        if candidate in checked:
+            continue
+        checked.append(candidate)
+        if candidate.is_dir() and (candidate / '.git').exists():
+            return candidate
+
+    checked_text = ', '.join(str(path) for path in checked)
+    raise RuntimeError(
+        'Codex research requires the tjrepo git checkout; set '
+        f'TJAI_RESEARCH_WORKDIR to its path. Checked: {checked_text}'
+    )
+
+
+def _build_subscription_codex_command(codex_path, output_file):
+    """Build the full-capability, read-only Codex research command."""
+    from tj.commands.ai_agent import _codex_mcp_config_args, _toml_literal
+
+    mcp_args, token_env_name = _codex_mcp_config_args()
+    cmd = [
+        codex_path,
+        '--ask-for-approval', 'never',
+        'exec',
+        '--ephemeral',
+        '--sandbox', 'read-only',
+        '-m', CODEX_RESEARCH_MODEL,
+        '-c', 'web_search="live"',
+        '-c', (
+            'model_reasoning_effort='
+            f'{_toml_literal(CODEX_RESEARCH_REASONING_EFFORT)}'
+        ),
+        *mcp_args,
+        '-o', str(output_file),
+        '-',
+    ]
+    return cmd, token_env_name
+
+
 def _call_subscription_codex(prompt, entry_uuid=None):
     """Run the Codex research peer through the authenticated subscription."""
-    from tj.commands.ai_agent import _find_codex, _toml_literal
+    from tj.commands.ai_agent import _find_codex
+
+    research_workdir = _codex_research_workdir()
 
     logger.info(
-        "Calling subscription Codex (%s, reasoning=%s)...",
+        "Calling subscription Codex (%s, reasoning=%s, workdir=%s)...",
         CODEX_RESEARCH_MODEL,
         CODEX_RESEARCH_REASONING_EFFORT,
+        research_workdir,
     )
-    with tempfile.TemporaryDirectory(prefix='tjai-research-codex-') as work_dir:
-        output_file = Path(work_dir) / 'codex-output.md'
-        cmd = [
-            _find_codex(), 'exec',
-            '--ephemeral',
-            '--ignore-user-config',
-            '--sandbox', 'read-only',
-            '-c', 'approval_policy="never"',
-            '--skip-git-repo-check',
-            '-m', CODEX_RESEARCH_MODEL,
-            '-c', 'web_search="live"',
-            '-c', (
-                'model_reasoning_effort='
-                f'{_toml_literal(CODEX_RESEARCH_REASONING_EFFORT)}'
-            ),
-            '-o', str(output_file),
-            '-',
-        ]
+    with tempfile.TemporaryDirectory(prefix='tjai-research-codex-') as output_dir:
+        output_file = Path(output_dir) / 'codex-output.md'
+        cmd, token_env_name = _build_subscription_codex_command(
+            _find_codex(), output_file)
         env = os.environ.copy()
         env['HOME'] = os.environ.get('HOME', '/home/admin')
         base_path = env.get('PATH', '/usr/local/bin:/usr/bin:/bin')
@@ -257,6 +297,13 @@ def _call_subscription_codex(prompt, entry_uuid=None):
         ])
         env.pop('OPENAI_API_KEY', None)
         env.pop('CODEX_API_KEY', None)
+        token = _get_tjai_mcp_token()
+        if not token:
+            raise RuntimeError(
+                'Codex research requires TJAI_MCP_TOKEN or SysConfig '
+                'mcp_bearer_token')
+        env[token_env_name] = token
+        env.setdefault('TJAI_MCP_TOKEN', token)
         started = time.monotonic()
         proc = None
         captured_output = ''
@@ -268,7 +315,7 @@ def _call_subscription_codex(prompt, entry_uuid=None):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 timeout=API_TIMEOUT,
-                cwd=work_dir,
+                cwd=research_workdir,
                 env=env,
             )
             captured_output = '\n'.join(
@@ -643,9 +690,10 @@ def main():
         completion_logger.addHandler(_cdb)
 
     try:
-        # Build the prompt
-        reader_context = load_reader_context()
-        prompt = build_research_prompt(topic, model, reader_context)
+        # Build the prompt. Codex loads profile, guidance, memory, skills, and
+        # live tjai context through its normal configuration and bootstrap;
+        # API and remote models receive the bounded inline reader context.
+        prompt = build_research_prompt(topic, model)
 
         # Call the selected research runtime.
         if model == 'gemini':
