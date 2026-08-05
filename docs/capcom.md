@@ -62,10 +62,12 @@ Two panels:
   date's diary editor, daily synopsis, and ideation entry in new tabs. It is
   independent of entry membership and pin ordering.
   State tiles are click-drag ordered through the `capcom_state_order`
-  sysconfig key. An enabled poll tile has a compact three-dot menu with one
-  action, **update**, which forces only that state source; grouped sources
-  still share their transport fetch, but only the selected returned state is
-  applied. Linked tiles continue to open their source page in a new tab.
+  sysconfig key. Every state tile gets the same compact three-dot menu with
+  one action, **update**. For an enabled poll source it forces only that state;
+  grouped sources still share their transport fetch, but only the selected
+  returned state is applied. For listen, missing, disabled, or unregistered
+  state sources it is a no-op and says why. Linked tiles continue to open
+  their source page in a new tab.
   Each real pin has a compact vertical-dot menu. Regular pins offer **pin to
   top** and **unpin**; top-group pins offer **unpin from top** and **unpin**.
   The **unpin** action removes the `:pin` tag and the entry from the shelf. Drag reordering
@@ -174,6 +176,15 @@ the dispatcher's collector table all reference it. Multiple state rows
 returned by one endpoint may share a `collector` key; the dispatcher then
 fetches that endpoint once and advances every grouped row's last-run time.
 
+Every key stored in `capcom_state` must have exactly one `kind=state` registry
+row. Poll rows must resolve through an implemented collector; listen and
+missing rows deliberately make **update** a no-op. Deployment runs
+`validate_capcom_sources` after migrations and stops before service reload if
+a tile is missing its row, a state row is duplicated, its mode is invalid, or
+its poll collector is not implemented. Adding a state therefore includes its
+producer payload, registry row, and source documentation as one change; the
+shared tile template supplies ordering and menu behavior automatically.
+
 The `missing` state is deliberate: it records where a followed system needs
 a status endpoint or callback that does not yet exist, so the gap is tracked
 as a request to make of that system rather than worked around.
@@ -189,12 +200,13 @@ Capcom carries as a notice like any other.
 
 - **ePIC/SWF** (poll, state) — the generic swf-monitor endpoint returns
   complete Capcom payloads for `swf-system` (infrastructure/operations health
-  only) and `swf-panda` (global running jobs and 12-hour success percentage).
+  only), `swf-panda` (global running jobs and 12-hour success percentage),
+  `swf-alarms` (active alarm count), and `swf-dispatcher` (Mattermost activity).
   A second generic endpoint receives the username configured by
   `CAPCOM_SWF_USERNAME` (default `wenauseic`) and returns `swf-user`, a one-line
-  summary of that user's testbed and PanDA activity/state. The registry rows
-  share the `swf-monitor` collector; each returned entry is stored verbatim
-  with `set_state(**entry)`.
+  summary of that user's testbed and PanDA activity/state. All five registry
+  rows share the `swf-monitor` collector; each returned entry is stored
+  verbatim with `set_state(**entry)`.
   Section failures are source-owned `UNAVAILABLE` tiles; transport or contract
   failures raise a collector warning. SWF feed events are pushed independently
   when they occur; they are not returned by this state endpoint.
@@ -298,6 +310,8 @@ Candidate sources and features considered and not adopted:
 - `tjai_app/static/tjai/sortable.min.js` — vendored SortableJS for pin drag
 - `scripts/capcom_dispatcher.py` — poll dispatcher, run by the
   `capcom-dispatcher` action (periodic, 10 minutes)
+- `tjai_app/management/commands/validate_capcom_sources.py` — deploy-time
+  enforcement of the state-tile/source/collector contract
 - Routine successful dispatcher cycles are deliberately absent from AppLog;
   collector failures, missing implementations, and meaningful cleanup remain
   logged.

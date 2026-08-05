@@ -368,22 +368,17 @@
         });
         const keys = savedKnown.concat(allKeys.filter(k => !savedSet.has(k)).sort());
         stateOrder = keys;
-        const updateable = new Set(((lastData && lastData.sources) || [])
-            .filter(s => s.kind === 'state' && s.mode === 'poll' && s.enabled)
-            .map(s => s.source));
         const stateHtml = keys.map(k => {
             const s = st[k];
             const color = ['green', 'yellow', 'red'].includes(s.color) ? s.color : '';
             const tag = s.url ? 'a' : 'div';
             const href = s.url ? ' href="' + escapeHtml(s.url) +
                 '" target="_blank" rel="noopener"' : '';
-            const menu = updateable.has(k)
-                ? '<button type="button" class="state-menu-btn" data-state-menu="' +
-                  escapeHtml(k) + '" aria-label="Actions for ' + escapeHtml(k) +
-                  '">&#8942;</button><div class="state-popover" hidden>' +
-                  '<button type="button" data-state-update="' + escapeHtml(k) +
-                  '">update</button></div>'
-                : '';
+            const menu = '<button type="button" class="state-menu-btn" data-state-menu="' +
+                escapeHtml(k) + '" aria-label="Actions for ' + escapeHtml(k) +
+                '">&#8942;</button><div class="state-popover" hidden>' +
+                '<button type="button" data-state-update="' + escapeHtml(k) +
+                '">update</button></div>';
             return '<div class="tile ' + color + '" data-state-key="' + escapeHtml(k) +
                    '"><' + tag + ' class="tile-main"' + href +
                    '><span class="t-source">' + escapeHtml(k) +
@@ -631,10 +626,13 @@
             const source = stateUpdate.dataset.stateUpdate;
             closeStateMenus();
             try {
-                await fetchJson('/tjai/api/capcom/run', {
+                const d = await fetchJson('/tjai/api/capcom/run', {
                     method: 'POST', body: JSON.stringify({source: source}),
                 });
-                flashNotice('Update triggered: ' + source, '#9ccc65');
+                const message = d.warning
+                    ? 'Triggered; ' + d.warning
+                    : (d.message || ('Update triggered: ' + source));
+                flashNotice(message, (d.noop || d.warning) ? '#ffd54f' : '#9ccc65');
             } catch (e) { flashNotice('Update failed: ' + e.message, '#ef5350'); }
             return;
         }

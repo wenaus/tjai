@@ -9008,18 +9008,26 @@ def api_capcom_run(request):
     source = (payload.get('source') or '').strip()
     if source:
         from . import capcom as capcom_lib
-        registered = any(
-            row.get('source') == source
-            and row.get('kind') == 'state'
-            and row.get('mode') == 'poll'
-            and row.get('enabled')
-            for row in capcom_lib.get_sources()
-        )
+        registered = next((
+            row for row in capcom_lib.get_sources()
+            if row.get('source') == source and row.get('kind') == 'state'
+        ), None)
         if not registered:
-            return JsonResponse(
-                {'error': f'No enabled poll state source named {source!r}'},
-                status=400,
-            )
+            return JsonResponse({
+                'ok': True, 'noop': True, 'source': source,
+                'message': f'No update: {source} has no registered state source',
+            })
+        mode = registered.get('mode', 'missing')
+        if mode != 'poll':
+            return JsonResponse({
+                'ok': True, 'noop': True, 'source': source,
+                'message': f'No update: {source} is a {mode} source',
+            })
+        if not registered.get('enabled'):
+            return JsonResponse({
+                'ok': True, 'noop': True, 'source': source,
+                'message': f'No update: {source} is disabled',
+            })
 
     SysConfig.objects.update_or_create(
         key='capcom_force_run',
@@ -9030,4 +9038,8 @@ def api_capcom_run(request):
     if not wake_ok:
         return JsonResponse({'ok': True, 'warning': wake_msg})
     logger.info("api_capcom_run: triggered %s, action agent woken", source or 'all')
-    return JsonResponse({'ok': True, 'source': source or 'all'})
+    return JsonResponse({
+        'ok': True,
+        'source': source or 'all',
+        'message': f'Update triggered: {source}' if source else 'Update triggered',
+    })

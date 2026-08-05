@@ -47,6 +47,11 @@ pushd "$TARGET_DIR" >/dev/null
 "$VENV/bin/python" manage.py migrate --noinput
 echo "[${SECONDS}s] migrate done"
 
+# Every rendered CAPCOM state must have one complete source row. This catches
+# incomplete additions before any service is reloaded onto the new code.
+"$VENV/bin/python" manage.py validate_capcom_sources
+echo "[${SECONDS}s] capcom sources validated"
+
 # collect static only if static files changed
 STATIC_HASH=$(find "$TARGET_DIR/tjai_app/static" -type f -exec md5sum {} \; 2>/dev/null | sort | md5sum | cut -d' ' -f1)
 STATIC_HASH_FILE="$TARGET_DIR/.last_static_hash"
