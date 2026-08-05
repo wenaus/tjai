@@ -123,19 +123,20 @@ it is not.
 
 ## Collection
 
-The kind of information determines how it is collected. Discrete events are
-pushed to the ingest endpoint by the producing system at the moment they
-occur; cron completion, report creation, transition, and failure notices must
-not be rediscovered by polling. Continuously sampled state may be polled when
-that is the natural interface. One system may therefore expose polled state
-tiles while separately pushing feed notices. A state collector is not a
-template for feed delivery, and feed notices must not be added to a state
-endpoint for Capcom to discover later.
-
-Systems maintained within this ecosystem — the tjai pipeline, corun-ai,
-primus, pax-eden, and SWF — push their discrete events. Polling is reserved
-for current state or for systems that cannot be instrumented; those collectors
-are standalone scripts reading purpose-built endpoints.
+The kind of information determines how it is collected, inside a credential
+boundary: no personal-system credential is ever held by an external system.
+Discrete events from systems inside that boundary — the tjai pipeline,
+corun-ai, primus, pax-eden — are pushed to the ingest endpoint at the moment
+they occur; cron completion, report creation, transition, and failure notices
+must not be rediscovered by polling. An external system such as SWF cannot
+push, since pushing would place a tjai credential in that system. It buffers
+its discrete events in a notices endpoint on its own side, and the dispatcher
+drains that buffer with a persistent cursor on its poll tick; event latency
+is bounded by the poll cadence. Continuously sampled state may be polled when
+that is the natural interface. A state collector is not a template for feed
+delivery, and feed notices must not be added to a state endpoint for Capcom
+to discover later; a drained notices buffer is a dedicated event feed,
+distinct from state.
 
 All notices pass through one implementation: an `emit_notice()` helper
 holds the threading and dedup logic. The bearer-authenticated
@@ -208,13 +209,19 @@ Capcom carries as a notice like any other.
   rows share the `swf-monitor` collector; each returned entry is stored
   verbatim with `set_state(**entry)`.
   Section failures are source-owned `UNAVAILABLE` tiles; transport or contract
-  failures raise a collector warning. SWF feed events are pushed independently
-  when they occur; they are not returned by this state endpoint.
-- **ePIC campaign delivery** (listen, feed) — the nightly SWF delivery rebuild
-  POSTs one notice when the recorded delivery day advances, or a warning when
+  failures raise a collector warning. SWF feed events are not returned by the
+  state endpoints: the same collector's periodic pass drains them from the
+  SWF notices buffer (`/api/capcom/notices/`), keeping its cursor — the last
+  consumed `created_at` — in the `capcom_swf_notices_cursor` sysconfig key.
+- **ePIC campaign delivery** (poll, feed) — the nightly SWF delivery rebuild
+  buffers one notice when the recorded delivery day advances, or a warning when
   that rebuild fails. The producer supplies the title, direct URL, severity,
-  and stable day-specific dedup key at job completion. It does not wait for the
-  ten-minute state collector.
+  and stable day-specific dedup key at job completion; the swf-monitor
+  collector's drain delivers it on the next poll.
+- **ePIC task operations** (poll, feed) — PanDA task pause and resume requests
+  and their verified outcomes, single and bulk, buffered by the production
+  operations agent under source `swf-panda-operations` and delivered by the
+  same drain.
 - **ePIC production report** (poll, state) — the `epicprod-report` tile shows
   the verdict from the latest daily campaign report and the time since that
   report. corun-ai owns the canonical assessment Page and returns its verdict,
