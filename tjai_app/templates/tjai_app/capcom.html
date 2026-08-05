@@ -50,7 +50,7 @@
                 margin-bottom: 4px; background: #222;
                 border-left: 3px solid #444; cursor: grab; }
         .tile:hover { background: #292929; }
-        .tile.sortable-ghost { opacity: 0.4; }
+        .tile.sortable-ghost { opacity: 0.1; }
         .tile-main { display: flex; flex: 1; justify-content: space-between;
                      align-items: baseline; min-width: 0; padding: 5px 3px 5px 8px;
                      color: inherit; text-decoration: none; }
@@ -804,6 +804,7 @@
                     .map(el => el.dataset.stateKey)
             ));
             if (lastData) lastData.state_order = stateOrder;
+            requestAnimationFrame(renderState);
             saveStateOrder();
         },
     });
