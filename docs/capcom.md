@@ -201,7 +201,7 @@ Capcom carries as a notice like any other.
 - **ePIC/SWF** (poll, state) — the generic swf-monitor endpoint returns
   complete Capcom payloads for `swf-system` (infrastructure/operations health
   only), `swf-panda` (global running jobs and 12-hour success percentage),
-  `swf-alarms` (active alarm count), and `swf-dispatcher` (Mattermost activity).
+  `swf-alarms` (active alarm count), and `swf-bot` (Mattermost bot activity).
   A second generic endpoint receives the username configured by
   `CAPCOM_SWF_USERNAME` (default `wenauseic`) and returns `swf-user`, a one-line
   summary of that user's testbed and PanDA activity/state. All five registry
