@@ -16,7 +16,7 @@ from .models import Notice, SysConfig
 logger = logging.getLogger(__name__)
 
 SEVERITIES = ('info', 'warning', 'alarm')
-DEFAULT_RETENTION_DAYS = 30
+DEFAULT_RETENTION_DAYS = -1
 TJAI_PIPELINE_SOURCE = 'tjai-pipeline'
 TJAI_SYSTEM_SOURCE = 'tjai-system'
 
@@ -166,13 +166,15 @@ def emit_tjai_notice(title, url='', dedup_key='', detail='', severity='info',
 
 
 def purge_old_notices():
-    """Delete archived/read notices past the retention window. Returns count."""
+    """Delete notices past a finite retention window; -1 keeps indefinitely."""
     row = SysConfig.objects.filter(key='capcom_retention_days').first()
     try:
         days = int(row.value) if row and row.value else DEFAULT_RETENTION_DAYS
     except ValueError:
         logger.error("capcom: capcom_retention_days is not an integer: %r", row.value)
         days = DEFAULT_RETENTION_DAYS
+    if days < 0:
+        return 0
     cutoff = timezone.now() - timedelta(days=days)
     deleted, _ = Notice.objects.filter(timestamp__lt=cutoff).delete()
     if deleted:

@@ -111,8 +111,9 @@ Threading is applied at ingest: a notice whose `dedup_key` matches an
 unarchived row updates that row — the timestamp and count advance and
 `was_read` clears — rather than inserting a new one. A read notice remains
 in the feed greyed out; `archived` is an internal threading boundary with
-no interface surface. Old notices are purged on a retention schedule, as
-entry versions are.
+no interface surface. Notices are retained indefinitely by default. The
+`capcom_retention_days` setting permits an explicitly configured finite
+retention period; `-1` means indefinite retention.
 
 The feed is deterministic — no ranking or model-based selection. Curation
 happens at the source level: a source is either admitted to the registry or
