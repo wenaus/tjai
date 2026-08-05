@@ -79,6 +79,8 @@
         .tile.meeting-tile .t-ago { color: #aaa; }
         .tile.meeting-tile .meeting-time { color: inherit; }
         .tile[data-state-key="corun-ai"] .t-value { font-size: 11px; }
+        .tile[data-state-key="corun-ai"] .t-ago.recent { color: #fff; }
+        .tile[data-state-key="corun-ai"] .t-ago.fresh { color: #9ccc65; }
 
         /* Pins */
         .pin { position: relative; display: flex; align-items: baseline; gap: 6px; padding: 4px 4px;
@@ -325,6 +327,14 @@
         return Math.floor(s / 86400) + 'd';
     }
 
+    function corunAgeClass(source, epoch) {
+        if (source !== 'corun-ai' || !epoch) return '';
+        const age = Math.max(0, Date.now() / 1000 - epoch);
+        if (age < 6 * 3600) return ' fresh';
+        if (age < 24 * 3600) return ' recent';
+        return '';
+    }
+
     function meetingCountdown(epoch) {
         const seconds = Math.max(0, Math.floor(epoch - Date.now() / 1000));
         if (seconds >= 86400) {
@@ -379,7 +389,8 @@
                    '><span class="t-source">' + escapeHtml(k) +
                    '</span><span class="t-reading"><span class="t-value">' +
                    escapeHtml(String(s.value)) +
-                   '</span><span class="t-ago">' + stateAgo(s.updated) +
+                   '</span><span class="t-ago' + corunAgeClass(k, s.updated) + '">' +
+                   stateAgo(s.updated) +
                    '</span></span></' + tag + '>' + menu + '</div>';
         }).join('');
         const meeting = lastData && lastData.next_meeting;
