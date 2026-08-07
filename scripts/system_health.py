@@ -668,7 +668,11 @@ def collect_tjai():
 
 
 def assess_health(system, postgres, tjai=None, backups=None, web_apps=None, **_kwargs):
-    """Determine health status from metrics."""
+    """Determine health status from metrics.
+
+    Returns the status and the issues as (level, message) pairs; the level is
+    what lets a caller name the causes of the status it just reached.
+    """
     issues = []
     cpu_count = system.get('cpu_count', 1)
     load = system.get('load_5m', 0)  # 5m avg — less noisy than 1m
@@ -756,7 +760,12 @@ def assess_health(system, postgres, tjai=None, backups=None, web_apps=None, **_k
     else:
         status = 'green'
 
-    return status, [msg for _, msg in issues]
+    return status, issues
+
+
+def transition_reason(status, issues):
+    """The causes that put the system in `status`, for a transition notice title."""
+    return '; '.join(msg for level, msg in issues if level == status)
 
 
 def main():
@@ -769,11 +778,12 @@ def main():
     web_apps = collect_web_apps()
 
     status, issues = assess_health(system, postgres, tjai, backups, web_apps=web_apps)
+    issue_msgs = [msg for _, msg in issues]
 
     health_data = {
         'timestamp': time.time(),
         'status': status,
-        'issues': issues,
+        'issues': issue_msgs,
         'recheck': False,
         'system': system,
         'postgres': postgres,
@@ -798,20 +808,25 @@ def main():
     )
 
     if previous_status in ('green', 'yellow', 'red') and previous_status != status:
+        title = f'System state {previous_status} → {status}'
+        reason = transition_reason(status, issues)
+        if reason:
+            title = f'{title} — {reason}'
         try:
             from tjai_app import capcom
             capcom.emit_tjai_notice(
                 source=capcom.TJAI_SYSTEM_SOURCE,
-                title=f'System state {previous_status} → {status}',
+                title=title,
                 url='/tjai/system/',
                 severity={'green': 'info', 'yellow': 'warning', 'red': 'alarm'}[status],
-                detail=('\n'.join(issues) if issues else 'All monitored systems normal.'),
+                detail=('\n'.join(issue_msgs) if issue_msgs
+                        else 'All monitored systems normal.'),
             )
         except Exception as e:
             logger.error("System transition Capcom notice failed: %s", e)
 
-    if issues:
-        logger.info("Health: %s (%s)", status.upper(), '; '.join(issues))
+    if issue_msgs:
+        logger.info("Health: %s (%s)", status.upper(), '; '.join(issue_msgs))
     else:
         logger.debug("Health: %s", status.upper())
 

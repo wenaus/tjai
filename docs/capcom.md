@@ -239,7 +239,9 @@ Capcom carries as a notice like any other.
   retries and individual research-model completions do not emit notices.
 - **TJAI system** (listen, in-process) — a notice when aggregate system
   health changes between green, yellow, and red. Routine health collection
-  does not emit. The transition notice carries the current causes and links
+  does not emit. The notice title names the causes at the new state's own
+  level, so the reason for a transition reads directly from the feed line;
+  the complete issue list, all levels, is the notice body. The notice links
   to the System page.
 - **corun-ai** (listen) — a notice when an interactive run is submitted,
   emitted from the submit path of the registration mechanism; runs
