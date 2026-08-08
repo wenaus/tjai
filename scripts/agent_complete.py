@@ -819,7 +819,8 @@ def main():
             noun = 'topic' if topic_count == 1 else 'topics'
             _emit_capcom(
                 title=f'Ideation ready — {topic_count} {noun}',
-                url=(f'/tjai/entry/{entry_id}/' if log_entry else '/tjai/research/'),
+                url=(f'/tjai/entry/?entry_id={entry_id}' if log_entry
+                     else '/tjai/research/'),
                 dedup_key=f'tjai-ideation-{yyyymmdd}',
             )
         except Exception as e:
@@ -926,7 +927,9 @@ def main():
         date_str = _local_date().isoformat()
         _emit_capcom(
             title=f'Daily synopsis ready — {date_str}',
-            url=f'/tjai/entry/daily-{date_str}/',
+            # The synopsis page, not the entry viewer: section markup such as
+            # the entry pills is styled there and nowhere else.
+            url=f'/tjai/synopsis/?entry_id=daily-{date_str}',
             dedup_key=f'tjai-daily-synopsis-{date_str}',
         )
 
