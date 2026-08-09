@@ -106,6 +106,13 @@
         .entry {
             margin: 4px 0 4px 16px;
             line-height: 1.4;
+        }
+        /* Skipping off-screen layout is worth ~10ms on the thousand-row entries
+           list. It is not applied to the calendar: calendar rows have no fixed
+           height, so the placeholder size stands in for the real one whenever
+           the list is rebuilt, and the scroll position lands against a layout
+           that changes on the next frame. */
+        #entries-list .entry {
             content-visibility: auto;
             contain-intrinsic-block-size: auto 44px;
         }
@@ -382,14 +389,61 @@
         }
 
         function renderCalendarState() {
-            if (!calendarMeta) return;
-            renderCalendar({...calendarMeta, entries: calendarEntries});
+            if (!calendarMeta) return false;
+            return renderCalendar({...calendarMeta, entries: calendarEntries});
         }
 
-        async function fetchCalendar({centerToday = false} = {}) {
+        // Replacing the list resets scrollTop, and the resulting scroll event
+        // is indistinguishable from the user reaching the top — which trips
+        // the older-page loader, prepends 30 days, and moves the view earlier
+        // on every refresh. Programmatic scrolling is bracketed so the
+        // listener can tell the two apart.
+        let calendarScrollSuppressed = 0;
+        function suppressCalendarScroll(fn) {
+            calendarScrollSuppressed++;
+            try {
+                fn();
+            } finally {
+                // Scroll events are dispatched in the next rendering update,
+                // ahead of animation-frame callbacks, so releasing after a
+                // frame releases after the event has been delivered.
+                requestAnimationFrame(() => requestAnimationFrame(() => {
+                    calendarScrollSuppressed = Math.max(0, calendarScrollSuppressed - 1);
+                }));
+            }
+        }
+
+        // Position is restored against a day header rather than a pixel
+        // offset: heights above the viewport change as events come and go, so
+        // the same scrollTop lands on a different date.
+        function captureCalendarAnchor() {
+            const el = document.getElementById('calendar-content');
+            if (!el) return null;
+            const top = el.getBoundingClientRect().top;
+            let found = null;
+            el.querySelectorAll('.day-header[data-day]').forEach(function(h) {
+                if (h.getBoundingClientRect().top - top <= 1) found = h;
+            });
+            if (!found) return null;
+            return {day: found.dataset.day,
+                    offset: found.getBoundingClientRect().top - top};
+        }
+
+        function restoreCalendarAnchor(anchor) {
+            const el = document.getElementById('calendar-content');
+            if (!el || !anchor) return false;
+            const h = el.querySelector(`.day-header[data-day="${anchor.day}"]`);
+            if (!h) return false;
+            const now = h.getBoundingClientRect().top - el.getBoundingClientRect().top;
+            el.scrollTop += now - anchor.offset;
+            return true;
+        }
+
+        async function fetchCalendar() {
             try {
                 const calContent = document.getElementById('calendar-content');
-                const preserveScroll = !centerToday && window._calendarInitialized && calContent
+                const anchor = window._calendarInitialized ? captureCalendarAnchor() : null;
+                const preserveScroll = window._calendarInitialized && calContent
                     ? calContent.scrollTop : null;
                 const params = [];
                 if (calendarStartTs !== null && calendarEndTs !== null) {
@@ -398,14 +452,17 @@
                 }
                 const qs = params.length ? `?${params.join('&')}` : '';
                 const data = await fetchJson(`/tjai/api/dashboard/calendar${qs}`);
-                updateCalendarState(data, 'replace');
-                renderCalendarState();
-                if (centerToday) {
-                    window.scrollCalendarToToday();
-                } else if (preserveScroll !== null) {
-                    document.getElementById('calendar-content').scrollTop = preserveScroll;
-                }
+                suppressCalendarScroll(function() {
+                    updateCalendarState(data, 'replace');
+                    // Scroll is only restored when the list was actually
+                    // rebuilt; an unchanged calendar is left alone.
+                    if (renderCalendarState() && !restoreCalendarAnchor(anchor)
+                        && preserveScroll !== null) {
+                        calContent.scrollTop = preserveScroll;
+                    }
+                });
             } catch (e) {
+                calendarHtmlKey = null;
                 document.getElementById('calendar-content').innerHTML = 'Error loading calendar';
             }
         }
@@ -418,11 +475,13 @@
             const oldTop = calContent ? calContent.scrollTop : 0;
             try {
                 const data = await fetchJson(`/tjai/api/dashboard/calendar?before=${encodeURIComponent(calendarStartTs)}`);
-                updateCalendarState(data, 'merge', 'older');
-                renderCalendarState();
-                if (calContent) {
-                    calContent.scrollTop = calContent.scrollHeight - oldHeight + oldTop;
-                }
+                suppressCalendarScroll(function() {
+                    updateCalendarState(data, 'merge', 'older');
+                    renderCalendarState();
+                    if (calContent) {
+                        calContent.scrollTop = calContent.scrollHeight - oldHeight + oldTop;
+                    }
+                });
             } catch (e) {
                 console.error('loadOlderCalendar error:', e);
             } finally {
@@ -437,11 +496,13 @@
             const oldTop = calContent ? calContent.scrollTop : 0;
             try {
                 const data = await fetchJson(`/tjai/api/dashboard/calendar?after=${encodeURIComponent(calendarEndTs)}`);
-                updateCalendarState(data, 'merge', 'newer');
-                renderCalendarState();
-                if (calContent) {
-                    calContent.scrollTop = oldTop;
-                }
+                suppressCalendarScroll(function() {
+                    updateCalendarState(data, 'merge', 'newer');
+                    renderCalendarState();
+                    if (calContent) {
+                        calContent.scrollTop = oldTop;
+                    }
+                });
             } catch (e) {
                 console.error('loadNewerCalendar error:', e);
             } finally {
@@ -560,8 +621,14 @@
         if (namedSortAlphaBtn) namedSortAlphaBtn.addEventListener('click', () => setNamedSort('alpha'));
         if (namedSortModBtn) namedSortModBtn.addEventListener('click', () => setNamedSort('mod'));
 
+        // Marks where the live countdown goes, so the surrounding markup can be
+        // compared between refreshes without the ticking text defeating it.
+        const COUNTDOWN_SLOT = '<span id="cal-countdown"></span>';
+        let calendarHtmlKey = null;
+
         function renderCalendar(data) {
             let html = '';
+            let countdownContent = '';
             const now = data.server_time || (Date.now() / 1000);
             const serverTodayDate = data.today_date;
             const includesToday = data.today_ts >= data.start_ts && data.today_ts < data.end_ts;
@@ -647,7 +714,7 @@
                     const dayClass = isToday ? 'day-header day-today' : 'day-header';
                     const todayLabel = isToday ? ' <span class="now-marker">Today</span>' : '';
                     const todayId = isToday ? ' id="today-marker"' : '';
-                    html += `<div${todayId} class="${dayClass}">${entry.date_display}${todayLabel}</div>`;
+                    html += `<div${todayId} class="${dayClass}" data-day="${entry.date_key}">${entry.date_display}${todayLabel}</div>`;
                 }
 
                 // Skip rendering placeholder entries (they only trigger the day header)
@@ -691,23 +758,28 @@
 
                 // Countdown for next upcoming event (only if it's today). Counts
                 // down to the start, then negative for up to LATE_GRACE_SEC after.
+                // The text is the one part of the calendar that changes on its
+                // own between refreshes, so it is emitted into a container of
+                // its own and kept out of the comparison key below; that lets an
+                // otherwise unchanged calendar be left alone entirely.
                 let countdownStr = '';
                 if (entry.event_date === nextUpcomingTs && isToday && !isDailyEntry) {
                     const diffSec = entry.event_date - now;
                     if (diffSec >= 3600) {
                         const hours = Math.floor(diffSec / 3600);
                         const minutes = Math.floor((diffSec % 3600) / 60);
-                        countdownStr = `<span style="color:#e57373;font-weight:bold">in ${hours}h ${minutes}m</span> `;
+                        countdownContent = `<span style="color:#e57373;font-weight:bold">in ${hours}h ${minutes}m</span> `;
                     } else if (diffSec >= 60) {
                         const minutes = Math.floor(diffSec / 60);
-                        countdownStr = `<span style="color:#e57373;font-weight:bold">in ${minutes}m</span> `;
+                        countdownContent = `<span style="color:#e57373;font-weight:bold">in ${minutes}m</span> `;
                     } else if (diffSec >= 0) {
-                        countdownStr = `<span style="color:#e57373;font-weight:bold">in &lt;1m</span> `;
+                        countdownContent = `<span style="color:#e57373;font-weight:bold">in &lt;1m</span> `;
                     } else {
                         // Started — count negative (−1m … −15m), brighter red to pop.
                         const lateMin = Math.ceil(-diffSec / 60);
-                        countdownStr = `<span style="color:#ff5252;font-weight:bold">−${lateMin}m</span> `;
+                        countdownContent = `<span style="color:#ff5252;font-weight:bold">−${lateMin}m</span> `;
                     }
+                    countdownStr = COUNTDOWN_SLOT;
                 }
 
                 // For clock entries: show title in color, truncate description on new line
@@ -735,7 +807,24 @@
                 html += `<div class="entry calendar-entry" data-copy-line="${dashAttr(copyLine)}"><a class="calendar-detail-link" href="${dashAttr(calEntryUrl)}">${timeStr}</a>${countdownStr}${contentHtml}</div>`;
             }
 
-            document.getElementById('calendar-content').innerHTML = html || 'No upcoming events';
+            // A refresh whose markup is identical to what is already on screen
+            // must not touch the DOM. Replacing the list resets scrollTop and
+            // relays out every row, which is what moved the view; the calendar
+            // changes only when an event does, so almost every refresh stops
+            // here and updates nothing but the countdown text.
+            const calContent = document.getElementById('calendar-content');
+            if (calendarHtmlKey === html) {
+                const slot = document.getElementById('cal-countdown');
+                if (slot && slot.innerHTML !== countdownContent) {
+                    slot.innerHTML = countdownContent;
+                }
+                return false;
+            }
+            calendarHtmlKey = html;
+            calContent.innerHTML =
+                (countdownContent ? html.replace(COUNTDOWN_SLOT,
+                    `<span id="cal-countdown">${countdownContent}</span>`) : html)
+                || 'No upcoming events';
 
             // Scroll to today ONLY on first render; refreshes preserve scroll
             // so the user's view isn't jerked while browsing older dates.
@@ -746,6 +835,7 @@
                     window._calendarInitialized = true;
                 }, 0);
             }
+            return true;
         }
 
         window.scrollCalendarToToday = function() {
@@ -769,6 +859,7 @@
         if (calendarContentEl) {
             calendarContentEl.addEventListener('scroll', function() {
                 if (!window._calendarInitialized) return;
+                if (calendarScrollSuppressed) return;
                 if (this.scrollTop < 50) {
                     loadOlderCalendar();
                 }
@@ -1889,11 +1980,11 @@
             }
         });
 
-        async function refresh({centerCalendar = false} = {}) {
+        async function refresh() {
             const start = performance.now();
             const fetches = [fetchStatus()];
             if (!isSimplifiedMode) {
-                fetches.push(fetchCalendar({centerToday: centerCalendar}), fetchNamed());
+                fetches.push(fetchCalendar(), fetchNamed());
             }
             await Promise.all(fetches);
             lastBuildTime = Math.round(performance.now() - start);
@@ -2161,8 +2252,8 @@
             focusContentArea();
         });
 
-        // Refresh every 20 seconds and return the calendar to today.
-        setInterval(() => refresh({centerCalendar: true}), 20000);
+        // Refresh every 20 seconds
+        setInterval(refresh, 20000);
 
         // Update refresh display every second
         setInterval(updateRefreshDisplay, 1000);
