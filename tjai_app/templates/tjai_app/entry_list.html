@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>tjai - {{ title }}</title>
     <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
+    <script src="/tjai/static/tjai/tjai-utils.js"></script>
     <script>
         (function() {
             var key = 'scroll_' + location.pathname + location.search;
@@ -255,6 +256,11 @@
             activeCtx.forEach(c => p.append('ctx', c));
             activeTags.forEach(t => p.append('tag', t));
             activeKinds.forEach(k => p.append('kind', k));
+            var q = searchInput.value.trim();
+            if (q && (searchQuery || searchMode)) {
+                p.set('search', q);
+                if (searchMode) p.set('mode', searchMode);
+            }
             var qs = p.toString();
             history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
         }
@@ -280,7 +286,8 @@
             applyFilter();
         }
 
-        var searchQuery = '';
+        var searchQuery = '';   // live client-side filter text
+        var searchMode = '';    // 'title' or 'body' while a server search is active
 
         function applyFilter() {
             var hasFilters = activeTags.size > 0 || activeCtx.size > 0 || activeKinds.size > 0 || searchQuery;
@@ -387,12 +394,14 @@
         function clearSearch() {
             searchInput.value = '';
             searchQuery = '';
+            searchMode = '';
             searchClear.style.display = 'none';
             if (isBodySearch) {
                 isBodySearch = false;
                 allEntries.forEach(el => { el.style.display = ''; });
                 document.querySelectorAll('.body-result').forEach(el => el.remove());
             }
+            updateURL();
             applyFilter();
         }
 
@@ -413,6 +422,8 @@
             if (!q) return;
             searchClear.style.display = 'inline';
             isBodySearch = true;
+            searchMode = mode;
+            updateURL();
             allEntries.forEach(el => { el.style.display = 'none'; });
             document.querySelectorAll('.body-result').forEach(el => el.remove());
             var context = '{{ context_name|default:"" }}';
@@ -434,11 +445,13 @@
                     var target = relateToId ? ' target="_blank"' : '';
                     div.innerHTML = checkHtml
                         + '<a href="/tjai/entry/' + slug + '/"' + target + '>'
-                        + '<span class="entry-num">===</span> '
-                        + '<span class="content">' + (e.content || '').replace(/</g, '&lt;') + '</span>'
-                        + '</a> '
+                        + '<span class="entry-num">===</span></a> '
+                        + '<a href="/tjai/entry/' + slug + '/"' + target + ' class="content-link">'
+                        + '<span class="content"></span></a> '
                         + (e.line_count ? '<span class="lines">[' + e.line_count + ' lines]</span> ' : '')
                         + tags.map(t => '<span class="tag">:' + t + '</span>').join(' ');
+                    div.querySelector('.content').dataset.content = e.content || '';
+                    linkifyRows(div);
                     container.appendChild(div);
                 });
                 if (relateToId) _updateRelateCount();
@@ -458,10 +471,26 @@
         searchInput.addEventListener('input', function() {
             var q = searchInput.value.trim().toLowerCase();
             searchQuery = q;
+            searchMode = '';
             searchClear.style.display = q ? 'inline' : 'none';
+            updateURL();
             applyFilter();
         });
         searchClear.addEventListener('click', function() { clearSearch(); searchInput.focus(); });
+
+        // Restore search state from the URL (search=<query>, mode=title|body).
+        var initSearch = params.get('search') || '';
+        var initSearchMode = params.get('mode') || '';
+        if (initSearch) {
+            searchInput.value = initSearch;
+            if (initSearchMode === 'title' || initSearchMode === 'body') {
+                doSearch(initSearchMode);
+            } else {
+                searchQuery = initSearch.trim().toLowerCase();
+                searchClear.style.display = 'inline';
+                applyFilter();
+            }
+        }
 
         // Named-entry chips — clicking one filters the list to that @name AND,
         // in relate mode, toggles the matching entry's relate-check so Save
@@ -484,26 +513,27 @@
             });
         });
 
-        // Linkify content
-        document.querySelectorAll('.content[data-content]').forEach(el => {
-            var content = el.dataset.content;
-            var hasUrl = /https?:\/\//.test(content);
-            if (hasUrl) {
-                content = content.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,
-                    '<a href="$2" target="_blank" style="color:#90caf9">$1</a>');
-                content = content.replace(/(^|[^"'])(https?:\/\/[^\s<]+)/g,
-                    '$1<a href="$2" target="_blank" style="color:#90caf9">$2</a>');
-                var wrapper = el.closest('a.content-link');
-                if (wrapper) {
+        // Linkify content via the shared escapeHtml/linkifyContent (tjai-utils.js).
+        // A row whose content gains an anchor loses its content-link wrapper —
+        // anchors cannot nest — so the inner links are clickable; a plain row
+        // keeps the whole-line link to the entry.
+        function linkifyRows(root) {
+            root.querySelectorAll('.content[data-content]').forEach(el => {
+                var raw = el.dataset.content;
+                el.removeAttribute('data-content');
+                var html = linkifyContent(escapeHtml(raw));
+                if (html.indexOf('<a ') >= 0) {
                     var span = document.createElement('span');
                     span.className = 'content';
-                    span.innerHTML = content;
-                    wrapper.replaceWith(span);
+                    span.innerHTML = html;
+                    var wrapper = el.closest('a.content-link');
+                    if (wrapper) wrapper.replaceWith(span); else el.replaceWith(span);
+                } else {
+                    el.textContent = raw;
                 }
-            } else {
-                el.textContent = content;
-            }
-        });
+            });
+        }
+        linkifyRows(document);
 
         // Per-row action menu — open/edit navigate; archive POSTs; trash DELETEs (soft).
         document.addEventListener('change', function(ev) {

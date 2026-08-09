@@ -14,7 +14,7 @@
     {% if current_page == "readme" %}<span style="color:#e0e0e0">ReadMe</span>{% else %}<a href="{% url 'readme' %}">ReadMe</a>{% endif %}
     <a href="{% url 'research' %}" {% if current_page == "research" %}style="color:#e0e0e0"{% endif %}>Research</a>
     {% if current_page == "goals" %}<span style="color:#e0e0e0">Goals</span>{% else %}<a href="{% url 'goals' %}">Goals</a>{% endif %}
-    {% if current_page == "recipes" %}<span style="color:#e0e0e0">Recipes</span>{% else %}<a href="{% url 'context_entries' 'recipe' %}">Recipes</a>{% endif %}
+    <a href="{% url 'context_entries' 'recipe' %}" {% if current_page == "recipes" %}style="color:#e0e0e0"{% endif %}>Recipes</a>
     {% if current_page == "poetry" %}<span style="color:#e0e0e0">Poetry</span>{% else %}<a href="{% url 'context_entries' 'poetry' %}">Poetry</a>{% endif %}
     {% if current_page == "agent_queue" %}<span id="menu-agents" style="color:#e0e0e0">Agents</span>{% else %}<a id="menu-agents" href="{% url 'agent_queue' %}">Agents</a>{% endif %}
     {% if current_page == "agent_log" %}<span style="color:#e0e0e0">Logs</span>{% else %}<a href="{% url 'agent_log' %}">Logs</a>{% endif %}
