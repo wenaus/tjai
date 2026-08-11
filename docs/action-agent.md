@@ -1,5 +1,9 @@
 # Action Agent System
 
+**The action agent is frozen.** Its successor — durable workers on the
+wrangle-ai substrate — and the migration plan are in [wrangler.md](wrangler.md);
+actions move there progressively, and no new capability is added here.
+
 **Entry references: when an entry has a human-readable `entry_id` (in `data.entry_id`), ALWAYS use it in URLs instead of the UUID.** Example: `/tjai/entry/daily-history`.
 
 The action agent is a supervised daemon (`scripts/action_agent.py`) that executes scheduled tasks defined as `kind=action` entries. Each action carries its full configuration in the `data` JSON field.
