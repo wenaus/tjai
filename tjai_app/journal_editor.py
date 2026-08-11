@@ -19,9 +19,9 @@ def parse_journal_editor_prefix(content, current_event_ts, tz):
     weekday names, t+N/w+N/m+N, jan/feb/.../dec + day. A trailing HH:MM
     or H[:MM]am|pm token is consumed as the time-of-day.
 
-    Time-only prefix (e.g. "9am rest...") updates the existing event's
-    time-of-day in place — it requires `current_event_ts` to be set,
-    since there is no date to attach to otherwise.
+    Time-only prefix (e.g. "9am rest...") updates an existing event's
+    time-of-day in place. For a new journal entry with no event date, it
+    creates an event for today in the application timezone.
 
     Returns (stripped_content, event_timestamp, warnings). `warnings` is
     a list of human-readable strings emitted by `parse_date_spec` when
@@ -37,17 +37,19 @@ def parse_journal_editor_prefix(content, current_event_ts, tz):
     if not tokens:
         return content, None, []
 
-    # Time-only prefix: preserve existing date, swap in new time.
+    # Time-only prefix: preserve an existing date, or use today for a new
+    # journal entry, then swap in the requested time.
     # parse_date_spec would interpret a bare HH:MM as "today at HH:MM",
     # which is not what the editor wants here.
     if _TIME_ONLY_RE.match(tokens[0]):
-        if current_event_ts is None:
-            return content, None, []
         try:
             hour, minute = parse_time(tokens[0])
         except ValueError:
             return content, None, []
-        current_dt = datetime.fromtimestamp(float(current_event_ts), tz=tz)
+        if current_event_ts is None:
+            current_dt = datetime.now(tz)
+        else:
+            current_dt = datetime.fromtimestamp(float(current_event_ts), tz=tz)
         dt = current_dt.replace(hour=hour, minute=minute, second=0, microsecond=0)
         new_first = ' '.join(tokens[1:])
         return _rejoin(new_first, sep, rest_lines), dt.timestamp(), []

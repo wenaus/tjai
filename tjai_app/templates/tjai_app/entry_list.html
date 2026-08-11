@@ -251,7 +251,7 @@
         var countDisplay = document.getElementById('countDisplay');
         var totalCount = allEntries.length;
 
-        function updateURL() {
+        function updateURL(pushSearch) {
             var p = new URLSearchParams();
             activeCtx.forEach(c => p.append('ctx', c));
             activeTags.forEach(t => p.append('tag', t));
@@ -262,7 +262,11 @@
                 if (searchMode) p.set('mode', searchMode);
             }
             var qs = p.toString();
-            history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+            var url = location.pathname + (qs ? '?' + qs : '');
+            var enteringSearch = pushSearch
+                && q
+                && !new URLSearchParams(location.search).has('search');
+            history[enteringSearch ? 'pushState' : 'replaceState'](null, '', url);
         }
 
         function toggleTag(tag) {
@@ -423,7 +427,7 @@
             searchClear.style.display = 'inline';
             isBodySearch = true;
             searchMode = mode;
-            updateURL();
+            updateURL(true);
             allEntries.forEach(el => { el.style.display = 'none'; });
             document.querySelectorAll('.body-result').forEach(el => el.remove());
             var context = '{{ context_name|default:"" }}';
@@ -440,17 +444,91 @@
                     var div = document.createElement('div');
                     div.className = 'entry body-result';
                     var slug = e.entry_id || e.nickname || e.name || e.id;
-                    var tags = (e.all_tags || []).filter(t => ['tjweb','dynalist','chrome','test'].indexOf(t) < 0);
-                    var checkHtml = relateToId ? '<input type="checkbox" class="relate-check" data-uuid="' + e.id + '"> ' : '';
-                    var target = relateToId ? ' target="_blank"' : '';
-                    div.innerHTML = checkHtml
-                        + '<a href="/tjai/entry/' + slug + '/"' + target + '>'
-                        + '<span class="entry-num">===</span></a> '
-                        + '<a href="/tjai/entry/' + slug + '/"' + target + ' class="content-link">'
-                        + '<span class="content"></span></a> '
-                        + (e.line_count ? '<span class="lines">[' + e.line_count + ' lines]</span> ' : '')
-                        + tags.map(t => '<span class="tag">:' + t + '</span>').join(' ');
-                    div.querySelector('.content').dataset.content = e.content || '';
+                    var detailUrl = '/tjai/entry/' + encodeURIComponent(slug) + '/';
+                    div.dataset.tags = (e.all_tags || []).join(',');
+                    div.dataset.ctx = e.context || '(none)';
+                    div.dataset.kind = e.kind || '';
+                    div.dataset.name = e.name || '';
+
+                    if (relateToId) {
+                        var check = document.createElement('input');
+                        check.type = 'checkbox';
+                        check.className = 'relate-check';
+                        check.dataset.uuid = e.id;
+                        div.dataset.entryUuid = e.id;
+                        div.appendChild(check);
+                    } else {
+                        var action = document.createElement('select');
+                        action.className = 'entry-action-select';
+                        action.dataset.eid = e.id;
+                        action.dataset.url = detailUrl;
+                        action.dataset.editUrl = detailUrl + '?edit=1';
+                        [['', 'Action'], ['open', 'open'], ['edit', 'edit'],
+                         ['archive', 'archive'], ['trash', 'trash']].forEach(function(item) {
+                            if (item[0] === 'edit' && e.kind === 'log') return;
+                            var option = document.createElement('option');
+                            option.value = item[0];
+                            option.textContent = item[1];
+                            action.appendChild(option);
+                        });
+                        div.appendChild(action);
+                    }
+
+                    var metadataLink = document.createElement('a');
+                    metadataLink.href = detailUrl;
+                    if (relateToId) metadataLink.target = '_blank';
+                    var entryNum = document.createElement('span');
+                    entryNum.className = 'entry-num';
+                    entryNum.textContent = '===';
+                    metadataLink.appendChild(entryNum);
+                    metadataLink.appendChild(document.createTextNode(' '));
+                    var timestamp = document.createElement('span');
+                    timestamp.className = 'timestamp';
+                    timestamp.textContent = e.date_display || '';
+                    metadataLink.appendChild(timestamp);
+                    div.appendChild(metadataLink);
+
+                    if (e.context) {
+                        div.appendChild(document.createTextNode(' '));
+                        var context = document.createElement('span');
+                        context.className = 'context';
+                        context.textContent = '=' + e.context;
+                        div.appendChild(context);
+                    }
+                    if (e.name) {
+                        div.appendChild(document.createTextNode(' '));
+                        var name = document.createElement('span');
+                        name.style.cssText = 'color:#c0d8f0;font-weight:bold';
+                        name.textContent = '@' + e.name;
+                        div.appendChild(name);
+                    }
+
+                    div.appendChild(document.createTextNode(' '));
+                    var contentLink = document.createElement('a');
+                    contentLink.href = detailUrl;
+                    contentLink.className = 'content-link';
+                    if (relateToId) contentLink.target = '_blank';
+                    var content = document.createElement('span');
+                    content.className = 'content';
+                    content.dataset.content = e.content || '';
+                    contentLink.appendChild(content);
+                    div.appendChild(contentLink);
+
+                    if (e.line_count) {
+                        div.appendChild(document.createTextNode(' '));
+                        var lines = document.createElement('span');
+                        lines.className = 'lines';
+                        lines.textContent = '[' + e.line_count + ' lines]';
+                        div.appendChild(lines);
+                    }
+                    (e.tags || []).forEach(function(tagName) {
+                        div.appendChild(document.createTextNode(' '));
+                        var tag = document.createElement('span');
+                        tag.className = 'tag';
+                        tag.dataset.tag = tagName;
+                        tag.textContent = ':' + tagName;
+                        div.appendChild(tag);
+                    });
                     linkifyRows(div);
                     container.appendChild(div);
                 });
@@ -473,24 +551,38 @@
             searchQuery = q;
             searchMode = '';
             searchClear.style.display = q ? 'inline' : 'none';
-            updateURL();
+            updateURL(true);
             applyFilter();
         });
         searchClear.addEventListener('click', function() { clearSearch(); searchInput.focus(); });
 
         // Restore search state from the URL (search=<query>, mode=title|body).
-        var initSearch = params.get('search') || '';
-        var initSearchMode = params.get('mode') || '';
-        if (initSearch) {
-            searchInput.value = initSearch;
-            if (initSearchMode === 'title' || initSearchMode === 'body') {
-                doSearch(initSearchMode);
+        // The original rows remain in the DOM while server-search rows are shown;
+        // history navigation can therefore restore the full list without reloading it.
+        function restoreSearchStateFromURL() {
+            var stateParams = new URLSearchParams(location.search);
+            var restoredSearch = stateParams.get('search') || '';
+            var restoredMode = stateParams.get('mode') || '';
+            searchInput.value = restoredSearch;
+            if (!restoredSearch) {
+                searchQuery = '';
+                searchMode = '';
+                searchClear.style.display = 'none';
+                isBodySearch = false;
+                document.querySelectorAll('.body-result').forEach(el => el.remove());
+                allEntries.forEach(el => { el.style.display = ''; });
+                applyFilter();
+            } else if (restoredMode === 'title' || restoredMode === 'body') {
+                doSearch(restoredMode);
             } else {
-                searchQuery = initSearch.trim().toLowerCase();
+                searchQuery = restoredSearch.trim().toLowerCase();
+                searchMode = '';
                 searchClear.style.display = 'inline';
                 applyFilter();
             }
         }
+        restoreSearchStateFromURL();
+        window.addEventListener('popstate', restoreSearchStateFromURL);
 
         // Named-entry chips — clicking one filters the list to that @name AND,
         // in relate mode, toggles the matching entry's relate-check so Save
