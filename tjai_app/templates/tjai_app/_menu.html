@@ -2,6 +2,7 @@
     <span class="menu-title">tjai</span>
     {% if current_page == "dashboard" %}<span style="color:#e0e0e0">Dash</span>{% else %}<a href="{% url 'dashboard' %}">Dash</a>{% endif %}
     {% if current_page == "capcom" %}<span style="color:#e0e0e0">Capcom</span>{% else %}<a href="{% url 'capcom' %}">Capcom</a>{% endif %}
+    <a href="{% url 'capcom' %}?view=notepad">Note</a>
     {% if current_page == "diary" %}<span style="color:#e0e0e0">Diary</span>{% elif current_page == "weekly" %}<span style="color:#e0e0e0">Weekly</span>{% else %}<a href="{% url 'diary_page' %}">Diary</a>{% endif %}
     {% if current_page == "todo_bangs" %}<span style="color:#e0e0e0">!!!</span>{% else %}<a href="{% url 'todo_bangs' %}">!!!</a>{% endif %}
     {% if current_page == "synopsis" %}<span style="color:#e0e0e0">Daily</span>{% else %}<a href="{% url 'daily_synopsis' %}">Daily</a>{% endif %}
