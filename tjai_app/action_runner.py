@@ -1369,6 +1369,20 @@ def run_action(entry_id):
 
     data = action.data or {}
 
+    # Wrangler-owned action: force-run is a plain enqueue (docs/wrangler.md).
+    # The legacy schedule surgery below must not run here — its injected
+    # scheduled_time is restored by update_last_run, which the roster never
+    # calls, so the injection would stick permanently.
+    if data.get('runner') == 'wrangler':
+        from .wrangler import enqueue_action
+        worker_type = enqueue_action(action)
+        return {
+            "success": True,
+            "action": action.content[:80],
+            "entry_id": str(action.id),
+            "message": f"Enqueued for the wrangler ({worker_type} worker)",
+        }
+
     # Inject a current-HHMM scheduled_time only for actions that already
     # have one (needed when today's configured moment is still ahead).
     # Interval actions become due from last_run=0 alone, and an injected

@@ -93,17 +93,54 @@ action agent's `get_due_actions` skips them, and a move is reverted by
 removing the flag. The action agent is frozen — no new capability — and is
 retired when nothing unflagged remains.
 
-Order:
+Stages, ordered small and safe first. Each stage deploys, then is observed
+through at least one natural cycle of its actions before the next begins; the
+dashboard reads both sysconfig agent state and worker rows during the
+transition. Every move is a one-field flag flip until the final stage —
+nothing is deleted earlier.
 
-1. `server-backup` — long-running mechanical, the incident case.
-2. Remaining mechanical actions (rss-fetcher, system-health,
-   capcom-dispatcher, the codoc pair, daily-synopsis, workweek).
-3. The sysconfig on-demand flags, replaced by enqueues from the web views.
-4. AI-dispatch actions (daily-history, picks, assessments, ideation).
-5. The research multimodel cluster — model fan-out, remote workers,
-   synthesis fan-in. The fan-in orchestration stays tjai application logic;
-   the substrate deliberately has no workflow primitives.
-6. Retire the action agent daemon and its sysconfig machinery.
-
-Each step deploys and observes before the next; the dashboard reads both
-sysconfig agent state and worker rows during the transition.
+1. **Force-run correctness, then the smallest mechanicals.** For a
+   wrangler-owned action, `run_action` must be a plain enqueue plus bell
+   ring: the legacy path's injected `scheduled_time` is restored by
+   `update_last_run`, which the roster never calls, so the injection would
+   stick permanently. With that fixed, flag `rss-fetcher`,
+   `codoc-prs-delta`, and `codoc-prs-full` — pure mechanical, idempotent,
+   low consequence, and rss's 2-hour cadence gives fast observation.
+   (`server-backup` moved first, before this plan: the incident case.)
+2. **Monitoring mechanicals.** `system-health` (30 min), then
+   `capcom-dispatcher` (10 min, the highest-frequency action) together with
+   the first flag-to-enqueue conversion: the tile Update button's
+   `capcom_force_run` flag becomes an enqueued worker.
+3. **Daily mechanical products.** `daily-synopsis` (journal plus section
+   scripts), `workweek-agent`, and `llm-assessment-gemini` (a mechanical
+   wrapper) — the morning record, moved once the machinery has quiet time
+   behind it; a failure is visible same-day in Capcom.
+4. **Remaining on-demand flags.** `system_health_refresh_requested` becomes
+   an enqueue; the assessment rerun and backfill flags become enqueued
+   workers carrying their target date, the backfill as a self-chaining
+   worker (each completion enqueues its successor — the durable-row form of
+   its advance-flag-before-launch protocol); `agent_kill_requested` becomes
+   the `abort` handler. After this stage the action agent's sysconfig-flag
+   servicing is dead code.
+5. **AI dispatch.** `agent_complete.py` gains a dual mode — bullpen
+   `mark_done`/`mark_failed` when the agent was launched by a wrangler
+   worker (keyed by an environment variable carrying the worker id), the
+   sysconfig path otherwise — so both worlds work throughout the
+   transition. The `ai_dispatch` handler follows the detached
+   self-completing doer convention, and actions move one per observed
+   overnight: `daily-history` (with its rerun flag), `daily-assessment`,
+   `picks-agent`, `ideation-agent`. The agent-health choreography dies
+   per-action as each moves. The agent-queue and System pages read worker
+   rows for migrated actions in this stage.
+6. **The research multimodel cluster.** Its own design pass in this
+   document first: each model run a worker, `research_queue` absorbed by
+   the bullpen, the remote Mac workers as a remote claimant,
+   `heal_research_subprocess_state` replaced by PID-aware reclaim. The
+   synthesis fan-in stays tjai application logic; the substrate
+   deliberately has no workflow primitives.
+7. **Retirement.** AppLog pruning and entry-flood detection become ordinary
+   scheduled actions under the roster (today they are daemon-embedded and
+   would die with it). Then, with nothing unflagged remaining: the
+   action-agent program leaves supervisord, the daemon and its sysconfig
+   machinery are deleted, and action-agent.md collapses to a stub pointing
+   here.

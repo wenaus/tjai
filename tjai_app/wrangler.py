@@ -19,11 +19,13 @@ from wrangle_ai import Worker
 from wrangle_ai.postgres import PgBullpen
 
 from .db_log_handler import DbLogHandler
-from .models import Entry, SysConfig
+from .models import Entry, SysConfig, WrangleWorker
 from .action_runner import (
     create_journal_entry, get_next_scheduled_time, get_target_date,
     run_mechanical,
 )
+
+BELL_CHANNEL = 'tjai_wrangle'
 
 # Logger: DB (dashboard-visible, source='wrangler') + stdout (supervisord log)
 logger = logging.getLogger('wrangler')
@@ -137,6 +139,34 @@ class TjaiRoster:
                 return workers
         finally:
             connections.close_all()
+
+
+def enqueue_action(action, target_date=None):
+    """Producer-side enqueue of one action run, plus bell ring.
+
+    The on-demand path for wrangler-owned actions: force-run, reruns, web
+    triggers. Runs on the web tier via the ordinary Django connection — no
+    connection pool, no signal, and pg_notify crosses the OS user boundary.
+    Returns the worker type enqueued.
+    """
+    from django.db import connection
+    from django.utils import timezone
+
+    data = action.data or {}
+    action_id = data.get('entry_id') or str(action.id)
+    if target_date is None:
+        target_date = get_target_date()
+        if data.get('trigger') == 'overnight':
+            target_date -= timedelta(days=1)
+    worker_type = 'ai_dispatch' if data.get('ai_prompt') else 'mechanical'
+    WrangleWorker.objects.create(
+        id=str(uuid.uuid4()), type=worker_type, status='pending', attempts=0,
+        created_at=timezone.now(),
+        payload={'action_entry_id': action_id, 'action_uuid': str(action.id),
+                 'target_date': target_date.isoformat()})
+    with connection.cursor() as cur:
+        cur.execute("SELECT pg_notify(%s, '')", [BELL_CHANNEL])
+    return worker_type
 
 
 def handle_mechanical(worker):

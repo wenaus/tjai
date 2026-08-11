@@ -18,10 +18,9 @@ from wrangle_ai.postgres import PgBell
 
 from tjai_app.models import SysConfig
 from tjai_app.wrangler import (
-    TjaiBullpen, TjaiRoster, build_dsn, handle_mechanical, logger, write_pulse,
+    BELL_CHANNEL, TjaiBullpen, TjaiRoster, build_dsn, handle_mechanical,
+    logger, write_pulse,
 )
-
-BELL_CHANNEL = 'tjai_wrangle'
 
 
 def main():
