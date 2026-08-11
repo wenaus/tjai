@@ -343,3 +343,30 @@ class SysConfig(models.Model):
 
     class Meta:
         db_table = 'sysconfig'
+
+
+class WrangleWorker(models.Model):
+    """Read model over the wrangle-ai worker table (docs/wrangler.md).
+
+    The table is created by migration 0023 with the DDL from wrangle-ai's
+    postgres reference (defaults live in the database because PgBullpen inserts
+    outside the ORM); unmanaged here — PgBullpen owns the writes, this model
+    gives the UI the work history.
+    """
+    id = models.TextField(primary_key=True)
+    type = models.TextField()
+    payload = models.JSONField(default=dict)
+    status = models.TextField(default='pending')
+    result = models.JSONField(null=True, blank=True)
+    error = models.TextField(null=True, blank=True)
+    attempts = models.IntegerField(default=0)
+    claimed_by = models.TextField(null=True, blank=True)
+    claimed_pid = models.IntegerField(null=True, blank=True)
+    doer_pid = models.IntegerField(null=True, blank=True)
+    claimed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField()
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = 'wrangle_workers'

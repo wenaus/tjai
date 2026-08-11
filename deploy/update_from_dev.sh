@@ -107,4 +107,17 @@ else
   echo "    \"import time; from tjai_app.models import SysConfig; SysConfig.objects.update_or_create(key='action_agent_restart_requested', defaults={'value': '1', 'timestamp_modified': time.time()})\""
 fi
 
+# Wrangler: SIGTERM starts a graceful drain (in-flight workers finish, process
+# exits, supervisord restarts it on the new code). Non-blocking here — the
+# drain may outlast this script during a long worker (e.g. server-backup).
+if "$VENV/bin/supervisorctl" -c "$TARGET_DIR/deploy/supervisord.conf" status tjai-wrangler >/dev/null 2>&1; then
+  if "$VENV/bin/supervisorctl" -c "$TARGET_DIR/deploy/supervisord.conf" signal TERM tjai-wrangler >/dev/null; then
+    echo "[${SECONDS}s] wrangler graceful restart signaled (restarts after in-flight workers drain)"
+  else
+    echo "[${SECONDS}s] WARNING: wrangler TERM signal failed — it may still run OLD code"
+  fi
+else
+  echo "[${SECONDS}s] tjai-wrangler not registered with supervisord, skipping (supervisorctl reread + add to register)"
+fi
+
 echo "Deployment complete in ${SECONDS}s."

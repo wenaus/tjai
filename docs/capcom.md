@@ -256,6 +256,19 @@ Capcom carries as a notice like any other.
   dispatcher invokes that production Pax Eden producer every ten minutes and
   stores the returned payload verbatim. The tile links directly to that
   route's Pax Eden gatecheck page.
+- **Server backup** (poll, state) — the `server-backup` tile reads as
+  size-and-age of the last backup: when healthy the value carries the total
+  dump size and the signed day-over-day size change vs the previous backup at
+  0.1% resolution (`OK 156M +0.4%`), and the payload's `updated` field is the
+  backup's own completion time. Problem states replace the value: `FAILED` (latest worker
+  run failed), `STALE` (past the 26-hour window), `INCOMPLETE` (fewer dumps
+  than the trailing week, or a zero-length dump), or a signed percentage when
+  the total — or any per-database dump averaging ≥5MB — deviates more than
+  20% from its trailing-week mean. The producer `scripts/backup_state.py`
+  owns the thresholds; the dispatcher stores its payload verbatim. State
+  transitions emit a feed notice (alarm for a failed run, warning otherwise,
+  info on recovery); an outright worker failure additionally surfaces through
+  the wrangler's uniform failure notices ([wrangler.md](wrangler.md)).
 - **Second Life** (listen) — visitor presence at monitored places via
   primus. Live data gathering there does not exist today (the capability
   is in legacy LSL scripts); this is the motivating case for direct posts

@@ -389,6 +389,29 @@ def _collect_agents(now):
         'status': 'running' if alive and hb_min and hb_min < 10 else 'stale' if alive else 'down',
     })
 
+    # Wrangler agent — PID + pulse from sysconfig (docs/wrangler.md). The pulse
+    # comes from a loop that never executes work, so 'stale' here means a
+    # stopped or wedged process, never a long-running action.
+    w_pid = SysConfig.objects.filter(key='wrangler_pid').values_list('value', flat=True).first()
+    w_hb = SysConfig.objects.filter(key='wrangler_heartbeat').values_list('value', flat=True).first()
+    w_started = SysConfig.objects.filter(key='wrangler_started').values_list('value', flat=True).first()
+    w_inflight = SysConfig.objects.filter(key='wrangler_inflight').values_list('value', flat=True).first()
+    if w_pid or w_hb:
+        w_alive = _pid_alive(w_pid) if w_pid else False
+        w_hb_min = round((now - float(w_hb)) / 60, 1) if w_hb else None
+        w_uptime_min = round((now - float(w_started)) / 60, 1) if w_started else None
+        agents.append({
+            'name': 'Wrangler',
+            'pid': w_pid,
+            'alive': w_alive,
+            'heartbeat_min': w_hb_min,
+            'uptime_min': w_uptime_min,
+            'inflight': int(w_inflight) if w_inflight else 0,
+            'restart_pending': False,
+            'status': 'running' if w_alive and w_hb_min is not None and w_hb_min < 10
+                      else 'stale' if w_alive else 'down',
+        })
+
     # AI agents — status, health, errors from sysconfig
     for agent_name, agent_id in [('Research Agent', 'research-agent'),
                                   ('Picks Agent', 'picks-agent')]:

@@ -171,6 +171,11 @@ def get_due_actions(trigger_filter=None):
     for action in actions:
         data = action.data or {}
 
+        # Migrated to the wrangler (docs/wrangler.md): its roster owns the
+        # schedule; the action agent must not also fire it.
+        if data.get('runner') == 'wrangler':
+            continue
+
         # 'blocked' = auto-dispatch off: suppress the recurring schedule but still
         # honor an explicit Run (dispatch_run sets next_target_entry_id, one-shot).
         if action.status == 'blocked' and not data.get('next_target_entry_id'):
