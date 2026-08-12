@@ -186,13 +186,19 @@ function focusContentArea() {
 }
 
 function buildHeatmap(heatmap) {
-    // Grid from Feb 1 2026 (retirement day 1) to today
-    const today = new Date();
+    // Grid from Feb 1 2026 (retirement day 1) to today. tjai dates are
+    // Eastern: the grid day must come from America/New_York, never the
+    // viewer's clock. Dates are carried at local noon so day arithmetic
+    // crosses DST changes safely, and labels are formatted without a UTC
+    // round trip.
+    const fmtIso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const etToday = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+    const today = new Date(etToday + 'T12:00:00');
     const endDay = new Date(today);
     endDay.setDate(endDay.getDate() + (6 - endDay.getDay()));
 
     // Start on the Sunday of the week containing Feb 1
-    const feb1 = new Date(2026, 1, 1); // Feb 1 2026
+    const feb1 = new Date(2026, 1, 1, 12); // Feb 1 2026
     const startDay = new Date(feb1);
     startDay.setDate(startDay.getDate() - startDay.getDay()); // back to Sunday
 
@@ -200,7 +206,7 @@ function buildHeatmap(heatmap) {
     const cells = [];
     const d = new Date(startDay);
     while (d <= endDay) {
-        const iso = d.toISOString().slice(0, 10);
+        const iso = fmtIso(d);
         const count = heatmap[iso] || 0;
         const future = d > today;
         cells.push({ date: iso, count, dow: d.getDay(), future });
@@ -236,7 +242,7 @@ function buildHeatmap(heatmap) {
     let lastMonth = -1;
     const weekWidth = 13; // 11px cell + 2px gap
     for (let wi = 0; wi < weeks.length; wi++) {
-        const firstInWeek = new Date(weeks[wi][0].date);
+        const firstInWeek = new Date(weeks[wi][0].date + 'T12:00:00');
         const m = firstInWeek.getMonth();
         if (m !== lastMonth && !(m === 0 && firstInWeek.getFullYear() === 2026)) {
             monthsHtml += `<span class="heatmap-month" style="width:${weekWidth}px">${monthNames[m]}</span>`;
