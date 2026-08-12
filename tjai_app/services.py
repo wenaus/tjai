@@ -4,7 +4,9 @@ All functions are synchronous (Django ORM). MCP wraps with sync_to_async.
 Returns dicts/lists, not ORM objects.
 """
 
+import base64
 import difflib
+import json
 import re
 import time
 import uuid
@@ -17,7 +19,7 @@ from django.utils import timezone
 from django.db.models import Q
 
 from .dialog_context import DIALOG_TAG
-from .models import Entry, Context, Tag, SysConfig, Relation, AppLog
+from .models import Entry, Context, Tag, SysConfig, Relation, AppLog, Notice
 from .tagger import tag_bookmark
 from .tjai_utils import fmt_datetime, get_app_tz, safe_truncate
 from tj.commands.journal import parse_time
@@ -28,6 +30,7 @@ VALID_STATUSES = ('active', 'done', 'blocked', 'archive', 'failed')
 DEFAULT_MAX_CONTENT_LENGTH = 500
 MAX_RESULT_LIMIT = 500
 PICKS_NOOP_SENTINEL = '__noop__'
+CAPCOM_SEVERITIES = ('info', 'warning', 'alarm')
 
 
 def is_noop_pick_bookmark(content, data=None):
@@ -822,6 +825,125 @@ def get_logs(source=None, level=None, contains=None, ref=None,
             'extra_data': log.extra_data or {},
         })
     return rows
+
+
+def _encode_capcom_cursor(notice):
+    payload = json.dumps(
+        [notice.timestamp.isoformat(), notice.id], separators=(',', ':'),
+    ).encode()
+    return base64.urlsafe_b64encode(payload).decode().rstrip('=')
+
+
+def _decode_capcom_cursor(cursor):
+    if not isinstance(cursor, str) or not cursor:
+        return None, None, "cursor must be a non-empty string"
+    try:
+        padded = cursor + '=' * (-len(cursor) % 4)
+        timestamp_text, notice_id = json.loads(
+            base64.urlsafe_b64decode(padded.encode()).decode()
+        )
+        cursor_dt = datetime.fromisoformat(timestamp_text)
+        if timezone.is_naive(cursor_dt):
+            raise ValueError("cursor timestamp has no timezone")
+        return cursor_dt, int(notice_id), None
+    except (ValueError, TypeError, json.JSONDecodeError, UnicodeDecodeError,
+            base64.binascii.Error) as exc:
+        return None, None, f"Invalid cursor: {exc}"
+
+
+def get_capcom(source=None, severity=None, since=None, unread_only=False,
+               limit=100, cursor=None):
+    """Read the active Capcom notice feed without changing read state."""
+    err = _validate_result_limit(limit)
+    if err:
+        return err
+    if not isinstance(unread_only, bool):
+        return {"error": "unread_only must be true or false"}
+
+    source_filter = None
+    if source is not None:
+        if not isinstance(source, str):
+            return {"error": "source must be a string"}
+        source_filter = source.strip().rstrip('-') or None
+
+    severity_filter = None
+    if severity is not None:
+        if not isinstance(severity, str):
+            return {"error": "severity must be a string"}
+        severity_filter = severity.strip().lower()
+        if severity_filter not in CAPCOM_SEVERITIES:
+            return {
+                "error": (
+                    f"Invalid severity '{severity}'. Use "
+                    f"{'|'.join(CAPCOM_SEVERITIES)}."
+                )
+            }
+
+    tz = get_app_tz()
+    qs = Notice.objects.filter(archived=False)
+    if source_filter:
+        qs = qs.filter(
+            Q(source=source_filter) |
+            Q(source__startswith=f'{source_filter}-')
+        )
+    if severity_filter:
+        qs = qs.filter(severity=severity_filter)
+    if since is not None:
+        since_ts, err = parse_date_filter(since, tz=tz)
+        if err:
+            return {"error": err}
+        if since_ts:
+            qs = qs.filter(
+                timestamp__gte=datetime.fromtimestamp(since_ts, tz=tz)
+            )
+    if unread_only:
+        qs = qs.filter(was_read=False)
+
+    matched_sources = list(
+        qs.order_by().values_list('source', flat=True).distinct()
+    )
+
+    if cursor is not None:
+        cursor_dt, cursor_id, err = _decode_capcom_cursor(cursor)
+        if err:
+            return {"error": err}
+        qs = qs.filter(
+            Q(timestamp__lt=cursor_dt) |
+            Q(timestamp=cursor_dt, id__lt=cursor_id)
+        )
+
+    rows = list(qs.order_by('-timestamp', '-id')[:limit + 1])
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    next_cursor = _encode_capcom_cursor(rows[-1]) if has_more and rows else None
+
+    return {
+        'notices': [{
+            'id': notice.id,
+            'timestamp': notice.timestamp.astimezone(tz).isoformat(),
+            'first_seen': notice.first_seen.astimezone(tz).isoformat(),
+            'source': notice.source,
+            'severity': notice.severity,
+            'title': notice.title,
+            'url': notice.url,
+            'detail': (notice.data or {}).get('detail', ''),
+            'was_read': notice.was_read,
+            'count': notice.count,
+        } for notice in rows],
+        'returned_count': len(rows),
+        'has_more': has_more,
+        'next_cursor': next_cursor,
+        'total_unread_global': Notice.objects.filter(
+            archived=False, was_read=False,
+        ).count(),
+        'matched_sources': sorted(matched_sources),
+        'filters': {
+            'source': source_filter,
+            'severity': severity_filter,
+            'since': since,
+            'unread_only': unread_only,
+        },
+    }
 
 
 def get_bookmarks(context=None, limit=50, offset=0, start_date=None, end_date=None, max_content_length=DEFAULT_MAX_CONTENT_LENGTH):

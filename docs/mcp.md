@@ -45,11 +45,11 @@ able to consume the gunicorn workers that serve the web UI and REST API.
 
 ## Tools
 
-34 tools are registered, defined in `tjai_app/mcp.py`:
+35 tools are registered, defined in `tjai_app/mcp.py`:
 
 - Read: `get_server_instructions`, `get_calendar`, `get_profile`,
   `get_ai_guidance`, `list_contexts`, `get_todos`, `get_memories`,
-  `get_dialog`, `get_logs`, `get_bookmarks`, `search_entries`,
+  `get_dialog`, `get_logs`, `get_capcom`, `get_bookmarks`, `search_entries`,
   `get_named_entries`, `get_entry`, `get_entry_by_entry_id`, `get_goal`,
   `get_relations`, `get_relation_graph`, `get_entry_versions`
 - Write: `create_entry`, `edit_entry`, `edit_entry_metadata`,

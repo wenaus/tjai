@@ -121,6 +121,26 @@ The feed is deterministic — no ranking or model-based selection. Curation
 happens at the source level: a source is either admitted to the registry or
 it is not.
 
+### MCP read access
+
+`get_capcom(source=None, severity=None, since=None, unread_only=False,
+limit=100, cursor=None)` exposes the same notice store to TJAI MCP clients. It
+is read-only and never changes `was_read`. `source` matches a full source key
+or a hyphen-delimited family: `source="swf"` returns every `swf-*` notice, and
+an unknown source returns an empty result. Source keys are intentionally not
+enumerated in the tool contract because producers evolve. `severity` accepts
+`info`, `warning`, or `alarm`; `since` uses Eastern Time.
+
+The response names its global unread count `total_unread_global`, independent
+of filters. Raw notice `data` is omitted for context economy; its curated
+`detail` value is included. Results are bounded and cursor-paged. Pagination
+is best-effort on this live feed: threading can advance a notice timestamp
+between calls and move that row across a page boundary.
+
+SWF-side notices are drained by the dispatcher at roughly ten-minute cadence.
+Absence of a notice within the last poll interval is not evidence that the
+event did not occur.
+
 ## Collection
 
 The kind of information determines how it is collected, inside a credential

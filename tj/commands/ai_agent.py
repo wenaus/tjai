@@ -301,6 +301,7 @@ CODEX_MCP_TOOLS = [
     'get_bookmarks',
     'get_dialog',
     'get_logs',
+    'get_capcom',
     'search_entries',
     'get_named_entries',
     'get_entry',

@@ -182,6 +182,11 @@ Tools:
   application log (AppLog) rows — agent/script/server logs (the Agent Log page
   data). For operational/diagnostic questions; AppLog is not an Entry, so the
   entry-query tools can't reach it. Use this instead of raw SQL.
+- get_capcom(source, severity, since, unread_only, limit, cursor): Read the
+  curated cross-system Capcom notice feed without changing read state. Source
+  filters match families, so source='swf' returns all SWF notices. Since values
+  are interpreted in Eastern Time. SWF notices may arrive up to one dispatcher
+  poll interval after their event.
 - search_entries(query, kind, context, limit, offset, start_date, end_date,
   max_content_length, order_by): Search or list entries. Omit query for structured
   listing/filtering by kind, context, or date. Use order_by='rank' only with a

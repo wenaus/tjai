@@ -15,6 +15,7 @@ Available tools:
     get_bookmarks     - Get saved bookmark entries (URLs)
     get_dialog        - Get recorded human-AI dialog turns for a host/time range
     get_logs          - Read application log (AppLog) rows — agent/script/server logs
+    get_capcom        - Read the curated cross-system Capcom notice feed
     search_entries    - Search/list entries with optional full-text query and filters
     get_named_entries - Get entries by @name, or list all named entries
     get_entry         - Get a single entry by ID
@@ -565,6 +566,53 @@ async def get_logs(
         source=source, level=level, contains=contains, ref=ref,
         start_date=start_date, end_date=end_date, limit=limit,
         max_content_length=max_content_length,
+    )
+    return _json_text(result)
+
+
+@mcp.tool()
+async def get_capcom(
+    source: str = None,
+    severity: str = None,
+    since: str = None,
+    unread_only: bool = False,
+    limit: int = 100,
+    cursor: str = None,
+) -> str:
+    """Read the curated, reverse-chronological Capcom cross-system notice feed.
+
+    This tool is read-only: retrieving notices never marks them as read.
+
+    Args:
+        source: Filter by a source family or full source key. For example,
+                source="swf" returns all SWF notices. Source keys evolve;
+                unknown filters return an empty result.
+        severity: Exact severity: info, warning, or alarm. Use warning or alarm
+                  to bypass routine informational traffic.
+        since: Only notices updated since this Eastern Time boundary. Accepts
+               TJAI date syntax such as "6h", "1d", "yesterday", YYYYMMDD,
+               or an ISO timestamp.
+        unread_only: If true, return only notices currently marked unread.
+        limit: Page size. Default 100; hard maximum 500.
+        cursor: Opaque next_cursor returned by a previous call. Pagination is
+                best-effort because threading can update a live notice's
+                timestamp and move it between pages.
+
+    Returns:
+        An envelope containing notices, returned_count, has_more, next_cursor,
+        total_unread_global, matched_sources, and applied filters. Each notice
+        contains id, Eastern timestamps, source, severity, title, URL, curated
+        detail, read state, and occurrence count. The raw data JSON is omitted
+        deliberately for context economy.
+
+    Freshness:
+        SWF-side notices reach TJAI through the dispatcher at roughly ten-minute
+        cadence. Absence of a notice within the last poll interval is not
+        evidence that the event did not occur.
+    """
+    result = await sync_to_async(services.get_capcom)(
+        source=source, severity=severity, since=since,
+        unread_only=unread_only, limit=limit, cursor=cursor,
     )
     return _json_text(result)
 
