@@ -9029,15 +9029,11 @@ def api_capcom_run(request):
                 'message': f'No update: {source} is disabled',
             })
 
-    SysConfig.objects.update_or_create(
-        key='capcom_force_run',
-        defaults={'value': source or '*', 'timestamp_modified': time.time()},
-    )
-
-    wake_ok, wake_msg = _wake_action_agent()
-    if not wake_ok:
-        return JsonResponse({'ok': True, 'warning': wake_msg})
-    logger.info("api_capcom_run: triggered %s, action agent woken", source or 'all')
+    # Durable worker + bell (docs/wrangler.md), replacing the polled
+    # capcom_force_run flag: survives a wrangler restart, needs no wake path.
+    from .wrangler import enqueue_worker
+    enqueue_worker('capcom_refresh', {'target': source or '*'})
+    logger.info("api_capcom_run: enqueued capcom refresh (%s)", source or 'all')
     return JsonResponse({
         'ok': True,
         'source': source or 'all',

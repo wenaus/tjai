@@ -18,8 +18,8 @@ from wrangle_ai.postgres import PgBell
 
 from tjai_app.models import SysConfig
 from tjai_app.wrangler import (
-    BELL_CHANNEL, TjaiBullpen, TjaiRoster, build_dsn, handle_mechanical,
-    logger, write_pulse,
+    BELL_CHANNEL, TjaiBullpen, TjaiRoster, build_dsn, handle_capcom_refresh,
+    handle_mechanical, logger, write_pulse,
 )
 
 
@@ -34,6 +34,9 @@ def main():
     wrangler.register(
         'mechanical', handle_mechanical, timeout=3600.0,
         key_fn=lambda w: f"action:{w.payload.get('action_entry_id')}")
+    wrangler.register(
+        'capcom_refresh', handle_capcom_refresh, timeout=600.0,
+        key_fn=lambda w: f"capcom:{w.payload.get('target')}")
 
     now = time.time()
     for key, value in (('wrangler_pid', str(os.getpid())),

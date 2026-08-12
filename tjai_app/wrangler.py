@@ -141,17 +141,25 @@ class TjaiRoster:
             connections.close_all()
 
 
-def enqueue_action(action, target_date=None):
-    """Producer-side enqueue of one action run, plus bell ring.
-
-    The on-demand path for wrangler-owned actions: force-run, reruns, web
-    triggers. Runs on the web tier via the ordinary Django connection — no
-    connection pool, no signal, and pg_notify crosses the OS user boundary.
-    Returns the worker type enqueued.
-    """
+def enqueue_worker(worker_type, payload):
+    """Producer-side enqueue plus bell ring — the on-demand path for
+    wrangler work: force-run, reruns, web triggers. Runs on the web tier via
+    the ordinary Django connection — no connection pool, no signal, and
+    pg_notify crosses the OS user boundary. Returns the worker id."""
     from django.db import connection
     from django.utils import timezone
 
+    wid = str(uuid.uuid4())
+    WrangleWorker.objects.create(
+        id=wid, type=worker_type, status='pending', attempts=0,
+        created_at=timezone.now(), payload=payload)
+    with connection.cursor() as cur:
+        cur.execute("SELECT pg_notify(%s, '')", [BELL_CHANNEL])
+    return wid
+
+
+def enqueue_action(action, target_date=None):
+    """Enqueue one run of a wrangler-owned action. Returns the worker type."""
     data = action.data or {}
     action_id = data.get('entry_id') or str(action.id)
     if target_date is None:
@@ -159,13 +167,9 @@ def enqueue_action(action, target_date=None):
         if data.get('trigger') == 'overnight':
             target_date -= timedelta(days=1)
     worker_type = 'ai_dispatch' if data.get('ai_prompt') else 'mechanical'
-    WrangleWorker.objects.create(
-        id=str(uuid.uuid4()), type=worker_type, status='pending', attempts=0,
-        created_at=timezone.now(),
-        payload={'action_entry_id': action_id, 'action_uuid': str(action.id),
-                 'target_date': target_date.isoformat()})
-    with connection.cursor() as cur:
-        cur.execute("SELECT pg_notify(%s, '')", [BELL_CHANNEL])
+    enqueue_worker(worker_type, {
+        'action_entry_id': action_id, 'action_uuid': str(action.id),
+        'target_date': target_date.isoformat()})
     return worker_type
 
 
@@ -187,6 +191,23 @@ def handle_mechanical(worker):
             raise RuntimeError("mechanical step failed (details in AppLog)")
         return {'action': payload['action_entry_id'],
                 'target_date': payload['target_date']}
+    finally:
+        connections.close_all()
+
+
+def handle_capcom_refresh(worker):
+    """On-demand Capcom collector run for one source (or '*'), as a doer
+    subprocess — the durable replacement for the polled capcom_force_run
+    flag. A run that is due anyway is a no-op beyond the forced source; the
+    dispatcher's periodic cadence is never shifted by a forced pass."""
+    from .action_runner import _run_one_script
+    close_old_connections()
+    try:
+        target = worker.payload.get('target') or '*'
+        if not _run_one_script(f'capcom_dispatcher.py --force-target {target}',
+                               timeout=600):
+            raise RuntimeError('capcom_dispatcher force run failed (details in AppLog)')
+        return {'capcom_refresh': target}
     finally:
         connections.close_all()
 

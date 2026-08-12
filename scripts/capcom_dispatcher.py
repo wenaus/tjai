@@ -327,4 +327,9 @@ def run(force_target=None):
 
 
 if __name__ == '__main__':
-    run()
+    import argparse
+    parser = argparse.ArgumentParser(description='Capcom collector dispatcher')
+    parser.add_argument('--force-target',
+                        help="run one source (or '*' for all) without shifting cadence")
+    args = parser.parse_args()
+    run(force_target=args.force_target)
