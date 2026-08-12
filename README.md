@@ -47,6 +47,7 @@ interfaces, not the center of the system architecture.
 | [MCP Server](docs/mcp.md) | Standalone MCP ASGI service: transport policy, bearer auth, Apache routing, deployment; related read-only Postgres MCP |
 | [Action Agent](docs/action-agent.md) | Scheduled task daemon, execution pipeline, action entry schema |
 | [Wrangler](docs/wrangler.md) | Successor execution design on wrangle-ai: durable workers, roster over action entries, migration plan |
+| [Page Refresh](docs/page-refresh.md) | Scheduled synchronous rebuild of the cached products behind listed pages, with authenticated fetching |
 | [Local Maintenance Actions](docs/local-actions.md) | Small machine-local jobs run by the sync agent, separate from EC2 action entries |
 | [Agents](docs/agents.md) | Daily synopsis, AI news curation (Picks), autonomous research, RSS reader |
 | [ec2dev-web Monitor](docs/ec2dev-web.md) | Cron-collected ingress traffic, backend load, automation evidence, Snapper history, and Capcom state |

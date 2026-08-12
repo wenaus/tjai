@@ -98,13 +98,15 @@ def process_failure_details(label, returncode, stdout='', stderr='', limit=PROCE
 def get_next_scheduled_time(action):
     """Return the next scheduled run time (epoch) for an action.
 
-    For actions with data.scheduled_time (HHMM string):
-        Computes today's scheduled moment in the configured timezone.
-        If last_run >= that moment, returns tomorrow's scheduled moment.
-        Otherwise returns today's (due now or overdue).
+    For actions with data.scheduled_time (HHMM string, or several
+    comma-separated: "0600,1800"):
+        Computes the day's scheduled moments in the configured timezone
+        and returns the earliest one not yet consumed by last_run. When
+        every moment of the day is consumed, returns the next day's first.
 
         If data.scheduled_dow is also set ('mon'..'sun'), the action only
-        runs on that weekday — returns the next occurrence at HH:MM.
+        runs on that weekday — the same moment selection applies to the
+        next occurrence of that day.
 
     For actions without scheduled_time:
         Falls back to last_run + interval_hours * 3600.
@@ -124,34 +126,39 @@ def get_next_scheduled_time(action):
     if scheduled_time:
         tz = services.get_timezone()
         now_local = datetime.now(tz)
-        hour = int(scheduled_time[:2])
-        minute = int(scheduled_time[2:])
+        times = sorted(
+            (int(t.strip()[:2]), int(t.strip()[2:]))
+            for t in str(scheduled_time).split(',') if t.strip()
+        )
+        last_run = data.get('last_run', 0)
 
         if scheduled_dow:
             target_weekday = DOW_MAP.get(str(scheduled_dow).lower())
             if target_weekday is not None:
-                today_weekday = now_local.weekday()
-                days_ahead = (target_weekday - today_weekday) % 7
-                scheduled_target = now_local.replace(
-                    hour=hour, minute=minute, second=0, microsecond=0
-                ) + timedelta(days=days_ahead)
-                last_run = data.get('last_run', 0)
-                # If today is the target day and we already ran (or moment
-                # passed and was consumed), advance one full week.
-                if scheduled_target.timestamp() <= last_run:
-                    scheduled_target += timedelta(days=7)
-                return scheduled_target.timestamp()
+                days_ahead = (target_weekday - now_local.weekday()) % 7
+                day_moments = [
+                    now_local.replace(hour=hour, minute=minute,
+                                      second=0, microsecond=0)
+                    + timedelta(days=days_ahead)
+                    for hour, minute in times
+                ]
+                for moment in day_moments:
+                    if moment.timestamp() > last_run:
+                        return moment.timestamp()
+                # Every moment of the target day consumed — next week's first.
+                return (day_moments[0] + timedelta(days=7)).timestamp()
             # Unknown dow string — fall through to daily behavior
 
-        scheduled_today = now_local.replace(
-            hour=hour, minute=minute, second=0, microsecond=0)
-        scheduled_moment = scheduled_today.timestamp()
-        last_run = data.get('last_run', 0)
-        if last_run >= scheduled_moment:
-            # Already ran today — next is tomorrow
-            scheduled_tomorrow = (scheduled_today + timedelta(days=1))
-            return scheduled_tomorrow.timestamp()
-        return scheduled_moment
+        day_moments = [
+            now_local.replace(hour=hour, minute=minute,
+                              second=0, microsecond=0)
+            for hour, minute in times
+        ]
+        for moment in day_moments:
+            if moment.timestamp() > last_run:
+                return moment.timestamp()
+        # Every moment of today consumed — tomorrow's first.
+        return (day_moments[0] + timedelta(days=1)).timestamp()
     else:
         last_run = data.get('last_run', 0)
         interval_hours = data.get('interval_hours', 24)

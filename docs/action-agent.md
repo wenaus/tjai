@@ -24,7 +24,7 @@ supervisord → action_agent.py (always-on daemon)
 |-----|---------|
 | `entry_id` | Human-readable identifier (e.g. `daily-synopsis`) |
 | `trigger` | Trigger class: `daily`, `periodic`, `overnight` (targets the previous day), or `weekly` |
-| `scheduled_time` | HHMM string for daily scheduling (e.g. `0010`) |
+| `scheduled_time` | HHMM string for daily scheduling (e.g. `0010`), or several comma-separated moments (e.g. `0600,1800`) — the due time is the day's earliest moment not yet consumed by `last_run` |
 | `scheduled_dow` | Day of week (`mon`..`sun`); with `scheduled_time`, the action runs weekly on that day |
 | `interval_hours` | Fallback interval if no `scheduled_time` |
 | `last_run` | Epoch timestamp of last execution |
