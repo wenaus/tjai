@@ -220,11 +220,14 @@ def main():
         target = datetime.now().date()
 
     date_str = target.strftime('%Y-%m-%d')
-    backup_dir = LOCAL_BACKUP_DIR / date_str
+    # Work in a .partial directory and publish by rename at the end, so
+    # concurrent observers (the health check, the Capcom backup tile) only
+    # ever see a complete backup directory — never one mid-write.
+    final_dir = LOCAL_BACKUP_DIR / date_str
+    backup_dir = LOCAL_BACKUP_DIR / f'{date_str}.partial'
 
     if backup_dir.exists():
-        print(f"Backup already exists: {backup_dir}")
-        print("Overwriting.")
+        print(f"Removing leftover partial from a prior attempt: {backup_dir}")
         shutil.rmtree(backup_dir)
 
     backup_dir.mkdir(parents=True)
@@ -250,14 +253,29 @@ def main():
     copy_apache_conf(backup_dir)
 
     if not ok:
-        print(f"Backup completed with errors: {date_str}", file=sys.stderr)
+        print(f"Backup completed with errors: {date_str} "
+              f"(left in {backup_dir}; last good backup stays published)",
+              file=sys.stderr)
         sys.exit(1)
+
+    # Atomic publish. Replacing an existing same-day backup passes through a
+    # two-rename swap whose window is microseconds.
+    if final_dir.exists():
+        retired = LOCAL_BACKUP_DIR / f'{date_str}.old'
+        if retired.exists():
+            shutil.rmtree(retired)
+        final_dir.rename(retired)
+        backup_dir.rename(final_dir)
+        shutil.rmtree(retired)
+    else:
+        backup_dir.rename(final_dir)
+    print(f"Published {final_dir}")
 
     # Push to Dropbox via rclone
     rclone_dest = f'{RCLONE_DEST}/{date_str}'
     print(f"Pushing to {rclone_dest} ...")
     result = subprocess.run(
-        ['rclone', 'copy', str(backup_dir), rclone_dest],
+        ['rclone', 'copy', str(final_dir), rclone_dest],
         capture_output=True, text=True, timeout=3600,
     )
     if result.returncode != 0:

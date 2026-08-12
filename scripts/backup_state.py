@@ -47,7 +47,11 @@ def build_payload(now=None):
     """Compute the tile payload plus transition metadata. Pure filesystem +
     worker-row read; no Capcom writes."""
     now = now or time.time()
-    dirs = sorted((d for d in BACKUP_ROOT.iterdir() if d.is_dir()),
+    # Date-named directories only — .partial/.old workspaces from the
+    # backup's atomic publish are never judged (same filter the health
+    # collector uses).
+    dirs = sorted((d for d in BACKUP_ROOT.iterdir()
+                   if d.is_dir() and len(d.name) == 10),
                   key=lambda d: d.name) if BACKUP_ROOT.is_dir() else []
     if not dirs:
         return {'source': CAPCOM_SOURCE, 'value': 'NO BACKUPS', 'color': 'red',
