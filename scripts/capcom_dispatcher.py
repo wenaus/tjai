@@ -311,10 +311,12 @@ def run(force_target=None):
         except Exception as e:
             logger.error(
                 "capcom_dispatcher: collector %r failed: %s", collector_name, e)
+            notice_source = group[0].get('source', collector_name)
             capcom.emit_notice(
-                source=group[0].get('source', collector_name), severity='warning',
-                title=f"collector failed: {e}",
+                source=notice_source, severity='warning',
+                title=f"{notice_source} collector failed",
                 dedup_key=f"capcom-collector-fail-{collector_name}",
+                data={'detail': str(e)},
             )
         if not force_target:
             for src in group:
