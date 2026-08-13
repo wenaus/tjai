@@ -82,6 +82,7 @@
         .tile.meeting-tile .t-value { color: #e0e0e0; }
         .tile.meeting-tile .t-ago { color: #aaa; }
         .tile.meeting-tile .meeting-time { color: inherit; }
+        .tile.meeting-tile .t-ago.meeting-soon { color: #ef5350; }
         .tile[data-state-key="corun-ai"] .t-value { font-size: 11px; }
         .tile[data-state-key="corun-ai"] .t-ago.recent { color: #fff; }
         .tile[data-state-key="corun-ai"] .t-ago.fresh { color: #9ccc65; }
@@ -430,7 +431,9 @@
               escapeHtml(meeting.edit_url) + '" target="_blank" rel="noopener">' +
               escapeHtml(meeting.time_display) + '</a> · ' +
               linkifyContent(escapeHtml(meeting.title)) +
-              '</span><span class="t-ago">' + meetingCountdown(meeting.event_date) +
+              '</span><span class="t-ago' +
+              (meeting.event_date - Date.now() / 1000 < 900 ? ' meeting-soon' : '') +
+              '">' + meetingCountdown(meeting.event_date) +
               '</span></span></div></div>'
             : '';
         el.innerHTML = stateHtml + meetingHtml ||
