@@ -26,9 +26,15 @@ by source; Capcom is one stream with filtered views over it.
 
 Two panels:
 
-- **Left panel — notepad, state, and pins.** A fixed **Notepad** section at
-  the top opens a content-only editor in the right panel for the canonical
-  TJAI memory entry whose `entry_id` is `capcom-notepad`. It has no Save
+- **Left panel — pads, state, and pins.** A fixed pad line at the top —
+  **Notepad · Pouch** — opens a content-only editor in the right panel over
+  one canonical TJAI memory entry per pad: `capcom-notepad`, the user's
+  scratch surface, and `capcom-pouch`, the exchange surface between the user
+  and LLMs, where write-ups and handoffs are placed for immediate pickup and
+  wiped by the consumer; entry versioning retains what wipes remove. The
+  editor page carries the two pads as tabs. An explicit `?pad=` selection is
+  remembered in the `capcom_pad_last` sysconfig key and a bare load serves
+  the last-visited pad. The editor has no Save
   button or metadata controls. Content writes immediately to a per-tab local
   recovery draft, autosaves after a short pause, and forces a server flush
   when the editor, Capcom tab, or Chrome window loses focus and when the page

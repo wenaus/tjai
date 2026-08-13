@@ -4217,11 +4217,12 @@ def api_entry_save(request, entry_id):
         else:
             entry.context_id = None
     # Sync tags: explicit field takes precedence, then extract from content.
-    # The Capcom notepad is deliberately content-only: colons jotted there
-    # are text, not an implicit request to mutate entry metadata.
+    # The Capcom pads (notepad, pouch) are deliberately content-only: colons
+    # jotted there are text, not an implicit request to mutate entry metadata.
     entry_data = entry.data if isinstance(entry.data, dict) else {}
     content_only_notepad = (
-        entry_data.get('entry_id') == CAPCOM_NOTEPAD_ENTRY_ID
+        entry_data.get('entry_id') in (CAPCOM_NOTEPAD_ENTRY_ID,
+                                       CAPCOM_POUCH_ENTRY_ID)
         and data.get('autosave') is True
         and 'tags' not in data
     )
@@ -8696,25 +8697,40 @@ def capcom_page(request):
 
 CAPCOM_NOTEPAD_ENTRY_ID = 'capcom-notepad'
 CAPCOM_NOTEPAD_UUID = '09d846c3-9163-5019-8138-14af8fbb648c'
+CAPCOM_POUCH_ENTRY_ID = 'capcom-pouch'
+CAPCOM_POUCH_UUID = 'd64e5159-29a5-4719-9a87-6ed771b5dec8'
+
+# The Capcom pads: one canonical content-only entry each, edited on the
+# shared pad page. The notepad is the user's scratch surface; the pouch
+# is the exchange surface between the user and LLMs — write-ups and
+# handoffs placed for instant pickup, wiped by the consumer, with entry
+# versioning retaining history.
+CAPCOM_PADS = {
+    'notepad': {'entry_id': CAPCOM_NOTEPAD_ENTRY_ID,
+                'uuid': CAPCOM_NOTEPAD_UUID, 'label': 'Notepad'},
+    'pouch': {'entry_id': CAPCOM_POUCH_ENTRY_ID,
+              'uuid': CAPCOM_POUCH_UUID, 'label': 'Pouch'},
+}
 
 
-def _capcom_notepad_entry():
-    """Return the one canonical Capcom notepad entry, creating it once."""
+def _capcom_pad_entry(pad):
+    """Return a pad's one canonical entry, creating it once."""
+    spec = CAPCOM_PADS[pad]
     entry = Entry.objects.filter(
-        data__entry_id=CAPCOM_NOTEPAD_ENTRY_ID,
+        data__entry_id=spec['entry_id'],
         deleted_at__isnull=True,
     ).first()
     if entry:
         return entry
     entry, _created = Entry.objects.get_or_create(
-        id=CAPCOM_NOTEPAD_UUID,
+        id=spec['uuid'],
         defaults={
             'content': '',
             'kind': 'memory',
             'timestamp_created': time.time(),
             'timestamp_modified': time.time(),
             'is_dirty': 1,
-            'data': {'entry_id': CAPCOM_NOTEPAD_ENTRY_ID},
+            'data': {'entry_id': spec['entry_id']},
         },
     )
     return entry
@@ -8723,10 +8739,25 @@ def _capcom_notepad_entry():
 @login_required
 @xframe_options_exempt
 def capcom_notepad(request):
-    """Minimal content-only editor for the Capcom notepad entry."""
-    entry = _capcom_notepad_entry()
+    """Content-only editor page for the Capcom pads (notepad, pouch).
+
+    An explicit ?pad= selects and is remembered (capcom_pad_last
+    sysconfig); a bare request serves the last-visited pad.
+    """
+    from . import capcom as capcom_lib
+    pad = request.GET.get('pad')
+    if pad in CAPCOM_PADS:
+        capcom_lib._set_json_config('capcom_pad_last', pad)
+    else:
+        pad = capcom_lib._get_json_config('capcom_pad_last', 'notepad')
+        if pad not in CAPCOM_PADS:
+            pad = 'notepad'
+    entry = _capcom_pad_entry(pad)
     return render(request, 'tjai_app/capcom_notepad.html', {
         'entry': entry,
+        'pad': pad,
+        'pad_entry_id': CAPCOM_PADS[pad]['entry_id'],
+        'pad_label': CAPCOM_PADS[pad]['label'],
     })
 
 

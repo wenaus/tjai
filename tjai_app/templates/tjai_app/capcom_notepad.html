@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Capcom Notepad</title>
+    <title>Capcom {{ pad_label }}</title>
     <link rel="stylesheet" href="/tjai/static/tjai/vendor/codemirror/5.65.18/codemirror.min.css">
     <link rel="stylesheet" href="/tjai/static/tjai/vendor/codemirror/5.65.18/theme/material-darker.min.css">
     <style>
@@ -20,12 +20,17 @@
             min-height: 27px;
             display: flex;
             align-items: center;
-            justify-content: flex-end;
+            gap: 10px;
             padding: 3px 9px;
             border-bottom: 1px solid #2b2b2b;
         }
-        #save-error { display: none; margin-right: auto; color: #ef5350; }
-        .history { color: #777; text-decoration: none; font-size: 11px; }
+        .pad-tab { color: #999; text-decoration: none; }
+        .pad-tab:hover { color: #ccc; }
+        .pad-tab.active { color: #90caf9; }
+        .pad-sep { color: #555; }
+        #save-error { display: none; color: #ef5350; }
+        .history { color: #777; text-decoration: none; font-size: 11px;
+                   margin-left: auto; }
         .history:hover { color: #bbb; text-decoration: underline; }
         #editor-shell { flex: 1; min-height: 0; }
         #editor { display: none; }
@@ -42,8 +47,13 @@
 </head>
 <body>
     <div class="notepad-bar">
+        <a class="pad-tab{% if pad == 'notepad' %} active{% endif %}"
+           href="?pad=notepad">Notepad</a>
+        <span class="pad-sep">·</span>
+        <a class="pad-tab{% if pad == 'pouch' %} active{% endif %}"
+           href="?pad=pouch">Pouch</a>
         <span id="save-error"></span>
-        <a class="history" href="/tjai/entry/?entry_id=capcom-notepad&amp;edit=1"
+        <a class="history" href="/tjai/entry/?entry_id={{ pad_entry_id }}&amp;edit=1"
            target="_blank" rel="noopener">history</a>
     </div>
     <div id="editor-shell"><textarea id="editor">{{ entry.content }}</textarea></div>
@@ -278,6 +288,10 @@
             scheduleSave(0);
         } else {
             clearSatisfiedDrafts();
+        }
+        if (window.parent !== window) {
+            window.parent.postMessage(
+                {type: 'tjai-capcom-pad', pad: "{{ pad }}"}, window.location.origin);
         }
         editor.focus();
         setInterval(function() {
