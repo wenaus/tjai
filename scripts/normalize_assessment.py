@@ -12,7 +12,9 @@ Canonical schema:
     data.scores: [{dt, score, cumulative, precis}, ...]
     data.total_turns, data.scored_events, data.final_cumulative, data.integral
 """
+import re
 import sys
+from datetime import datetime
 
 import bootstrap  # noqa: F401 - Django setup
 
@@ -34,6 +36,21 @@ def _pick(d, keys, default=None):
     return default
 
 
+def _repair_dt(raw):
+    """Repair an LLM-emitted timestamp; return (value, parsed_or_None).
+
+    Collapses hyphen runs between digits (e.g. '2026--08-12'), the
+    observed malformation. An unparseable value is returned unchanged
+    with parsed=None so callers can surface it rather than sort on a
+    string that misorders against valid ISO dates.
+    """
+    value = re.sub(r'(?<=\d)-{2,}(?=\d)', '-', str(raw or ''))
+    try:
+        return value, datetime.fromisoformat(value)
+    except ValueError:
+        return str(raw or ''), None
+
+
 def normalize_entry(entry):
     """Normalize an assessment entry's data to canonical field names.
 
@@ -46,14 +63,25 @@ def normalize_entry(entry):
 
     changed = False
 
-    # Sort by timestamp, then normalize each score object
-    scores.sort(key=lambda s: _pick(s, DT_KEYS, ''))
+    # Sort by parsed timestamp (repairing malformations first) — a raw
+    # string sort misorders malformed dates against valid ISO ones.
+    # Unparseable values sort last and are reported.
+    def _sort_key(s):
+        value, parsed = _repair_dt(_pick(s, DT_KEYS, ''))
+        if parsed is None:
+            print(f'WARNING: unparseable score timestamp {value!r} in '
+                  f'{(entry.data or {}).get("entry_id", entry.id)}',
+                  file=sys.stderr)
+            return (1, '')
+        return (0, parsed.isoformat())
+
+    scores.sort(key=_sort_key)
     canonical_scores = []
     running_cum = 0
     for s in scores:
         score_val = _pick(s, SCORE_KEYS, 0)
         cum_val = _pick(s, CUM_KEYS)
-        dt_val = _pick(s, DT_KEYS, '')
+        dt_val, _ = _repair_dt(_pick(s, DT_KEYS, ''))
         precis_val = _pick(s, PRECIS_KEYS, '')
 
         # Always recompute cumulative (sort may have changed order)
