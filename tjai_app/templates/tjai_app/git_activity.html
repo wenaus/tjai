@@ -390,6 +390,17 @@ function buildLocChart(d) {
         }
     }
 
+    // Average line over complete weeks — the in-progress week would
+    // understate the average, so a trailing partial bucket is excluded.
+    const lastWk = new Date(weeks[n - 1] + 'T12:00:00');
+    const done = (lastWk.getTime() + 7 * 86400e3 < Date.now()) ? totals : totals.slice(0, -1);
+    if (done.length) {
+        const avg = done.reduce((a, b) => a + b, 0) / done.length;
+        const ay = y(Math.min(avg, yMax));
+        svg += `<line x1="${axisW}" y1="${ay}" x2="${width}" y2="${ay}" stroke="#e8e8e8" stroke-width="1" stroke-dasharray="5 4" data-tip="average ${fmt(Math.round(avg))} lines/week over ${done.length} complete weeks"/>`;
+        svg += `<text x="${axisW + 6}" y="${topPad + 11}" font-size="10" fill="#e8e8e8">avg ${kfmt(Math.round(avg / 100) * 100)}/wk</text>`;
+    }
+
     let legend = '';
     for (const p of projects) {
         const tot = (d.series[p] || []).reduce((a, b) => a + b, 0);
