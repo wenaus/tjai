@@ -37,6 +37,7 @@ urlpatterns = [
     # Dashboard (protected by login)
     path("dashboard/", views.dashboard, name="dashboard"),
     path("diary/", views.diary_page, name="diary_page"),
+    path("diary/today/", views.diary_today_edit, name="diary_today_edit"),
     path("versions/", views.versions_page, name="versions_page"),
     path("todo-bangs/", views.todo_bangs, name="todo_bangs"),
     path("api/todo-bangs", views.api_todo_bangs, name="api_todo_bangs"),

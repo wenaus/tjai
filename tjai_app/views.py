@@ -1751,8 +1751,21 @@ def diary_page(request):
 
 @login_required
 def api_diary_entries(request):
-    """Return @Underway entry and diary journal entries as JSON."""
-    from .models import Entry, Tag
+    """Diary journal entries for one date window, newest first.
+
+    Query params: ``before`` (inclusive upper-bound ISO date; default
+    today) and ``days`` (window length, default 62 ≈ two months). The
+    @Underway entry rides only the first page (no ``before``). ``has_more``
+    reports whether any diary entry predates the window, so the client can
+    lazy-load the next window on scroll instead of rendering every entry's
+    markdown on first paint.
+    """
+    from datetime import date as date_type, timedelta
+
+    from django.db.models.fields.json import KeyTextTransform
+
+    from .models import Entry
+    from .tjai_utils import get_app_tz
 
     def render_entry(entry):
         body_lines = entry.content.split('\n')
@@ -1782,19 +1795,48 @@ def api_diary_entries(request):
             'modified': entry.timestamp_modified,
         }
 
-    result = {'underway': None, 'diary_entries': []}
+    try:
+        days = int(request.GET.get('days', 62))
+    except ValueError:
+        days = 62
+    days = max(1, min(days, 400))
 
-    # @Underway
-    underway = Entry.objects.filter(name='Underway', deleted_at__isnull=True).first()
-    if underway:
-        result['underway'] = render_entry(underway)
+    today = datetime.now(get_app_tz()).date()
+    before = request.GET.get('before')
+    if before:
+        try:
+            window_end = date_type.fromisoformat(before)
+        except ValueError:
+            return JsonResponse({'error': 'Invalid before date'}, status=400)
+    else:
+        window_end = today
+    window_start = window_end - timedelta(days=days - 1)
+    start_id = f'diary-{window_start.isoformat()}'
+    end_id = f'diary-{window_end.isoformat()}'
 
-    # Diary entries only (entry_id starts with 'diary-'), not daily synopsis
-    diary_qs = Entry.objects.filter(
+    # Diary entries only (entry_id 'diary-YYYY-MM-DD', not daily synopsis).
+    # ISO dates sort lexicographically, so a text range on entry_id is the
+    # date window; KeyTextTransform gives text comparison (not jsonb order).
+    base = Entry.objects.filter(
         context_id='diary', kind='journal', deleted_at__isnull=True,
         data__entry_id__startswith='diary-',
-    ).order_by('-timestamp_modified')[:1000]
-    result['diary_entries'] = [render_entry(e) for e in diary_qs]
+    ).annotate(eid=KeyTextTransform('entry_id', 'data'))
+    window_qs = base.filter(
+        eid__gte=start_id, eid__lte=end_id,
+    ).order_by('-eid')
+
+    result = {
+        'diary_entries': [render_entry(e) for e in window_qs],
+        'window_start': window_start.isoformat(),
+        'window_end': window_end.isoformat(),
+        'has_more': base.filter(eid__lt=start_id).exists(),
+    }
+
+    # @Underway only on the first (most recent) page.
+    if not before:
+        underway = Entry.objects.filter(
+            name='Underway', deleted_at__isnull=True).first()
+        result['underway'] = render_entry(underway) if underway else None
 
     return JsonResponse(result)
 
@@ -4889,6 +4931,29 @@ def api_add_journal(request):
     })
 
 
+def _get_or_create_diary_entry(day):
+    """Find or create the diary entry for a date. Returns (entry_id, uuid)
+    on success or ({'error': ...}, None) on failure."""
+    from . import services
+    entry_id = f'diary-{day.isoformat()}'
+    existing = Entry.objects.filter(
+        data__entry_id=entry_id, deleted_at__isnull=True,
+    ).first()
+    if existing:
+        return entry_id, str(existing.id)
+    result = services.create_entry(
+        content=day.strftime('Diary: %a %b %-d, %Y'),
+        kind='journal',
+        context='diary',
+        event_date=day.strftime('%Y%m%d'),
+        event_time='0000',
+        data={'entry_id': entry_id},
+    )
+    if isinstance(result, dict) and 'error' in result:
+        return result, None
+    return entry_id, result.get('id', '')
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 @login_required
@@ -4908,28 +4973,25 @@ def api_diary_today(request):
             return JsonResponse({'error': 'Invalid date format, use YYYY-MM-DD'}, status=400)
     else:
         today = datetime.now(tz).date()
-    entry_id = f'diary-{today.isoformat()}'
-    existing = Entry.objects.filter(
-        data__entry_id=entry_id, deleted_at__isnull=True,
-    ).first()
-    if existing:
-        return JsonResponse({'entry_id': entry_id, 'id': str(existing.id)})
-    # Create new diary entry
-    now = time.time()
-    title = today.strftime('Diary: %a %b %-d, %Y')
-    event_date = today.strftime('%Y%m%d')
-    from . import services
-    result = services.create_entry(
-        content=title,
-        kind='journal',
-        context='diary',
-        event_date=event_date,
-        event_time='0000',
-        data={'entry_id': entry_id},
-    )
-    if isinstance(result, dict) and 'error' in result:
-        return JsonResponse(result, status=400)
-    return JsonResponse({'entry_id': entry_id, 'id': result.get('id', '')})
+    entry_id, uuid = _get_or_create_diary_entry(today)
+    if uuid is None:
+        return JsonResponse(entry_id, status=400)
+    return JsonResponse({'entry_id': entry_id, 'id': uuid})
+
+
+@login_required
+def diary_today_edit(request):
+    """Open today's diary entry in edit mode, creating it if absent.
+
+    The 'T' affordance in the menu links here, so today's entry is one
+    click from any page.
+    """
+    from .tjai_utils import get_app_tz
+    today = datetime.now(get_app_tz()).date()
+    entry_id, uuid = _get_or_create_diary_entry(today)
+    if uuid is None:
+        return redirect('diary_page')
+    return redirect(f'/tjai/entry/?entry_id={entry_id}&edit=1')
 
 
 @login_required

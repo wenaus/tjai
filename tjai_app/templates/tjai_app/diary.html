@@ -76,7 +76,11 @@
             <button class="toolbar-btn" id="openAllBtn">Open All</button>
             <button class="toolbar-btn" id="closeAllBtn">Close All</button>
         </div>
-        <div id="diary-content"><div class="loading">Loading...</div></div>
+        <div id="diary-content">
+            <div id="diary-header"></div>
+            <div id="diary-days"><div class="loading">Loading...</div></div>
+            <div id="diary-sentinel"></div>
+        </div>
     </div>
     <script src="/tjai/static/tjai/offline-cache.js"></script>
     <script>
@@ -208,55 +212,105 @@
             return html;
         }
 
-        async function loadDiary() {
+        // Windowed loading: the page paints the most recent two months and
+        // lazy-loads older windows when the bottom sentinel nears the viewport,
+        // so first paint never renders every diary entry.
+        const entryByDate = {};
+        let cursorBefore = null;   // ISO upper bound for the next fetch; null = first page (today)
+        let renderFrom = todayStr(); // next calendar day to render downward from
+        let hasMore = true;
+        let loading = false;
+        let observer = null;
+
+        function renderHeader(underway) {
+            let html = `<div style="margin-bottom:12px;display:flex;gap:18px;flex-wrap:wrap">`;
+            html += `<a href="#" onclick="event.preventDefault();createDiaryEntry(todayStr())" style="color:#90caf9">Edit today's diary</a>`;
+            html += `<a href="/tjai/weekly/" style="color:#90caf9">Weekly</a>`;
+            html += `<a href="/tjai/this-week/" style="color:#90caf9">This Workweek</a>`;
+            html += `<a href="/tjai/entry/?entry_id=work-hours-highlights" style="color:#90caf9">Work highlights</a>`;
+            if (underway) {
+                const url = underway.entry_id
+                    ? `/tjai/entry/?entry_id=${encodeURIComponent(underway.entry_id)}`
+                    : `/tjai/entry/?uuid=${underway.id}`;
+                html += `<a href="${url}" style="color:#90caf9">@Underway</a>`;
+            }
+            html += `</div>`;
+            return html;
+        }
+
+        function renderRange(fromStr, toStr, state) {
+            // fromStr >= toStr, newest to oldest; ISO dates compare lexically.
+            let html = '', cur = fromStr;
+            while (cur >= toStr) {
+                html += entryByDate[cur]
+                    ? renderDiaryEntry(entryByDate[cur], state)
+                    : renderMissingDay(cur);
+                cur = addDays(cur, -1);
+            }
+            return html;
+        }
+
+        async function loadWindow() {
+            if (loading || !hasMore) return;
+            loading = true;
             try {
-                const data = await TjaiOfflineCache.fetchJson('/tjai/api/diary/entries');
+                const url = '/tjai/api/diary/entries' + (cursorBefore ? ('?before=' + cursorBefore) : '');
+                const data = await TjaiOfflineCache.fetchJson(url);
                 const state = getCollapseState();
-                let html = '';
+                const daysDiv = document.getElementById('diary-days');
 
-                // Quick links: edit today's diary, view current week
-                html += `<div style="margin-bottom:12px;display:flex;gap:18px">`;
-                html += `<a href="#" onclick="event.preventDefault();createDiaryEntry(todayStr())" style="color:#90caf9">Edit today's diary</a>`;
-                html += `<a href="/tjai/weekly/" style="color:#90caf9">Weekly</a>`;
-                html += `<a href="/tjai/this-week/" style="color:#90caf9">This Workweek</a>`;
-                html += `<a href="/tjai/entry/?entry_id=work-hours-highlights" style="color:#90caf9">Work highlights</a>`;
-                if (data.underway) {
-                    const u = data.underway;
-                    const url = u.entry_id
-                        ? `/tjai/entry/?entry_id=${encodeURIComponent(u.entry_id)}`
-                        : `/tjai/entry/?uuid=${u.id}`;
-                    html += `<a href="${url}" style="color:#90caf9">@Underway</a>`;
+                if (cursorBefore === null) {
+                    document.getElementById('diary-header').innerHTML = renderHeader(data.underway);
+                    daysDiv.innerHTML = '';
                 }
-                html += `</div>`;
 
-                // Build date->entry map from diary entries
-                const entryByDate = {};
                 for (const e of data.diary_entries) {
                     const m = (e.entry_id || '').match(/^diary-(\d{4}-\d{2}-\d{2})$/);
                     if (m) entryByDate[m[1]] = e;
                 }
+                hasMore = !!data.has_more;
+                const windowStart = data.window_start;
+                // Fill placeholders down to the window floor; on the final page
+                // stop at the oldest real entry so there are no trailing empties.
+                const oldestKey = Object.keys(entryByDate).sort()[0];
+                const bottom = hasMore ? windowStart : (oldestKey || windowStart);
+                daysDiv.insertAdjacentHTML('beforeend', renderRange(renderFrom, bottom, state));
+                if (window.Prism) Prism.highlightAllUnder(daysDiv);
 
-                // Walk from today back to oldest entry, filling gaps
-                const today = todayStr();
-                const dates = Object.keys(entryByDate).sort();
-                const oldest = dates.length ? dates[0] : today;
-                let cur = today;
-                while (cur >= oldest) {
-                    if (entryByDate[cur]) {
-                        html += renderDiaryEntry(entryByDate[cur], state);
-                    } else {
-                        html += renderMissingDay(cur);
+                renderFrom = addDays(windowStart, -1);
+                cursorBefore = addDays(windowStart, -1);
+
+                if (!hasMore) {
+                    if (observer) observer.disconnect();
+                    const s = document.getElementById('diary-sentinel');
+                    if (s) s.remove();
+                    if (!daysDiv.innerHTML.trim()) {
+                        daysDiv.innerHTML = '<div class="loading">No diary entries yet.</div>';
                     }
-                    cur = addDays(cur, -1);
                 }
-
-                if (!html) html = '<div class="loading">No diary entries yet.</div>';
-                document.getElementById('diary-content').innerHTML = html;
-                if (window.Prism) Prism.highlightAllUnder(document.getElementById('diary-content'));
             } catch (e) {
-                document.getElementById('diary-content').innerHTML =
-                    '<div class="loading">Error loading diary: ' + escHtml(e.message) + '</div>';
+                document.getElementById('diary-days').insertAdjacentHTML('beforeend',
+                    '<div class="loading">Error loading diary: ' + escHtml(e.message) + '</div>');
+                hasMore = false;
+            } finally {
+                loading = false;
             }
+            // Keep loading until the sentinel is pushed past the viewport, so a
+            // short first window still fills the screen.
+            if (hasMore) {
+                const s = document.getElementById('diary-sentinel');
+                if (s && s.getBoundingClientRect().top < window.innerHeight + 200) {
+                    setTimeout(loadWindow, 0);
+                }
+            }
+        }
+
+        function loadDiary() {
+            observer = new IntersectionObserver((entries) => {
+                if (entries[0].isIntersecting) loadWindow();
+            }, { rootMargin: '600px' });
+            observer.observe(document.getElementById('diary-sentinel'));
+            loadWindow();
         }
 
         TjaiOfflineCache.warmManifest({
