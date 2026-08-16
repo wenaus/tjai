@@ -1634,13 +1634,13 @@ def _entry_ids_with_relations():
 # lightweight in-flow todo marker. /tjai/todo-bangs/ presents the live
 # extraction — derived every time, no stored state, nothing to go stale.
 # Completion is editing the bangs out of the source line.
+#
+# The extraction itself (query, exclusions, line matching) lives in
+# services.todo_bang_entries, shared with the get_todo_bangs MCP tool so the
+# page and an agent always see the same set. This page adds rendering.
 
-TODO_BANG_RE = re.compile(r'^\s*(?:[-*+]\s+|\d+[.)]\s+)?!{3,}')
-
-# SQL twin of TODO_BANG_RE, served by the partial index entries_todo_bangs
-# (migration 0019) — keep the two literally identical or the planner
-# cannot prove the index applies and the query degrades to a full scan.
-TODO_BANG_SQL_RE = r'(^|\n)[ \t]*([-*+][ \t]+|[0-9]+[.)][ \t]+)?!{3,}'
+from . import services  # noqa: E402
+from .services import TODO_BANG_RE, TODO_BANG_SQL_RE  # noqa: E402,F401
 
 
 @functools.lru_cache(maxsize=4096)
@@ -1659,48 +1659,22 @@ def _render_bang_line(line):
 
 
 def _todo_bang_entries():
-    """Entries carrying bang lines, newest-modified first. Per entry: every
-    bang line in document order, untouched — no reordering by bang count or
-    recency. Dialog, archived, and deleted entries are excluded."""
-    qs = Entry.objects.filter(
-        deleted_at__isnull=True,
-        content__regex=TODO_BANG_SQL_RE,
-    ).exclude(status='archive').exclude(
-        # AI-session contexts: bang lines there are conversation artifacts,
-        # not todos. 'claude-code' is the legacy dialog context name.
-        context__name__in=('claude-code',) + DIALOG_CONTEXTS,
-    )
-    candidates = list(qs.select_related('context').order_by('-timestamp_modified'))
-    # Dialog exclusion as a candidate-scoped membership check — an
-    # exclude() anti-join against every dialog tag row costs ~60ms.
-    dialog_ids = set(Tag.objects.filter(
-        tag_name=DIALOG_TAG, entry_id__in=[e.id for e in candidates],
-    ).values_list('entry_id', flat=True))
-    tz = get_app_tz()
+    """The shared bang extraction, rendered for the page: each bang line's
+    markdown inline-rendered, and the page's date and edit-link shapes."""
     out = []
-    for e in candidates:
-        if e.id in dialog_ids:
-            continue
-        bang_lines = [
-            {'line': i, 'html': _render_bang_line(line)}
-            for i, line in enumerate(e.content.split('\n'), start=1)
-            if TODO_BANG_RE.match(line)
-        ]
-        if not bang_lines:
-            continue
-        data = e.data if isinstance(e.data, dict) else {}
-        eid = data.get('entry_id')
-        first_line = e.content.split('\n', 1)[0].strip().lstrip('#').strip()
-        title = e.name or eid or first_line
-        edit_base = (f'/tjai/entry/?entry_id={quote(eid)}' if eid
-                     else f'/tjai/entry/?uuid={e.id}')
+    for e in services.todo_bang_entries():
+        eid = e['entry_id']
+        edit_base = (f"/tjai/entry/?entry_id={quote(eid)}" if eid
+                     else f"/tjai/entry/?uuid={e['uuid']}")
         out.append({
-            'title': title[:60],
-            'kind': e.kind,
-            'date': datetime.fromtimestamp(
-                float(e.timestamp_modified), tz).strftime('%m/%d'),
+            'title': e['title'],
+            'kind': e['kind'],
+            'date': datetime.strptime(e['modified'], '%Y-%m-%d').strftime('%m/%d'),
             'edit_base': edit_base,
-            'bang_lines': bang_lines,
+            'bang_lines': [
+                {'line': b['line'], 'html': _render_bang_line(b['text'])}
+                for b in e['bang_lines']
+            ],
         })
     return out
 

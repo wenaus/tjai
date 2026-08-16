@@ -18,7 +18,7 @@ from django.utils import timezone
 
 from django.db.models import Q
 
-from .dialog_context import DIALOG_TAG
+from .dialog_context import DIALOG_CONTEXTS, DIALOG_TAG
 from .models import Entry, Context, Tag, SysConfig, Relation, AppLog, Notice
 from .tagger import tag_bookmark
 from .tjai_utils import fmt_datetime, get_app_tz, safe_truncate
@@ -642,6 +642,94 @@ def get_todos(context=None, status=None, include_done=False, max_content_length=
 
     qs = qs.order_by('-timestamp_modified')
     return [_format_entry(entry, max_content_length=max_content_length) for entry in qs]
+
+
+# --- todo bangs -------------------------------------------------------------
+# A todo bang line opens with 3+ bangs, modulo a markdown list prefix: the
+# lightweight in-flow todo marker, written wherever the thought occurred.
+# Extraction is live — derived on every call, no stored state. This is the
+# single extraction rule; the /tjai/todo-bangs/ page and get_todo_bangs()
+# both read it, so page and agent can never see different sets.
+
+TODO_BANG_RE = re.compile(r'^\s*(?:[-*+]\s+|\d+[.)]\s+)?!{3,}')
+
+# SQL twin of TODO_BANG_RE, served by the partial index entries_todo_bangs
+# (migration 0019) — keep the two literally identical or the planner
+# cannot prove the index applies and the query degrades to a full scan.
+TODO_BANG_SQL_RE = r'(^|\n)[ \t]*([-*+][ \t]+|[0-9]+[.)][ \t]+)?!{3,}'
+
+
+def todo_bang_entries(context=None, limit=None):
+    """Entries carrying bang lines, newest-modified first.
+
+    Per entry: every bang line in document order, raw text, untouched — no
+    reordering by bang count or recency. Dialog, archived, and deleted
+    entries are excluded: a bang line in a dialog turn is a conversation
+    artifact, not one of the user's todos.
+    """
+    qs = Entry.objects.filter(
+        deleted_at__isnull=True,
+        content__regex=TODO_BANG_SQL_RE,
+    ).exclude(status='archive').exclude(
+        # AI-session contexts. 'claude-code' is the legacy dialog context name.
+        context__name__in=('claude-code',) + DIALOG_CONTEXTS,
+    )
+    if context:
+        qs = qs.filter(context__name=context)
+    candidates = list(qs.select_related('context').order_by('-timestamp_modified'))
+    # Dialog exclusion as a candidate-scoped membership check — an
+    # exclude() anti-join against every dialog tag row costs ~60ms.
+    dialog_ids = set(Tag.objects.filter(
+        tag_name=DIALOG_TAG, entry_id__in=[e.id for e in candidates],
+    ).values_list('entry_id', flat=True))
+    tz = get_app_tz()
+    out = []
+    for e in candidates:
+        if e.id in dialog_ids:
+            continue
+        bang_lines = [
+            {'line': i, 'text': line.rstrip()}
+            for i, line in enumerate(e.content.split('\n'), start=1)
+            if TODO_BANG_RE.match(line)
+        ]
+        if not bang_lines:
+            continue
+        data = e.data if isinstance(e.data, dict) else {}
+        entry_id = data.get('entry_id')
+        first_line = e.content.split('\n', 1)[0].strip().lstrip('#').strip()
+        out.append({
+            'title': (e.name or entry_id or first_line)[:60],
+            'entry_id': entry_id,
+            'uuid': str(e.id),
+            'kind': e.kind,
+            'context': e.context.name if e.context else None,
+            'modified': datetime.fromtimestamp(
+                float(e.timestamp_modified), tz).strftime('%Y-%m-%d'),
+            'bang_lines': bang_lines,
+        })
+        if limit and len(out) >= limit:
+            break
+    return out
+
+
+def get_todo_bangs(context=None, limit=None):
+    """Bang-marked todo lines, formatted compactly for LLM reading."""
+    entries = todo_bang_entries(context=context, limit=limit)
+    out = []
+    for e in entries:
+        out.append({
+            'title': e['title'],
+            'url': (f"/tjai/entry/?entry_id={e['entry_id']}" if e['entry_id']
+                    else f"/tjai/entry/?uuid={e['uuid']}"),
+            'context': e['context'],
+            'modified': e['modified'],
+            'lines': [b['text'] for b in e['bang_lines']],
+        })
+    return {
+        'entries': out,
+        'entry_count': len(out),
+        'line_count': sum(len(e['lines']) for e in out),
+    }
 
 
 def get_goals(context=None, status=None, include_done=False, max_content_length=DEFAULT_MAX_CONTENT_LENGTH):

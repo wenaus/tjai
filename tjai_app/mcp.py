@@ -11,6 +11,7 @@ Available tools:
     list_contexts     - List all projects/topics for organizing entries
     create_entry      - Add new entries (memories, todos, journal, profile, ai, bookmark, action)
     get_todos         - Retrieve todo items with filtering options
+    get_todo_bangs    - Get the user's `!!!` bang-marked todo lines (the !!! page)
     get_memories      - Get memory entries. Call unfiltered to see general activity
     get_bookmarks     - Get saved bookmark entries (URLs)
     get_dialog        - Get recorded human-AI dialog turns for a host/time range
@@ -432,6 +433,43 @@ async def get_todos(
     result = await sync_to_async(services.get_todos)(
         context=context, status=status, include_done=include_done,
         max_content_length=max_content_length,
+    )
+    return _json_text(result)
+
+
+@mcp.tool()
+async def get_todo_bangs(
+    context: str = None,
+    limit: int = None,
+) -> str:
+    """
+    Get the user's bang-marked todo lines — the `!!!` items.
+
+    A bang line opens with three or more exclamation marks and marks a todo
+    in flow: the user writes it wherever the thought occurred — a diary
+    entry, a project note, a design document — rather than filing a separate
+    todo. These are hand-flagged by the user, so they carry his own emphasis
+    and are the strongest available signal of what he considers live work.
+    The same set is presented on the `!!!` page at /tjai/todo-bangs/.
+
+    Bang lines in recorded AI dialog are conversation artifacts, not the
+    user's todos, and are excluded here along with archived and deleted
+    entries. Completion is done by editing the bangs out of the source line,
+    so a line that disappears between calls was finished.
+
+    Lines are returned as raw text in document order within each entry,
+    entries newest-modified first. Bang count is emphasis and is preserved.
+
+    Args:
+        context: Filter to bang lines in this context/project only.
+        limit: Maximum number of entries to return. Default: all.
+
+    Returns:
+        {"entries": [{title, url, context, modified, lines: [...]}, ...],
+         "entry_count": N, "line_count": M}
+    """
+    result = await sync_to_async(services.get_todo_bangs)(
+        context=context, limit=limit,
     )
     return _json_text(result)
 
