@@ -56,7 +56,7 @@ No agent restart needed — section scripts run as subprocesses.
 
 | Script | Heading | Data Source |
 |--------|---------|-------------|
-| `section_todos.py` | ToDo | DB: all pending todos, `###` subsection per context (alphabetical, uncontexted last), reverse modification time within each, 3-line subtext |
+| `section_todos.py` | ToDo | DB: all pending todos, `###` subsection per context, reverse modification time both across contexts (by each context's newest todo) and within them, 3-line subtext |
 | `section_keeps.py` | Keeps | DB: saved bookmarks + kept picks, last 24h |
 | `section_goals.py` | Goals | DB: goals created or modified in the past 60 days |
 | `section_git.py` | Git | previous calendar day's commits across the `_GIT_REPOS` registry (`tjai_app/views.py`); tjrepo grouped by top-level subdir |

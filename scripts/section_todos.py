@@ -2,10 +2,11 @@
 """Appends ## ToDo to the daily synopsis entry.
 
 Lists all pending todos grouped by context under an explicit ### subsection
-heading per context (alphabetical; uncontexted last as "(no context)"),
-reverse modification-time within each context. Title as link to the entry
-detail page with up to 3 lines of subtext. Done and archived todos are
-excluded; no time-depth limit.
+heading per context (uncontexted shown as "(no context)"). Both the
+subsections and the todos within them are in reverse modification-time
+order, so the context holding the most recently touched todo comes first.
+Title as link to the entry detail page with up to 3 lines of subtext. Done
+and archived todos are excluded; no time-depth limit.
 """
 import bootstrap  # noqa: F401 - Django setup
 from synopsis_utils import main_section
@@ -58,24 +59,29 @@ def build(since_ts, target_date):
     entries = list(Entry.objects.filter(
         kind='todo',
         deleted_at__isnull=True,
-    ).exclude(status__in=('done', 'archive')).order_by('context_id', '-timestamp_modified'))
+    ).exclude(status__in=('done', 'archive')).order_by('-timestamp_modified'))
 
     if not entries:
         return None
 
-    lines = []
-    current_ctx = object()  # sentinel: differs from any context incl. None
+    # Single pass over the globally reverse-modified list: a context takes
+    # its position from its most recently modified todo, and each context's
+    # own todos stay in that same order.
+    by_context = {}
     for entry in entries:
-        if entry.context_id != current_ctx:
-            current_ctx = entry.context_id
-            if lines:
-                lines.append('')
-            lines.append(f'### {current_ctx or "(no context)"}')
-        title, subtext = _title_and_subtext(entry)
-        link = f'/tjai/entry/{entry.id}'
-        lines.append(f'- [{title}]({link})')
-        for st in subtext:
-            lines.append(f'  - {st}')
+        by_context.setdefault(entry.context_id, []).append(entry)
+
+    lines = []
+    for ctx, ctx_entries in by_context.items():
+        if lines:
+            lines.append('')
+        lines.append(f'### {ctx or "(no context)"}')
+        for entry in ctx_entries:
+            title, subtext = _title_and_subtext(entry)
+            link = f'/tjai/entry/{entry.id}'
+            lines.append(f'- [{title}]({link})')
+            for st in subtext:
+                lines.append(f'  - {st}')
     return '\n'.join(lines)
 
 
