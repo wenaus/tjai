@@ -73,10 +73,18 @@ TJREPO_DIR_PROJECT = {
     '.vscode': 'dev', '': 'dev',
 }
 
-# Path fragments excluded from line counts (generated/vendored files).
+# Path fragments excluded from line counts (generated/vendored files,
+# and script-generated data files — data is not LOC). The -old/-broken/
+# SUPERSEDED fragments drop snapshot copies of own code kept during
+# refactors, which would otherwise double-count.
 EXCLUDE_PARTS = ('node_modules/', '.venv/', 'venv/', 'staticfiles/',
-                 'dist/', 'build/', '__pycache__/')
-EXCLUDE_SUFFIXES = ('.min.js', '.min.css', 'package-lock.json', '.lock')
+                 'dist/', 'build/', '__pycache__/',
+                 'cleanup_manifests/', 'cleanup_logs/',
+                 'texture_catalog.txt',
+                 '-old.', '_old.', '-broken.', '_broken.', 'SUPERSEDED')
+# .dae/.bvh: tool-generated 3D geometry and motion-capture data.
+EXCLUDE_SUFFIXES = ('.min.js', '.min.css', 'package-lock.json', '.lock',
+                    '.dae', '.bvh')
 
 # tjrepo ignore list: top-level dirs whose lines never count — archive
 # imports of pre-period work, and staging dirs for material that is not

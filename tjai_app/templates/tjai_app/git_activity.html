@@ -416,7 +416,7 @@ function buildLocChart(d) {
     }
 
     return `<div class="locchart">
-        <div class="locchart-title">Lines added per week, by project</div>
+        <div class="locchart-title">Lines added per week, by project, third party and data excluded</div>
         <div class="locchart-sub">commits authored by wenaus since Jun 2025 · archives and bulk-import commits (&gt;${kfmt(d.bulk_commit_lines || 100000)} lines) excluded</div>
         <div class="locchart-legend">${legend}</div>
         <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${svg}</svg>
