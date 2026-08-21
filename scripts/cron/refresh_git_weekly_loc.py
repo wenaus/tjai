@@ -36,7 +36,7 @@ WEEK_ZERO = datetime(2025, 6, 2).date()  # Monday on/after 2025-06-01
 # template palette revalidated to match.
 PROJECTS = ['kozykorner', 'tjai', 'corun-ai', 'swf', 'swf-monitor',
             'swf-epicprod', 'swf-testbed', 'etaverse', 'blender',
-            'SL/OS', 'primus', 'pax-eden', 'other']
+            'SL/OS', 'primus', 'pax-eden', 'web', 'other']
 
 # Repo name -> project. Unlisted repos fall to 'other'; tjrepo is
 # attributed per file by top-level directory instead. The swf family is
@@ -50,6 +50,10 @@ REPO_PROJECT = {
     'site-canary': 'swf',
     'corun-ai': 'corun-ai', 'corun-mcp-server': 'corun-ai',
     'wrangle-ai': 'corun-ai',
+    'rucio-eic-mcp-server': 'swf',
+    # web: website/doc-site and web-tooling repos
+    'epic-web-demo': 'web', 'BNLNPPS.github.io': 'web',
+    'lxr-mcp-server': 'web',
 }
 
 # tjrepo top-level directory -> project ('' catches root-level files).
@@ -68,9 +72,12 @@ EXCLUDE_PARTS = ('node_modules/', '.venv/', 'venv/', 'staticfiles/',
                  'dist/', 'build/', '__pycache__/')
 EXCLUDE_SUFFIXES = ('.min.js', '.min.css', 'package-lock.json', '.lock')
 
-# tjrepo archive imports of pre-period work — not part of the year's coding.
+# tjrepo ignore list: top-level dirs whose lines never count — archive
+# imports of pre-period work, and staging dirs for material that is not
+# this author's work product (e.g. transfers: patch handoffs, deleted
+# 2026-08 but present in history).
 EXCLUDE_TJREPO_TOP = {'etaverse-2014', 'tjai-archive', 'tjweb-old',
-                      'tjweb-2013', 'sl2007'}
+                      'tjweb-2013', 'sl2007', 'transfers'}
 
 # A single commit adding more than this is a bulk import (e.g. the 296k-line
 # recipe migration), dropped whole. Stated on the chart.
