@@ -325,19 +325,19 @@ function buildStats(heatmap) {
 // neutral gray, not a categorical slot.
 const LOC_COLORS = {
     'tjai': '#4a9df0',
-    'corun-ai': '#ffc61a', 'kozykorner': '#1fc98f',
-    // SL/OS virtual-world family: shades of one orange — primus
-    // deepest, etaverse mid, blender (the pipeline serving both)
-    // lighter, SL/OS umbrella palest
+    'corun-ai': '#00a800',
+    // virtual-world family: shades of one orange — primus deepest
+    // (SL/OS scripting dirs count here), etaverse mid, blender (the
+    // pipeline serving both) lightest
     'primus': '#f26b35', 'etaverse': '#ff8f33', 'blender': '#ffb680',
-    'SL/OS': '#ffd2a8',
     'pax-eden': '#a89bff',
     // swf family: subtle shades of one pink — residual deepest
     'swf': '#d15c92', 'swf-monitor': '#e86ba0',
     'swf-epicprod': '#f77fb0', 'swf-testbed': '#ff96c2',
-    // web: validated against stack neighbors pax-eden (ΔE 23.7) and
-    // corun-ai yellow (19.6), dark surface
-    'web': '#bf8a4d',
+    // dev (development support: web/doc sites, tooling, machine and
+    // workspace config): validated against stack neighbors pax-eden
+    // (ΔE 23.7) and corun-ai (19.6), dark surface
+    'dev': '#bf8a4d',
     'other': '#8a8983',
 };
 

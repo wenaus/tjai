@@ -34,9 +34,9 @@ WEEK_ZERO = datetime(2025, 6, 2).date()  # Monday on/after 2025-06-01
 # Display order == stacking order (bottom-up) == legend order. The order is
 # color-validated (adjacent-pair CVD checks) — change it only with the
 # template palette revalidated to match.
-PROJECTS = ['kozykorner', 'tjai', 'corun-ai', 'swf', 'swf-monitor',
-            'swf-epicprod', 'swf-testbed', 'etaverse', 'blender',
-            'SL/OS', 'primus', 'pax-eden', 'web', 'other']
+PROJECTS = ['tjai', 'corun-ai', 'swf', 'swf-monitor',
+            'swf-epicprod', 'swf-testbed', 'primus', 'etaverse',
+            'blender', 'pax-eden', 'dev', 'other']
 
 # Repo name -> project. Unlisted repos fall to 'other'; tjrepo is
 # attributed per file by top-level directory instead. The swf family is
@@ -51,20 +51,26 @@ REPO_PROJECT = {
     'corun-ai': 'corun-ai', 'corun-mcp-server': 'corun-ai',
     'wrangle-ai': 'corun-ai',
     'rucio-eic-mcp-server': 'swf',
-    # web: website/doc-site and web-tooling repos
-    'epic-web-demo': 'web', 'BNLNPPS.github.io': 'web',
-    'lxr-mcp-server': 'web',
+    # dev: development support — web/doc sites, tooling, machine and
+    # workspace configuration
+    'epic-web-demo': 'dev', 'BNLNPPS.github.io': 'dev',
+    'lxr-mcp-server': 'dev', 'tjdev': 'dev',
 }
 
 # tjrepo top-level directory -> project ('' catches root-level files).
-# blender is its own family: the 3D content pipeline crosses etaverse,
-# SL/OS, and primus, so it carries its own color rather than a guess.
+# blender carries its own color: the 3D content pipeline serves both
+# etaverse and primus. SL/OS scripting dirs count as primus; kozykorner
+# and the infra/meta dirs count as dev.
 TJREPO_DIR_PROJECT = {
-    'tjai': 'tjai', 'etaverse': 'etaverse', 'kozykorner': 'kozykorner',
+    'tjai': 'tjai', 'tj-getlink': 'tjai',
+    'etaverse': 'etaverse', 'kozykorner': 'dev',
     'pax-eden': 'pax-eden', 'primus': 'primus', 'primus-blender': 'primus',
     'primus-sl': 'primus', 'primus-wright': 'primus',
     'blender': 'blender',
-    'sl': 'SL/OS', 'lsl': 'SL/OS', 'lslp': 'SL/OS', 'wright': 'SL/OS',
+    'sl': 'primus', 'lsl': 'primus', 'lslp': 'primus', 'wright': 'primus',
+    'computers': 'dev', 'torre-code': 'dev', 'ops': 'dev', 'docs': 'dev',
+    'talks': 'dev', '.claude': 'dev', '.devcontainer': 'dev',
+    '.vscode': 'dev', '': 'dev',
 }
 
 # Path fragments excluded from line counts (generated/vendored files).
