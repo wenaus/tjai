@@ -324,9 +324,14 @@ function buildStats(heatmap) {
 // (dataviz six checks, dark surface #1a1a1a); 'other' is a deliberate
 // neutral gray, not a categorical slot.
 const LOC_COLORS = {
-    'tjai': '#4a9df0', 'etaverse': '#00a800', 'SL/OS': '#1ec8e6',
+    'tjai': '#4a9df0',
     'corun-ai': '#ffc61a', 'kozykorner': '#1fc98f',
-    'primus': '#f26b35', 'pax-eden': '#a89bff', 'blender': '#ff7a7a',
+    // SL/OS virtual-world family: shades of one orange — primus
+    // deepest, etaverse mid, blender (the pipeline serving both)
+    // lighter, SL/OS umbrella palest
+    'primus': '#f26b35', 'etaverse': '#ff8f33', 'blender': '#ffb680',
+    'SL/OS': '#ffd2a8',
+    'pax-eden': '#a89bff',
     // swf family: subtle shades of one pink — residual deepest
     'swf': '#d15c92', 'swf-monitor': '#e86ba0',
     'swf-epicprod': '#f77fb0', 'swf-testbed': '#ff96c2',
