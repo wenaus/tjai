@@ -34,27 +34,30 @@ WEEK_ZERO = datetime(2025, 6, 2).date()  # Monday on/after 2025-06-01
 # Display order == stacking order (bottom-up) == legend order. The order is
 # color-validated (adjacent-pair CVD checks) — change it only with the
 # template palette revalidated to match.
-PROJECTS = ['tjai', 'corun-ai', 'swf', 'swf-monitor',
+PROJECTS = ['tjai', 'AI', 'swf', 'swf-monitor',
             'swf-epicprod', 'swf-testbed', 'primus', 'etaverse',
             'blender', 'pax-eden', 'dev', 'other']
 
 # Repo name -> project. Unlisted repos fall to 'other'; tjrepo is
 # attributed per file by top-level directory instead. The swf family is
 # factored into shades of one hue: monitor, epicprod, and testbed are
-# called out; 'swf' is the family residual (remote, docs, common-lib, snapper, site-canary).
+# called out; 'swf' is the family residual (remote, docs, common-lib,
+# site-canary, rucio-eic). AI: AI infrastructure serving any project —
+# corun-ai, wrangle-ai, snapper-ai (generic in service of swf, not
+# swf-bound), and the MCP servers. tjai stays its own project.
 REPO_PROJECT = {
     'swf-monitor': 'swf-monitor', 'swf-epicprod': 'swf-epicprod',
     'swf-testbed': 'swf-testbed',
     'swf-common-lib': 'swf', 'swf-remote': 'swf', 'epic-wfms-docs': 'swf',
-    'snapper-ai': 'swf',
     'site-canary': 'swf',
-    'corun-ai': 'corun-ai', 'corun-mcp-server': 'corun-ai',
-    'wrangle-ai': 'corun-ai',
+    'corun-ai': 'AI', 'corun-mcp-server': 'AI',
+    'wrangle-ai': 'AI', 'snapper-ai': 'AI',
+    'lxr-mcp-server': 'AI', 'xrootd-mcp-server': 'AI',
     'rucio-eic-mcp-server': 'swf',
     # dev: development support — web/doc sites, tooling, machine and
     # workspace configuration
     'epic-web-demo': 'dev', 'BNLNPPS.github.io': 'dev',
-    'lxr-mcp-server': 'dev', 'tjdev': 'dev',
+    'tjdev': 'dev',
 }
 
 # tjrepo top-level directory -> project ('' catches root-level files).
