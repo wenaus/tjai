@@ -3221,6 +3221,7 @@ _GIT_REPOS = [
     ('/home/admin/github/corun-ai', 'https://github.com/BNLNPPS/corun-ai', 'corun-ai'),
     ('/home/admin/github/epic-wfms-docs', 'https://github.com/eic/epic-wfms-docs', 'epic-wfms-docs'),
     ('/home/admin/github/rucio-eic-mcp-server', 'https://github.com/BNLNPPS/rucio-eic-mcp-server', 'rucio-eic-mcp-server'),
+    ('/home/admin/github/epic-web-demo', 'https://github.com/BNLNPPS/epic-web-demo', 'epic-web-demo'),
 ]
 
 
