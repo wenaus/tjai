@@ -83,11 +83,12 @@ TJREPO_DIR_PROJECT = {
 EXCLUDE_PARTS = ('node_modules/', '.venv/', 'venv/', 'staticfiles/',
                  'dist/', 'build/', '__pycache__/',
                  'cleanup_manifests/', 'cleanup_logs/',
-                 'texture_catalog.txt',
+                 'texture_catalog.txt', 'cove_house_reference',
                  '-old.', '_old.', '-broken.', '_broken.', 'SUPERSEDED')
 # .dae/.bvh: tool-generated 3D geometry and motion-capture data.
+# .dbml: auto-generated database schema diagrams.
 EXCLUDE_SUFFIXES = ('.min.js', '.min.css', 'package-lock.json', '.lock',
-                    '.dae', '.bvh')
+                    '.dae', '.bvh', '.dbml')
 
 # tjrepo ignore list: top-level dirs whose lines never count — archive
 # imports of pre-period work, and staging dirs for material that is not
