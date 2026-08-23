@@ -43,6 +43,9 @@
         .CodeMirror-selected, .CodeMirror-focused .CodeMirror-selected {
             background: #264f78 !important;
         }
+        /* CodeMirror's markdown mode tokens backtick code as 'comment';
+           match the entry pages' inline-code pink instead of theme grey */
+        .cm-s-material-darker span.cm-comment { color: #f0c0c0; }
     </style>
 </head>
 <body>
