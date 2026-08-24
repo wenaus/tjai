@@ -46,6 +46,10 @@
         /* CodeMirror's markdown mode tokens backtick code as 'comment';
            match the entry pages' inline-code pink instead of theme grey */
         .cm-s-material-darker span.cm-comment { color: #f0c0c0; }
+        /* bare URLs (padlink overlay): show and behave as links */
+        .cm-s-material-darker span.cm-padlink {
+            color: #90caf9; text-decoration: underline; cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -139,6 +143,37 @@
             },
         });
         editor.setValue(recoveredContent);
+
+        // Bare URLs render and behave as links: an overlay tokens them
+        // (class cm-padlink), a click on one opens it in a new tab.
+        // Clicking anywhere else still just places the cursor.
+        const urlRe = /https?:\/\/[^\s<>"')\]]+/g;
+        editor.addOverlay({
+            token: function(stream) {
+                urlRe.lastIndex = stream.pos;
+                const m = urlRe.exec(stream.string);
+                if (m && m.index === stream.pos) {
+                    stream.pos = urlRe.lastIndex;
+                    return 'padlink';
+                }
+                if (m) stream.pos = m.index; else stream.skipToEnd();
+                return null;
+            }
+        });
+        editor.getWrapperElement().addEventListener('mousedown', function(e) {
+            if (!e.target.closest('.cm-padlink')) return;
+            const pos = editor.coordsChar({left: e.clientX, top: e.clientY});
+            const line = editor.getLine(pos.line) || '';
+            urlRe.lastIndex = 0;
+            let m;
+            while ((m = urlRe.exec(line))) {
+                if (pos.ch >= m.index && pos.ch <= m.index + m[0].length) {
+                    e.preventDefault();
+                    window.open(m[0].replace(/[.,;:]+$/, ''), '_blank');
+                    return;
+                }
+            }
+        });
 
         function writeDraft() {
             try {
