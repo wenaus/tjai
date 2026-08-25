@@ -34,7 +34,8 @@ Two panels:
   wiped by the consumer; entry versioning retains what wipes remove. The
   editor page carries the two pads as tabs. An explicit `?pad=` selection is
   remembered in the `capcom_pad_last` sysconfig key and a bare load serves
-  the last-visited pad. The editor has no Save
+  the last-visited pad. Selecting the pad already shown, from the pad line
+  or the editor's tab, reloads it from the server. The editor has no Save
   button or metadata controls. Content writes immediately to a per-tab local
   recovery draft, autosaves after a short pause, and forces a server flush
   when the editor, Capcom tab, or Chrome window loses focus and when the page

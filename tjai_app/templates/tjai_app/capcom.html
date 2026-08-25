@@ -331,6 +331,16 @@
         }
     }
 
+    // Re-selecting the pad already shown reloads it from the server, so
+    // content another writer placed there appears without leaving the page.
+    // The pad's pagehide flush and local draft recovery cover unsaved edits.
+    function reloadNotepad() {
+        const frame = document.getElementById('notepad-frame');
+        if (!frame.dataset.loaded) { renderAll(); return; }
+        flushNotepad();
+        frame.src = frame.dataset.padUrl || (frame.dataset.src + (padSel ? '?pad=' + padSel : ''));
+    }
+
     // The pad page reports which pad it is showing (the server chooses on a
     // bare load, and in-page tab links navigate inside the iframe); mirror
     // that into padSel, the URL, and the left-panel highlight.
@@ -694,6 +704,7 @@
             return;
         }
         if (t.classList.contains('pad-link')) {
+            if (view === 'notepad' && padSel === t.dataset.pad) { reloadNotepad(); return; }
             if (view === 'notepad' && padSel !== t.dataset.pad) flushNotepad();
             padSel = t.dataset.pad;
             view = 'notepad'; syncStateToUrl(); renderAll(); return;
