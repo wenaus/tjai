@@ -170,8 +170,9 @@ Tools:
   following next_offset until complete=true.
 - get_todos(context, status, include_done, max_content_length): Get task list with filtering.
   Valid statuses: active, done, blocked, archive.
-- get_calendar(start_date, end_date, context, days): Get calendar entries
-  for a date range. Dates in ISO or YYYYMMDD format.
+- get_calendar(start_date, end_date, context, days, max_content_length): Get
+  calendar entries for a date range. Dates in ISO or YYYYMMDD format. Results
+  carry the entry id for use with copy_calendar_entry/get_entry.
 - list_contexts(): List all projects/topics to discover what contexts exist.
 - get_memories(context, limit, offset, start_date, end_date, max_content_length): Get memory entries.
   Call unfiltered to see recent activity.
@@ -188,9 +189,10 @@ Tools:
   are interpreted in Eastern Time. SWF notices may arrive up to one dispatcher
   poll interval after their event.
 - search_entries(query, kind, context, limit, offset, start_date, end_date,
-  max_content_length, order_by): Search or list entries. Omit query for structured
-  listing/filtering by kind, context, or date. Use order_by='rank' only with a
-  non-empty query.
+  max_content_length, order_by, date_field): Search or list entries. Omit query
+  for structured listing/filtering by kind, context, or date. Use
+  order_by='rank' only with a non-empty query. Date filters apply to the event
+  date for kind='journal' (date_field overrides).
 - get_named_entries(name, context, max_content_length): Get entries by @name, or list all named.
 - get_entry(entry_id): Get a single entry by UUID.
 - get_entry_by_entry_id(entry_id): Find entry by human-readable entry_id.

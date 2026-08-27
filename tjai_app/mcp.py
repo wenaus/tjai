@@ -190,23 +190,31 @@ async def get_calendar(
     end_date: str = None,
     context: str = None,
     days: int = None,
+    max_content_length: int = DEFAULT_MAX_CONTENT_LENGTH,
 ) -> str:
     """
     Get calendar/journal entries within a date range.
 
     Args:
         start_date: Start date (ISO format or YYYYMMDD). Default: today.
-        end_date: End date (ISO format or YYYYMMDD). Default: start + 30 days.
+        end_date: End date (ISO format or YYYYMMDD), inclusive.
+                  Default: start + 30 days.
         context: Filter to entries in this context/project.
-        days: Alternative to end_date - number of days from start_date.
+        days: Alternative to end_date - count of days starting at start_date
+              (days=1 returns exactly the start day). Must be >= 1.
+        max_content_length: Truncate titles to this many characters (appends …).
+                           Default: 500. Set 0 for full titles; diary and
+                           synopsis entries can run to many KB.
 
     Returns:
         List of entries sorted by date/time, each containing:
+        - id: Entry UUID (use with copy_calendar_entry, get_entry)
         - date: YYYY-MM-DD
         - day: Day of week (Mon, Tue, etc.)
         - time: HH:MM
         - title: Event title (plain text)
         - url: Link URL (only if event has a link)
+        - entry_id: Human-readable entry_id (only if the entry has one)
 
     OUTPUT FORMAT: When presenting to user, show each entry as:
         TIME TITLE URL
@@ -218,6 +226,7 @@ async def get_calendar(
     """
     result = await sync_to_async(services.get_calendar)(
         start_date=start_date, end_date=end_date, context=context, days=days,
+        max_content_length=max_content_length,
     )
     return _json_text(result)
 
@@ -702,12 +711,14 @@ async def search_entries(
     end_date: str = None,
     max_content_length: int = DEFAULT_MAX_CONTENT_LENGTH,
     order_by: str = 'time',
+    date_field: str = None,
 ) -> str:
     """
     Search or list entries.
 
     When query is non-empty, uses PostgreSQL full-text search with stemming,
     relevance ranking, and Google-style syntax (quoted phrases, -exclusions).
+    Slashes are treated as word separators: "testbed" matches "Prod/testbed".
     When query is omitted or empty, lists entries matching the structured
     filters only. This is the correct mode for requests like "recent goals" or
     "todos modified last night" where invented keywords would create false
@@ -733,6 +744,10 @@ async def search_entries(
         order_by: Sort order. 'time' (default) = newest first by modification date.
                   'rank' = best match first by search relevance and requires a
                   non-empty query. 'size' = longest content first.
+        date_field: Which date start_date/end_date filter on. 'modified' =
+                    timestamp_modified; 'event' = calendar placement in
+                    data.event_date (entries without one are excluded).
+                    Default 'auto': 'event' when kind='journal', else 'modified'.
 
     Returns:
         List of matching entries, each containing: id, content (preview), kind,
@@ -745,7 +760,7 @@ async def search_entries(
         query=query, kind=kind, context=context, limit=limit, offset=offset,
         start_date=start_date, end_date=end_date,
         max_content_length=max_content_length,
-        order_by=order_by,
+        order_by=order_by, date_field=date_field,
     )
     return _json_text(result)
 

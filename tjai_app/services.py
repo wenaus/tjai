@@ -161,21 +161,44 @@ def _strip_punct(s):
     return re.sub(r'[^\w\s]', '', s)
 
 
-def _apply_date_filter(qs, start_date, end_date):
-    """Apply date range filter to queryset. Both dates optional; None means no filter."""
+def fts_normalize(text):
+    """Slash-to-space normalization for full-text search. Postgres FTS lexes
+    'Prod/testbed' as a single file-path token that a word query for 'testbed'
+    can never match. Applied identically to indexed content (search-vector
+    trigger, migration 0025) and to query text, so both sides tokenize the
+    same way."""
+    return text.replace('/', ' ')
+
+
+def _apply_date_filter(qs, start_date, end_date, date_field='modified'):
+    """Apply date range filter to queryset. Both dates optional; None means no filter.
+
+    date_field='modified' filters on timestamp_modified. date_field='event'
+    filters on the calendar placement in data.event_date, excluding entries
+    that have none.
+    """
     tz = get_timezone()
+    start_ts = end_ts = None
     if start_date is not None:
         start_ts, err = parse_date_filter(start_date, tz=tz)
         if err:
             return None, {"error": err}
-        if start_ts:
-            qs = qs.filter(timestamp_modified__gte=start_ts)
     if end_date is not None:
         end_ts, err = parse_date_filter(end_date, end_of_day=True, tz=tz)
         if err:
             return None, {"error": err}
-        if end_ts:
-            qs = qs.filter(timestamp_modified__lte=end_ts)
+    if date_field == 'event' and (start_ts or end_ts):
+        from django.db.models import FloatField
+        from django.db.models.fields.json import KeyTextTransform
+        from django.db.models.functions import Cast
+        qs = qs.annotate(_event_ts=Cast(KeyTextTransform('event_date', 'data'), FloatField()))
+        field = '_event_ts'
+    else:
+        field = 'timestamp_modified'
+    if start_ts:
+        qs = qs.filter(**{field + '__gte': start_ts})
+    if end_ts:
+        qs = qs.filter(**{field + '__lte': end_ts})
     return qs, None
 
 
@@ -239,17 +262,19 @@ def _query_annual_events(start_dt, end_dt, today_mmdd):
 
 # --- Service functions ---
 
-def get_calendar(start_date=None, end_date=None, context=None, days=None):
+def get_calendar(start_date=None, end_date=None, context=None, days=None,
+                 max_content_length=DEFAULT_MAX_CONTENT_LENGTH):
     start, err = _parse_date(start_date)
     if err:
         return {"error": err}
     if not start:
         start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
+    # `end` is the last included day in every branch below.
     if days is not None:
-        if not isinstance(days, int) or days < 0:
-            return {"error": f"days must be a non-negative integer, got {days}"}
-        end = start + timedelta(days=days)
+        if not isinstance(days, int) or days < 1:
+            return {"error": f"days must be a positive integer (count of days starting at start_date), got {days}"}
+        end = start + timedelta(days=days - 1)
     elif end_date:
         end, err = _parse_date(end_date)
         if err:
@@ -272,6 +297,11 @@ def get_calendar(start_date=None, end_date=None, context=None, days=None):
     end_ts = (end + timedelta(days=1)).timestamp()
     tz = get_timezone()
 
+    def _truncate(text):
+        if max_content_length and len(text) > max_content_length:
+            return text[:max_content_length] + '…'
+        return text
+
     results = []
     for entry in qs:
         if not entry.data or not isinstance(entry.data, dict):
@@ -289,11 +319,14 @@ def get_calendar(start_date=None, end_date=None, context=None, days=None):
                 title = entry.content
                 url = None
             result = {
+                'id': entry.id,
                 'date': event_dt.strftime('%Y-%m-%d'),
                 'day': event_dt.strftime('%a'),
                 'time': event_dt.strftime('%H:%M'),
-                'title': title,
+                'title': _truncate(title),
             }
+            if isinstance(entry.data.get('entry_id'), str):
+                result['entry_id'] = entry.data['entry_id']
             if url:
                 result['url'] = url
             results.append(result)
@@ -316,10 +349,11 @@ def get_calendar(start_date=None, end_date=None, context=None, days=None):
             continue  # e.g. Feb 29 in non-leap year
 
         result = {
+            'id': entry.id,
             'date': projected_dt.strftime('%Y-%m-%d'),
             'day': projected_dt.strftime('%a'),
             'time': '00:00',
-            'title': entry.content,
+            'title': _truncate(entry.content),
             'annual': True,
         }
         results.append(result)
@@ -1058,9 +1092,11 @@ def get_bookmarks(context=None, limit=50, offset=0, start_date=None, end_date=No
     return [_format_entry(entry, max_content_length=max_content_length) for entry in qs]
 
 
-def search_entries(query=None, kind=None, context=None, limit=50, offset=0, start_date=None, end_date=None, max_content_length=DEFAULT_MAX_CONTENT_LENGTH, order_by='time'):
+def search_entries(query=None, kind=None, context=None, limit=50, offset=0, start_date=None, end_date=None, max_content_length=DEFAULT_MAX_CONTENT_LENGTH, order_by='time', date_field=None):
     if kind is not None and kind not in VALID_KINDS:
         return {"error": f"Invalid kind '{kind}'. Must be one of: {', '.join(VALID_KINDS)}"}
+    if date_field not in (None, 'auto', 'modified', 'event'):
+        return {"error": "date_field must be one of: auto, modified, event"}
     err = _validate_result_limit(limit)
     if err:
         return err
@@ -1091,10 +1127,10 @@ def search_entries(query=None, kind=None, context=None, limit=50, offset=0, star
             # Full-text search with relevance ranking (replaces icontains substring match)
             # Uses websearch_to_tsquery for Google-style syntax: quoted phrases, -exclusions.
             try:
-                search_query = SearchQuery(query, search_type='websearch', config='english')
+                search_query = SearchQuery(fts_normalize(query), search_type='websearch', config='english')
             except Exception:
                 # Fallback for malformed queries
-                search_query = SearchQuery(query, config='english')
+                search_query = SearchQuery(fts_normalize(query), config='english')
 
             qs = qs.filter(
                 search_vector=search_query,
@@ -1107,7 +1143,11 @@ def search_entries(query=None, kind=None, context=None, limit=50, offset=0, star
     if context:
         qs = qs.filter(context__name=context)
 
-    qs, err = _apply_date_filter(qs, start_date, end_date)
+    if date_field in (None, 'auto'):
+        # Journal entries live on the calendar; date-scoped journal queries
+        # mean the event date, not the row's last modification.
+        date_field = 'event' if kind == 'journal' else 'modified'
+    qs, err = _apply_date_filter(qs, start_date, end_date, date_field=date_field)
     if err:
         return err
 

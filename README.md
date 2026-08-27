@@ -41,6 +41,7 @@ interfaces, not the center of the system architecture.
 | [Architecture](docs/architecture.md) | Sync design, MCP gateway, design decisions |
 | [Sync Agent](TJ_AGENT.md) | `tj_agent` sync daemon: per-machine SQLite, push/pull protocol, conflict handling, daemon lifecycle |
 | [Dashboard](docs/dashboard.md) | Web dashboard client: page modes, URL-state model, panels, filtering, search, endpoints |
+| [Search](docs/search.md) | Full-text entry search: tsvector index and trigger, slash normalization, websearch query syntax, ranking, date filtering |
 | [Markdown Rendering](docs/rendering.md) | Server-side render pipeline, linkify policy, Prism code blocks, `text` prose fences |
 | [Git Activity](docs/git-activity.md) | Commit grid and daily commit lists: repo registry, daily-file producers, weekly lines-added chart, Eastern-date rules |
 | [Todo Bangs](docs/todo-bangs.md) | The `!!!` in-flow todo marker: extraction rule and index, dialog exclusions, the `!!!` page, and the `get_todo_bangs` MCP tool |

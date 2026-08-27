@@ -2724,9 +2724,9 @@ def dashboard_search(request):
         search_filter = {'content__icontains': q}
     else:
         try:
-            search_query = SearchQuery(q, search_type='websearch', config='english')
+            search_query = SearchQuery(services.fts_normalize(q), search_type='websearch', config='english')
         except Exception:
-            search_query = SearchQuery(q, config='english')
+            search_query = SearchQuery(services.fts_normalize(q), config='english')
         search_filter = {'search_vector': search_query}
 
     show_deleted = request.GET.get('deleted') == '1'
