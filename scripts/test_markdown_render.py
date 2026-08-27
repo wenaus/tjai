@@ -15,6 +15,7 @@ import django  # noqa: E402
 django.setup()
 
 from tjai_app.views import (  # noqa: E402
+    _diary_hard_breaks,
     _fix_md_list_spacing,
     _linkify_rendered_html,
     _render_markdown,
@@ -166,6 +167,26 @@ def main():
         r"t_\mathrm{notify}",
         "LaTeX body survives the markdown pass unmangled",
     )
+
+    # Diary save-time hard breaks: prose runs get two trailing spaces, the
+    # last line of a paragraph, list items, rules and fenced code do not.
+    diary_src = (
+        "Diary: Wed\n\n- bullet one\n- bullet two\n\n---\n\n"
+        "Hi Anil,\nSecond line\nThird line\n\n"
+        "```\ncode a\ncode b\n```\n\n| a | b |\n| - | - |\n\nlast\n"
+    )
+    swept = _diary_hard_breaks(diary_src)
+    assert_contains(swept, "Hi Anil,  \nSecond line  \nThird line\n\n", "diary prose run")
+    assert_contains(swept, "- bullet one\n- bullet two\n", "diary list untouched")
+    assert_contains(swept, "code a\ncode b\n", "diary fence untouched")
+    assert_contains(swept, "| a | b |\n| - | - |\n", "diary table untouched")
+    assert_equal(swept.endswith("last\n"), True, "diary last line untouched")
+    restripped = "\n".join(l.rstrip() for l in swept.split("\n"))
+    assert_equal(_diary_hard_breaks(restripped), swept, "diary sweep idempotent")
+    diary_html = _render_markdown(
+        swept, extensions=["tables", "fenced_code", "pymdownx.arithmatex"])
+    assert_contains(diary_html, "Hi Anil,<br />\nSecond line<br />\nThird line</p>", "diary prose renders breaks")
+    assert_not_contains(diary_html, "bullet one<br", "diary list renders without breaks")
 
     print("markdown render tests passed")
 

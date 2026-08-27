@@ -83,6 +83,41 @@ def _fix_md_list_spacing(text):
     return '\n'.join(result)
 
 
+_HARD_BREAK_SKIP_RE = re.compile(r'^\s*(\||---+\s*$|\*\*\*+\s*$|___+\s*$|<)')
+
+
+def _diary_hard_breaks(text):
+    """Add markdown hard breaks (two trailing spaces) to paragraph-internal
+    lines so single newlines render as line breaks under the md format.
+
+    Applied to diary entries at save time. A line gets the break when it and
+    the line after it are both prose: non-blank, not a list item, header,
+    fence marker, table row, rule, or raw HTML, and not inside a fenced code
+    block. The break is invisible in the editor and on the page; the
+    save-time trailing-whitespace strip runs first, so re-saves are
+    idempotent.
+    """
+    lines = text.split('\n')
+
+    def prose(line):
+        return bool(line.strip()) and not _BLOCK_RE.match(line) \
+            and not _HARD_BREAK_SKIP_RE.match(line)
+
+    out = []
+    in_fence = False
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith('```'):
+            in_fence = not in_fence
+            out.append(line)
+            continue
+        if (not in_fence and prose(line)
+                and i + 1 < len(lines) and prose(lines[i + 1])):
+            out.append(line + '  ')
+        else:
+            out.append(line)
+    return '\n'.join(out)
+
+
 # HTML elements that put the parser into rcdata / raw-text / plaintext mode,
 # swallowing all following page content until their (often absent) close tag.
 # A literal '<title>' in entry content — e.g. from a commit message like
@@ -4197,7 +4232,9 @@ def api_entry_save(request, entry_id):
         except (TypeError, ValueError):
             server_ts = client_ts = 0.0
         if server_ts - client_ts > 0.5:
-            server_lines = (entry.content or '').splitlines()
+            # rstrip: stored diary lines carry hard-break spaces; client
+            # lines were stripped above, so compare like with like.
+            server_lines = [l.rstrip() for l in (entry.content or '').splitlines()]
             client_lines = content.splitlines()
             client_set = set(client_lines)
             added = []
@@ -4218,6 +4255,11 @@ def api_entry_save(request, entry_id):
             if added:
                 merged = True
                 content = '\n'.join(client_lines + added)
+    # Diary entries: single newlines are line breaks. Add invisible markdown
+    # hard breaks at save so the md render honors them (docs/rendering.md).
+    _eid = entry.data.get('entry_id', '') if isinstance(entry.data, dict) else ''
+    if entry.context_id == 'diary' and str(_eid).startswith('diary-'):
+        content = _diary_hard_breaks(content)
     old_content = entry.content
     entry.content = content
     if 'name' in data:

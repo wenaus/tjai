@@ -25,6 +25,18 @@ Bare URLs are linkified by `_linkify_rendered_html`, which walks the rendered HT
 skips `<a>`, `<code>`, `<pre>`, `<script>`, `<style>` so existing anchors and code are
 left intact.
 
+## Diary newlines
+
+Diary entries (`context` `diary`, entry_id `diary-*`) are saved with a markdown hard
+break — two trailing spaces — on every line that is followed by another prose line,
+so a single newline renders as a line break under the default `md` format.
+`_diary_hard_breaks` in `views.py` applies this in `api_entry_save`, after the
+save-time trailing-whitespace strip; list items, headers, table rows, rules, raw HTML
+and fenced code are left alone. The breaks are invisible in the editor and on the
+page, and the pass is idempotent across saves. An entry saved before the pass existed
+keeps its original text until its next save. `scripts/test_markdown_render.py` covers
+the sweep.
+
 ## Code blocks
 
 Fenced code blocks render to `<pre><code class="language-XXX">` and are syntax-highlighted
