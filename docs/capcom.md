@@ -281,8 +281,15 @@ Capcom carries as a notice like any other.
   Pax Eden owns the gate selection, severity mapping, display value, color,
   and destination URL, returning a complete Capcom state payload. The Capcom
   dispatcher invokes that production Pax Eden producer every ten minutes and
-  stores the returned payload verbatim. The tile links directly to that
-  route's Pax Eden gatecheck page.
+  stores the returned payload. A data failure never leaves a stale status on
+  the tile: Pax Eden returns `DOWNTIME` (yellow) when the failure falls in
+  the EVE daily-downtime window (10:55–11:30 UTC) and `NO DATA` (red)
+  otherwise, with failure markers the dispatcher strips before storage.
+  Downtime-window failures are expected and emit no notice; other failures
+  emit the collector warning only at three consecutive occurrences, counted
+  in the `capcom_eve_ahbazon_failures` sysconfig row and reset by a
+  successful poll. The tile links directly to that route's Pax Eden
+  gatecheck page.
 - **Server backup** (poll, state) — the `server-backup` tile reads as
   size-and-age of the last backup: when healthy the value carries the total
   dump size and the signed day-over-day size change vs the previous backup at

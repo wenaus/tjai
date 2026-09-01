@@ -40,6 +40,8 @@ if not logger.handlers:
 
 PAX_EDEN_DIR = Path('/var/www/pax-eden')
 PAX_EDEN_PYTHON = PAX_EDEN_DIR / '.venv/bin/python'
+EVE_AHBAZON_FAILS_KEY = 'capcom_eve_ahbazon_failures'
+EVE_AHBAZON_FAIL_WARN = 3
 CORUN_DIR = Path('/var/www/corun-ai')
 CORUN_PYTHON = CORUN_DIR / '.venv/bin/python'
 SWF_MONITOR_STATE_URL = (
@@ -58,7 +60,16 @@ SWF_NOTICES_PAGE_LIMIT = 10
 
 
 def collect_eve_ahbazon(target_source=None):
-    """Store the complete Ahbazon state payload supplied by Pax Eden."""
+    """Store the Ahbazon state payload supplied by Pax Eden.
+
+    Pax Eden reports a data failure as a payload marked failed — value
+    DOWNTIME inside the EVE daily-downtime window, NO DATA otherwise —
+    so the tile always shows whether its status is current. Expected
+    downtime failures emit no notice; other failures raise the collector
+    warning only at EVE_AHBAZON_FAIL_WARN consecutive occurrences,
+    counted in the EVE_AHBAZON_FAILS_KEY sysconfig row and reset by a
+    successful poll.
+    """
     code = (
         "import json; "
         "from pax_eden.gatecheck import capcom_ahbazon_state; "
@@ -84,7 +95,36 @@ def collect_eve_ahbazon(target_source=None):
         raise RuntimeError(
             f'Pax Eden gatecheck returned invalid JSON: {result.stdout}') from e
 
+    failed = bool(data.pop('failed', False))
+    expected = bool(data.pop('expected', False))
+    error = str(data.pop('error', '') or '')
     capcom.set_state(**data)
+
+    row = SysConfig.objects.filter(key=EVE_AHBAZON_FAILS_KEY).first()
+    try:
+        fails = int((row.value or '').strip()) if row else 0
+    except ValueError:
+        logger.warning('eve-ahbazon: unreadable failure count %r, resetting',
+                       row.value)
+        fails = 0
+    if not failed:
+        if fails:
+            SysConfig.objects.update_or_create(
+                key=EVE_AHBAZON_FAILS_KEY,
+                defaults={'value': '0', 'timestamp_modified': time.time()})
+        return
+    if expected:
+        logger.info('eve-ahbazon: expected downtime-window failure: %s', error)
+        return
+    fails += 1
+    SysConfig.objects.update_or_create(
+        key=EVE_AHBAZON_FAILS_KEY,
+        defaults={'value': str(fails), 'timestamp_modified': time.time()})
+    if fails >= EVE_AHBAZON_FAIL_WARN:
+        raise RuntimeError(
+            f'Pax Eden gatecheck: {fails} consecutive failures, latest: {error}')
+    logger.warning('eve-ahbazon: failure %d of %d before warning: %s',
+                   fails, EVE_AHBAZON_FAIL_WARN, error)
 
 
 def _fetch_swf_monitor_states(url, params=None):
