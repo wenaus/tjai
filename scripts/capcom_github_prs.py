@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""GitHub pull-request follow-up collector for Capcom (docs/capcom.md).
+"""GitHub follow-up collector for Capcom (docs/capcom.md).
 
 Runs as the github-pr-followups action's mechanical_script (wrangler-owned,
-hourly). Discovers every pull request authored by the token's GitHub account
-that changed since the cursor — one GitHub search, no repository list — and
-emits a Capcom notice for each human event on those PRs since the cursor:
-issue comments, review comments, submitted reviews, and close, merge, and
-reopen. Events by the account itself and by bots are skipped. Every event is
-its own notice row; the dedup_key names the event (repo, PR number, verb,
-time) so a re-run never duplicates one.
+hourly). Discovers, by GitHub search and with no repository list, every
+issue or pull request that changed since the cursor and involves the
+token's account (authored, assigned, mentioned, or commented on) or has its
+review requested from that account, and emits a Capcom notice for each
+human event on them since the cursor: issue comments, review comments,
+submitted reviews, review requests and assignments addressed to the
+account, and close, merge, and reopen. Events by the account itself and by
+bots are skipped. Every event is its own notice row; the dedup_key names the
+event (repo, number, verb, time) and an event already in the feed is never
+emitted again, so a re-run or a re-seed adds only what is new.
 
 Cursor: the capcom_github_prs_cursor sysconfig row holds the newest event
 time processed (UTC, ISO). The first run seeds it LOOKBACK_DAYS back.
@@ -16,8 +19,10 @@ Token: GITHUB_PERSONAL_ACCESS_TOKEN from the user's ~/.env (never the
 deployed project .env).
 
 Usage:
-    capcom_github_prs.py            run (emit notices, advance the cursor)
-    capcom_github_prs.py --dry-run  print what would be emitted; write nothing
+    capcom_github_prs.py                 run (emit notices, advance the cursor)
+    capcom_github_prs.py --dry-run       print what would be emitted; write nothing
+    capcom_github_prs.py --lookback N    start N days back instead of at the cursor
+                                         (a re-seed: events already in the feed are skipped)
 """
 import logging
 import os
@@ -30,7 +35,7 @@ import requests
 
 from tjai_app import capcom
 from tjai_app.db_log_handler import DbLogHandler
-from tjai_app.models import SysConfig
+from tjai_app.models import Notice, SysConfig
 
 SOURCE = 'github-pr-followups'
 SOURCE_NOTE = 'Human follow-ups on my GitHub pull requests (hourly discovery)'
@@ -114,7 +119,9 @@ def _token():
     return ''
 
 
-def _read_cursor():
+def _read_cursor(lookback_days=None):
+    if lookback_days is not None:
+        return datetime.now(timezone.utc) - timedelta(days=lookback_days)
     row = SysConfig.objects.filter(key=CURSOR_KEY).first()
     value = (row.value or '').strip() if row else ''
     if value:
@@ -127,9 +134,8 @@ def _write_cursor(dt):
         key=CURSOR_KEY, defaults={'value': _iso(dt), 'timestamp_modified': time.time()})
 
 
-def discover_prs(session, login, cursor):
-    """Every PR authored by `login` updated at or after the cursor, anywhere."""
-    items, query = [], f'is:pr author:{login} updated:>={_iso(cursor)}'
+def _search(session, query):
+    items = []
     for page in range(1, SEARCH_PAGES + 1):
         data = _get(session, f'{API}/search/issues',
                     {'q': query, 'sort': 'updated', 'order': 'asc',
@@ -139,23 +145,35 @@ def discover_prs(session, login, cursor):
         if len(batch) < 100:
             break
     else:
-        logger.warning('github prs: search page limit reached, remainder next run')
+        logger.warning('github prs: search page limit reached for %r, remainder next run', query)
     return items
 
 
-def pr_events(session, repo, number, login, cursor):
-    """Human events on one PR strictly after the cursor, oldest first."""
+def discover(session, login, cursor):
+    """Issues and PRs updated at or after the cursor, anywhere on GitHub, that
+    involve `login` or have `login`'s review requested. No repository list."""
+    since = f'updated:>={_iso(cursor)}'
+    found = {}
+    for query in (f'involves:{login} {since}', f'is:pr review-requested:{login} {since}'):
+        for item in _search(session, query):
+            found.setdefault(item['html_url'], item)
+    return list(found.values())
+
+
+def item_events(session, repo, number, is_pr, login, cursor):
+    """Human events on one issue or PR strictly after the cursor, oldest first."""
     since = {'since': _iso(cursor), 'per_page': 100}
     events = []
 
     for c in _get(session, f'{API}/repos/{repo}/issues/{number}/comments', since):
         events.append(('commented', c['created_at'], c.get('user'), c['html_url'], c.get('body')))
 
-    for c in _get(session, f'{API}/repos/{repo}/pulls/{number}/comments', since):
+    for c in (_get(session, f'{API}/repos/{repo}/pulls/{number}/comments', since) if is_pr else []):
         events.append((f"commented on {c.get('path')}", c['created_at'], c.get('user'),
                        c['html_url'], c.get('body')))
 
-    for rv in _get(session, f'{API}/repos/{repo}/pulls/{number}/reviews', {'per_page': 100}):
+    for rv in (_get(session, f'{API}/repos/{repo}/pulls/{number}/reviews', {'per_page': 100})
+               if is_pr else []):
         state, body = rv.get('state') or '', rv.get('body') or ''
         if not rv.get('submitted_at'):
             continue
@@ -165,9 +183,8 @@ def pr_events(session, repo, number, login, cursor):
                 'DISMISSED': 'dismissed a review'}.get(state, 'reviewed')
         events.append((verb, rv['submitted_at'], rv.get('user'), rv['html_url'], body))
 
-    state_events = [e for e in _get(session, f'{API}/repos/{repo}/issues/{number}/events',
-                                    {'per_page': 100})
-                    if e.get('event') in ('closed', 'merged', 'reopened')]
+    timeline = _get(session, f'{API}/repos/{repo}/issues/{number}/events', {'per_page': 100})
+    state_events = [e for e in timeline if e.get('event') in ('closed', 'merged', 'reopened')]
     merged_at = [_parse(e['created_at']) for e in state_events if e['event'] == 'merged']
     for e in state_events:
         if e['event'] == 'closed' and any(
@@ -175,6 +192,13 @@ def pr_events(session, repo, number, login, cursor):
             continue                      # a merge emits merged + closed seconds apart; keep merged
         verb = {'closed': 'closed', 'merged': 'merged', 'reopened': 'reopened'}[e['event']]
         events.append((verb, e['created_at'], e.get('actor'), '', ''))
+    for e in timeline:                    # things addressed to the account itself
+        if e.get('event') == 'review_requested' and \
+                ((e.get('requested_reviewer') or {}).get('login') == login):
+            events.append(('requested your review', e['created_at'],
+                           e.get('review_requester') or e.get('actor'), '', ''))
+        elif e.get('event') == 'assigned' and ((e.get('assignee') or {}).get('login') == login):
+            events.append(('assigned you', e['created_at'], e.get('actor'), '', ''))
 
     out = []
     for verb, ts, user, url, body in events:
@@ -188,7 +212,7 @@ def pr_events(session, repo, number, login, cursor):
     return out
 
 
-def run(dry_run=False):
+def run(dry_run=False, lookback_days=None):
     token = os.environ.get('GITHUB_PERSONAL_ACCESS_TOKEN', '').strip() or _token()
     if not token:
         raise RuntimeError('GITHUB_PERSONAL_ACCESS_TOKEN is not set in ~/.env')
@@ -197,50 +221,59 @@ def run(dry_run=False):
     if not login:
         raise RuntimeError('GitHub /user returned no login for the token')
 
-    cursor = _read_cursor()
-    newest = cursor
+    cursor = _read_cursor(lookback_days)
+    newest = _read_cursor()          # the stored cursor only ever moves forward
     if not dry_run:
         capcom.ensure_source(SOURCE, kind='feed', mode='listen', note=SOURCE_NOTE)
 
-    prs = discover_prs(session, login, cursor)
-    emitted = 0
-    for pr in prs:
-        repo = pr['repository_url'].split('/repos/', 1)[1]
-        number = pr['number']
-        pr_url = pr['html_url']
-        for ev in pr_events(session, repo, number, login, cursor):
+    items = discover(session, login, cursor)
+    emitted = skipped = 0
+    for item in items:
+        repo = item['repository_url'].split('/repos/', 1)[1]
+        number = item['number']
+        is_pr = bool(item.get('pull_request'))
+        item_url = item['html_url']
+        label = f"{repo}#{number}" + ('' if is_pr else ' (issue)')
+        for ev in item_events(session, repo, number, is_pr, login, cursor):
+            key = f"github-pr:{repo}#{number}:{ev['verb']}:{_iso(ev['at'])}"
+            if ev['at'] > newest:
+                newest = ev['at']
+            if not dry_run and Notice.objects.filter(dedup_key=key).exists():
+                skipped += 1
+                continue
             snippet = _first_line(ev['body'], SNIPPET)
-            title = f"{repo}#{number} · {ev['actor']} {ev['verb']}"
+            title = f"{label} · {ev['actor']} {ev['verb']}"
             if snippet:
                 title += f': {snippet}'
-            severity = 'warning' if ev['verb'] in ('requested changes', 'closed') else 'info'
-            detail = f"{pr['title']}\n{pr_url}\n\n{ev['at'].strftime('%Y-%m-%d %H:%M UTC')}  {ev['actor']} {ev['verb']}"
+            severity = ('warning' if ev['verb'] in ('requested changes', 'closed',
+                                                      'requested your review', 'assigned you')
+                        else 'info')
+            detail = f"{item['title']}\n{item_url}\n\n{ev['at'].strftime('%Y-%m-%d %H:%M UTC')}  {ev['actor']} {ev['verb']}"
             if ev['body'].strip():
                 detail += '\n\n' + ev['body'].replace('\r', '').strip()[:DETAIL]
             if dry_run:
-                print(f"[{severity}] {title}\n    {ev['url'] or pr_url}")
+                print(f"[{severity}] {title}\n    {ev['url'] or item_url}")
             else:
                 capcom.emit_notice(source=SOURCE, title=title, severity=severity,
-                                   url=ev['url'] or pr_url,
-                                   dedup_key=f"github-pr:{repo}#{number}:{ev['verb']}:{_iso(ev['at'])}",
-                                   data={'detail': detail, 'pr_url': pr_url})
+                                   url=ev['url'] or item_url, dedup_key=key,
+                                   data={'detail': detail, 'item_url': item_url})
             emitted += 1
-            if ev['at'] > newest:
-                newest = ev['at']
 
     if dry_run:
-        print(f'dry run: {len(prs)} PR(s) updated since {_iso(cursor)}, '
+        print(f'dry run: {len(items)} item(s) updated since {_iso(cursor)}, '
               f'{emitted} event(s) would be emitted; cursor would move to {_iso(newest)}')
         return
-    if newest > cursor:
-        _write_cursor(newest)
-    if emitted:
-        logger.info('github prs: %d event(s) on %d PR(s) since %s', emitted, len(prs), _iso(cursor))
+    _write_cursor(newest)
+    if emitted or skipped:
+        logger.info('github prs: %d new event(s), %d already in feed, on %d item(s) since %s',
+                    emitted, skipped, len(items), _iso(cursor))
 
 
 if __name__ == '__main__':
+    args = sys.argv[1:]
+    lookback = int(args[args.index('--lookback') + 1]) if '--lookback' in args else None
     try:
-        run(dry_run='--dry-run' in sys.argv[1:])
+        run(dry_run='--dry-run' in args, lookback_days=lookback)
     except Exception as e:  # surface every failure: AppLog ERROR + nonzero exit
         logger.error('github prs collector failed: %s', e)
         sys.exit(1)

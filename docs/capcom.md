@@ -303,23 +303,26 @@ Capcom carries as a notice like any other.
   transitions emit a feed notice (alarm for a failed run, warning otherwise,
   info on recovery); an outright worker failure additionally surfaces through
   the wrangler's uniform failure notices ([wrangler.md](wrangler.md)).
-- **GitHub PR follow-ups** (listen, in-process; wrangler action
-  `github-pr-followups`, hourly) — human activity on pull requests the user
-  authored, anywhere on GitHub. `scripts/capcom_github_prs.py` discovers the
-  PRs with one search (`is:pr author:<login> updated:>=<cursor>`; there is
-  no repository list) and emits a notice for each issue comment, review
-  comment, submitted review, close, merge, or reopen since the cursor by
-  anyone other than the user or a bot. Every event is its own notice row,
-  dismissed by marking it read; the `dedup_key` names the event
-  (`github-pr:<owner/repo>#<n>:<verb>:<time>`) so a re-run never duplicates
-  one. A close without merge or a changes-requested review is a warning, the
-  rest are informational.
-  The notice links to the event itself and carries the PR title and the
-  comment body as its detail. The cursor is the `capcom_github_prs_cursor`
-  sysconfig row (newest event time processed); the first run looks back 14
-  days. The GitHub token is `GITHUB_PERSONAL_ACCESS_TOKEN` in the user's
-  `~/.env`, read by the script directly; it is not placed in the deployed
-  project `.env`.
+- **GitHub follow-ups** (listen, in-process; wrangler action
+  `github-pr-followups`, hourly) — human activity on the issues and pull
+  requests the user is part of, anywhere on GitHub. `scripts/capcom_github_prs.py`
+  discovers them with two searches and no repository list —
+  `involves:<login>` (authored, assigned, mentioned, or commented on) and
+  `is:pr review-requested:<login>`, both bounded by `updated:>=<cursor>` —
+  and emits a notice for each issue comment, review comment, submitted
+  review, close, merge, or reopen since the cursor by anyone other than the
+  user or a bot, and for each review request or assignment addressed to the
+  user. Every event is its own notice row, dismissed by marking it read;
+  the `dedup_key` names the event (`github-pr:<owner/repo>#<n>:<verb>:<time>`)
+  and an event already in the feed is never emitted again, so a re-run or a
+  `--lookback N` re-seed adds only what is new. A close without merge, a
+  changes-requested review, a review request, and an assignment are
+  warnings; the rest are informational. The notice links to the event itself
+  and carries the item's title and the comment body as its detail. The
+  cursor is the `capcom_github_prs_cursor` sysconfig row (newest event time
+  processed); the first run looks back 14 days. The GitHub token is
+  `GITHUB_PERSONAL_ACCESS_TOKEN` in the user's `~/.env`, read by the script
+  directly; it is not placed in the deployed project `.env`.
 - **Second Life** (listen) — visitor presence at monitored places via
   primus. Live data gathering there does not exist today (the capability
   is in legacy LSL scripts); this is the motivating case for direct posts
@@ -385,9 +388,9 @@ Candidate sources and features considered and not adopted:
 - `tjai_app/static/tjai/sortable.min.js` — vendored SortableJS for pin drag
 - `scripts/capcom_dispatcher.py` — poll dispatcher, run by the
   `capcom-dispatcher` action (periodic, 10 minutes)
-- `scripts/capcom_github_prs.py` — GitHub PR follow-up collector, run by the
+- `scripts/capcom_github_prs.py` — GitHub follow-up collector, run by the
   `github-pr-followups` action (wrangler, periodic, hourly); `--dry-run`
-  prints what it would emit
+  prints what it would emit, `--lookback N` re-seeds from N days back
 - `tjai_app/management/commands/validate_capcom_sources.py` — deploy-time
   enforcement of the state-tile/source/collector contract
 - Routine successful dispatcher cycles are deliberately absent from AppLog;
