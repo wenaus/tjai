@@ -309,10 +309,11 @@ Capcom carries as a notice like any other.
   PRs with one search (`is:pr author:<login> updated:>=<cursor>`; there is
   no repository list) and emits a notice for each issue comment, review
   comment, submitted review, close, merge, or reopen since the cursor by
-  anyone other than the user or a bot. All events on one PR thread onto one
-  row (`dedup_key github-pr:<owner/repo>#<n>`), so every new event re-flags
-  that row unread with the latest event as its title; a close without merge
-  or a changes-requested review is a warning, the rest are informational.
+  anyone other than the user or a bot. Every event is its own notice row,
+  dismissed by marking it read; the `dedup_key` names the event
+  (`github-pr:<owner/repo>#<n>:<verb>:<time>`) so a re-run never duplicates
+  one. A close without merge or a changes-requested review is a warning, the
+  rest are informational.
   The notice links to the event itself and carries the PR title and the
   comment body as its detail. The cursor is the `capcom_github_prs_cursor`
   sysconfig row (newest event time processed); the first run looks back 14

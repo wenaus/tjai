@@ -6,9 +6,9 @@ hourly). Discovers every pull request authored by the token's GitHub account
 that changed since the cursor — one GitHub search, no repository list — and
 emits a Capcom notice for each human event on those PRs since the cursor:
 issue comments, review comments, submitted reviews, and close, merge, and
-reopen. Events by the account itself and by bots are skipped. Every event on
-a PR threads onto one notice row (dedup_key github-pr:<owner/repo>#<n>), so
-each new event re-flags that row unread with the latest event as its title.
+reopen. Events by the account itself and by bots are skipped. Every event is
+its own notice row; the dedup_key names the event (repo, PR number, verb,
+time) so a re-run never duplicates one.
 
 Cursor: the capcom_github_prs_cursor sysconfig row holds the newest event
 time processed (UTC, ISO). The first run seeds it LOOKBACK_DAYS back.
@@ -222,7 +222,7 @@ def run(dry_run=False):
             else:
                 capcom.emit_notice(source=SOURCE, title=title, severity=severity,
                                    url=ev['url'] or pr_url,
-                                   dedup_key=f'github-pr:{repo}#{number}',
+                                   dedup_key=f"github-pr:{repo}#{number}:{ev['verb']}:{_iso(ev['at'])}",
                                    data={'detail': detail, 'pr_url': pr_url})
             emitted += 1
             if ev['at'] > newest:
