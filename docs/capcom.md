@@ -303,6 +303,22 @@ Capcom carries as a notice like any other.
   transitions emit a feed notice (alarm for a failed run, warning otherwise,
   info on recovery); an outright worker failure additionally surfaces through
   the wrangler's uniform failure notices ([wrangler.md](wrangler.md)).
+- **GitHub PR follow-ups** (listen, in-process; wrangler action
+  `github-pr-followups`, hourly) — human activity on pull requests the user
+  authored, anywhere on GitHub. `scripts/capcom_github_prs.py` discovers the
+  PRs with one search (`is:pr author:<login> updated:>=<cursor>`; there is
+  no repository list) and emits a notice for each issue comment, review
+  comment, submitted review, close, merge, or reopen since the cursor by
+  anyone other than the user or a bot. All events on one PR thread onto one
+  row (`dedup_key github-pr:<owner/repo>#<n>`), so every new event re-flags
+  that row unread with the latest event as its title; a close without merge
+  or a changes-requested review is a warning, the rest are informational.
+  The notice links to the event itself and carries the PR title and the
+  comment body as its detail. The cursor is the `capcom_github_prs_cursor`
+  sysconfig row (newest event time processed); the first run looks back 14
+  days. The GitHub token is `GITHUB_PERSONAL_ACCESS_TOKEN` in the user's
+  `~/.env`, read by the script directly; it is not placed in the deployed
+  project `.env`.
 - **Second Life** (listen) — visitor presence at monitored places via
   primus. Live data gathering there does not exist today (the capability
   is in legacy LSL scripts); this is the motivating case for direct posts
@@ -323,7 +339,9 @@ Candidate sources and features considered and not adopted:
 - **Raw failure and watchdog streams** — noise; only curated alarms are
   carried, per the contract above.
 - **Git and development activity** — already sufficiently visible through
-  existing views and workflow.
+  existing views and workflow. Review conversation addressed to the user on
+  their own pull requests is a different thing — it needs attention and is
+  easily missed in email — and is carried (see *GitHub PR follow-ups*).
 - **Calendar and todos** — the full calendar and todo lists remain in their
   established views. Capcom shows only the next timed calendar entry as
   compact current state.
@@ -366,6 +384,9 @@ Candidate sources and features considered and not adopted:
 - `tjai_app/static/tjai/sortable.min.js` — vendored SortableJS for pin drag
 - `scripts/capcom_dispatcher.py` — poll dispatcher, run by the
   `capcom-dispatcher` action (periodic, 10 minutes)
+- `scripts/capcom_github_prs.py` — GitHub PR follow-up collector, run by the
+  `github-pr-followups` action (wrangler, periodic, hourly); `--dry-run`
+  prints what it would emit
 - `tjai_app/management/commands/validate_capcom_sources.py` — deploy-time
   enforcement of the state-tile/source/collector contract
 - Routine successful dispatcher cycles are deliberately absent from AppLog;
