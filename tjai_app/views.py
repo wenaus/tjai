@@ -4090,7 +4090,12 @@ def entry_detail(request, entry_id=None):
     is_public = _is_public(entry)
     public_slug = (data.get('entry_id') or data.get('nickname') or entry.name or str(entry.id)) if data else str(entry.id)
     entry_done = bool(data.get('done')) if data and 'done' in data else entry.status == 'done'
+    from . import inflight as inflight_lib
+    is_inflight = inflight_lib.is_inflight(entry)
+    inflight_ref = ((entry.data or {}).get('entry_id') if isinstance(entry.data, dict) else None) or str(entry.id)
     return render(request, 'tjai_app/entry_detail.html', {
+        'is_inflight': is_inflight,
+        'inflight_ref': inflight_ref,
         'entry': entry,
         'content_html': content_html,
         'section_links': section_links,
@@ -4224,6 +4229,7 @@ def api_entry_save(request, entry_id):
     # deletions get reverted in the merge case; redundant lines are easy to
     # clean up, deleted bullets are not easy to recover.
     merged = False
+    merge_conflict = False
     expected_ts = data.get('expected_ts')
     if expected_ts:
         try:
@@ -4231,6 +4237,36 @@ def api_entry_save(request, entry_id):
             client_ts = float(expected_ts)
         except (TypeError, ValueError):
             server_ts = client_ts = 0.0
+        # Inflight todos merge three-way against the version snapshot taken
+        # by the first change after the editor opened, whose content is what
+        # the editor loaded (docs/inflight.md). Other entries keep the line
+        # union below.
+        if server_ts - client_ts > 0.5:
+            from . import inflight as inflight_lib
+            if inflight_lib.is_inflight(entry):
+                # The base is the version whose content the editor loaded,
+                # identified by the hash the editor sends; a timestamp alone
+                # cannot separate it from the snapshot of the editor's own
+                # baseline save, which lands milliseconds later.
+                base_row = None
+                base_hash = data.get('base_hash')
+                if base_hash is not None:
+                    try:
+                        base_hash = int(base_hash)
+                    except (TypeError, ValueError):
+                        base_hash = None
+                if base_hash is not None:
+                    for v_row in (EntryVersion.objects.filter(
+                            entry_id=entry.id, timestamp__gt=client_ts - 5.0)
+                            .order_by('timestamp')):
+                        if inflight_lib.fnv1a(v_row.content or '') == base_hash:
+                            base_row = v_row
+                            break
+                if base_row is not None:
+                    content, merge_conflict = inflight_lib.three_way_merge(
+                        base_row.content or '', content, entry.content or '')
+                    merged = True
+                    client_ts = server_ts       # handled; skip the union merge
         if server_ts - client_ts > 0.5:
             # rstrip: stored diary lines carry hard-break spaces; client
             # lines were stripped above, so compare like with like.
@@ -4387,6 +4423,8 @@ def api_entry_save(request, entry_id):
     if merged:
         resp['merged'] = True
         resp['merged_content'] = entry.content
+        if merge_conflict:
+            resp['merge_conflict'] = True
     if prefix_warnings:
         resp['warnings'] = prefix_warnings
     return JsonResponse(resp)
@@ -9000,6 +9038,7 @@ def api_capcom_feed(request):
         'next_meeting': next_meeting,
         'diary_pin': diary_pin,
         'pins': {'top': top, 'rest': rest},
+        'inflight': _inflight_list()[:20],
         'sources': capcom_lib.get_sources(),
         'counts_24h': counts_24h,
         'retention_days': capcom_lib._get_json_config('capcom_retention_days',
@@ -9150,3 +9189,162 @@ def api_capcom_run(request):
         'source': source or 'all',
         'message': f'Update triggered: {source}' if source else 'Update triggered',
     })
+
+
+# ── Inflight todos: live view and item actions (docs/inflight.md) ───────────
+
+def _inflight_lookup(entry_id):
+    """Resolve a UUID or data.entry_id to an inflight todo, else None."""
+    base = Entry.objects.filter(deleted_at__isnull=True, kind='todo')
+    entry = None
+    try:
+        uuid.UUID(str(entry_id))
+        entry = base.filter(id=entry_id).first()
+    except (ValueError, AttributeError):
+        pass
+    if entry is None:
+        entry = base.filter(data__entry_id=entry_id).first()
+    return entry
+
+
+def _inflight_payload(entry):
+    from . import inflight as inflight_lib
+    p = inflight_lib.parse(entry.content or '')
+    eid = (entry.data or {}).get('entry_id') if isinstance(entry.data, dict) else None
+    ref = eid or str(entry.id)
+    return {
+        'id': str(entry.id),
+        'entry_id': eid or '',
+        'ref': ref,
+        'status': entry.status,
+        'title': p['title'],
+        'description_html': _render_markdown(p['description']) if p['description'] else '',
+        'live': [{'text': it['text'], 'html': _render_markdown('\n'.join(it['lines'])[2:])}
+                 for it in p['live']],
+        'done': [{'text': it['text'], 'html': _render_markdown('\n'.join(it['lines'])[2:])}
+                 for it in p['done']],
+        'refs_html': _render_markdown(p['refs']) if p['refs'] else '',
+        'open_count': len(p['live']),
+        'done_count': len(p['done']),
+        'modified_ts': entry.timestamp_modified,
+        'modified_display': fmt_datetime(entry.timestamp_modified),
+        'context': entry.context_id or '',
+        'edit_url': f'/tjai/entry/?uuid={entry.id}&edit=1&return=/tjai/inflight/{quote(ref, safe="")}/',
+        'entry_url': f'/tjai/entry/?uuid={entry.id}',
+    }
+
+
+def _inflight_list():
+    """Inflight todos, most recently touched first, with item counts."""
+    from . import inflight as inflight_lib
+    rows = []
+    qs = Entry.objects.filter(deleted_at__isnull=True, kind='todo',
+                              status=inflight_lib.STATUS).order_by('-timestamp_modified')
+    for e in qs:
+        s = inflight_lib.summary(e.content or '')
+        eid = (e.data or {}).get('entry_id') if isinstance(e.data, dict) else None
+        ref = eid or str(e.id)
+        rows.append({
+            'id': str(e.id), 'ref': ref, 'title': s['title'] or '(untitled)',
+            'open': s['open'], 'done': s['done'],
+            'modified_ts': e.timestamp_modified,
+            'modified_display': fmt_datetime(e.timestamp_modified),
+            'ago': fmt_ago(e.timestamp_modified),
+            'url': f'/tjai/inflight/{quote(ref, safe="")}/',
+            'context': e.context_id or '',
+        })
+    return rows
+
+
+
+@login_required
+def inflight_page(request, entry_id=None):
+    """The Inflight index (no entry) or one activity's live view."""
+    if entry_id is None:
+        return render(request, 'tjai_app/inflight.html', {'mode': 'index', 'entry': None})
+    entry = _inflight_lookup(entry_id)
+    if entry is None:
+        raise Http404('No such todo')
+    return render(request, 'tjai_app/inflight.html', {
+        'mode': 'view', 'entry': entry,
+        'initial_json': json.dumps(_inflight_payload(entry)),
+    })
+
+
+@login_required
+def api_inflight_list(request):
+    return JsonResponse({'items': _inflight_list(), 'server_time': time.time()})
+
+
+@login_required
+def api_inflight_state(request, entry_id):
+    """Current rendered state of one activity; polled by the live view and
+    by the editor's change banner. Cheap when unchanged: pass ?since=<ts>
+    and an unchanged entry answers {changed: false}."""
+    entry = _inflight_lookup(entry_id)
+    if entry is None:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    since = request.GET.get('since')
+    if since:
+        try:
+            if float(entry.timestamp_modified) - float(since) <= 0.0005:
+                return JsonResponse({'changed': False, 'modified_ts': entry.timestamp_modified})
+        except (TypeError, ValueError):
+            pass
+    payload = _inflight_payload(entry)
+    payload['changed'] = True
+    from .models import EntryVersion
+    last = (EntryVersion.objects.filter(entry_id=entry.id).order_by('-timestamp')
+            .values_list('changed_by', flat=True).first())
+    payload['last_changed_by'] = last or ''
+    return JsonResponse(payload)
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_inflight_item(request, entry_id):
+    """Item actions on an inflight todo: done, reopen, add. Each is a
+    surgical edit of the current content, serialized per entry."""
+    from . import inflight as inflight_lib
+    from . import services
+    try:
+        body = json.loads(request.body or b'{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    action = body.get('action')
+    text = (body.get('text') or '').strip()
+    if action not in ('done', 'reopen', 'add') or not text:
+        return JsonResponse({'error': 'action (done|reopen|add) and text are required'}, status=400)
+    with transaction.atomic():
+        entry = Entry.objects.select_for_update().filter(
+            deleted_at__isnull=True, kind='todo').filter(
+            Q(id=entry_id) if _is_uuid(entry_id) else Q(data__entry_id=entry_id)).first()
+        if entry is None:
+            return JsonResponse({'error': 'Not found'}, status=404)
+        try:
+            if action == 'done':
+                new_content = inflight_lib.mark_done(entry.content or '', text)
+            elif action == 'reopen':
+                new_content = inflight_lib.reopen(entry.content or '', text)
+            else:
+                new_content = inflight_lib.add_item(entry.content or '', text)
+        except ValueError as e:
+            return JsonResponse({'error': str(e)}, status=409)
+        result = services._edit_entry_impl(
+            entry_id=str(entry.id), content=new_content,
+            source=f'inflight:{request.user.username}', locked_entry=entry)
+    if isinstance(result, dict) and result.get('error'):
+        logger.error('inflight item %s on %s failed: %s', action, entry_id, result['error'])
+        return JsonResponse({'error': result['error']}, status=500)
+    entry.refresh_from_db()
+    payload = _inflight_payload(entry)
+    payload['changed'] = True
+    return JsonResponse(payload)
+
+
+def _is_uuid(value):
+    try:
+        uuid.UUID(str(value))
+        return True
+    except (ValueError, AttributeError):
+        return False

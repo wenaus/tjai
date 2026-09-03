@@ -1,0 +1,166 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if mode == 'index' %}Inflight{% else %}{{ entry.content|truncatechars:60 }}{% endif %} - tjai</title>
+    <style>
+        body { background: #1a1a1a; color: #e0e0e0; font-family: 'SF Mono', Monaco, Menlo, Consolas, monospace; font-size: 14px; line-height: 1.5; margin: 0; }
+        a { color: #90caf9; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .main { max-width: 1000px; margin: 0 auto; padding: 16px 20px 60px; }
+        .head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
+        .head h1 { font-size: 18px; font-weight: 600; margin: 0; color: #fff; }
+        .meta { color: #8a8a8a; font-size: 12px; }
+        .meta .live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #66bb6a; margin-right: 5px; vertical-align: middle; }
+        .meta .live-dot.stale { background: #ef5350; }
+        .btn { background: #2a2a2a; color: #e0e0e0; border: 1px solid #555; padding: 3px 10px; border-radius: 3px; cursor: pointer; font: inherit; font-size: 13px; }
+        .btn:hover { background: #3a3a3a; }
+        .btn.act { color: #9ccc65; border-color: #4a6a3a; }
+        .btn.reopen { color: #ffb74d; border-color: #6a5a3a; }
+        .desc { color: #cfcfcf; margin: 10px 0 14px; }
+        .desc p { margin: 0 0 6px; }
+        .section-head { color: #d8a070; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; margin: 16px 0 6px; }
+        .item { display: flex; align-items: baseline; gap: 10px; padding: 5px 6px; border-bottom: 1px solid #262626; }
+        .item .txt { flex: 1; min-width: 0; }
+        .item .txt p { margin: 0; }
+        .item.done .txt { color: #8a8a8a; }
+        .item.done .txt::before { content: '. '; color: #666; }
+        .item.live .txt::before { content: '- '; color: #9ccc65; }
+        .add { display: flex; gap: 8px; margin-top: 8px; }
+        .add input { flex: 1; background: #232323; color: #e0e0e0; border: 1px solid #444; border-radius: 3px; padding: 5px 8px; font: inherit; }
+        .refs { color: #bdbdbd; }
+        .refs ul { margin: 0; padding-left: 18px; }
+        .err { color: #ef5350; margin: 8px 0; }
+        .empty { color: #777; font-style: italic; padding: 4px 6px; }
+        /* index */
+        .row { display: flex; align-items: baseline; gap: 12px; padding: 6px 6px; border-bottom: 1px solid #262626; }
+        .row .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .row .counts { color: #9ccc65; white-space: nowrap; }
+        .row .counts .d { color: #777; }
+        .row .ago { color: #8a8a8a; white-space: nowrap; min-width: 40px; text-align: right; }
+        .row .ctx { color: #d8a070; font-size: 12px; }
+    </style>
+</head>
+<body>
+    {% with current_page="inflight" %}{% include "tjai_app/_menu.html" %}{% endwith %}
+    <div class="main">
+    {% if mode == 'index' %}
+        <div class="head"><h1>Inflight</h1><span class="meta" id="idx-meta">activities being worked, most recently touched first</span></div>
+        <div id="idx-list"><div class="empty">Loading…</div></div>
+        <div class="err" id="idx-err"></div>
+    {% else %}
+        <div class="head">
+            <h1 id="title"></h1>
+            <span class="meta" id="meta"><span class="live-dot" id="live-dot"></span><span id="meta-text"></span></span>
+            <a class="btn" id="edit-btn" href="#">Edit</a>
+            <a class="btn" id="entry-btn" href="#" target="_blank" rel="noopener">Entry</a>
+        </div>
+        <div class="desc" id="desc"></div>
+        <div class="section-head">Live <span id="live-count"></span></div>
+        <div id="live"></div>
+        <div class="add"><input id="add-input" placeholder="new item, Enter to add"><button class="btn act" id="add-btn">Add</button></div>
+        <div class="section-head">Done <span id="done-count"></span></div>
+        <div id="done"></div>
+        <div class="section-head">Refs</div>
+        <div class="refs" id="refs"></div>
+        <div class="err" id="err"></div>
+    {% endif %}
+    </div>
+<script src="{% static 'tjai/tjai-utils.js' %}"></script>
+<script>
+(function () {
+    const csrf = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
+    const MODE = "{{ mode }}";
+
+    async function getJson(url, opts) {
+        const r = await fetch(url, Object.assign({headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf}}, opts || {}));
+        let d = null;
+        try { d = await r.json(); } catch (e) { throw new Error('bad response ' + r.status); }
+        if (!r.ok) throw new Error((d && d.error) || ('HTTP ' + r.status));
+        return d;
+    }
+
+    if (MODE === 'index') {
+        async function loadIndex() {
+            try {
+                const d = await getJson('/tjai/api/inflight/list');
+                const el = document.getElementById('idx-list');
+                if (!d.items.length) { el.innerHTML = '<div class="empty">No inflight todos. Set a todo’s status to inflight to start one.</div>'; return; }
+                el.innerHTML = d.items.map(i =>
+                    '<div class="row"><a class="t" href="' + escapeHtml(i.url) + '">' + escapeHtml(i.title) + '</a>' +
+                    (i.context ? '<span class="ctx">' + escapeHtml(i.context) + '</span>' : '') +
+                    '<span class="counts">' + i.open + ' open <span class="d">· ' + i.done + ' done</span></span>' +
+                    '<span class="ago" title="' + escapeHtml(i.modified_display) + '">' + escapeHtml(i.ago) + '</span></div>').join('');
+                document.getElementById('idx-err').textContent = '';
+            } catch (e) { document.getElementById('idx-err').textContent = 'refresh failed: ' + e.message; }
+        }
+        loadIndex(); setInterval(loadIndex, 10000);
+        return;
+    }
+
+    let state = JSON.parse('{{ initial_json|escapejs }}');
+    let lastTs = state.modified_ts;
+    const ref = encodeURIComponent(state.ref);
+
+    function itemRow(it, cls, btnLabel, btnCls, action) {
+        return '<div class="item ' + cls + '"><div class="txt">' + it.html + '</div>' +
+               '<button class="btn ' + btnCls + '" data-action="' + action + '" data-text="' + escapeHtml(it.text) + '">' + btnLabel + '</button></div>';
+    }
+
+    function render() {
+        document.title = state.title + ' - Inflight';
+        document.getElementById('title').textContent = state.title;
+        document.getElementById('meta-text').textContent = state.modified_display + (state.last_changed_by ? ' · ' + state.last_changed_by : '') + (state.context ? ' · ' + state.context : '');
+        document.getElementById('edit-btn').href = state.edit_url;
+        document.getElementById('entry-btn').href = state.entry_url;
+        document.getElementById('desc').innerHTML = state.description_html || '';
+        document.getElementById('live-count').textContent = state.open_count ? '(' + state.open_count + ')' : '';
+        document.getElementById('done-count').textContent = state.done_count ? '(' + state.done_count + ')' : '';
+        document.getElementById('live').innerHTML = state.live.length
+            ? state.live.map(it => itemRow(it, 'live', 'done', 'act', 'done')).join('')
+            : '<div class="empty">nothing open</div>';
+        document.getElementById('done').innerHTML = state.done.length
+            ? state.done.map(it => itemRow(it, 'done', 'reopen', 'reopen', 'reopen')).join('')
+            : '<div class="empty">nothing done yet</div>';
+        document.getElementById('refs').innerHTML = state.refs_html || '<div class="empty">no refs</div>';
+    }
+
+    async function act(action, text) {
+        try {
+            const d = await getJson('/tjai/api/inflight/' + ref + '/item', {method: 'POST', body: JSON.stringify({action: action, text: text})});
+            state = d; lastTs = d.modified_ts; render();
+            document.getElementById('err').textContent = '';
+        } catch (e) {
+            document.getElementById('err').textContent = action + ' failed: ' + e.message;
+            poll();
+        }
+    }
+
+    async function poll() {
+        try {
+            const d = await getJson('/tjai/api/inflight/' + ref + '/state?since=' + encodeURIComponent(lastTs));
+            document.getElementById('live-dot').classList.remove('stale');
+            if (d.changed) { state = d; lastTs = d.modified_ts; render(); }
+        } catch (e) {
+            document.getElementById('live-dot').classList.add('stale');
+        }
+    }
+
+    document.body.addEventListener('click', ev => {
+        const b = ev.target.closest('button[data-action]');
+        if (b) act(b.dataset.action, b.dataset.text);
+    });
+    const addInput = document.getElementById('add-input');
+    function addItem() { const t = addInput.value.trim(); if (!t) return; addInput.value = ''; act('add', t); }
+    document.getElementById('add-btn').addEventListener('click', addItem);
+    addInput.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); addItem(); } });
+
+    render();
+    setInterval(poll, 3000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+})();
+</script>
+</body>
+</html>

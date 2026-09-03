@@ -68,6 +68,9 @@ Two panels:
   always first. Its date is plain text; the three labels open that Eastern
   date's diary editor, daily synopsis, and ideation entry in new tabs. It is
   independent of entry membership and pin ordering.
+  Between the tiles and the pins, an **Inflight** shelf lists the todos with
+  status `inflight` ([Inflight Todos](inflight.md)), most recently touched
+  first, each with its open-item count and age, linking to its live view.
   State tiles are click-drag ordered through the `capcom_state_order`
   sysconfig key. Every state tile gets the same compact three-dot menu with
   one action, **update**. For an enabled poll source it forces only that state;

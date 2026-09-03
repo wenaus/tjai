@@ -225,6 +225,7 @@
 
     <!-- Content (edit mode) -->
     <div id="editMode">
+            <div id="inflightBanner" style="display:none;color:#ffb74d;background:#2a2416;border:1px solid #6a5a3a;padding:6px 10px;margin-bottom:8px;font-size:13px;"></div>
         <div class="field-row">
             <label>@name</label>
             <input id="nameField" type="text" value="{{ entry.name|default:'' }}" placeholder="(none)">
@@ -282,6 +283,7 @@
         <div style="margin-bottom: 8px;">
             <span class="timestamp">{{ entry.timestamp_modified|date:"D m/d/Y H:i" }}</span>
             <span class="kind">[{{ entry.kind }}]</span>
+            {% if is_inflight %}<a href="/tjai/inflight/{{ inflight_ref|urlencode }}/" style="color:#9ccc65;margin-left:8px;font-size:12px;" title="Live view of this inflight todo">live view</a>{% endif %}
             {% if entry.context_id %}<span class="context">={{ entry.context_id }}</span>{% endif %}
             {% if entry.name %}<strong>@{{ entry.name }}</strong>{% endif %}
             {% for t in tags %}<span class="tag">:{{ t }}</span> {% endfor %}
@@ -595,8 +597,39 @@
             var show = kind === 'todo' || kind === 'goal';
             document.getElementById('doneFieldLabel').style.display = show ? '' : 'none';
         }
+        var IS_INFLIGHT = {{ is_inflight|yesno:"true,false" }};
+        var _inflightPoll = null;
+        var _baseHash = null;   // FNV-1a of the content this editor loaded (see tjai_app/inflight.py)
+        function fnv1a(s) {
+            var h = 0x811c9dc5;
+            for (var ch of (s || '')) { h ^= ch.codePointAt(0); h = Math.imul(h, 0x01000193) >>> 0; }
+            return h >>> 0;
+        }
+        function _startInflightWatch() {
+            if (!IS_INFLIGHT) return;
+            _stopInflightWatch();
+            _inflightPoll = setInterval(function() {
+                fetch('/tjai/api/inflight/{{ entry.id }}/state?since=' + encodeURIComponent(_serverTimestamp))
+                    .then(function(r) { return r.json(); })
+                    .then(function(d) {
+                        var b = document.getElementById('inflightBanner');
+                        if (!b || !d.changed) return;
+                        b.style.display = '';
+                        b.textContent = 'Changed ' + d.modified_display + (d.last_changed_by ? ' by ' + d.last_changed_by : '') +
+                                        ' while you are editing; your save will merge three-way.';
+                    })
+                    .catch(function() {});
+            }, 5000);
+        }
+        function _stopInflightWatch() {
+            if (_inflightPoll) { clearInterval(_inflightPoll); _inflightPoll = null; }
+            var b = document.getElementById('inflightBanner');
+            if (b) b.style.display = 'none';
+        }
         function startEdit() {
             document.title = baseTitle + ' - Edit';
+            _startInflightWatch();
+            if (IS_INFLIGHT) _baseHash = fnv1a(cm ? cm.getValue() : document.getElementById('editor').value);
             document.getElementById('viewMode').style.display = 'none';
             document.getElementById('editMode').style.display = 'block';
             document.getElementById('editBtn').style.display = 'none';
@@ -946,6 +979,7 @@
 
         function cancelEdit() {
             if (typeof _stopAutosave === 'function') _stopAutosave();
+            _stopInflightWatch();
             // Arrived from another page (e.g. todo-bangs): cancel returns
             // there, same as save, instead of dropping to the detail view.
             var cancelReturn = new URLSearchParams(window.location.search).get('return');
@@ -992,11 +1026,12 @@
             fetch(saveUrl, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-                body: JSON.stringify({content: content, name: name, context: context, format: fmt, tags: tags, entry_id: entryIdVal, kind: kind, priority: priority, status: status, done: done, access: isPublic ? 'public' : null, keep_time: keepTime, expected_ts: _serverTimestamp})
+                body: JSON.stringify({content: content, name: name, context: context, format: fmt, tags: tags, entry_id: entryIdVal, kind: kind, priority: priority, status: status, done: done, access: isPublic ? 'public' : null, keep_time: keepTime, expected_ts: _serverTimestamp, base_hash: _baseHash})
             }).then(parseJsonResponse).then(function(data) {
                 if (data.ok) {
                     _lastSavedContent = content;
                     if (data.timestamp_modified) _serverTimestamp = data.timestamp_modified;
+                    _stopInflightWatch();
                     var st = document.getElementById('saveStatus');
                     st.style.display = 'inline';
                     setTimeout(function() { st.style.display = 'none'; }, 2000);
@@ -1267,7 +1302,7 @@
                 _showAutosaveStatus('localStorage FAILED: ' + e.message, true);
             }
             // First autosave creates a pre-edit version snapshot
-            var body = {content: content, autosave: true, expected_ts: _serverTimestamp};
+            var body = {content: content, autosave: true, expected_ts: _serverTimestamp, base_hash: _baseHash};
             var wasFirstAutosave = _isFirstAutosave;
             if (_isFirstAutosave) {
                 body.first_autosave = true;
@@ -1287,6 +1322,7 @@
                     // merged bits appear on next reload.
                     _lastSavedContent = data.merged ? data.merged_content : content;
                     _serverTimestamp = data.timestamp_modified || _serverTimestamp;
+                    if (IS_INFLIGHT) _baseHash = fnv1a(data.merged_content !== undefined ? data.merged_content : content);
                     _autosaveFailCount = 0;
                     _showAutosaveStatus(data.merged ? 'autosaved (merged)' : 'autosaved', false);
                     if (data.warnings && data.warnings.length) {

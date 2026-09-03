@@ -26,7 +26,7 @@ from tj.commands.journal import parse_time
 from tj.date_utils import parse_date_filter
 
 VALID_KINDS = ('memory', 'todo', 'journal', 'profile', 'ai', 'bookmark', 'list', 'action', 'goal')
-VALID_STATUSES = ('active', 'done', 'blocked', 'archive', 'failed')
+VALID_STATUSES = ('active', 'inflight', 'done', 'blocked', 'archive', 'failed')
 DEFAULT_MAX_CONTENT_LENGTH = 500
 MAX_RESULT_LIMIT = 500
 PICKS_NOOP_SENTINEL = '__noop__'

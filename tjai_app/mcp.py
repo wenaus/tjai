@@ -427,8 +427,11 @@ async def get_todos(
 
     Args:
         context: Filter to todos in this context/project only.
-        status: Filter by specific status: active, done, blocked, or archive.
+        status: Filter by specific status: active, inflight, done, blocked, or archive.
                 If specified, returns only todos with this exact status.
+                'inflight' todos are activities being worked in sessions; their
+                body is the working record (description, ## Live items, ## Done
+                items, ## Refs). See docs/inflight.md.
                 Overrides include_done.
         include_done: If True, include all todos regardless of status.
                       Default: False (excludes status='done' only).

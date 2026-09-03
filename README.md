@@ -45,6 +45,7 @@ interfaces, not the center of the system architecture.
 | [Markdown Rendering](docs/rendering.md) | Server-side render pipeline, linkify policy, Prism code blocks, `text` prose fences |
 | [Git Activity](docs/git-activity.md) | Commit grid and daily commit lists: repo registry, daily-file producers, weekly lines-added chart, Eastern-date rules |
 | [Todo Bangs](docs/todo-bangs.md) | The `!!!` in-flow todo marker: extraction rule and index, dialog exclusions, the `!!!` page, and the `get_todo_bangs` MCP tool |
+| [Inflight Todos](docs/inflight.md) | Activities in progress as todos with status `inflight`: body shape (Live/Done/Refs), live view with per-item actions and auto-refresh, Capcom shelf, three-way editor merge, LLM rules |
 | [Server & Deployment](docs/server.md) | Production environment, deploy, endpoints, logging, health, backups |
 | [MCP Server](docs/mcp.md) | Standalone MCP ASGI service: transport policy, bearer auth, Apache routing, deployment; related read-only Postgres MCP |
 | [Action Agent](docs/action-agent.md) | Scheduled task daemon, execution pipeline, action entry schema |
