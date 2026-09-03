@@ -21,6 +21,14 @@ def is_inflight(entry):
     return entry.kind == 'todo' and entry.status == STATUS
 
 
+CONFLICT_MARKERS = ('<<<<<<< yours', '=======', '>>>>>>> server')
+
+
+def has_conflict(text):
+    """True when a merge left conflict markers in the content."""
+    return CONFLICT_MARKERS[0] in (text or '') and CONFLICT_MARKERS[2] in (text or '')
+
+
 def fnv1a(text):
     """32-bit FNV-1a over code points; the editor computes the same in JS to
     name the content it loaded, so the save can find that exact version."""

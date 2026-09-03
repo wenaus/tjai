@@ -1032,6 +1032,7 @@
                     _lastSavedContent = content;
                     if (data.timestamp_modified) _serverTimestamp = data.timestamp_modified;
                     _stopInflightWatch();
+                    if (data.merge_conflict) alert('Merge conflict: <<<<<<< yours / >>>>>>> server markers were written into the entry. Open it again and resolve them.');
                     var st = document.getElementById('saveStatus');
                     st.style.display = 'inline';
                     setTimeout(function() { st.style.display = 'none'; }, 2000);
@@ -1322,9 +1323,11 @@
                     // merged bits appear on next reload.
                     _lastSavedContent = data.merged ? data.merged_content : content;
                     _serverTimestamp = data.timestamp_modified || _serverTimestamp;
-                    if (IS_INFLIGHT) _baseHash = fnv1a(data.merged_content !== undefined ? data.merged_content : content);
+                    if (IS_INFLIGHT) _baseHash = (data.content_hash !== undefined) ? data.content_hash
+                        : fnv1a(data.merged_content !== undefined ? data.merged_content : content);
                     _autosaveFailCount = 0;
-                    _showAutosaveStatus(data.merged ? 'autosaved (merged)' : 'autosaved', false);
+                    _showAutosaveStatus(data.merge_conflict ? 'autosaved (merged, CONFLICT)' : (data.merged ? 'autosaved (merged)' : 'autosaved'), false);
+                    if (data.merge_conflict) flashNotice('Merge conflict: <<<<<<< yours / >>>>>>> server markers were written into the entry; reload and resolve them', '#ef5350');
                     if (data.warnings && data.warnings.length) {
                         flashNotice(data.warnings.join(' | '));
                     }

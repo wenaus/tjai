@@ -109,6 +109,28 @@ d = r.json()
 entry.refresh_from_db()
 check('same-line edits surface as a conflict', d.get('merge_conflict') is True and '<<<<<<< yours' in entry.content and '>>>>>>> server' in entry.content, entry.content[:300])
 
+entry.refresh_from_db()
+r = c.get(f'/api/inflight/{ref}/state')
+check('state payload flags the conflict', r.json().get('conflict') is True)
+
+# unchanged content but a drifted expected_ts: with the right base hash nothing is merged or duplicated
+services._edit_entry_impl(entry_id=eid, content=original, source='test-restore')
+entry.refresh_from_db()
+stale_ts = entry.timestamp_modified - 3.0
+r = c.post(f'/api/entry/{eid}/save', data=json.dumps({'content': original, 'expected_ts': stale_ts, 'base_hash': inflight.fnv1a(original)}), content_type='application/json')
+d = r.json()
+entry.refresh_from_db()
+check('unchanged content with drifted timestamp does not merge', r.status_code == 200 and not d.get('merged') and entry.content == original, d)
+check('save response carries content_hash', d.get('content_hash') == inflight.fnv1a(original))
+
+# a 4-space continuation line renders as text, not a code block
+r = c.post(f'/api/inflight/{ref}/item', data=json.dumps({'action': 'add', 'text': 'indent test'}), content_type='application/json')
+entry.refresh_from_db()
+services._edit_entry_impl(entry_id=eid, content=entry.content.replace('- indent test', '- indent test\n    four spaces of continuation https://example.org/x'), source='test')
+r = c.get(f'/api/inflight/{ref}/state')
+html = [i['html'] for i in r.json()['live'] if i['text'] == 'indent test'][0]
+check('continuation renders as text with link', '<pre' not in html and 'four spaces' in html and 'href="https://example.org/x"' in html, html)
+
 # restore
 services._edit_entry_impl(entry_id=eid, content=original, source='test-restore')
 entry.refresh_from_db()

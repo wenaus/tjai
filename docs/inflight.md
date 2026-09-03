@@ -63,14 +63,17 @@ frame (index to activity and back) is mirrored into the address bar.
   the right panel.
 - **Entry editor**: an inflight todo's page carries a live-view link, and
   while it is being edited the page polls for changes by others and shows
-  who changed it and when. On save, if the entry changed since it was
-  opened, the save is merged three-way (the version the editor opened,
-  identified by a hash of the loaded content that the editor sends with the
-  save, the editor's text, the current content), line by line: changes on one side
+  who changed it and when. The editor sends a hash of the content it
+  loaded with every save; if the stored content still matches, the save
+  is applied as is, and if it differs the save is merged three-way (the
+  version snapshot carrying that hash, the editor's text, the current
+  content), line by line: changes on one side
   only are taken, identical changes collapse, two insertions at the same
   point keep both, and any other overlap is written into the content with
   `<<<<<<< yours` / `=======` / `>>>>>>> server` markers for the user to
-  resolve. Other entries keep the editor's existing line-union merge.
+  resolve; the editor announces the conflict and the live view shows a
+  warning until the markers are gone. Other entries keep the editor's
+  existing line-union merge.
 
 ## LLM sessions
 
@@ -100,4 +103,8 @@ accepted everywhere are `active`, `inflight`, `done`, `blocked`, `archive`,
 - `tjai_app/templates/tjai_app/inflight.html` — index and live view
 - `tjai_app/templates/tjai_app/entry_detail.html` — live link and change
   banner for inflight entries
-- `scripts/test_inflight.py` — functionality test (pure functions)
+- `scripts/test_inflight.py` — functionality test (pure functions);
+  `scripts/test_inflight_web.py` — end-to-end through Django's test client
+  (pages, item actions, state poll, Capcom shelf, editor merge);
+  `scripts/test_inflight_browser.py` — real-browser click test through the
+  Capcom frame (CSRF, frame, live re-render), run with the playwright venv

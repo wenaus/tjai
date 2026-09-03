@@ -35,6 +35,7 @@
         .refs { color: #bdbdbd; }
         .refs ul { margin: 0; padding-left: 18px; }
         .err { color: #ef5350; margin: 8px 0; }
+        .warn { color: #ffb74d; background: #2a2416; border: 1px solid #6a5a3a; padding: 6px 10px; margin: 8px 0; font-size: 13px; }
         .empty { color: #777; font-style: italic; padding: 4px 6px; }
         /* index */
         .row { display: flex; align-items: baseline; gap: 12px; padding: 6px 6px; border-bottom: 1px solid #262626; }
@@ -59,6 +60,7 @@
             <a class="btn" id="edit-btn" href="#" target="_blank" rel="noopener">Edit</a>
             <a class="btn" id="entry-btn" href="#" target="_blank" rel="noopener">Entry</a>
         </div>
+        <div class="warn" id="warn" style="display:none"></div>
         <div class="desc" id="desc"></div>
         <div class="section-head">Live <span id="live-count"></span></div>
         <div id="live"></div>
@@ -73,7 +75,7 @@
 <script src="{% static 'tjai/tjai-utils.js' %}"></script>
 <script>
 (function () {
-    const csrf = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
+    const csrf = "{{ csrf_token }}";
     const MODE = "{{ mode }}";
 
     async function getJson(url, opts) {
@@ -118,6 +120,12 @@
         document.getElementById('edit-btn').href = state.edit_url;
         document.getElementById('entry-btn').href = state.entry_url;
         document.getElementById('desc').innerHTML = state.description_html || '';
+        const warn = document.getElementById('warn');
+        const warnings = [];
+        if (!state.inflight) warnings.push('status is ' + (state.status || 'none') + ', not inflight: item actions are disabled until it is inflight again');
+        if (state.conflict) warnings.push('unresolved merge conflict in this entry (<<<<<<< yours / >>>>>>> server markers): open Edit and resolve it');
+        warn.style.display = warnings.length ? '' : 'none';
+        warn.textContent = warnings.join(' · ');
         document.getElementById('live-count').textContent = state.open_count ? '(' + state.open_count + ')' : '';
         document.getElementById('done-count').textContent = state.done_count ? '(' + state.done_count + ')' : '';
         document.getElementById('live').innerHTML = state.live.length
@@ -141,6 +149,7 @@
     }
 
     async function poll() {
+        if (document.hidden || window.innerHeight === 0) return;   // page hidden, or this frame not the shown view
         try {
             const d = await getJson('/tjai/api/inflight/' + ref + '/state?since=' + encodeURIComponent(lastTs));
             document.getElementById('live-dot').classList.remove('stale');

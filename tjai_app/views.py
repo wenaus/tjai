@@ -4237,31 +4237,28 @@ def api_entry_save(request, entry_id):
             client_ts = float(expected_ts)
         except (TypeError, ValueError):
             server_ts = client_ts = 0.0
-        # Inflight todos merge three-way against the version snapshot taken
-        # by the first change after the editor opened, whose content is what
-        # the editor loaded (docs/inflight.md). Other entries keep the line
-        # union below.
-        if server_ts - client_ts > 0.5:
-            from . import inflight as inflight_lib
-            if inflight_lib.is_inflight(entry):
-                # The base is the version whose content the editor loaded,
-                # identified by the hash the editor sends; a timestamp alone
-                # cannot separate it from the snapshot of the editor's own
-                # baseline save, which lands milliseconds later.
+        # Inflight todos (docs/inflight.md): the editor names the content it
+        # loaded by hash. If the stored content still matches, nothing
+        # changed underneath and no merge is needed whatever the clocks say;
+        # if it differs, the base is the version snapshot carrying that hash
+        # and the save is merged three-way. Only when no snapshot matches
+        # does the line union below apply. Other entries keep the union.
+        from . import inflight as inflight_lib
+        base_hash = data.get('base_hash')
+        try:
+            base_hash = int(base_hash) if base_hash is not None else None
+        except (TypeError, ValueError):
+            base_hash = None
+        if base_hash is not None and inflight_lib.is_inflight(entry):
+            if inflight_lib.fnv1a(entry.content or '') == base_hash:
+                client_ts = server_ts           # unchanged since load: no merge
+            else:
                 base_row = None
-                base_hash = data.get('base_hash')
-                if base_hash is not None:
-                    try:
-                        base_hash = int(base_hash)
-                    except (TypeError, ValueError):
-                        base_hash = None
-                if base_hash is not None:
-                    for v_row in (EntryVersion.objects.filter(
-                            entry_id=entry.id, timestamp__gt=client_ts - 5.0)
-                            .order_by('timestamp')):
-                        if inflight_lib.fnv1a(v_row.content or '') == base_hash:
-                            base_row = v_row
-                            break
+                for v_row in (EntryVersion.objects.filter(entry_id=entry.id)
+                              .order_by('-timestamp')[:50]):
+                    if inflight_lib.fnv1a(v_row.content or '') == base_hash:
+                        base_row = v_row
+                        break
                 if base_row is not None:
                     content, merge_conflict = inflight_lib.three_way_merge(
                         base_row.content or '', content, entry.content or '')
@@ -4425,6 +4422,8 @@ def api_entry_save(request, entry_id):
         resp['merged_content'] = entry.content
         if merge_conflict:
             resp['merge_conflict'] = True
+    if inflight_lib.is_inflight(entry):
+        resp['content_hash'] = inflight_lib.fnv1a(entry.content or '')
     if prefix_warnings:
         resp['warnings'] = prefix_warnings
     return JsonResponse(resp)
@@ -9207,23 +9206,33 @@ def _inflight_lookup(entry_id):
     return entry
 
 
+def _inflight_item_html(item):
+    """Render one item: its first line without the marker, continuation
+    lines dedented so their indentation is not read as a code block."""
+    import textwrap
+    head = item['lines'][0][2:]
+    rest = textwrap.dedent('\n'.join(item['lines'][1:])) if len(item['lines']) > 1 else ''
+    return _linkify_rendered_html(_render_markdown(head + ('\n' + rest if rest else '')))
+
+
 def _inflight_payload(entry):
     from . import inflight as inflight_lib
     p = inflight_lib.parse(entry.content or '')
     eid = (entry.data or {}).get('entry_id') if isinstance(entry.data, dict) else None
     ref = eid or str(entry.id)
+    content = entry.content or ''
     return {
         'id': str(entry.id),
         'entry_id': eid or '',
         'ref': ref,
         'status': entry.status,
-        'title': p['title'],
-        'description_html': _render_markdown(p['description']) if p['description'] else '',
-        'live': [{'text': it['text'], 'html': _render_markdown('\n'.join(it['lines'])[2:])}
-                 for it in p['live']],
-        'done': [{'text': it['text'], 'html': _render_markdown('\n'.join(it['lines'])[2:])}
-                 for it in p['done']],
-        'refs_html': _render_markdown(p['refs']) if p['refs'] else '',
+        'inflight': inflight_lib.is_inflight(entry),
+        'conflict': inflight_lib.has_conflict(content),
+        'title': p['title'].lstrip('#').strip(),
+        'description_html': _linkify_rendered_html(_render_markdown(p['description'])) if p['description'] else '',
+        'live': [{'text': it['text'], 'html': _inflight_item_html(it)} for it in p['live']],
+        'done': [{'text': it['text'], 'html': _inflight_item_html(it)} for it in p['done']],
+        'refs_html': _linkify_rendered_html(_render_markdown(p['refs'])) if p['refs'] else '',
         'open_count': len(p['live']),
         'done_count': len(p['done']),
         'modified_ts': entry.timestamp_modified,
@@ -9246,7 +9255,7 @@ def _inflight_list():
         eid = (e.data or {}).get('entry_id') if isinstance(e.data, dict) else None
         ref = eid or str(e.id)
         rows.append({
-            'id': str(e.id), 'ref': ref, 'title': s['title'] or '(untitled)',
+            'id': str(e.id), 'ref': ref, 'title': (s['title'] or '(untitled)').lstrip('#').strip(),
             'open': s['open'], 'done': s['done'],
             'modified_ts': e.timestamp_modified,
             'modified_display': fmt_datetime(e.timestamp_modified),
