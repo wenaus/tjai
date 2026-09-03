@@ -9303,48 +9303,22 @@ def api_inflight_state(request, entry_id):
 @login_required
 @require_http_methods(["POST"])
 def api_inflight_item(request, entry_id):
-    """Item actions on an inflight todo: done, reopen, add. Each is a
-    surgical edit of the current content, serialized per entry."""
-    from . import inflight as inflight_lib
+    """Item actions on an inflight todo: done, reopen, add (docs/inflight.md).
+    The web twin of the inflight_item MCP tool; both run services.inflight_item."""
     from . import services
     try:
         body = json.loads(request.body or b'{}')
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
-    action = body.get('action')
-    text = (body.get('text') or '').strip()
-    if action not in ('done', 'reopen', 'add') or not text:
-        return JsonResponse({'error': 'action (done|reopen|add) and text are required'}, status=400)
-    with transaction.atomic():
-        entry = Entry.objects.select_for_update().filter(
-            deleted_at__isnull=True, kind='todo').filter(
-            Q(id=entry_id) if _is_uuid(entry_id) else Q(data__entry_id=entry_id)).first()
-        if entry is None:
-            return JsonResponse({'error': 'Not found'}, status=404)
-        try:
-            if action == 'done':
-                new_content = inflight_lib.mark_done(entry.content or '', text)
-            elif action == 'reopen':
-                new_content = inflight_lib.reopen(entry.content or '', text)
-            else:
-                new_content = inflight_lib.add_item(entry.content or '', text)
-        except ValueError as e:
-            return JsonResponse({'error': str(e)}, status=409)
-        result = services._edit_entry_impl(
-            entry_id=str(entry.id), content=new_content,
-            source=f'inflight:{request.user.username}', locked_entry=entry)
+    result = services.inflight_item(entry_id, body.get('action'), body.get('text'),
+                                    source=f'inflight:{request.user.username}')
     if isinstance(result, dict) and result.get('error'):
-        logger.error('inflight item %s on %s failed: %s', action, entry_id, result['error'])
-        return JsonResponse({'error': result['error']}, status=500)
-    entry.refresh_from_db()
+        code = result.get('code')
+        status = {'NOT_FOUND': 404, 'BAD_REQUEST': 400, 'NO_MATCH': 409}.get(code, 500)
+        if status == 500:
+            logger.error('inflight item %s on %s failed: %s', body.get('action'), entry_id, result['error'])
+        return JsonResponse({'error': result['error']}, status=status)
+    entry = _inflight_lookup(entry_id)
     payload = _inflight_payload(entry)
     payload['changed'] = True
     return JsonResponse(payload)
-
-
-def _is_uuid(value):
-    try:
-        uuid.UUID(str(value))
-        return True
-    except (ValueError, AttributeError):
-        return False

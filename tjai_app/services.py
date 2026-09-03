@@ -2167,3 +2167,48 @@ def restore_version(entry_id, version=None, source='api'):
     result = _format_entry(entry)
     result['diff'] = _content_unified_diff(entry, old_content, entry.content)
     return result
+
+
+def inflight_item(entry_id, action, text, source='mcp'):
+    """Item action on an inflight todo (docs/inflight.md): done, reopen, or
+    add. `entry_id` is a UUID or a data.entry_id. A surgical edit of the
+    current content, serialized per entry; returns the updated entry with a
+    `diff` plus `open_count` and `done_count`."""
+    import uuid as _uuid
+    from django.db import transaction
+    from django.db.models import Q
+    from . import inflight as inflight_lib
+    action = (action or '').strip()
+    text = (text or '').strip()
+    if action not in ('done', 'reopen', 'add') or not text:
+        return {"error": "action must be done, reopen, or add, with a non-empty text",
+                "code": "BAD_REQUEST"}
+    try:
+        _uuid.UUID(str(entry_id))
+        lookup = Q(id=entry_id)
+    except (ValueError, AttributeError):
+        lookup = Q(data__entry_id=entry_id)
+    with transaction.atomic():
+        entry = Entry.objects.select_for_update().filter(
+            deleted_at__isnull=True, kind='todo').filter(lookup).first()
+        if entry is None:
+            return {"error": f"No inflight todo {entry_id!r}", "code": "NOT_FOUND"}
+        if not inflight_lib.is_inflight(entry):
+            return {"error": f"Todo {entry_id!r} has status {entry.status!r}, not inflight",
+                    "code": "BAD_REQUEST"}
+        try:
+            if action == 'done':
+                new_content = inflight_lib.mark_done(entry.content or '', text)
+            elif action == 'reopen':
+                new_content = inflight_lib.reopen(entry.content or '', text)
+            else:
+                new_content = inflight_lib.add_item(entry.content or '', text)
+        except ValueError as e:
+            return {"error": str(e), "code": "NO_MATCH"}
+        result = _edit_entry_impl(entry_id=str(entry.id), content=new_content,
+                                  source=source, locked_entry=entry)
+    if isinstance(result, dict) and "error" not in result:
+        counts = inflight_lib.summary(new_content)
+        result['open_count'] = counts['open']
+        result['done_count'] = counts['done']
+    return result

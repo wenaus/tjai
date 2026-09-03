@@ -54,7 +54,7 @@ able to consume the gunicorn workers that serve the web UI and REST API.
   `get_named_entries`, `get_entry`, `get_entry_by_entry_id`, `get_goal`,
   `get_relations`, `get_relation_graph`, `get_entry_versions`
 - Write: `create_entry`, `edit_entry`, `edit_entry_metadata`,
-  `replace_entry_content`, `replace_text_in_entry`,
+  `replace_entry_content`, `replace_text_in_entry`, `inflight_item`,
   `replace_section_in_entry`, `append_entry_content`, `copy_calendar_entry`,
   `change_entry_kind`, `delete_entry`, `create_goal`, `create_relation`,
   `edit_relation`, `delete_relation`, `restore_version`

@@ -920,6 +920,33 @@ async def replace_entry_content(entry_id: str, content: str) -> dict:
 
 
 @mcp.tool()
+async def inflight_item(entry_id: str, action: str, text: str) -> dict:
+    """
+    Item action on an inflight todo (docs/inflight.md): mark an open item
+    done, reopen a done item, or add an open item. An inflight todo is a todo
+    with status 'inflight', the working record of an activity in progress;
+    its ## Live section holds open items ("- item") and ## Done finished
+    ones (". item"). This is the way to keep an activity's list current:
+    a surgical edit of the current content, never a whole rewrite.
+
+    Args:
+        entry_id: UUID or human-readable data.entry_id of the inflight todo.
+        action: 'done' (open -> Done), 'reopen' (Done -> open), or 'add'.
+        text: the item text, exactly as it appears (for done/reopen) or the
+            new item (for add).
+
+    Returns:
+        The updated entry with a unified `diff`, `open_count`, and
+        `done_count`. You MUST present the returned `diff` verbatim to the
+        user in a fenced diff block. On error: {"error": "...", "code": ...}
+        with code NOT_FOUND, BAD_REQUEST (not inflight, bad action), or
+        NO_MATCH (no such item).
+    """
+    return await sync_to_async(services.inflight_item)(
+        entry_id=entry_id, action=action, text=text, source='mcp')
+
+
+@mcp.tool()
 async def replace_text_in_entry(
     entry_id: str,
     old_text: str,

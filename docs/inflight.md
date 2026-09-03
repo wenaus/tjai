@@ -66,9 +66,11 @@ the user chooses to use it. Missing sections are created when first needed.
 
 `get_todos(status='inflight')` returns the activities in progress with
 their full content. A session starting on an activity reads its Refs and
-works from its Live list; it marks items done and adds items through the
-surgical entry tools (`replace_text_in_entry`, `append_entry_content`) or
-the live view's item endpoint, never by replacing the whole content.
+works from its Live list; it marks items done, reopens them, and adds
+items with the `inflight_item` MCP tool (the web item endpoint's twin; both
+run `services.inflight_item`), or for other edits the surgical entry tools
+(`replace_text_in_entry`, `append_entry_content`), never by replacing the
+whole content.
 
 An LLM may create a todo on its own initiative only with status
 `inflight`, may edit only inflight todos, and only surgically. Every other
@@ -80,6 +82,8 @@ accepted everywhere are `active`, `inflight`, `done`, `blocked`, `archive`,
 
 - `tjai_app/inflight.py` — parse, `summary`, `mark_done`, `reopen`,
   `add_item`, `three_way_merge`
+- `tjai_app/services.py` — `inflight_item`; `tjai_app/mcp.py` — the
+  `inflight_item` tool
 - `tjai_app/views.py` — `inflight_page`, `api_inflight_list`,
   `api_inflight_state`, `api_inflight_item`, the Inflight shelf in
   `api_capcom_feed`, the three-way branch in `api_entry_save`
