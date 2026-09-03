@@ -70,7 +70,8 @@ Two panels:
   independent of entry membership and pin ordering.
   Between the tiles and the pins, an **Inflight** shelf lists the todos with
   status `inflight` ([Inflight Todos](inflight.md)), most recently touched
-  first, each with its open-item count and age, linking to its live view.
+  first, each with its open-item count and age; a click opens that activity
+  in the right panel's Inflight view.
   State tiles are click-drag ordered through the `capcom_state_order`
   sysconfig key. Every state tile gets the same compact three-dot menu with
   one action, **update**. For an enabled poll source it forces only that state;
@@ -94,8 +95,10 @@ Two panels:
   the view, carried in the URL. **Feed** (default): reverse-chronological
   notices with read/unread rendering, filter controls, an unread count, and
   an Update button at the panel's top right that runs all poll sources
-  immediately. **Config**: the source registry, displayed and edited in
-  place. Registry changes save automatically.
+  immediately. **Inflight**: the inflight todos index or one activity's
+  live view ([Inflight Todos](inflight.md)), an iframe like the pads, with
+  the activity carried as `id` in the URL. **Config**: the source registry,
+  displayed and edited in place. Registry changes save automatically.
 
 The feed carries events; the tiles carry state. Collectors emit a notice on
 a state transition (camp up, run finished), not while a condition persists,

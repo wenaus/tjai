@@ -148,8 +148,8 @@
 
         /* Config */
         .config-area { flex: 1; overflow-y: auto; padding: 16px; }
-        .notepad-area { flex: 1; min-height: 0; }
-        .notepad-area iframe { display: block; width: 100%; height: 100%; border: 0; }
+        .notepad-area, .inflight-area { flex: 1; min-height: 0; }
+        .notepad-area iframe, .inflight-area iframe { display: block; width: 100%; height: 100%; border: 0; }
         .cfg-section { border: 1px solid #333; border-left-width: 4px;
                        margin-bottom: 24px; padding: 0 12px 12px; }
         .cfg-section.feed { border-left-color: #607d8b; }
@@ -199,6 +199,7 @@
             <div class="pane-header">
                 <div class="view-tabs">
                     <span class="view-tab" data-view="feed">Feed</span>
+                    <span class="view-tab" data-view="inflight">Inflight</span>
                     <span class="view-tab" data-view="config">Config</span>
                 </div>
                 <span id="unread-chip"></span>
@@ -216,6 +217,9 @@
                 <iframe id="notepad-frame" data-src="{% url 'capcom_notepad' %}"
                         title="Capcom Notepad"></iframe>
             </div>
+            <div class="inflight-area" id="inflight-area" style="display:none">
+                <iframe id="inflight-frame" title="Inflight todos"></iframe>
+            </div>
         </div>
     </div>
 
@@ -224,6 +228,7 @@
     <script>
     let view = 'feed';
     let padSel = null;
+    let inflightId = null;   // inflight view: the activity shown (entry_id or UUID), or null for the index
     let unreadOnly = false;
     let filterSource = '', filterSeverity = '';
     let offset = 0, notices = [], hasMore = false;
@@ -237,8 +242,9 @@
 
     function loadStateFromUrl() {
         const p = new URLSearchParams(location.search);
-        view = ['feed', 'config', 'notepad'].includes(p.get('view')) ? p.get('view') : 'feed';
+        view = ['feed', 'config', 'notepad', 'inflight'].includes(p.get('view')) ? p.get('view') : 'feed';
         padSel = ['notepad', 'pouch'].includes(p.get('pad')) ? p.get('pad') : null;
+        inflightId = p.get('id') || null;
         unreadOnly = p.get('unread') === '1';
         filterSource = p.get('source') || '';
         filterSeverity = p.get('severity') || '';
@@ -247,6 +253,7 @@
         const p = new URLSearchParams();
         if (view !== 'feed') p.set('view', view);
         if (view === 'notepad' && padSel) p.set('pad', padSel);
+        if (view === 'inflight' && inflightId) p.set('id', inflightId);
         if (unreadOnly) p.set('unread', '1');
         if (filterSource) p.set('source', filterSource);
         if (filterSeverity) p.set('severity', filterSeverity);
@@ -295,8 +302,8 @@
         const el = document.getElementById('inflight-shelf');
         if (!items.length) { el.innerHTML = '<div class="feed-note">No inflight todos.</div>'; return; }
         el.innerHTML = items.map(i =>
-            '<div class="pin inflight-row"><a href="' + escapeHtml(i.url) + '" target="_blank" rel="noopener" title="' +
-            escapeHtml(i.modified_display) + '">' + escapeHtml(i.title) + '</a>' +
+            '<div class="pin inflight-row"><a href="' + escapeHtml(i.capcom_url) + '" data-inflight="' +
+            escapeHtml(i.ref) + '" title="' + escapeHtml(i.modified_display) + '">' + escapeHtml(i.title) + '</a>' +
             '<span class="inflight-count">' + i.open + '</span>' +
             '<span class="inflight-ago">' + escapeHtml(i.ago) + '</span></div>').join('');
     }
@@ -315,6 +322,14 @@
         document.getElementById('feed-controls').style.display = view === 'feed' ? '' : 'none';
         document.getElementById('config-area').style.display = view === 'config' ? '' : 'none';
         document.getElementById('notepad-area').style.display = view === 'notepad' ? '' : 'none';
+        document.getElementById('inflight-area').style.display = view === 'inflight' ? '' : 'none';
+        if (view === 'inflight') {
+            const frame = document.getElementById('inflight-frame');
+            const want = inflightId
+                ? '/tjai/inflight/' + encodeURIComponent(inflightId) + '/?embed=1'
+                : '/tjai/inflight/?embed=1';
+            if (frame.dataset.url !== want) { frame.src = want; frame.dataset.url = want; }
+        }
         document.getElementById('notepad-section').classList.toggle('active', view === 'notepad');
         document.querySelectorAll('#notepad-section .pad-link').forEach(el => {
             el.classList.toggle('active-pad',
@@ -355,6 +370,20 @@
         flushNotepad();
         frame.src = frame.dataset.padUrl || (frame.dataset.src + (padSel ? '?pad=' + padSel : ''));
     }
+
+    // In-frame navigation in the inflight view (index <-> activity) is
+    // mirrored into inflightId and the URL, so the address bar stays
+    // bookmarkable; same-origin, so the frame's location is readable.
+    document.getElementById('inflight-frame').addEventListener('load', function() {
+        let path = '', search = '';
+        try { path = this.contentWindow.location.pathname; search = this.contentWindow.location.search; }
+        catch (e) { return; }
+        const m = path.match(/^\/tjai\/inflight\/(?:([^/]+)\/)?$/);
+        if (!m) return;
+        this.dataset.url = path + search;
+        const id = m[1] ? decodeURIComponent(m[1]) : null;
+        if (id !== inflightId) { inflightId = id; syncStateToUrl(); }
+    });
 
     // The pad page reports which pad it is showing (the server chooses on a
     // bare load, and in-page tab links navigate inside the iframe); mirror
@@ -674,6 +703,13 @@
 
     document.addEventListener('click', async (ev) => {
         const t = ev.target;
+        const inflightLink = t.closest('a[data-inflight]');
+        if (inflightLink) {
+            ev.preventDefault();
+            if (view === 'notepad') flushNotepad();
+            inflightId = inflightLink.dataset.inflight;
+            view = 'inflight'; syncStateToUrl(); renderAll(); return;
+        }
         const menuButton = t.closest('[data-state-menu], [data-pin-menu]');
         if (menuButton) {
             const menu = menuButton.parentElement.querySelector('.state-popover');

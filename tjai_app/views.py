@@ -9229,7 +9229,8 @@ def _inflight_payload(entry):
         'modified_ts': entry.timestamp_modified,
         'modified_display': fmt_datetime(entry.timestamp_modified),
         'context': entry.context_id or '',
-        'edit_url': f'/tjai/entry/?uuid={entry.id}&edit=1&return=/tjai/inflight/{quote(ref, safe="")}/',
+        'edit_url': (f'/tjai/entry/?uuid={entry.id}&edit=1&return='
+                     + quote(f'/tjai/capcom/?view=inflight&id={ref}', safe='')),
         'entry_url': f'/tjai/entry/?uuid={entry.id}',
     }
 
@@ -9250,7 +9251,8 @@ def _inflight_list():
             'modified_ts': e.timestamp_modified,
             'modified_display': fmt_datetime(e.timestamp_modified),
             'ago': fmt_ago(e.timestamp_modified),
-            'url': f'/tjai/inflight/{quote(ref, safe="")}/',
+            'url': f'/tjai/inflight/{quote(ref, safe="")}/?embed=1',
+            'capcom_url': f'/tjai/capcom/?view=inflight&id={quote(ref, safe="")}',
             'context': e.context_id or '',
         })
     return rows
@@ -9258,8 +9260,16 @@ def _inflight_list():
 
 
 @login_required
+@xframe_options_exempt
 def inflight_page(request, entry_id=None):
-    """The Inflight index (no entry) or one activity's live view."""
+    """The Inflight index (no entry) or one activity's live view. These
+    pages are the content of Capcom's inflight view (right-panel iframe);
+    a direct visit redirects into Capcom, and only ?embed=1 renders them."""
+    if request.GET.get('embed') != '1':
+        target = '/tjai/capcom/?view=inflight'
+        if entry_id is not None:
+            target += '&id=' + quote(str(entry_id), safe='')
+        return redirect(target)
     if entry_id is None:
         return render(request, 'tjai_app/inflight.html', {'mode': 'index', 'entry': None})
     entry = _inflight_lookup(entry_id)

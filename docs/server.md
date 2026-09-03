@@ -58,7 +58,7 @@ cd /home/admin/github/tjrepo/tjai
 | `/tjai/dashboard/` | Dashboard — entry list, filtering by kind/context/tags/status; see [Dashboard](dashboard.md) |
 | `/tjai/entry/` | Entry detail with human-readable data display |
 | `/tjai/diary/` | Diary page |
-| `/tjai/inflight/`, `/tjai/inflight/<entry_id>/` | Inflight todos: index and one activity's live view; see [Inflight Todos](inflight.md) |
+| `/tjai/inflight/`, `/tjai/inflight/<entry_id>/` | Inflight todos: frame content of Capcom's inflight view (`?embed=1`); bare visits redirect to `/tjai/capcom/?view=inflight`; see [Inflight Todos](inflight.md) |
 | `/tjai/versions/` | Recent entry changes across all entries; see [Entry Versions](versions.md) |
 | `/tjai/synopsis/` | Daily synopsis (Today in History) |
 | `/tjai/this-week/` | Current in-progress workweek (Sat–Fri), one row per day |

@@ -9,7 +9,8 @@
         body { background: #1a1a1a; color: #e0e0e0; font-family: 'SF Mono', Monaco, Menlo, Consolas, monospace; font-size: 14px; line-height: 1.5; margin: 0; }
         a { color: #90caf9; text-decoration: none; }
         a:hover { text-decoration: underline; }
-        .main { max-width: 1000px; margin: 0 auto; padding: 16px 20px 60px; }
+        .main { max-width: 1000px; margin: 0; padding: 8px 12px 40px; }
+        .back { color: #8a8a8a; font-size: 12px; }
         .head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
         .head h1 { font-size: 18px; font-weight: 600; margin: 0; color: #fff; }
         .meta { color: #8a8a8a; font-size: 12px; }
@@ -22,12 +23,13 @@
         .desc { color: #cfcfcf; margin: 10px 0 14px; }
         .desc p { margin: 0 0 6px; }
         .section-head { color: #d8a070; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; margin: 16px 0 6px; }
-        .item { display: flex; align-items: baseline; gap: 10px; padding: 5px 6px; border-bottom: 1px solid #262626; }
-        .item .txt { flex: 1; min-width: 0; }
-        .item .txt p { margin: 0; }
+        .item { padding: 5px 6px; border-bottom: 1px solid #262626; }
+        .item .txt p { display: inline; margin: 0; }
+        .item .txt p + p::before { content: ' '; }
         .item.done .txt { color: #8a8a8a; }
         .item.done .txt::before { content: '. '; color: #666; }
         .item.live .txt::before { content: '- '; color: #9ccc65; }
+        .item .btn { margin-left: 10px; vertical-align: baseline; }
         .add { display: flex; gap: 8px; margin-top: 8px; }
         .add input { flex: 1; background: #232323; color: #e0e0e0; border: 1px solid #444; border-radius: 3px; padding: 5px 8px; font: inherit; }
         .refs { color: #bdbdbd; }
@@ -44,7 +46,6 @@
     </style>
 </head>
 <body>
-    {% with current_page="inflight" %}{% include "tjai_app/_menu.html" %}{% endwith %}
     <div class="main">
     {% if mode == 'index' %}
         <div class="head"><h1>Inflight</h1><span class="meta" id="idx-meta">activities being worked, most recently touched first</span></div>
@@ -52,9 +53,10 @@
         <div class="err" id="idx-err"></div>
     {% else %}
         <div class="head">
+            <a class="back" href="/tjai/inflight/?embed=1" title="All inflight todos">&lsaquo; inflight</a>
             <h1 id="title"></h1>
             <span class="meta" id="meta"><span class="live-dot" id="live-dot"></span><span id="meta-text"></span></span>
-            <a class="btn" id="edit-btn" href="#">Edit</a>
+            <a class="btn" id="edit-btn" href="#" target="_blank" rel="noopener">Edit</a>
             <a class="btn" id="entry-btn" href="#" target="_blank" rel="noopener">Entry</a>
         </div>
         <div class="desc" id="desc"></div>
@@ -105,7 +107,7 @@
     const ref = encodeURIComponent(state.ref);
 
     function itemRow(it, cls, btnLabel, btnCls, action) {
-        return '<div class="item ' + cls + '"><div class="txt">' + it.html + '</div>' +
+        return '<div class="item ' + cls + '"><span class="txt">' + it.html + '</span>' +
                '<button class="btn ' + btnCls + '" data-action="' + action + '" data-text="' + escapeHtml(it.text) + '">' + btnLabel + '</button></div>';
     }
 

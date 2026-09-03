@@ -38,19 +38,29 @@ the user chooses to use it. Missing sections are created when first needed.
 
 ## Surfaces
 
-- **Inflight page** (`/tjai/inflight/`) lists the inflight todos, most
-  recently touched first, with open and done counts and time since last
-  change. Each links to its live view.
-- **Live view** (`/tjai/inflight/<entry_id>/`) renders one activity:
+The inflight surfaces are a view of the Capcom page, in its right panel with
+the left panel (state tiles, shelves, pins) intact: `/tjai/capcom/?view=inflight`
+is the index and `&id=<entry_id>` one activity, the same URL-carried view
+state as the pads. The panel hosts an iframe whose content is served by
+`/tjai/inflight/` and `/tjai/inflight/<entry_id>/` with `?embed=1`; a direct
+visit to those paths redirects into the Capcom view. Navigating inside the
+frame (index to activity and back) is mirrored into the address bar.
+
+- **Index** lists the inflight todos, most recently touched first, with
+  open and done counts and time since last change. Each opens its live view
+  in place.
+- **Live view** renders one activity:
   description, Live items each with a done button, an add-item field, Done
   items each with a reopen button, and Refs. Every action is a surgical edit
   of the current content, serialized per entry, attributed
   `inflight:<user>` in the version history. The view polls the entry's
   state every three seconds and re-renders when anyone has changed it, from
   the editor, from MCP, or from another live view; a red dot means the poll
-  is failing. Edit opens the ordinary entry editor and returns here on save.
-- **Capcom** shows an Inflight shelf on the left panel, one line per
-  inflight todo with its open count and age, linking to the live view.
+  is failing. Edit opens the ordinary entry editor in a new tab, which
+  returns to the Capcom inflight view on save.
+- **Capcom** also shows an Inflight shelf on the left panel, one line per
+  inflight todo with its open count and age; a click opens that activity in
+  the right panel.
 - **Entry editor**: an inflight todo's page carries a live-view link, and
   while it is being edited the page polls for changes by others and shows
   who changed it and when. On save, if the entry changed since it was
