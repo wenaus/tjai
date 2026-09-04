@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/tjai/static/tjai/favicon.svg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Captures</title>
+    <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 14px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+        .page-content { padding: 16px; max-width: 1400px; }
+        a { color: #90caf9; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        h3 { font-size: 15px; margin-bottom: 8px; }
+        h3 span { color: #8a8a8a; font-weight: normal; }
+        .cap { padding: 10px 0 14px; border-top: 1px solid #2a2a2a; }
+        .head { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; line-height: 1.5; }
+        .dt { color: #aaa; white-space: nowrap; }
+        .subject { color: #e0e0e0; font-weight: 600; }
+        .from { color: #bbb; }
+        .ctx { color: #ce93d8; }
+        .del {
+            background: none; border: 1px solid #ef5350; color: #ef5350;
+            font: inherit; padding: 1px 8px; border-radius: 3px; cursor: pointer;
+        }
+        .del:hover { background: #ef5350; color: #1a1a1a; }
+        .del:disabled { opacity: 0.6; cursor: default; }
+        .note { color: #ccc; margin-top: 4px; white-space: pre-wrap; }
+        .imgs { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+        .img { display: flex; flex-direction: column; gap: 3px; }
+        .img img { max-height: 220px; max-width: 420px; border: 1px solid #333; border-radius: 3px; background: #111; }
+        .fn { color: #9a9a9a; font-size: 13px; }
+        .empty { color: #9a9a9a; margin-top: 10px; }
+        .err { color: #ef5350; }
+    </style>
+</head>
+<body>
+    {% with current_page="captures" %}{% include "tjai_app/_menu.html" %}{% endwith %}
+    <div class="page-content">
+        <h3>Captures <span id="count"></span></h3>
+        <div id="list"></div>
+    </div>
+    <script>
+        var items = JSON.parse('{{ items_json|escapejs }}');
+        var csrf = "{{ csrf_token }}";
+        function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+        function fmtSize(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
+        function render() {
+            var el = document.getElementById('list');
+            document.getElementById('count').textContent = items.length ? '(' + items.length + ')' : '';
+            if (!items.length) {
+                el.innerHTML = '<div class="empty">No captures. Stash images from the Gmail add-on to see them here.</div>';
+                return;
+            }
+            var html = '';
+            items.forEach(function (it) {
+                html += '<div class="cap" id="cap-' + esc(it.id) + '">';
+                html += '<div class="head"><span class="dt">' + esc(it.datetime) + '</span>';
+                html += '<a class="subject" href="' + esc(it.entry_url) + '">' + esc(it.subject) + '</a>';
+                if (it.sender) html += '<span class="from">from ' + esc(it.sender) + '</span>';
+                if (it.context) html += '<span class="ctx">=' + esc(it.context) + '</span>';
+                if (it.gmail_url) html += '<a href="' + esc(it.gmail_url) + '" target="_blank" rel="noopener">gmail</a>';
+                html += '<button class="del" data-id="' + esc(it.id) + '">Delete</button></div>';
+                if (it.note) html += '<div class="note">' + esc(it.note) + '</div>';
+                html += '<div class="imgs">';
+                it.files.forEach(function (f) {
+                    html += '<div class="img"><a href="' + esc(f.url) + '" target="_blank" rel="noopener">';
+                    html += '<img src="' + esc(f.url) + '" alt="' + esc(f.name) + '" loading="lazy"></a>';
+                    html += '<span class="fn">' + esc(f.name) + ' ' + fmtSize(f.size) + '</span></div>';
+                });
+                html += '</div></div>';
+            });
+            el.innerHTML = html;
+        }
+        document.getElementById('list').addEventListener('click', async function (ev) {
+            var b = ev.target.closest('button.del');
+            if (!b) return;
+            var id = b.dataset.id;
+            b.disabled = true;
+            b.textContent = 'Deleting';
+            try {
+                var r = await fetch('/tjai/api/capture/' + id + '/delete', { method: 'POST', headers: { 'X-CSRFToken': csrf } });
+                var d = await r.json().catch(function () { return {}; });
+                if (!r.ok || d.status !== 'ok') throw new Error(d.error || ('HTTP ' + r.status));
+                items = items.filter(function (it) { return it.id !== id; });
+                render();
+            } catch (e) {
+                b.disabled = false;
+                b.textContent = 'Delete';
+                b.insertAdjacentHTML('afterend', '<span class="err"> ' + esc(e.message) + '</span>');
+            }
+        });
+        render();
+    </script>
+</body>
+</html>

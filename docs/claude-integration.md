@@ -90,6 +90,17 @@ ln -s ~/github/tjrepo/computers/common/claude-statusline.sh ~/.claude/statusline
 The status line shows machine location, working directory, model, git branch,
 context usage, and session duration.
 
+## Captures
+
+Images stashed from mail by the Gmail add-on ([addons.md](addons.md#stash-images-captures)) are memory entries tagged `capture`. Each image line in the entry carries an absolute URL of the form `https://etaverse.com/tjai/capture/<entry uuid>/<file>`, served to a logged-in session or the REST bearer. A session reads an image by fetching it with its bearer and opening the saved file:
+
+```bash
+curl -sf -H "Authorization: Bearer $TJAI_API_KEY" \
+  https://etaverse.com/tjai/capture/<entry uuid>/01-screenshot.png -o <scratch dir>/01-screenshot.png
+```
+
+`get_memories`, `search_entries`, and `get_entry` locate captures; the Captures page at `/tjai/captures/` lists them all.
+
 ## Cross-Session Dialog Memory
 
 Claude Code and Codex conversations are recorded into tjai so new sessions on

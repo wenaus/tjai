@@ -13,6 +13,7 @@
     {% if current_page == "picks" %}<span style="color:#e0e0e0">Picks</span>{% else %}<a href="{% url 'picks' %}">Picks</a>{% endif %}
     {% if current_page == "rss" %}<span style="color:#e0e0e0">RSS</span>{% else %}<a href="{% url 'rss' %}">RSS</a>{% endif %}
     {% if current_page == "readme" %}<span style="color:#e0e0e0">ReadMe</span>{% else %}<a href="{% url 'readme' %}">ReadMe</a>{% endif %}
+    {% if current_page == "captures" %}<span style="color:#e0e0e0">Captures</span>{% else %}<a href="{% url 'captures' %}">Captures</a>{% endif %}
     <a href="{% url 'research' %}" {% if current_page == "research" %}style="color:#e0e0e0"{% endif %}>Research</a>
     {% if current_page == "goals" %}<span style="color:#e0e0e0">Goals</span>{% else %}<a href="{% url 'goals' %}">Goals</a>{% endif %}
     <a href="{% url 'context_entries' 'recipe' %}" {% if current_page == "recipes" %}style="color:#e0e0e0"{% endif %}>Recipes</a>

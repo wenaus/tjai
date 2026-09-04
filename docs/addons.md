@@ -2,7 +2,7 @@
 
 ## Gmail Add-on
 
-A Gmail sidebar add-on that creates tjai entries from the email being viewed. The card offers three sections — **journal** (calendar entry, prefilled from detected event details), **bookmark**, and **memory** — each posting to `api/add-entry` with the corresponding `kind`.
+A Gmail sidebar add-on that creates tjai entries from the email being viewed. The card offers four sections — **journal** (calendar entry, prefilled from detected event details), **bookmark**, and **memory**, each posting to `api/add-entry` with the corresponding `kind`, and **images**, which stashes the email's images as a capture (below).
 
 ### What It Does
 
@@ -29,6 +29,18 @@ A Gmail sidebar add-on that creates tjai entries from the email being viewed. Th
 4. Deploy as test deployment (Gmail Add-on type)
 
 Server endpoint accepts: `{kind, content, tags, context, source, event_date, event_time, all_day}`
+
+### Stash images (captures)
+
+The IMAGES section shows how many image attachments the open message carries, inline pasted screenshots included; images under 10 KB (tracking pixels, signature icons) are ignored. It takes a note with the same `:tag` and `=context` tokens, and **Stash images** posts the images as a multipart form to `api/add-capture` with the subject, sender, Gmail permalink, and note.
+
+The server stores the files under `data/captures/YYYY-MM/<entry uuid>/NN-name.ext`; the data directory is excluded from the deploy rsync and included in the nightly backup. It creates one memory entry tagged `gmail` and `capture`, in the given context, whose content is the subject, sender, and permalink on line 1, the note, and one markdown image line per file with its absolute URL. Accepted types are PNG, JPEG, GIF, WebP, BMP, TIFF, and HEIC, at most 20 files of 25 MB each per stash.
+
+The files are served at `/tjai/capture/<entry uuid>/<file>` to a logged-in session or the REST bearer (`TJAI_API_KEY`), never anonymously. The entry page therefore shows the images inline, and an AI session on any machine can fetch them; the recipe is in [claude-integration.md](claude-integration.md#captures).
+
+The **Captures** page (`/tjai/captures/`, menu link) lists every stash newest first with its images and a Delete button. Delete removes the files and moves the entry to Trash; restoring the entry does not restore the files.
+
+Files: `tjai_app/captures.py` (storage, listing, delete); the `api_add_capture`, `capture_file`, `captures_page`, and `api_capture_delete` views in `tjai_app/views.py`; `tjai_app/templates/tjai_app/captures.html`; `scripts/test_captures.py` (functionality test through Django's test client).
 
 ---
 

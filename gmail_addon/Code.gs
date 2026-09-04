@@ -1,5 +1,6 @@
 /**
- * tjai Gmail Add-on: Add calendar invites to tjai as journal entries.
+ * tjai Gmail Add-on: journal, bookmark, and memory entries from the open
+ * email, and its images stashed as captures (docs/addons.md).
  *
  * Shows a card in the Gmail sidebar when viewing emails with .ics attachments
  * or meeting details in the email subject/body.
@@ -11,6 +12,8 @@
 
 var TJAI_API_URL = 'https://etaverse.com/tjai/api/add-journal';
 var TJAI_ENTRY_URL = 'https://etaverse.com/tjai/api/add-entry';
+var TJAI_CAPTURE_URL = 'https://etaverse.com/tjai/api/add-capture';
+var CAPTURE_MIN_BYTES = 10 * 1024;  // below this an image is a tracking pixel or a signature icon
 var DEFAULT_TIMEZONE = 'America/New_York';
 
 // Country-code TLD → default timezone for sender (when no explicit tz in text).
@@ -748,7 +751,13 @@ function onGmailMessage(e) {
     // Build the single card with all sections
     var subj = message.getSubject() || '';
     var cleanTitle = subj.replace(/\[\[[^\]]*\]\]\s*/g, '').replace(/^(?:Re|Fwd|Fw)\s*:\s*/gi, '').trim();
-    return [buildMainCard_(cleanTitle || subj, gmailUrl, prefill)];
+    var capInfo = {
+      messageId: messageId,
+      subject: cleanTitle || subj,
+      sender: message.getFrom() || '',
+      count: imageAttachments_(message).length
+    };
+    return [buildMainCard_(cleanTitle || subj, gmailUrl, prefill, capInfo)];
   } catch (err) {
     diag.push('ERROR: ' + err.message);
     return [buildDiagCard_(diag)];
@@ -978,10 +987,11 @@ function pad_(n) {
  * Build a Card for one event, with memory section at bottom.
  */
 /**
- * Build the main card with all three sections: journal, bookmark, memory.
- * journalPrefill is optional {content, date, time} from auto-detected events.
+ * Build the main card with all four sections: journal, bookmark, memory, images.
+ * journalPrefill is optional {content, date, time} from auto-detected events;
+ * capInfo is {messageId, subject, sender, count} for the images section.
  */
-function buildMainCard_(emailTitle, gmailUrl, journalPrefill) {
+function buildMainCard_(emailTitle, gmailUrl, journalPrefill, capInfo) {
   var header = CardService.newCardHeader()
     .setTitle('tjai');
 
@@ -990,6 +1000,7 @@ function buildMainCard_(emailTitle, gmailUrl, journalPrefill) {
     .addSection(buildJournalSection_(gmailUrl, journalPrefill, emailTitle))
     .addSection(buildBookmarkSection_(emailTitle, gmailUrl))
     .addSection(buildMemorySection_(gmailUrl, emailTitle))
+    .addSection(buildCapturesSection_(capInfo, gmailUrl))
     .build();
 }
 
@@ -1110,6 +1121,126 @@ function buildMemorySection_(gmailUrl, emailSubject) {
   );
 
   return section;
+}
+
+
+/**
+ * Images section — stash the message's image attachments in tjai as a
+ * capture (docs/addons.md). Inline pasted screenshots count; images under
+ * CAPTURE_MIN_BYTES (tracking pixels, signature icons) do not.
+ */
+function buildCapturesSection_(capInfo, gmailUrl) {
+  var section = CardService.newCardSection()
+    .setHeader('IMAGES');
+  var n = capInfo ? capInfo.count : 0;
+  section.addWidget(
+    CardService.newDecoratedText()
+      .setText(n === 0 ? 'No images in this message' : (n + (n === 1 ? ' image' : ' images')))
+  );
+  if (n === 0) return section;
+
+  section.addWidget(
+    CardService.newTextInput()
+      .setFieldName('cap_note')
+      .setTitle('Note')
+      .setHint('note :tag =context')
+      .setMultiline(true)
+  );
+
+  var action = CardService.newAction()
+    .setFunctionName('stashCaptures')
+    .setParameters({
+      message_id: capInfo.messageId,
+      subject: capInfo.subject || '',
+      sender: capInfo.sender || '',
+      gmail_url: gmailUrl || ''
+    });
+
+  section.addWidget(
+    CardService.newTextButton()
+      .setText('Stash images')
+      .setOnClickAction(action)
+  );
+
+  return section;
+}
+
+
+/**
+ * The message's image attachments, inline images included, above the size floor.
+ */
+function imageAttachments_(message) {
+  var atts = message.getAttachments({ includeInlineImages: true, includeAttachments: true });
+  return atts.filter(function(att) {
+    var ct = (att.getContentType() || '').toLowerCase();
+    return ct.indexOf('image/') === 0 && att.getSize() >= CAPTURE_MIN_BYTES;
+  });
+}
+
+
+/**
+ * Action handler: post the message's images to tjai as a capture.
+ */
+function stashCaptures(e) {
+  var params = e.commonEventObject.parameters;
+  var formInputs = e.commonEventObject.formInputs || {};
+  var apiKey = getApiKey_();
+  if (!apiKey) {
+    return notify_('API key not set. Run setApiKey first.');
+  }
+
+  var message = GmailApp.getMessageById(params.message_id);
+  var images = imageAttachments_(message);
+  if (images.length === 0) {
+    return notify_('No images in this message');
+  }
+
+  var raw = (formInputs.cap_note && formInputs.cap_note.stringInputs.value[0]) || '';
+  var parsed = parseTagsFromText_(raw);
+
+  var payload = {
+    subject: params.subject || message.getSubject() || '',
+    sender: params.sender || message.getFrom() || '',
+    gmail_url: params.gmail_url || '',
+    note: parsed.content,
+    tags: parsed.tags.join(','),
+    context: parsed.context || '',
+    source: 'gmail'
+  };
+  for (var i = 0; i < images.length; i++) {
+    var blob = images[i].copyBlob();
+    if (!blob.getName()) {
+      var ext = ((blob.getContentType() || 'image/png').split('/')[1] || 'png').replace('jpeg', 'jpg');
+      blob.setName('image-' + (i + 1) + '.' + ext);
+    }
+    payload['img' + i] = blob;
+  }
+
+  // A payload object holding blobs goes out as multipart/form-data.
+  var response = UrlFetchApp.fetch(TJAI_CAPTURE_URL, {
+    method: 'post',
+    headers: { 'Authorization': 'Bearer ' + apiKey },
+    payload: payload,
+    muteHttpExceptions: true
+  });
+  var code = response.getResponseCode();
+  var text;
+  try {
+    var body = JSON.parse(response.getContentText());
+    text = (code === 200 && body.status === 'ok')
+      ? 'Stashed ' + body.files + (body.files === 1 ? ' image' : ' images')
+      : 'Error: ' + (body.error || 'HTTP ' + code);
+  } catch (err) {
+    text = 'Error: HTTP ' + code + ' (non-JSON response)';
+  }
+  return notify_(text);
+}
+
+
+function notify_(text) {
+  return CardService.newActionResponseBuilder()
+    .setNotification(CardService.newNotification().setText(text))
+    .build();
 }
 
 

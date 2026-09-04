@@ -2,6 +2,7 @@ import functools
 import json
 import logging
 import math
+import mimetypes
 import os
 import re
 import time
@@ -5210,6 +5211,85 @@ def api_add_entry(request):
         "entry_id": entry.id,
         "content": content,
     })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@rest_api_auth_required
+def api_add_capture(request):
+    """Stash a mail's images (Gmail add-on, docs/addons.md).
+
+    Multipart form: subject, sender, gmail_url, note, tags (comma-separated),
+    context, and one or more image file parts. Creates one memory entry
+    tagged ``capture`` with the files stored under data/captures.
+    """
+    from . import captures
+    files = []
+    for key in request.FILES:
+        for f in request.FILES.getlist(key):
+            ctype = f.content_type or mimetypes.guess_type(f.name)[0] or ''
+            files.append((f.name, ctype, f.read()))
+    if not files:
+        return JsonResponse({"error": "no image files in request"}, status=400)
+    tags = [t.strip() for t in request.POST.get('tags', '').split(',') if t.strip()]
+    try:
+        entry = captures.create(
+            subject=request.POST.get('subject', ''),
+            sender=request.POST.get('sender', ''),
+            gmail_url=request.POST.get('gmail_url', ''),
+            note=request.POST.get('note', ''),
+            context_name=request.POST.get('context', '').strip() or None,
+            tags=tags,
+            files=files,
+        )
+    except ValueError as e:
+        return JsonResponse({"error": str(e)}, status=400)
+    except OSError as e:
+        logger.exception("capture store failed")
+        return JsonResponse({"error": f"store failed: {e}"}, status=500)
+    return JsonResponse({
+        "status": "ok",
+        "entry_id": entry.id,
+        "files": len(files),
+        "content": f"{len(files)} image(s) stashed",
+        "url": f"{captures.SITE_URL}/entry/?uuid={entry.id}",
+    })
+
+
+@rest_api_auth_required
+def capture_file(request, entry_id, filename):
+    """Serve one capture image to a logged-in session or a REST bearer."""
+    from django.http import FileResponse
+    from . import captures
+    path = captures.file_path(entry_id, filename)
+    if path is None:
+        return JsonResponse({"error": "not found"}, status=404)
+    ctype = mimetypes.guess_type(str(path))[0] or 'application/octet-stream'
+    return FileResponse(open(path, 'rb'), content_type=ctype)
+
+
+@login_required
+def captures_page(request):
+    """Captures newest first, each with its images and a delete button."""
+    from . import captures
+    return render(request, 'tjai_app/captures.html',
+                  {'items_json': json.dumps(captures.listing())})
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_capture_delete(request, entry_id):
+    """Delete a capture: its files are removed and the entry goes to Trash."""
+    from . import captures
+    entry = Entry.objects.filter(id=str(entry_id), deleted_at__isnull=True).first()
+    if not entry:
+        return JsonResponse({"error": "not found"}, status=404)
+    try:
+        captures.delete(entry)
+    except OSError as e:
+        logger.exception("capture delete failed")
+        return JsonResponse({"error": f"delete failed: {e}"}, status=500)
+    return JsonResponse({"status": "ok", "id": entry.id})
 
 
 @csrf_exempt
