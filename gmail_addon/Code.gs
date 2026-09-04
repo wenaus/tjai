@@ -13,7 +13,8 @@
 var TJAI_API_URL = 'https://etaverse.com/tjai/api/add-journal';
 var TJAI_ENTRY_URL = 'https://etaverse.com/tjai/api/add-entry';
 var TJAI_CAPTURE_URL = 'https://etaverse.com/tjai/api/add-capture';
-var CAPTURE_MIN_BYTES = 10 * 1024;  // below this an image is a tracking pixel or a signature icon
+var TJAI_CAPTURES_PAGE = 'https://etaverse.com/tjai/captures/';
+var CAPTURE_MIN_BYTES = 1024;  // below this an image is a tracking pixel or an icon
 var DEFAULT_TIMEZONE = 'America/New_York';
 
 // Country-code TLD → default timezone for sender (when no explicit tz in text).
@@ -1127,7 +1128,7 @@ function buildMemorySection_(gmailUrl, emailSubject) {
 /**
  * Images section — stash the message's image attachments in tjai as a
  * capture (docs/addons.md). Inline pasted screenshots count; images under
- * CAPTURE_MIN_BYTES (tracking pixels, signature icons) do not.
+ * CAPTURE_MIN_BYTES (tracking pixels, icons) do not.
  */
 function buildCapturesSection_(capInfo, gmailUrl) {
   var section = CardService.newCardSection()
@@ -1224,16 +1225,46 @@ function stashCaptures(e) {
     muteHttpExceptions: true
   });
   var code = response.getResponseCode();
+  var body = null;
   var text;
   try {
-    var body = JSON.parse(response.getContentText());
+    body = JSON.parse(response.getContentText());
     text = (code === 200 && body.status === 'ok')
       ? 'Stashed ' + body.files + (body.files === 1 ? ' image' : ' images')
       : 'Error: ' + (body.error || 'HTTP ' + code);
   } catch (err) {
     text = 'Error: HTTP ' + code + ' (non-JSON response)';
   }
-  return notify_(text);
+  if (!(body && body.status === 'ok')) {
+    return notify_(text);
+  }
+  // Success: a card with links to the new capture and to the Captures page.
+  return CardService.newActionResponseBuilder()
+    .setNotification(CardService.newNotification().setText(text))
+    .setNavigation(CardService.newNavigation().pushCard(stashResultCard_(text, body.url)))
+    .build();
+}
+
+
+function stashResultCard_(text, entryUrl) {
+  var section = CardService.newCardSection();
+  section.addWidget(CardService.newDecoratedText().setText(text));
+  if (entryUrl) {
+    section.addWidget(
+      CardService.newTextButton()
+        .setText('Open capture')
+        .setOpenLink(CardService.newOpenLink().setUrl(entryUrl))
+    );
+  }
+  section.addWidget(
+    CardService.newTextButton()
+      .setText('All captures')
+      .setOpenLink(CardService.newOpenLink().setUrl(TJAI_CAPTURES_PAGE))
+  );
+  return CardService.newCardBuilder()
+    .setHeader(CardService.newCardHeader().setTitle('tjai'))
+    .addSection(section)
+    .build();
 }
 
 

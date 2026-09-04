@@ -5292,6 +5292,24 @@ def api_capture_delete(request, entry_id):
     return JsonResponse({"status": "ok", "id": entry.id})
 
 
+@login_required
+@require_http_methods(["POST"])
+def api_capture_file_delete(request, entry_id, filename):
+    """Delete one image from a capture; deleting the last one deletes the capture."""
+    from . import captures
+    entry = Entry.objects.filter(id=str(entry_id), deleted_at__isnull=True).first()
+    if not entry:
+        return JsonResponse({"error": "not found"}, status=404)
+    try:
+        remaining = captures.delete_file(entry, filename)
+    except FileNotFoundError:
+        return JsonResponse({"error": "no such image"}, status=404)
+    except OSError as e:
+        logger.exception("capture image delete failed")
+        return JsonResponse({"error": f"delete failed: {e}"}, status=500)
+    return JsonResponse({"status": "ok", "id": entry.id, "remaining": remaining})
+
+
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
 @login_required

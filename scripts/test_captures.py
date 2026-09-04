@@ -78,6 +78,14 @@ eid_js = eid.replace('-', '\\u002D').encode()  # the page's JSON goes through es
 r = web.get('/captures/')
 check('captures page lists the capture', r.status_code == 200 and b'test capture' in r.content and eid_js in r.content, r.status_code)
 check('file with session served', web.get(f'/capture/{eid}/02-Screenshot-2026-09-04.png').status_code == 200)
+r = web.post(f'/api/capture/{eid}/file/01-shot-one.png/delete')
+check('image delete 200, one left', r.status_code == 200 and r.json().get('remaining') == 1, r.content[:200])
+entry.refresh_from_db()
+check('image gone from disk, data, and content',
+      not (captures.ROOT / entry.data['capture_dir'] / '01-shot-one.png').exists()
+      and [f['name'] for f in entry.data['files']] == ['02-Screenshot-2026-09-04.png']
+      and entry.content.count('![') == 1 and '01-shot-one' not in entry.content, entry.content)
+check('unknown image 404', web.post(f'/api/capture/{eid}/file/nope.png/delete').status_code == 404)
 check('captures page needs login', remote.get('/captures/').status_code == 302)
 check('delete needs login', remote.post(f'/api/capture/{eid}/delete').status_code == 302)
 r = web.post(f'/api/capture/{eid}/delete')

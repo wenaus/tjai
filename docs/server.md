@@ -106,6 +106,7 @@ cd /home/admin/github/tjrepo/tjai
 | `/tjai/api/add-capture` | Bearer | Multipart image stash from the Gmail add-on |
 | `/tjai/capture/<uuid>/<file>` | Session or bearer | One stashed image |
 | `/tjai/api/capture/<uuid>/delete` | Session | Delete a capture: files and entry |
+| `/tjai/api/capture/<uuid>/file/<file>/delete` | Session | Delete one image of a capture |
 | `/tjai/api/log` | Bearer | Write to AppLog from external sources |
 | `/tjai/api/kozy-chat` | Bearer | KozyKorner persistent chat |
 | `/tjai/api/dialog` | Bearer | Claude Code dialog turns GET/POST |

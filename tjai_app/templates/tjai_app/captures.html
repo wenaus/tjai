@@ -35,7 +35,8 @@
         .imgs { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
         .img { display: flex; flex-direction: column; gap: 3px; }
         .img img { max-height: 220px; max-width: 420px; border: 1px solid #333; border-radius: 3px; background: #111; }
-        .fn { color: #9a9a9a; font-size: 13px; }
+        .fn { color: #9a9a9a; }
+        .img-del { padding: 0 6px; margin-left: 8px; }
         .empty { color: #9a9a9a; margin-top: 10px; }
         .err { color: #ef5350; }
     </style>
@@ -72,7 +73,8 @@
                 it.files.forEach(function (f) {
                     html += '<div class="img"><a href="' + esc(f.url) + '" target="_blank" rel="noopener">';
                     html += '<img src="' + esc(f.url) + '" alt="' + esc(f.name) + '" loading="lazy"></a>';
-                    html += '<span class="fn">' + esc(f.name) + ' ' + fmtSize(f.size) + '</span></div>';
+                    html += '<span class="fn">' + esc(f.name) + ' ' + fmtSize(f.size);
+                    html += '<button class="del img-del" data-id="' + esc(it.id) + '" data-file="' + esc(f.name) + '">Delete</button></span></div>';
                 });
                 html += '</div></div>';
             });
@@ -82,13 +84,19 @@
             var b = ev.target.closest('button.del');
             if (!b) return;
             var id = b.dataset.id;
+            var file = b.dataset.file;
+            var url = '/tjai/api/capture/' + id + (file ? '/file/' + encodeURIComponent(file) : '') + '/delete';
             b.disabled = true;
             b.textContent = 'Deleting';
             try {
-                var r = await fetch('/tjai/api/capture/' + id + '/delete', { method: 'POST', headers: { 'X-CSRFToken': csrf } });
+                var r = await fetch(url, { method: 'POST', headers: { 'X-CSRFToken': csrf } });
                 var d = await r.json().catch(function () { return {}; });
                 if (!r.ok || d.status !== 'ok') throw new Error(d.error || ('HTTP ' + r.status));
-                items = items.filter(function (it) { return it.id !== id; });
+                if (file && d.remaining > 0) {
+                    items.forEach(function (it) { if (it.id === id) it.files = it.files.filter(function (f) { return f.name !== file; }); });
+                } else {
+                    items = items.filter(function (it) { return it.id !== id; });
+                }
                 render();
             } catch (e) {
                 b.disabled = false;

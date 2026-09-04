@@ -161,3 +161,30 @@ def delete(entry):
     entry.timestamp_modified = now
     entry.is_dirty = 1
     entry.save(update_fields=['deleted_at', 'timestamp_modified', 'is_dirty'])
+
+
+def delete_file(entry, filename):
+    """Remove one image from a capture: the file, its entry in data.files,
+    and its image line in the content. Deleting the last image deletes the
+    capture. Returns the number of images left."""
+    data = entry.data if isinstance(entry.data, dict) else {}
+    files = data.get('files') or []
+    if not any(f['name'] == filename for f in files):
+        raise FileNotFoundError(filename)
+    if len(files) == 1:
+        delete(entry)
+        return 0
+    path = file_path(entry.id, filename)
+    snapshot_entry(entry, changed_by='capture-delete')
+    if path is not None:
+        path.unlink()
+    data['files'] = [f for f in files if f['name'] != filename]
+    marker = f']({SITE_URL}/capture/{entry.id}/{filename})'
+    entry.content = '\n'.join(
+        line for line in entry.content.split('\n')
+        if not (line.startswith('![') and line.endswith(marker)))
+    entry.data = data
+    entry.timestamp_modified = time.time()
+    entry.is_dirty = 1
+    entry.save(update_fields=['content', 'data', 'timestamp_modified', 'is_dirty'])
+    return len(data['files'])

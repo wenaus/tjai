@@ -26,6 +26,7 @@ urlpatterns = [
     path("api/add-entry", views.api_add_entry, name="api_add_entry"),
     path("api/add-capture", views.api_add_capture, name="api_add_capture"),
     path("api/capture/<uuid:entry_id>/delete", views.api_capture_delete, name="api_capture_delete"),
+    path("api/capture/<uuid:entry_id>/file/<str:filename>/delete", views.api_capture_file_delete, name="api_capture_file_delete"),
     path("api/dialog", views.api_dialog, name="api_dialog"),
     path("api/dialog/daily-counts", views.api_dialog_daily_counts, name="api_dialog_daily_counts"),
     path("api/kozy-chat", views.api_kozy_chat, name="api_kozy_chat"),
