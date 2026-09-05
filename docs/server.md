@@ -60,7 +60,7 @@ cd /home/admin/github/tjrepo/tjai
 | `/tjai/diary/` | Diary page |
 | `/tjai/inflight/`, `/tjai/inflight/<entry_id>/` | Inflight todos: frame content of Capcom's inflight view (`?embed=1`); bare visits redirect to `/tjai/capcom/?view=inflight`; see [Inflight Todos](inflight.md) |
 | `/tjai/versions/` | Recent entry changes across all entries; see [Entry Versions](versions.md) |
-| `/tjai/captures/` | Images stashed from mail by the Gmail add-on, with delete; see [Add-ons](addons.md#stash-images-captures) |
+| `/tjai/captures/` | Images stashed from mail by the Gmail add-on, newest first, a public read; delete for a login; see [Add-ons](addons.md#stash-images-captures) |
 | `/tjai/synopsis/` | Daily synopsis (Today in History) |
 | `/tjai/this-week/` | Current in-progress workweek (Sat–Fri), one row per day |
 | `/tjai/weekly/` | Index of past workweek entries (reverse chronological) |
@@ -104,7 +104,7 @@ cd /home/admin/github/tjrepo/tjai
 | `/tjai/api/add-journal` | Bearer | Journal entry (Gmail add-on) |
 | `/tjai/api/add-entry` | Bearer | Generic entry from external sources |
 | `/tjai/api/add-capture` | Bearer | Multipart image stash from the Gmail add-on |
-| `/tjai/capture/<uuid>/<file>` | Session or bearer | One stashed image |
+| `/tjai/capture/<uuid>/<file>` | Public | One stashed image |
 | `/tjai/api/capture/<uuid>/delete` | Session | Delete a capture: files and entry |
 | `/tjai/api/capture/<uuid>/file/<file>/delete` | Session | Delete one image of a capture |
 | `/tjai/api/log` | Bearer | Write to AppLog from external sources |

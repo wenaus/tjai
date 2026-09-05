@@ -38,7 +38,7 @@ The server stores the files under `data/captures/YYYY-MM/<entry uuid>/NN-name.ex
 
 The files are served at `/tjai/capture/<entry uuid>/<file>` as public reads: anyone with the URL, no credential. The entry page shows the images inline, and an AI session on any machine fetches them with a plain GET ([claude-integration.md](claude-integration.md#captures)).
 
-The **Captures** page (`/tjai/captures/`, menu link) is a public read too. It lists every stash newest first with its images; a logged-in session also sees a Delete button per capture and one per image, and deletion requires that login. Deleting a capture removes its files and moves the entry to Trash; restoring the entry does not restore the files. Deleting an image removes that file and its line from the entry, and deleting the last image deletes the capture.
+The **Captures** page (`/tjai/captures/`, menu link) is a public read too. It lists every stash newest first with its images, rendered server-side with absolute image URLs so that a GET of the page is the list; a logged-in session also sees a Delete button per capture and one per image, and deletion requires that login. Deleting a capture removes its files and moves the entry to Trash; restoring the entry does not restore the files. Deleting an image removes that file and its line from the entry, and deleting the last image deletes the capture.
 
 Files: `tjai_app/captures.py` (storage, listing, delete); the `api_add_capture`, `capture_file`, `captures_page`, and `api_capture_delete` views in `tjai_app/views.py`; `tjai_app/templates/tjai_app/captures.html`; `scripts/test_captures.py` (functionality test through Django's test client).
 

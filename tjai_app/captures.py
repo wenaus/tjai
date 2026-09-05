@@ -3,9 +3,8 @@
 A capture is one memory entry tagged ``capture`` plus its image files under
 ``data/captures/YYYY-MM/<entry uuid>/``. The entry content carries the
 subject, sender, Gmail permalink, the note, and one markdown image line per
-file. ``views.capture_file`` serves the files behind session-or-bearer auth;
-the absolute URLs in the entry let a session on any machine fetch them with
-its REST bearer.
+file. The files and the Captures page are public reads: a session on any
+machine fetches them with a plain GET of the URL.
 """
 import logging
 import re
@@ -134,9 +133,9 @@ def listing(limit=500):
             'gmail_url': data.get('gmail_url') or '',
             'note': data.get('note') or '',
             'context': e.context.name if e.context else '',
-            'entry_url': f'/tjai/entry/?uuid={e.id}',
+            'entry_url': f'{SITE_URL}/entry/?uuid={e.id}',
             'files': [{'name': f['name'], 'size': f.get('size', 0),
-                       'url': f'/tjai/capture/{e.id}/{f["name"]}'}
+                       'url': f'{SITE_URL}/capture/{e.id}/{f["name"]}'}
                       for f in (data.get('files') or [])],
         })
     return items

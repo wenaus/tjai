@@ -5268,11 +5268,12 @@ def capture_file(request, entry_id, filename):
 
 
 def captures_page(request):
-    """Captures newest first, each with its images. Public read; delete
+    """Captures newest first, each with its absolute image URLs, rendered
+    server-side so a plain GET of the page is the list. Public read; delete
     controls appear only for a logged-in session."""
     from . import captures
     return render(request, 'tjai_app/captures.html',
-                  {'items_json': json.dumps(captures.listing()),
+                  {'items': captures.listing(),
                    'can_delete': request.user.is_authenticated})
 
 

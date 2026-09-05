@@ -92,13 +92,14 @@ context usage, and session duration.
 
 ## Captures
 
-Images stashed from mail by the Gmail add-on ([addons.md](addons.md#stash-images-captures)) are memory entries tagged `capture`. Each image line in the entry carries an absolute URL of the form `https://etaverse.com/tjai/capture/<entry uuid>/<file>`, a public read with no credential. A session reads an image by fetching it and opening the saved file:
+Images stashed from mail by the Gmail add-on ([addons.md](addons.md#stash-images-captures)) are listed at `https://etaverse.com/tjai/captures/`, newest first, each with the absolute URL of every image. The page and the images are public reads with no credential. The page is rendered server-side, so a GET of it is the list. A session reads the list, then the image:
 
 ```bash
-curl -sf https://etaverse.com/tjai/capture/<entry uuid>/01-screenshot.png -o <scratch dir>/01-screenshot.png
+curl -s https://etaverse.com/tjai/captures/ | grep -o 'https://etaverse.com/tjai/capture/[^"]*'
+curl -sf https://etaverse.com/tjai/capture/<entry uuid>/01-image.png -o <scratch dir>/01-image.png
 ```
 
-A capture read never needs a credential; none of tjai's keys applies to it. `search_entries` (tag `capture`, or words from the note) and `get_entry` locate captures, and the entry content carries the image URLs; the Captures page at `/tjai/captures/` lists them all, also as a public read. The same rule is in the AI guidance (`ai-tjai-captures-public-read`), so every session has it at boot.
+Each capture is also a memory entry tagged `capture` whose content carries the same image URLs. The same rule is in the AI guidance (`ai-tjai-captures-public-read`).
 
 ## Cross-Session Dialog Memory
 

@@ -44,45 +44,37 @@
 <body>
     {% with current_page="captures" %}{% include "tjai_app/_menu.html" %}{% endwith %}
     <div class="page-content">
-        <h3>Captures <span id="count"></span></h3>
-        <div id="list"></div>
+        <h3>Captures <span id="count">{% if items %}({{ items|length }}){% endif %}</span></h3>
+        <div id="list">
+{% for it in items %}
+            <div class="cap" id="cap-{{ it.id }}">
+                <div class="head">
+                    <span class="dt">{{ it.datetime }}</span>
+                    <a class="subject" href="{{ it.entry_url }}">{{ it.subject }}</a>
+                    {% if it.sender %}<span class="from">from {{ it.sender }}</span>{% endif %}
+                    {% if it.context %}<span class="ctx">={{ it.context }}</span>{% endif %}
+                    {% if it.gmail_url %}<a href="{{ it.gmail_url }}" target="_blank" rel="noopener">gmail</a>{% endif %}
+                    {% if can_delete %}<button class="del" data-id="{{ it.id }}">Delete</button>{% endif %}
+                </div>
+                {% if it.note %}<div class="note">{{ it.note }}</div>{% endif %}
+                <div class="imgs">
+{% for f in it.files %}
+                    <div class="img">
+                        <a href="{{ f.url }}" target="_blank" rel="noopener"><img src="{{ f.url }}" alt="{{ f.name }}" loading="lazy"></a>
+                        <span class="fn">{{ f.name }} {{ f.size|filesizeformat }}{% if can_delete %}<button class="del img-del" data-id="{{ it.id }}" data-file="{{ f.name }}">Delete</button>{% endif %}</span>
+                    </div>
+{% endfor %}
+                </div>
+            </div>
+{% empty %}
+            <div class="empty">No captures. Stash images from the Gmail add-on to see them here.</div>
+{% endfor %}
+        </div>
     </div>
+{% if can_delete %}
     <script>
-        var items = JSON.parse('{{ items_json|escapejs }}');
         var csrf = "{{ csrf_token }}";
-        var canDelete = {{ can_delete|yesno:"true,false" }};
         function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
-        function fmtSize(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
-        function render() {
-            var el = document.getElementById('list');
-            document.getElementById('count').textContent = items.length ? '(' + items.length + ')' : '';
-            if (!items.length) {
-                el.innerHTML = '<div class="empty">No captures. Stash images from the Gmail add-on to see them here.</div>';
-                return;
-            }
-            var html = '';
-            items.forEach(function (it) {
-                html += '<div class="cap" id="cap-' + esc(it.id) + '">';
-                html += '<div class="head"><span class="dt">' + esc(it.datetime) + '</span>';
-                html += '<a class="subject" href="' + esc(it.entry_url) + '">' + esc(it.subject) + '</a>';
-                if (it.sender) html += '<span class="from">from ' + esc(it.sender) + '</span>';
-                if (it.context) html += '<span class="ctx">=' + esc(it.context) + '</span>';
-                if (it.gmail_url) html += '<a href="' + esc(it.gmail_url) + '" target="_blank" rel="noopener">gmail</a>';
-                if (canDelete) html += '<button class="del" data-id="' + esc(it.id) + '">Delete</button>';
-                html += '</div>';
-                if (it.note) html += '<div class="note">' + esc(it.note) + '</div>';
-                html += '<div class="imgs">';
-                it.files.forEach(function (f) {
-                    html += '<div class="img"><a href="' + esc(f.url) + '" target="_blank" rel="noopener">';
-                    html += '<img src="' + esc(f.url) + '" alt="' + esc(f.name) + '" loading="lazy"></a>';
-                    html += '<span class="fn">' + esc(f.name) + ' ' + fmtSize(f.size);
-                    if (canDelete) html += '<button class="del img-del" data-id="' + esc(it.id) + '" data-file="' + esc(f.name) + '">Delete</button>';
-                    html += '</span></div>';
-                });
-                html += '</div></div>';
-            });
-            el.innerHTML = html;
-        }
         document.getElementById('list').addEventListener('click', async function (ev) {
             var b = ev.target.closest('button.del');
             if (!b) return;
@@ -95,19 +87,17 @@
                 var r = await fetch(url, { method: 'POST', headers: { 'X-CSRFToken': csrf } });
                 var d = await r.json().catch(function () { return {}; });
                 if (!r.ok || d.status !== 'ok') throw new Error(d.error || ('HTTP ' + r.status));
-                if (file && d.remaining > 0) {
-                    items.forEach(function (it) { if (it.id === id) it.files = it.files.filter(function (f) { return f.name !== file; }); });
-                } else {
-                    items = items.filter(function (it) { return it.id !== id; });
-                }
-                render();
+                if (file && d.remaining > 0) b.closest('.img').remove();
+                else document.getElementById('cap-' + id).remove();
+                var n = document.querySelectorAll('.cap').length;
+                document.getElementById('count').textContent = n ? '(' + n + ')' : '';
             } catch (e) {
                 b.disabled = false;
                 b.textContent = 'Delete';
                 b.insertAdjacentHTML('afterend', '<span class="err"> ' + esc(e.message) + '</span>');
             }
         });
-        render();
     </script>
+{% endif %}
 </body>
 </html>

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Functionality test for captures (docs/addons.md): the add-capture
-endpoint, file serving with bearer and session auth, the Captures page,
-and delete. Runs through Django's test client against the live database;
+endpoint, the public file and page reads, and delete. Runs through Django's test client against the live database;
 the test entry and its files are removed afterwards. Exit 0 on pass."""
 import struct
 import sys
@@ -74,9 +73,10 @@ check('post without bearer 401', remote.post('/api/add-capture', {'subject': 'x'
 user = get_user_model().objects.filter(is_superuser=True).order_by('id').first()
 web = Client(HTTP_HOST='etaverse.com', REMOTE_ADDR='203.0.113.5')
 web.force_login(user)
-eid_js = eid.replace('-', '\\u002D').encode()  # the page's JSON goes through escapejs, which rewrites hyphens
+img_url = f'{captures.SITE_URL}/capture/{eid}/01-shot-one.png'.encode()
 r = web.get('/captures/')
-check('captures page lists the capture', r.status_code == 200 and b'test capture' in r.content and eid_js in r.content, r.status_code)
+check('captures page lists the capture with its absolute image URL and delete controls',
+      r.status_code == 200 and b'test capture' in r.content and img_url in r.content and b'class="del"' in r.content, r.status_code)
 check('file with session served', web.get(f'/capture/{eid}/02-Screenshot-2026-09-04.png').status_code == 200)
 r = web.post(f'/api/capture/{eid}/file/01-shot-one.png/delete')
 check('image delete 200, one left', r.status_code == 200 and r.json().get('remaining') == 1, r.content[:200])
@@ -87,7 +87,10 @@ check('image gone from disk, data, and content',
       and entry.content.count('![') == 1 and '01-shot-one' not in entry.content, entry.content)
 check('unknown image 404', web.post(f'/api/capture/{eid}/file/nope.png/delete').status_code == 404)
 r = remote.get('/captures/')
-check('captures page is a public read without delete controls', r.status_code == 200 and b'test capture' in r.content and b'canDelete = false' in r.content, r.status_code)
+check('captures page is a public read without delete controls',
+      r.status_code == 200 and b'test capture' in r.content and img_url not in r.content
+      and f'{captures.SITE_URL}/capture/{eid}/02-Screenshot-2026-09-04.png'.encode() in r.content
+      and b'class="del' not in r.content, r.status_code)
 check('delete needs login', remote.post(f'/api/capture/{eid}/delete').status_code == 302)
 r = web.post(f'/api/capture/{eid}/delete')
 check('delete 200', r.status_code == 200 and r.json().get('status') == 'ok', r.content[:200])
@@ -95,7 +98,7 @@ entry.refresh_from_db()
 check('entry in trash', entry.deleted_at is not None)
 check('files removed', not (captures.ROOT / entry.data['capture_dir']).exists())
 check('file after delete 404', remote.get(f'/capture/{eid}/01-shot-one.png', **bearer).status_code == 404)
-check('deleted capture gone from the page', eid_js not in web.get('/captures/').content)
+check('deleted capture gone from the page', eid.encode() not in web.get('/captures/').content)
 
 entry.tags.all().delete()
 entry.versions.all().delete()
