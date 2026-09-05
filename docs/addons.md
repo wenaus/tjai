@@ -36,9 +36,9 @@ The IMAGES section shows how many image attachments the open message carries, in
 
 The server stores the files under `data/captures/YYYY-MM/<entry uuid>/NN-name.ext`; the data directory is excluded from the deploy rsync and included in the nightly backup. It creates one memory entry tagged `gmail` and `capture`, in the given context, whose content is the subject, sender, and permalink on line 1, the note, and one markdown image line per file with its absolute URL. Accepted types are PNG, JPEG, GIF, WebP, BMP, TIFF, and HEIC, at most 20 files of 25 MB each per stash.
 
-The files are served at `/tjai/capture/<entry uuid>/<file>` to a logged-in session or the REST bearer (`TJAI_API_KEY`), never anonymously. The entry page therefore shows the images inline, and an AI session on any machine can fetch them; the recipe is in [claude-integration.md](claude-integration.md#captures).
+The files are served at `/tjai/capture/<entry uuid>/<file>` as public reads: anyone with the URL, no credential. The entry page shows the images inline, and an AI session on any machine fetches them with a plain GET ([claude-integration.md](claude-integration.md#captures)).
 
-The **Captures** page (`/tjai/captures/`, menu link) lists every stash newest first with its images, a Delete button per capture and one per image. Deleting a capture removes its files and moves the entry to Trash; restoring the entry does not restore the files. Deleting an image removes that file and its line from the entry, and deleting the last image deletes the capture.
+The **Captures** page (`/tjai/captures/`, menu link) is a public read too. It lists every stash newest first with its images; a logged-in session also sees a Delete button per capture and one per image, and deletion requires that login. Deleting a capture removes its files and moves the entry to Trash; restoring the entry does not restore the files. Deleting an image removes that file and its line from the entry, and deleting the last image deletes the capture.
 
 Files: `tjai_app/captures.py` (storage, listing, delete); the `api_add_capture`, `capture_file`, `captures_page`, and `api_capture_delete` views in `tjai_app/views.py`; `tjai_app/templates/tjai_app/captures.html`; `scripts/test_captures.py` (functionality test through Django's test client).
 

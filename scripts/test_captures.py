@@ -61,7 +61,7 @@ check('content: subject, sender, gmail link, note, two absolute image lines',
       and f'{captures.SITE_URL}/capture/{eid}/01-shot-one.png' in entry.content, entry.content)
 
 r = remote.get(f'/capture/{eid}/01-shot-one.png')
-check('file without auth is 401', r.status_code == 401, r.status_code)
+check('file without auth is a public read', r.status_code == 200 and r['Content-Type'] == 'image/png', r.status_code)
 r = remote.get(f'/capture/{eid}/01-shot-one.png', **bearer)
 check('file with bearer served as image/png', r.status_code == 200 and r['Content-Type'] == 'image/png'
       and b''.join(r.streaming_content) == img1, r.status_code)
@@ -86,7 +86,8 @@ check('image gone from disk, data, and content',
       and [f['name'] for f in entry.data['files']] == ['02-Screenshot-2026-09-04.png']
       and entry.content.count('![') == 1 and '01-shot-one' not in entry.content, entry.content)
 check('unknown image 404', web.post(f'/api/capture/{eid}/file/nope.png/delete').status_code == 404)
-check('captures page needs login', remote.get('/captures/').status_code == 302)
+r = remote.get('/captures/')
+check('captures page is a public read without delete controls', r.status_code == 200 and b'test capture' in r.content and b'canDelete = false' in r.content, r.status_code)
 check('delete needs login', remote.post(f'/api/capture/{eid}/delete').status_code == 302)
 r = web.post(f'/api/capture/{eid}/delete')
 check('delete 200', r.status_code == 200 and r.json().get('status') == 'ok', r.content[:200])

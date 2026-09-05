@@ -5256,9 +5256,8 @@ def api_add_capture(request):
     })
 
 
-@rest_api_auth_required
 def capture_file(request, entry_id, filename):
-    """Serve one capture image to a logged-in session or a REST bearer."""
+    """Serve one capture image. Public read: anyone with the URL."""
     from django.http import FileResponse
     from . import captures
     path = captures.file_path(entry_id, filename)
@@ -5268,12 +5267,13 @@ def capture_file(request, entry_id, filename):
     return FileResponse(open(path, 'rb'), content_type=ctype)
 
 
-@login_required
 def captures_page(request):
-    """Captures newest first, each with its images and a delete button."""
+    """Captures newest first, each with its images. Public read; delete
+    controls appear only for a logged-in session."""
     from . import captures
     return render(request, 'tjai_app/captures.html',
-                  {'items_json': json.dumps(captures.listing())})
+                  {'items_json': json.dumps(captures.listing()),
+                   'can_delete': request.user.is_authenticated})
 
 
 @login_required

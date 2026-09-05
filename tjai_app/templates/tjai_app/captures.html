@@ -50,6 +50,7 @@
     <script>
         var items = JSON.parse('{{ items_json|escapejs }}');
         var csrf = "{{ csrf_token }}";
+        var canDelete = {{ can_delete|yesno:"true,false" }};
         function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
         function fmtSize(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
         function render() {
@@ -67,14 +68,16 @@
                 if (it.sender) html += '<span class="from">from ' + esc(it.sender) + '</span>';
                 if (it.context) html += '<span class="ctx">=' + esc(it.context) + '</span>';
                 if (it.gmail_url) html += '<a href="' + esc(it.gmail_url) + '" target="_blank" rel="noopener">gmail</a>';
-                html += '<button class="del" data-id="' + esc(it.id) + '">Delete</button></div>';
+                if (canDelete) html += '<button class="del" data-id="' + esc(it.id) + '">Delete</button>';
+                html += '</div>';
                 if (it.note) html += '<div class="note">' + esc(it.note) + '</div>';
                 html += '<div class="imgs">';
                 it.files.forEach(function (f) {
                     html += '<div class="img"><a href="' + esc(f.url) + '" target="_blank" rel="noopener">';
                     html += '<img src="' + esc(f.url) + '" alt="' + esc(f.name) + '" loading="lazy"></a>';
                     html += '<span class="fn">' + esc(f.name) + ' ' + fmtSize(f.size);
-                    html += '<button class="del img-del" data-id="' + esc(it.id) + '" data-file="' + esc(f.name) + '">Delete</button></span></div>';
+                    if (canDelete) html += '<button class="del img-del" data-id="' + esc(it.id) + '" data-file="' + esc(f.name) + '">Delete</button>';
+                    html += '</span></div>';
                 });
                 html += '</div></div>';
             });
