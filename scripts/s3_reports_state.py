@@ -13,8 +13,9 @@ The tile reads as the day's object count with the current hourly rate
 
   RATE <n>/h      — objects per hour above the runaway ceiling
   LOOP <subject>  — one job writing more objects than any job should
+  SWEEP STALLED   — the production sweeper has stopped reporting passes
   UNHEARD <n>     — objects in the bucket that no event announced
-  STALE <n>m      — the drain has not run recently
+  STALE <n>m      — the event drain here has not run recently
   NO INDEX        — the indexer could not be read at all
 
 Standalone: `python s3_reports_state.py` prints the payload without
@@ -73,6 +74,12 @@ def build_payload(now=None):
                 'the event drain has not run recently')
     if summary.get('verdict') == 'warning':
         detail = summary.get('detail', '')
+        if 'sweeper has reported no pass' in detail:
+            # The production sweep is the bucket's normal drain. When it
+            # stops, objects accumulate for a reason the write credential
+            # would not fix, so this reads as a stalled drain rather than
+            # growth and never touches the plug.
+            return payload('SWEEP STALLED', 'amber'), 'warning', detail
         if 'per-job ceiling' in detail:
             return (payload(f"LOOP {summary.get('busiest_subject')}", 'amber'),
                     'warning', detail)
