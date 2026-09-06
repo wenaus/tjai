@@ -113,7 +113,14 @@ following the precedent of `RssItem` and `AppLog`. A `Notice` row carries:
 - `timestamp` — last update
 - `first_seen`
 - `source` — registry key of the emitting system or collector
-- `severity` — informational through alarm
+- `severity` — `info`, `ping`, `warning`, `alarm`. A ping is a dated
+  obligation rather than a condition, something a person owes, raised
+  ahead of its due date and cleared when someone says it is done
+  (swf-monitor `docs/PINGS.md`); it ranks above informational because it
+  wants an answer and below warning because nothing is wrong yet, and the
+  owning system re-emits it at alarm once it is overdue. The feed filters
+  on severity through the URL, so `?severity=ping` is the standing list of
+  what is owed.
 - `title` — the one-line notice text
 - `url` — deep link into the page or system the notice concerns; optional,
   and never self-referential — link-free notices are a normal category

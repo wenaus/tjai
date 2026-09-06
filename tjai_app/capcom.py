@@ -15,7 +15,12 @@ from .models import Notice, SysConfig
 
 logger = logging.getLogger(__name__)
 
-SEVERITIES = ('info', 'warning', 'alarm')
+# 'ping' is a dated obligation rather than a condition: something a person
+# owes, raised ahead of its due date and cleared when someone says it is
+# done (swf-monitor docs/PINGS.md). It sits above info because it wants an
+# answer, and below warning because nothing is wrong yet; a ping that goes
+# overdue is re-emitted at alarm by the system that owns it.
+SEVERITIES = ('info', 'ping', 'warning', 'alarm')
 DEFAULT_RETENTION_DAYS = -1
 TJAI_PIPELINE_SOURCE = 'tjai-pipeline'
 TJAI_SYSTEM_SOURCE = 'tjai-system'
