@@ -296,6 +296,13 @@ def collect_server_backup(target_source=None):
     collect_backup_state()
 
 
+def collect_s3_reports(target_source=None):
+    """Stage-out bucket tile; judgment is owned by the indexer that holds
+    the data, read through scripts/s3_reports_state.py."""
+    from s3_reports_state import collect_s3_reports as collect
+    collect()
+
+
 # Poll collectors, keyed by registry source name. Each is a no-argument
 # callable that polls its system and calls capcom.emit_notice()/set_state().
 # Poll sources land one at a time (docs/capcom.md § Initial sources).
@@ -303,6 +310,7 @@ COLLECTORS = {
     'corun-ai': collect_corun_ai,
     'eve-ahbazon': collect_eve_ahbazon,
     'server-backup': collect_server_backup,
+    's3-reports': collect_s3_reports,
     'swf-monitor': collect_swf_monitor,
 }
 
