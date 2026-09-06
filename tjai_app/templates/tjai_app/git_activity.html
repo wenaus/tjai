@@ -213,14 +213,19 @@ function buildHeatmap(heatmap) {
         d.setDate(d.getDate() + 1);
     }
 
-    // Color scale (GitHub-style greens on dark bg)
+    // Colour scale: regular gradations of twenty to sixty, then the top
+    // level saturates. The GitHub default saturated at ten, which stopped
+    // discriminating years ago — a ten-commit day and an eighty-commit day
+    // were the same green. Above sixty the colour says "a full day" and
+    // the leaderboard says by how much, which is the job colour is bad at
+    // and a ranked list is good at.
     const colors = ['#2d2d2d', '#0e4429', '#006d32', '#26a641', '#39d353'];
     function getColor(count, future) {
         if (future) return '#1a1a1a';
         if (count === 0) return colors[0];
-        if (count <= 2) return colors[1];
-        if (count <= 5) return colors[2];
-        if (count <= 9) return colors[3];
+        if (count <= 20) return colors[1];
+        if (count <= 40) return colors[2];
+        if (count < 60) return colors[3];
         return colors[4];
     }
 
