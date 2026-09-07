@@ -320,7 +320,7 @@ Further actions on the same pipeline, not covered above:
 | Action | Schedule | What it does |
 |--------|----------|--------------|
 | `workweek-agent` | weekly, Sat 05:00 | `workweek_agent.py` builds a `workweek_<yyyymmdd>` entry from the prior Sat–Fri `workday_*` entries |
-| `llm-assessment` / `llm-assessment-gemini` | daily 02:00 / 02:20 | Daily dialog scoring via `assessment_claude.py` / `assessment_gemini.py`; the Claude variant is currently blocked. Reruns and backfills are driven by sysconfig flags (see [action-agent.md](action-agent.md)) |
+| `llm-assessment` / `llm-assessment-gemini` | daily 02:00 / 02:20 | Daily dialog scoring via `assessment_claude.py` / `assessment_gemini.py`; the Claude variant is currently blocked. Reruns and backfills are driven by sysconfig flags (see [action-agent.md](action-agent.md)). The day is assessed per session in capped calls and merged; see [assessment.md](assessment.md) |
 | `server-backup` | daily 05:00 | `backup.py` — pg_dump, env files, and data dir to `~/tjai-backups/server/`, pushed to Dropbox via rclone |
 | `system-health` | every 30 min | `system_health.py` metrics collection for the system page |
 | `codoc-prs-delta` / `codoc-prs-full` | every 2h / nightly 03:40 | GitHub PR cache refresh via `codoc_prs_refresh.py` |

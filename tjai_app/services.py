@@ -866,6 +866,7 @@ def get_dialog(host, start_date=None, end_date=None, limit=None, offset=0, max_c
         if max_content_length and len(content) > max_content_length:
             content = safe_truncate(content, max_content_length, suffix='…')
         turns.append({
+            'id': str(e.id),
             'timestamp': datetime.fromtimestamp(e.timestamp_created, tz=tz).isoformat(),
             'role': role,
             'speaker': speaker,
@@ -875,6 +876,7 @@ def get_dialog(host, start_date=None, end_date=None, limit=None, offset=0, max_c
             'model_provider': data.get('model_provider', ''),
             'reasoning_effort': data.get('reasoning_effort', ''),
             'hostname': data.get('hostname', ''),
+            'session_id': data.get('session_id', ''),
             'content': content,
         })
     return turns

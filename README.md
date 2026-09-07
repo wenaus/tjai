@@ -53,6 +53,7 @@ interfaces, not the center of the system architecture.
 | [Page Refresh](docs/page-refresh.md) | Scheduled synchronous rebuild of the cached products behind listed pages, with authenticated fetching |
 | [Local Maintenance Actions](docs/local-actions.md) | Small machine-local jobs run by the sync agent, separate from EC2 action entries |
 | [Agents](docs/agents.md) | Daily synopsis, AI news curation (Picks), autonomous research, RSS reader |
+| [Assessment](docs/assessment.md) | Daily AI performance assessment: dialog split by session, capped calls, merged in code |
 | [ec2dev-web Monitor](docs/ec2dev-web.md) | Cron-collected ingress traffic, backend load, automation evidence, Snapper history, and Capcom state |
 | [Picks Page Curation](docs/picks-curate-page.md) | Curating picks from the page being viewed: browser extension flow, curate-page endpoint, background job |
 | [Capcom](docs/capcom.md) | Design for the live notice page: notice feed with read/unread, state tiles and pinned bookmarks, Notice model, polling collectors, source registry |

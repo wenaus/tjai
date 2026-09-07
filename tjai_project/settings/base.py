@@ -178,7 +178,8 @@ Tools:
   Call unfiltered to see recent activity.
 - get_bookmarks(context, limit, offset, start_date, end_date, max_content_length): Get saved bookmarks.
 - get_dialog(host, start_date, end_date, limit, offset, max_content_length): Get
-  recorded human-AI dialog turns. Use host='all' for all machines.
+  recorded human-AI dialog turns. Use host='all' for all machines. Every turn
+  carries its entry id and the session_id that recorded it.
 - get_logs(source, level, contains, ref, start_date, end_date, limit, max_content_length): Read
   application log (AppLog) rows — agent/script/server logs (the Agent Log page
   data). For operational/diagnostic questions; AppLog is not an Entry, so the

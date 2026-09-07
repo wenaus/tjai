@@ -563,8 +563,10 @@ async def get_dialog(
 
     Returns:
         List of dialog turns ordered chronologically, each containing:
-        timestamp, role (user/assistant), speaker, speaker_type
-        (human/ai/unknown), client, model, hostname, content.
+        id (the entry UUID, for citing a turn), timestamp, role
+        (user/assistant), speaker, speaker_type (human/ai/unknown), client,
+        model, hostname, session_id (the client session that recorded the
+        turn; a day's interleaved sessions separate on it), content.
     """
     result = await sync_to_async(services.get_dialog)(
         host=host, start_date=start_date, end_date=end_date,
