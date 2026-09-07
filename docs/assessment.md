@@ -1,6 +1,8 @@
 # AI assessment
 
-The daily AI performance assessment scores a day's human–AI dialog against the rules in the `assessment-system-prompt` entry and writes one entry per day, `assessment-<date>-gemini`, which the assessment dashboard reads. The assessor is Gemini (`gemini-2.5-pro`), a model outside the family being assessed. Action `llm-assessment-gemini`, daily at 02:20 for the previous day, script `scripts/assessment_gemini.py`.
+The daily AI performance assessment scores a day's human–AI dialog against the rules in the `assessment-system-prompt` entry and writes one entry per day, which the assessment dashboard reads. The assessor is `gpt-5.6-sol`, run through the Codex subscription, a model outside the family that supplies most of the assessed dialog. Action `llm-assessment-gemini`, daily at 02:20 for the previous day, script `scripts/assessment_gemini.py`.
+
+The entry id is `assessment-<date>-<assessor>`, so a change of assessor leaves the previous reader's history under its own name rather than overwriting it: days before 2026-09-06 end in `-gemini`, days from 2026-09-06 in `-sol`. The dashboard plots the assessors named in `ASSESSOR_SUFFIXES` (`tjai_app/views.py`); assessments written before the suffix existed are not plotted.
 
 ## Why a day is assessed in parts
 
@@ -30,9 +32,23 @@ Days under about 175K tokens yield 13–27 events per 100K; the days over 200K y
 
 Assessment reads `session` and `codex`; `headless` and `replay` are dropped and named on the entry. The recorder defects behind the last two are to be fixed at the source; the classification holds until they are.
 
-Sessions are packed into calls no larger than the call cap: a session over the cap gets a call of its own, the rest are packed first-fit by size up to it. The cap is the sysconfig key `assessment_call_token_cap`, default 100000 estimated tokens. With that cap 2026-09-06 is six calls: three sessions alone at 120K, 104K and 65K, and eleven small sessions in three calls.
+Sessions are packed into calls no larger than the call cap: a session over the cap gets a call of its own, the rest are packed first-fit by size up to it. The cap is the sysconfig key `assessment_call_token_cap`, 175000 estimated tokens. With that cap 2026-09-06 is three calls. Because a session is never split, the cap has a floor: the largest session of the day gets a call of its own whatever the cap says, 120K on 2026-09-06.
 
 `scripts/dialog_streams.py <date>` writes the same split as one file per session with a manifest of kind and size, for looking at a day before deciding anything about it.
+
+## Choice of assessor
+
+2026-09-06, the largest day on record at 549K estimated tokens, was assessed three ways over the same sessions. Detection is scored events per 100K tokens of input; generosity is the mean score per event, which with the event count sets the endpoint the dashboard plots.
+
+| assessor | cap | calls | events | per 100K | endpoint | mean |
+|---|---|---|---|---|---|---|
+| gemini-2.5-pro | 100K | 5 | 129 | 26.2 | +85 | 0.66 |
+| gemini-3.1-pro-preview | 175K | 3 | 82 | 16.7 | +42 | 0.51 |
+| gpt-5.6-sol | 175K | 3 | 114 | 23.2 | +57 | 0.50 |
+
+Detection under `gemini-3.1-pro-preview` fell as the pack grew, 33 then 28 then 21 events over packs of 422K, 463K and 465K characters. Under `gpt-5.6-sol` it did not: 41, 30, 43 over the same packs. Consolidation to three calls is therefore not what costs detection; the reader is. The two assessors score what they find alike, mean 0.50 against 0.51, so the endpoint difference between them follows from the event count.
+
+`gpt-5.6-sol` scores each event lower than `gemini-2.5-pro` (0.50 against 0.66), which steps the endpoint down at equal event counts. The `sol` marker on the dashboard divides the two.
 
 ## Calls and merge
 
@@ -46,7 +62,7 @@ A failed call is retried once. If some parts fail, the day is written from the p
 
 ## Dashboard
 
-The assessment dashboard plots the daily endpoint (final cumulative) and integral. Vertical orange markers on both plots mark boundaries in the series; they are a list in `tjai_app/templates/tjai_app/assessment.html`. The marker `RC-V2` between 2026-09-05 and 2026-09-06 divides the single-call assessments from V2: the days before it were scored by a reader whose yield fell with input size, so their endpoints are not comparable with the days after.
+The assessment dashboard plots the daily endpoint (final cumulative) and integral. Vertical orange markers on both plots mark boundaries in the series; they are a list in `tjai_app/templates/tjai_app/assessment.html`. The marker `RC` between 2026-09-05 and 2026-09-06 divides the single-call assessments from V2: the days before it were scored by a reader whose yield fell with input size, so their endpoints are not comparable with the days after. The same marker divides the assessors: 2026-09-06 onward is scored by `gpt-5.6-sol`, the days before it by Gemini, so endpoints are not comparable across it on either count.
 
 ## Recovery and inspection
 

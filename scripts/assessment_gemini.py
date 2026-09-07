@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the Gemini assessment for a date.
+"""Run the daily AI performance assessment for a date.
 
 Usage: assessment_gemini.py YYYY-MM-DD [--plan] [--from-saved] [--no-write]
                             [--action-id ID]
@@ -54,6 +54,17 @@ if not logger.handlers:
 API_TIMEOUT = 600  # 10 minutes
 MODEL = 'gemini-2.5-pro'
 
+# Comparison runs override these from the command line. The defaults are
+# the nightly assessor, so an unflagged run is unchanged.
+PROVIDER = 'codex'           # 'gemini' (API) or 'codex' (subscription)
+VARIANT = 'sol'              # names the raw-response and plan files
+CODEX_MODEL = 'gpt-5.6-sol'
+CODEX_EFFORT = 'high'
+# Codex at high effort spends far longer on a 150K-token pack than the
+# Gemini API takes to answer one, so the timeout that suits Gemini cuts
+# sol off mid-read.
+CODEX_TIMEOUT = 3600
+
 # The largest input for one assessment call, in estimated tokens
 # (chars / CHARS_PER_TOKEN). Held in sysconfig so it is editable without a
 # deploy; the value comes from the yield-against-size record in
@@ -61,7 +72,7 @@ MODEL = 'gemini-2.5-pro'
 CALL_CAP_KEY = 'assessment_call_token_cap'
 CALL_CAP_DEFAULT = 100000
 CALL_CAP_DESCRIPTION = (
-    'Largest input, in estimated tokens (chars/2.7), for one Gemini assessment call. '
+    'Largest input, in estimated tokens (chars/2.7), for one assessment call. '
     'A session over it gets a call of its own; smaller sessions pack together up to it. '
     'Set from the yield-against-size record (docs/assessment.md).')
 
@@ -166,13 +177,90 @@ def call_gemini(prompt):
     return response.text
 
 
+def call_codex(prompt):
+    """Run one assessment call through the Codex subscription.
+
+    Same contract as call_gemini: prompt in, response text out. The prompt
+    goes on stdin and the answer comes back through -o, so neither is
+    bounded by an argv limit. No MCP, no web search, no repo access: the
+    assessor gets the dialog and the system prompt and nothing else, which
+    is what the Gemini path gives it.
+    """
+    import signal
+    import subprocess
+    import tempfile
+    from tj.commands.ai_agent import _find_codex
+
+    with tempfile.TemporaryDirectory(prefix='tjai-assess-codex-') as out_dir:
+        out_file = Path(out_dir) / 'assessment.md'
+        cmd = [
+            _find_codex(),
+            '--ask-for-approval', 'never',
+            'exec',
+            '--ephemeral',
+            '--skip-git-repo-check',
+            '--sandbox', 'read-only',
+            '-m', CODEX_MODEL,
+            '-c', f'model_reasoning_effort="{CODEX_EFFORT}"',
+            '-o', str(out_file),
+            '-',
+        ]
+        env = os.environ.copy()
+        env['HOME'] = os.environ.get('HOME', '/home/admin')
+        env['PATH'] = ':'.join([
+            '/home/admin/.nvm/versions/node/v24.13.1/bin',
+            '/home/admin/.local/bin',
+            env.get('PATH', '/usr/local/bin:/usr/bin:/bin'),
+        ])
+        # Force subscription auth: an API key in the environment would bill.
+        env.pop('OPENAI_API_KEY', None)
+        env.pop('CODEX_API_KEY', None)
+
+        logger.info("Calling Codex (%s, effort=%s), prompt %d chars...",
+                    CODEX_MODEL, CODEX_EFFORT, len(prompt))
+        started = time.monotonic()
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, cwd=out_dir, env=env,
+                                start_new_session=True)
+        try:
+            out, err = proc.communicate(input=prompt, timeout=CODEX_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            proc.communicate()
+            raise
+        proc = subprocess.CompletedProcess(cmd, proc.returncode, out, err)
+        duration = round(time.monotonic() - started)
+        if proc.returncode != 0:
+            tail = (proc.stderr or proc.stdout or '')[-2000:]
+            raise RuntimeError(
+                f"codex exited {proc.returncode} after {duration}s: {tail}")
+        if not out_file.exists():
+            tail = (proc.stderr or proc.stdout or '')[-2000:]
+            raise RuntimeError(f"codex wrote no output file: {tail}")
+        response = out_file.read_text(encoding='utf-8')
+        if not response.strip():
+            raise RuntimeError("codex returned an empty response")
+        logger.info("Codex returned %d chars in %ds", len(response), duration)
+        return response
+
+
+def _call_model(prompt):
+    """Dispatch one call to the configured provider."""
+    if PROVIDER == 'codex':
+        return call_codex(prompt)
+    if PROVIDER == 'gemini':
+        return call_gemini(prompt)
+    raise RuntimeError(f"unknown provider {PROVIDER!r}")
+
+
 def _call_with_retry(prompt, what):
     """One retry on any failure; the error is logged both times."""
     try:
-        return call_gemini(prompt)
+        return _call_model(prompt)
     except Exception as e:
         logger.error("%s: first call failed: %s; retrying once", what, e)
-        return call_gemini(prompt)
+        return _call_model(prompt)
 
 
 def _clean_json(raw):
@@ -247,12 +335,22 @@ def _section(md, name):
     return m.group(1).strip() if m else ''
 
 
+def assessor_name():
+    """The assessor's name, which is also the entry id's suffix.
+
+    The id carries it so a change of assessor is visible in the record
+    instead of overwriting the previous reader's history under the same
+    name (docs/assessment.md).
+    """
+    return 'sol' if PROVIDER == 'codex' else 'gemini'
+
+
 def _response_dir():
     return Path(__file__).resolve().parent.parent / 'data' / 'assessment-responses'
 
 
 def _plan_path(date_str):
-    return _response_dir() / f'{date_str}-gemini-plan.json'
+    return _response_dir() / f'{date_str}-{VARIANT}-plan.json'
 
 
 def assess_part(date_str, part, n, pack, from_saved):
@@ -266,7 +364,7 @@ def assess_part(date_str, part, n, pack, from_saved):
         'est_tokens': sum(s['est_tokens'] for s in pack), 'ok': False, 'reason': '',
         'scores': [], 'content': '',
     }
-    raw_path = _response_dir() / f'{date_str}-gemini-{part}.txt'
+    raw_path = _response_dir() / f'{date_str}-{VARIANT}-{part}.txt'
     try:
         if from_saved:
             if not raw_path.exists():
@@ -372,8 +470,8 @@ def merge_parts(date_str, parts, assessable_turns, dropped):
 
 
 def write_entry(date_str, scores_data, content, parts, dropped):
-    """Write or update the Gemini assessment entry."""
-    entry_id = f'assessment-{date_str}-gemini'
+    """Write or update the day's assessment entry."""
+    entry_id = f'assessment-{date_str}-{assessor_name()}'
     now = time.time()
 
     data = {
@@ -383,7 +481,7 @@ def write_entry(date_str, scores_data, content, parts, dropped):
         'total_turns': scores_data.get('total_turns', 0),
         'scored_events': scores_data.get('scored_events', 0),
         'final_cumulative': scores_data.get('final_cumulative', 0),
-        'assessor': 'gemini',
+        'assessor': assessor_name(),
         'parts': [{k: p[k] for k in ('part', 'label', 'session_ids', 'turns', 'est_tokens', 'ok', 'reason')}
                   for p in parts],
         'sessions_dropped': [{'session_id': s['session_id'], 'kind': s['kind'], 'label': s['label']}
@@ -436,7 +534,8 @@ def _set_status(action_id, status):
 def _parse_args():
     date_str = None
     action_id = None
-    flags = {'from_saved': False, 'plan': False, 'no_write': False}
+    flags = {'from_saved': False, 'plan': False, 'no_write': False,
+             'cap': None, 'model': None, 'provider': None, 'variant': None}
     args = sys.argv[1:]
     i = 0
     while i < len(args):
@@ -452,12 +551,59 @@ def _parse_args():
         elif args[i] == '--no-write':
             flags['no_write'] = True
             i += 1
+        elif args[i] in ('--cap', '--model', '--provider', '--variant') and i + 1 < len(args):
+            flags[args[i][2:]] = args[i + 1]
+            i += 2
         elif not date_str:
             date_str = args[i]
             i += 1
         else:
             i += 1
     return date_str, action_id, flags
+
+
+def _write_result(date_str, parts, packs, scores_data, cap_tokens):
+    """Record what this run cost and yielded, per call and for the day.
+
+    Yield per 100K input tokens is the measure the assessor is judged on
+    (docs/assessment.md): 13-27 is the healthy band, 6-10 is thin. Written
+    per call because a single degraded call is invisible in a day average.
+    """
+    calls = []
+    for p in parts:
+        est = p['est_tokens'] or 0
+        calls.append({
+            'part': p['part'],
+            'sessions': len(p['session_ids']),
+            'turns': p['turns'],
+            'est_tokens': est,
+            'events': len(p['scores']),
+            'yield_per_100k': round(len(p['scores']) * 100000 / est, 1) if est else None,
+            'ok': p['ok'],
+            'reason': p['reason'],
+        })
+    total_tokens = sum(c['est_tokens'] for c in calls)
+    total_events = sum(c['events'] for c in calls)
+    result = {
+        'date': date_str,
+        'variant': VARIANT,
+        'provider': PROVIDER,
+        'model': CODEX_MODEL if PROVIDER == 'codex' else MODEL,
+        'cap_tokens': cap_tokens,
+        'calls': len(packs),
+        'calls_ok': sum(1 for c in calls if c['ok']),
+        'total_est_tokens': total_tokens,
+        'scored_events': scores_data['scored_events'],
+        'final_cumulative': scores_data['final_cumulative'],
+        'yield_per_100k': round(total_events * 100000 / total_tokens, 1) if total_tokens else None,
+        'per_call': calls,
+    }
+    path = _response_dir() / f'{date_str}-{VARIANT}-result.json'
+    path.write_text(json.dumps(result, indent=2), encoding='utf-8')
+    logger.info("%s: %d calls, %d events, %d est tokens, yield %.1f per 100K -> %s",
+                VARIANT, len(packs), total_events, total_tokens,
+                result['yield_per_100k'] or 0, path)
+    return result
 
 
 def main():
@@ -475,6 +621,20 @@ def main():
         _set_status(action_id, 'failed')
         sys.exit(1)
 
+    global MODEL, PROVIDER, VARIANT
+    if flags['provider']:
+        PROVIDER = flags['provider']
+        VARIANT = flags['provider']
+    if flags['model']:
+        MODEL = flags['model']
+    if flags['variant']:
+        VARIANT = flags['variant']
+    if flags['variant'] and not flags['no_write']:
+        # An explicitly named variant is a comparison run and never
+        # touches the day's official entry.
+        flags['no_write'] = True
+        logger.info("variant %r: --no-write forced, the official entry is untouched", VARIANT)
+
     start_time = time.time()
     try:
         turns = fetch_dialog(date_str)
@@ -485,7 +645,7 @@ def main():
         sessions = split_sessions(turns)
         assessable = [s for s in sessions if s['kind'] in ASSESSED_KINDS]
         dropped = [s for s in sessions if s['kind'] not in ASSESSED_KINDS]
-        cap_tokens = call_token_cap()
+        cap_tokens = int(flags['cap']) if flags['cap'] else call_token_cap()
         packs = pack_calls(assessable, cap_tokens * CHARS_PER_TOKEN)
         assessable_turns = sum(len(s['turns']) for s in assessable)
         logger.info("%s: %d turns in %d sessions; %d assessable (%d turns) in %d calls, cap %d tokens; dropped %s",
@@ -519,6 +679,11 @@ def main():
             raise RuntimeError("every call failed: " + '; '.join(p['reason'] for p in parts))
 
         scores_data, content = merge_parts(date_str, parts, assessable_turns, dropped)
+        try:
+            _write_result(date_str, parts, packs, scores_data, cap_tokens)
+        except Exception as e:
+            # A measurement artefact must never cost us the assessment.
+            logger.error("result artefact not written: %s", e)
         failed = [p for p in parts if not p['ok']]
         logger.info("Merged: %d scored events, final cumulative %+d, %d of %d parts ok",
                     scores_data['scored_events'], scores_data['final_cumulative'],
@@ -529,19 +694,19 @@ def main():
 
         write_entry(date_str, scores_data, content, parts, dropped)
         duration = round(time.time() - start_time)
-        logger.info("Gemini assessment complete for %s in %ds", date_str, duration)
+        logger.info("%s assessment complete for %s in %ds", assessor_name(), date_str, duration)
         try:
             from tjai_app import capcom
             capcom.emit_tjai_notice(
                 title=f'AI performance assessment completed — {date_str}',
                 url=f'/tjai/entry/assessment-{date_str}-gemini/',
                 dedup_key=f'tjai-assessment-{date_str}',
-                detail=(f"Gemini assessment completed: {scores_data['scored_events']} events, "
+                detail=(f"{assessor_name()} assessment completed: {scores_data['scored_events']} events, "
                         f"cumulative {scores_data['final_cumulative']:+d}, {len(parts)} calls"
                         + (f", {len(failed)} FAILED" if failed else '') + '.'),
             )
         except Exception as e:
-            logger.error("Gemini assessment Capcom notice failed: %s", e)
+            logger.error("assessment Capcom notice failed: %s", e)
         if failed:
             # The day is written from the parts that succeeded; the failure
             # stays visible on the action.
@@ -552,7 +717,7 @@ def main():
 
     except Exception as e:
         duration = round(time.time() - start_time)
-        logger.error("Gemini assessment failed for %s after %ds: %s\n%s",
+        logger.error("assessment failed for %s after %ds: %s\n%s",
                      date_str, duration, e, traceback.format_exc())
         _set_status(action_id, 'failed')
         sys.exit(1)

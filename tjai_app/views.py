@@ -3013,6 +3013,28 @@ def assessment_page(request):
     return render(request, 'tjai_app/assessment.html')
 
 
+# Assessors whose entries make up the daily series. The suffix on an
+# assessment entry id names the reader that wrote it; only these are
+# plotted, so the pre-suffix era stays out until someone asks for it.
+ASSESSOR_SUFFIXES = ('-gemini', '-sol')
+
+
+def strip_assessor(entry_id):
+    """'assessment-2026-09-06-sol' -> '2026-09-06'."""
+    stripped = entry_id.replace('assessment-', '')
+    for suffix in ASSESSOR_SUFFIXES:
+        if stripped.endswith(suffix):
+            return stripped[:-len(suffix)]
+    return stripped
+
+
+def _assessor_filter(entries):
+    query = Q()
+    for suffix in ASSESSOR_SUFFIXES:
+        query |= Q(data__entry_id__endswith=suffix)
+    return entries.filter(query)
+
+
 @login_required
 def api_assessment_dates(request):
     """Return Gemini assessment dates as JSON."""
@@ -3023,7 +3045,7 @@ def api_assessment_dates(request):
         deleted_at__isnull=True,
     ).exclude(data__entry_id__contains='-prompt').order_by('-data__date')
 
-    entries = entries.filter(data__entry_id__endswith='-gemini')
+    entries = _assessor_filter(entries)
 
     tz = get_app_tz()
     today_key = datetime.now(tz).strftime('%Y%m%d')
@@ -3035,8 +3057,7 @@ def api_assessment_dates(request):
         # Strip entry_id to just the date for display
         date_str = data.get('date', '')
         if not date_str:
-            stripped = entry_id.replace('assessment-', '').replace('-gemini', '')
-            date_str = stripped
+            date_str = strip_assessor(entry_id)
         date_key = date_str.replace('-', '')
         try:
             dt = datetime.strptime(date_str, '%Y-%m-%d')
@@ -3126,7 +3147,7 @@ def api_assessment_rerun(request):
     if not entry_id.startswith('assessment-'):
         return JsonResponse({'error': 'Invalid entry_id'}, status=400)
 
-    date_str = entry_id.replace('assessment-', '').replace('-gemini', '')
+    date_str = strip_assessor(entry_id)
 
     from datetime import datetime as dt
     try:
@@ -3154,7 +3175,7 @@ def api_assessment_dashboard(request):
         deleted_at__isnull=True,
     ).exclude(data__entry_id__contains='-prompt').order_by('data__date')
 
-    entries = entries.filter(data__entry_id__endswith='-gemini')
+    entries = _assessor_filter(entries)
 
     SESSION_GAP = 30 * 60  # 30 min gap = new session
 
@@ -3220,6 +3241,7 @@ def api_assessment_dashboard(request):
 
         days.append({
             'date': date_str,
+            'entry_id': data.get('entry_id', ''),
             'endpoint': endpoint,
             'integral': integral,
             'scored_events': len(scores),
