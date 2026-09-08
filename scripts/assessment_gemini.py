@@ -215,6 +215,11 @@ def call_codex(prompt):
         # Force subscription auth: an API key in the environment would bill.
         env.pop('OPENAI_API_KEY', None)
         env.pop('CODEX_API_KEY', None)
+        # An assessment call is not dialog. Without this the Codex record
+        # hook writes each call's prompt back into the day's dialog, and the
+        # next assessment reads its own prompts: the record then carries the
+        # previous day's inside the current one, without bound.
+        env['TJAI_DIALOG_TURNS'] = '0'
 
         logger.info("Calling Codex (%s, effort=%s), prompt %d chars...",
                     CODEX_MODEL, CODEX_EFFORT, len(prompt))

@@ -89,8 +89,14 @@ def format_turn(turn):
     return f"### {turn['timestamp']} {role}{where}{model}{uid}\n{turn['content']}"
 
 
+ASSESSOR_PROMPT_MARKER = 'You are an LLM performance assessor'
+
+
 def _classify(sess, earlier_assistant_content):
     turns = sess['turns']
+    if any(ASSESSOR_PROMPT_MARKER in (t.get('content') or '')[:200]
+           for t in turns if t['role'] == 'user'):
+        return 'assessor'
     if turns and all(t['client'] == 'codex' for t in turns):
         return 'codex'
     assistant = [t for t in turns if t['role'] == 'assistant']

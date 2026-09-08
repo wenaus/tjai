@@ -29,6 +29,7 @@ Days under about 175K tokens yield 13–27 events per 100K; the days over 200K y
 - `codex`: a Codex research run, one prompt and one report.
 - `headless`: a prompt with no assistant turn, written when a cron or a `claude -p` run records its prompt as dialog.
 - `replay`: a session whose assistant turns are copies of an earlier session's on the same host (80% or more), written by the recorder when a thread is moved to background. On 2026-09-06 one replay held 285 copied turns, 86K tokens of the day's 550K.
+- `assessor`: an assessment call recorded as dialog. Running the assessor through Codex put each call's prompt into the day's record, so on 2026-09-08 seven such sessions held 1.21M of the day's 1.23M estimated tokens and the record carried the previous day's inside the current one. The calls no longer record (`TJAI_DIALOG_TURNS=0` in `call_codex`); the classification covers what was recorded before that.
 
 Assessment reads `session` and `codex`; `headless` and `replay` are dropped and named on the entry. The recorder defects behind the last two are to be fixed at the source; the classification holds until they are.
 
