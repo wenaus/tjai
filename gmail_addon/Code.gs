@@ -368,7 +368,7 @@ function extractMeetingTitle_(subject, body) {
 function extractDateTime_(subject, body, msgYear, senderTz, msgDate) {
   var defaultTz = senderTz || DEFAULT_TIMEZONE;
   // Try subject first
-  var result = parseDateTimeText_(subject, msgYear, defaultTz);
+  var result = parseDateTimeText_(subject, msgYear, defaultTz, msgDate);
   if (result) return result;
 
   // Body: prefer lines with "Date" label
@@ -377,12 +377,12 @@ function extractDateTime_(subject, body, msgYear, senderTz, msgDate) {
     var lines = body.split(/\n/);
     for (var i = 0; i < lines.length; i++) {
       if (/^\s*Date/i.test(lines[i])) {
-        result = parseDateTimeText_(lines[i], msgYear, defaultTz);
+        result = parseDateTimeText_(lines[i], msgYear, defaultTz, msgDate);
         if (result) return result;
       }
     }
     // Fall back to any line in body
-    result = parseDateTimeText_(body, msgYear, defaultTz);
+    result = parseDateTimeText_(body, msgYear, defaultTz, msgDate);
   }
 
   // Last: a date written relative to when the message was sent.
@@ -548,6 +548,23 @@ function resolveRelativeDate_(text, msgDate) {
 
 
 /**
+ * Year for a month/day written without one.
+ *
+ * The message's year is right almost always; the exception is a date that
+ * falls well before the message — a December mail about a January meeting —
+ * which is next year's. Two months back is the line: closer than that and it
+ * is last week's minutes, not a meeting a year in the past.
+ */
+function yearFor_(month, day, fallbackYear, anchor) {
+  if (!anchor) return fallbackYear;
+  var a = Utilities.formatDate(anchor, DEFAULT_TIMEZONE, 'yyyy-MM-dd').split('-');
+  var ay = parseInt(a[0]);
+  var daysBehind = (Date.UTC(ay, parseInt(a[1]) - 1, parseInt(a[2])) - Date.UTC(ay, month, day)) / 86400000;
+  return daysBehind > 60 ? ay + 1 : ay;
+}
+
+
+/**
  * Find a date and a time independently and combine them.
  *
  * The combined patterns require the two to sit adjacent in one expression.
@@ -557,10 +574,28 @@ function resolveRelativeDate_(text, msgDate) {
  * pattern lands when it matched something that turned out not to be a date —
  * an ISO date read as a numeric one, say — so a misread never costs the parse.
  */
-function decoupledDateTime_(text, fallbackYear, defaultTz) {
-  var loneDate = parseDateOnly_(text, fallbackYear);
+function decoupledDateTime_(text, fallbackYear, defaultTz, anchor) {
   var loneTime = findTimeInText_(text);
-  if (!loneDate || !loneTime) return null;
+  if (!loneTime) return null;
+
+  // The sentence carrying the time is where its date is, if it has one: a
+  // deadline named earlier in the mail must not lend its date to the meeting.
+  var loneDate = null;
+  var segments = text.split(/(?<=[.!?])\s+|\n+/);
+  for (var i = 0; i < segments.length; i++) {
+    var segTime = findTimeInText_(segments[i]);
+    if (!segTime) continue;
+    loneTime = segTime;
+    loneDate = parseDateOnly_(segments[i], fallbackYear, anchor);
+    if (!loneDate && anchor) {
+      var rel = resolveRelativeDate_(segments[i], anchor);
+      if (rel) loneDate = buildDateOnlyResult_(rel.year, rel.month, rel.day);
+    }
+    break;
+  }
+  if (!loneDate) loneDate = parseDateOnly_(text, fallbackYear, anchor);
+  if (!loneDate) return null;
+
   var ld = Utilities.formatDate(new Date(loneDate.timestamp * 1000),
                                 DEFAULT_TIMEZONE, 'yyyy-MM-dd').split('-');
   return buildDateTimeResult_(parseInt(ld[0]), parseInt(ld[1]) - 1, parseInt(ld[2]),
@@ -574,7 +609,7 @@ function decoupledDateTime_(text, fallbackYear, defaultTz) {
  * Handles: [Dayname, ]Month DD[, YYYY][,] [at ]H[:MM] a.m./p.m. [(TZ)]
  * Returns {timestamp, displayDate, displayTime, tzInfo} or null.
  */
-function parseDateTimeText_(text, fallbackYear, defaultTz) {
+function parseDateTimeText_(text, fallbackYear, defaultTz, anchor) {
   if (!text) return null;
   defaultTz = defaultTz || DEFAULT_TIMEZONE;
   text = normalizeTimeRanges_(text);
@@ -690,7 +725,7 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
     if (match) { isNumeric = true; is24h = true; }
   }
 
-  if (!match) return decoupledDateTime_(text, fallbackYear, defaultTz);
+  if (!match) return decoupledDateTime_(text, fallbackYear, defaultTz, anchor);
 
   // Check for IANA timezone path near the matched time (e.g., "Europe/Zurich", "America/New_York")
   var ianaMatch = text.match(/\b(Africa|America|Antarctica|Asia|Atlantic|Australia|Europe|Indian|Pacific)\/[A-Za-z_]+(?:\/[A-Za-z_]+)?\b/);
@@ -700,10 +735,10 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
   if (isNumeric) {
     var numMonth = parseInt(match[1]) - 1;  // 0-indexed
     var numDay = parseInt(match[2]);
-    var numYear = match[3] ? parseInt(match[3]) : fallbackYear;
+    var numYear = match[3] ? parseInt(match[3]) : yearFor_(numMonth, numDay, fallbackYear, anchor);
     if (numYear < 100) numYear += 2000;  // handle 2-digit year
     if (numMonth < 0 || numMonth > 11 || numDay < 1 || numDay > 31) {
-      return decoupledDateTime_(text, fallbackYear, defaultTz);
+      return decoupledDateTime_(text, fallbackYear, defaultTz, anchor);
     }
 
     var numHour = parseInt(match[4]);
@@ -734,10 +769,10 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
   }
 
   var month = monthIndex_(match[1]);
-  if (month === undefined) return decoupledDateTime_(text, fallbackYear, defaultTz);
+  if (month === undefined) return decoupledDateTime_(text, fallbackYear, defaultTz, anchor);
 
   var day = parseInt(match[2]);
-  var year = match[3] ? parseInt(match[3]) : fallbackYear;
+  var year = match[3] ? parseInt(match[3]) : yearFor_(month, day, fallbackYear, anchor);
   var hour = parseInt(match[4]);
   var minute = parseInt(match[5] || '0');
 
@@ -770,7 +805,7 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
  */
 function extractDateOnly_(subject, body, fallbackYear, msgDate) {
   body = stripMailHeaders_(body);
-  var result = parseDateOnly_(subject, fallbackYear);
+  var result = parseDateOnly_(subject, fallbackYear, msgDate);
   if (result) return result;
 
   if (body) {
@@ -778,11 +813,11 @@ function extractDateOnly_(subject, body, fallbackYear, msgDate) {
     // Prefer lines with "Date" label
     for (var i = 0; i < lines.length; i++) {
       if (/^\s*Date/i.test(lines[i])) {
-        result = parseDateOnly_(lines[i], fallbackYear);
+        result = parseDateOnly_(lines[i], fallbackYear, msgDate);
         if (result) return result;
       }
     }
-    result = parseDateOnly_(body, fallbackYear);
+    result = parseDateOnly_(body, fallbackYear, msgDate);
   }
   if (!result && msgDate) {
     var rel2 = resolveRelativeDate_(subject, msgDate) || resolveRelativeDate_(body, msgDate);
@@ -798,7 +833,7 @@ function extractDateOnly_(subject, body, fallbackYear, msgDate) {
  * Handles: Month DD[, YYYY] / DD Month [YYYY]
  * Returns {timestamp (noon Eastern), displayDate} or null.
  */
-function parseDateOnly_(text, fallbackYear) {
+function parseDateOnly_(text, fallbackYear, anchor) {
   if (!text) return null;
 
   var month, day, year;
@@ -816,7 +851,7 @@ function parseDateOnly_(text, fallbackYear) {
     month = monthIndex_(match[1]);
     if (month !== undefined) {
       day = parseInt(match[2]);
-      year = match[3] ? parseInt(match[3]) : fallbackYear;
+      year = match[3] ? parseInt(match[3]) : yearFor_(month, day, fallbackYear, anchor);
       return buildDateOnlyResult_(year, month, day);
     }
   }
@@ -834,7 +869,7 @@ function parseDateOnly_(text, fallbackYear) {
     month = monthIndex_(match[2]);
     if (month !== undefined) {
       day = parseInt(match[1]);
-      year = match[3] ? parseInt(match[3]) : fallbackYear;
+      year = match[3] ? parseInt(match[3]) : yearFor_(month, day, fallbackYear, anchor);
       return buildDateOnlyResult_(year, month, day);
     }
   }
@@ -848,7 +883,7 @@ function parseDateOnly_(text, fallbackYear) {
   // Numeric M/D[/YY[YY]], read US-order to match the combined patterns.
   match = text.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
   if (match) {
-    year = match[3] ? parseInt(match[3]) : fallbackYear;
+    year = match[3] ? parseInt(match[3]) : yearFor_(month, day, fallbackYear, anchor);
     if (year < 100) year += 2000;
     return buildDateOnlyResult_(year, parseInt(match[1]) - 1, parseInt(match[2]));
   }

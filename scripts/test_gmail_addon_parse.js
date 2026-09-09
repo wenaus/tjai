@@ -183,5 +183,25 @@ for (const [name, body, want] of [
 // would be worse than declining.
 eq('relative declines without an anchor', whenFull('meeting this Friday at 1PM ET'), 'NULL');
 
+
+// A date with no written year takes the message's year, except when that puts
+// it well in the past: a December mail about a January meeting is next year's.
+const DEC = new Date(Date.UTC(2026, 11, 15, 15, 0));
+(function () {
+  const r = extractDateTime_('meeting', 'meeting January 8 at 1PM ET', 2026, null, DEC);
+  eq('December mail, January meeting rolls forward',
+     r ? new Date(r.timestamp * 1000).toLocaleString('en-US', { timeZone: ET, year: 'numeric', month: 'short', day: 'numeric' }) : 'NULL',
+     'Jan 8, 2027');
+})();
+eq('December mail, recent past stays this year',
+   whenFull('minutes of the November 20 meeting at 1PM ET', DEC), 'Nov 20, 1:00 PM');
+
+// The time pairs with the date in its own sentence, and a day name there beats
+// a date elsewhere — a deadline must not lend its date to the meeting.
+eq('deadline date does not pair with meeting time',
+   whenFull('Abstract deadline is September 30. The meeting is Friday at 1PM ET.', MSG), AT_ONE);
+eq('digest keeps its first meeting',
+   whenFull('Monday Sep 14: call at 10:00 AM ET.\nFriday Sep 18: meeting at 1:00 PM ET.'), 'Sep 14, 10:00 AM');
+
 console.log(failed ? `\n${failed} failed` : '\nall passed');
 process.exit(failed ? 1 : 0);
