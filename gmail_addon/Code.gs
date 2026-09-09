@@ -148,13 +148,28 @@ var WINDOWS_TZ_ = {
   'GMT': 'Etc/GMT'
 };
 
-// Month name → JS month index (0-based).
-var MONTHS_ = {
-  'january': 0, 'february': 1, 'march': 2, 'april': 3, 'may': 4, 'june': 5,
-  'july': 6, 'august': 7, 'september': 8, 'october': 9, 'november': 10, 'december': 11,
-  'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'jun': 5, 'jul': 6, 'aug': 7,
-  'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11
-};
+// Months are matched by prefix: any three or more leading characters of a
+// month name is that month, so Sep, Sept, Septem and September all resolve.
+// Enumerating abbreviations missed the ones people actually write — "Sept"
+// was absent, which failed the whole date parse and left the card with no
+// event at all.
+var MONTH_NAMES_ = ['January', 'February', 'March', 'April', 'May', 'June',
+                    'July', 'August', 'September', 'October', 'November', 'December'];
+
+// Three characters is the shortest unambiguous prefix: Mar and May share two.
+var MONTH_MIN_CHARS_ = 3;
+
+/**
+ * Month index (0-based) for a name or any prefix of it, or undefined.
+ */
+function monthIndex_(text) {
+  var t = String(text || '').toLowerCase().replace(/\.$/, '');
+  if (t.length < MONTH_MIN_CHARS_) return undefined;
+  for (var i = 0; i < MONTH_NAMES_.length; i++) {
+    if (MONTH_NAMES_[i].toLowerCase().indexOf(t) === 0) return i;
+  }
+  return undefined;
+}
 
 // Common timezone abbreviations → IANA.
 var TZ_ABBREV_ = {
@@ -166,7 +181,19 @@ var TZ_ABBREV_ = {
   'CET': 'Europe/Zurich', 'CEST': 'Europe/Zurich'
 };
 
-var MONTH_PAT_ = 'January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec';
+// Every prefix of every month name, longest first, so the alternation takes
+// the longest form and never leaves a trailing fragment ("Sept" matching as
+// "Sep" left a stray "t" that broke the day group).
+var MONTH_PAT_ = (function () {
+  var alts = [];
+  for (var i = 0; i < MONTH_NAMES_.length; i++) {
+    var name = MONTH_NAMES_[i];
+    for (var len = name.length; len >= MONTH_MIN_CHARS_; len--) {
+      alts.push(name.slice(0, len));
+    }
+  }
+  return alts.join('|');
+})();
 
 
 function getApiKey_() {
@@ -193,6 +220,63 @@ function stripSignature_(text) {
   if (match) return text.substring(0, match.index);
   return text;
 }
+
+/**
+ * Remove the lines by which a message describes its own transmission: the
+ * Gmail attribution ("On <date> ... wrote:"), forwarded and original-message
+ * separators, and contiguous runs of mail header lines.
+ *
+ * Quoted content is kept. A reply usually carries the meeting details inside
+ * the quoted original, so discarding the quote loses the event; what has to go
+ * is only the timestamps of the messages themselves, which otherwise win the
+ * body scan and put the time the mail was sent on the calendar.
+ *
+ * A lone "Date:" line survives: an announcement that labels its date that way
+ * is a meeting detail, and extractDateTime_ deliberately prefers it. Two or
+ * more header lines together are a header block.
+ */
+function stripMailHeaders_(text) {
+  if (!text) return text;
+  var lines = text.split(/\n/);
+  var headerish = /^[\s>]*(?:From|Sent|Date|To|Cc|Bcc|Subject|Reply-To)\s*:/i;
+  var separator = /^[\s>]*-{2,}\s*(?:Forwarded message|Original Message)\s*-{2,}\s*$/i;
+  var wroteEnd = /\bwrote:\s*$/i;
+  var onStart = /^[\s>]*On\b/i;
+
+  var drop = [];
+  var i;
+  for (i = 0; i < lines.length; i++) drop.push(false);
+
+  for (i = 0; i < lines.length; i++) {
+    if (separator.test(lines[i])) { drop[i] = true; continue; }
+
+    // Attribution, which wraps across up to three lines in plain text.
+    if (wroteEnd.test(lines[i])) {
+      for (var back = 0; back < 3 && i - back >= 0; back++) {
+        drop[i - back] = true;
+        if (onStart.test(lines[i - back])) break;
+      }
+      continue;
+    }
+
+    if (headerish.test(lines[i])) {
+      var j = i, run = 0;
+      while (j < lines.length && (headerish.test(lines[j]) || !lines[j].trim())) {
+        if (headerish.test(lines[j])) run++;
+        j++;
+      }
+      if (run >= 2) {
+        for (var k = i; k < j; k++) if (headerish.test(lines[k])) drop[k] = true;
+      }
+      i = j - 1;
+    }
+  }
+
+  var kept = [];
+  for (i = 0; i < lines.length; i++) if (!drop[i]) kept.push(lines[i]);
+  return kept.join('\n');
+}
+
 
 /**
  * Extract the best Zoom URL from text (location or description).
@@ -289,6 +373,7 @@ function extractDateTime_(subject, body, msgYear, senderTz) {
 
   // Body: prefer lines with "Date" label
   if (body) {
+    body = stripMailHeaders_(body);
     var lines = body.split(/\n/);
     for (var i = 0; i < lines.length; i++) {
       if (/^\s*Date/i.test(lines[i])) {
@@ -315,7 +400,7 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
 
   var regex = new RegExp(
     '(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\\s*)?' +
-    '(' + MONTH_PAT_ + ')' +                              // (1) month
+    '(' + MONTH_PAT_ + ')\\.?' +                              // (1) month
     '\\s+(\\d{1,2})(?:st|nd|rd|th)?' +                       // (2) day + optional ordinal
     '(?:,?\\s*(\\d{4}))?' +                                // (3) optional year
     ',?\\s+(?:(?:at|from)\\s+)?' +                           // separator
@@ -332,7 +417,7 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
     var euRegex = new RegExp(
       '(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\\s*)?' +
       '(\\d{1,2})(?:st|nd|rd|th)?\\s+' +                      // (1) day + optional ordinal
-      '(' + MONTH_PAT_ + ')' +                                 // (2) month
+      '(' + MONTH_PAT_ + ')\\.?' +                                 // (2) month
       '(?:,?\\s*(\\d{4}))?' +                                  // (3) optional year
       '(?:[,\\s\\-]+|\\s+(?:(?:at|from)\\s+))' +                // separator (comma, dash, or "at")
       '(\\d{1,2})(?::(\\d{2}))?\\s*' +                         // (4) hour (5) min
@@ -355,7 +440,7 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
     var eu24Regex = new RegExp(
       '(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\\s*)?' +
       '(\\d{1,2})(?:st|nd|rd|th)?\\s+' +                      // (1) day
-      '(' + MONTH_PAT_ + ')' +                                 // (2) month
+      '(' + MONTH_PAT_ + ')\\.?' +                                 // (2) month
       '(?:,?\\s*(\\d{4}))?' +                                  // (3) optional year
       '(?:[,\\s\\-]+|\\s+(?:(?:at|from)\\s+))' +                // separator
       '(\\d{1,2}):(\\d{2})' +                                  // (4) hour (5) min — colon required
@@ -375,7 +460,7 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
   if (!match) {
     var us24Regex = new RegExp(
       '(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\\s*)?' +
-      '(' + MONTH_PAT_ + ')' +                                 // (1) month
+      '(' + MONTH_PAT_ + ')\\.?' +                                 // (1) month
       '\\s+(\\d{1,2})(?:st|nd|rd|th)?' +                       // (2) day
       '(?:,?\\s*(\\d{4}))?' +                                  // (3) optional year
       ',?\\s+(?:(?:at|from)\\s+)?' +                             // separator
@@ -430,7 +515,7 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
   var ianaMatch = text.match(/\b(Africa|America|Antarctica|Asia|Atlantic|Australia|Europe|Indian|Pacific)\/[A-Za-z_]+(?:\/[A-Za-z_]+)?\b/);
   var ianaTz = ianaMatch ? ianaMatch[0] : null;
 
-  // Numeric date: month and day are already numeric, no MONTHS_ lookup needed
+  // Numeric date: month and day are already numeric, no month-name lookup needed
   if (isNumeric) {
     var numMonth = parseInt(match[1]) - 1;  // 0-indexed
     var numDay = parseInt(match[2]);
@@ -465,7 +550,7 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
     };
   }
 
-  var month = MONTHS_[match[1].toLowerCase()];
+  var month = monthIndex_(match[1]);
   if (month === undefined) return null;
 
   var day = parseInt(match[2]);
@@ -508,6 +593,7 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
  * Returns {timestamp (noon), displayDate} or null.
  */
 function extractDateOnly_(subject, body, fallbackYear) {
+  body = stripMailHeaders_(body);
   var result = parseDateOnly_(subject, fallbackYear);
   if (result) return result;
 
@@ -539,14 +625,14 @@ function parseDateOnly_(text, fallbackYear) {
   // US order: [Dayname, ]Month DD[, YYYY]
   var usRegex = new RegExp(
     '(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\\s*)?' +
-    '(' + MONTH_PAT_ + ')' +
+    '(' + MONTH_PAT_ + ')\\.?' +
     '\\s+(\\d{1,2})(?:st|nd|rd|th)?' +
     '(?:,?\\s*(\\d{4}))?',
     'i'
   );
   var match = text.match(usRegex);
   if (match) {
-    month = MONTHS_[match[1].toLowerCase()];
+    month = monthIndex_(match[1]);
     if (month !== undefined) {
       day = parseInt(match[2]);
       year = match[3] ? parseInt(match[3]) : fallbackYear;
@@ -558,13 +644,13 @@ function parseDateOnly_(text, fallbackYear) {
   var euRegex = new RegExp(
     '(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\\s*)?' +
     '(\\d{1,2})(?:st|nd|rd|th)?\\s+' +
-    '(' + MONTH_PAT_ + ')' +
+    '(' + MONTH_PAT_ + ')\\.?' +
     '(?:,?\\s*(\\d{4}))?',
     'i'
   );
   match = text.match(euRegex);
   if (match) {
-    month = MONTHS_[match[2].toLowerCase()];
+    month = monthIndex_(match[2]);
     if (month !== undefined) {
       day = parseInt(match[1]);
       year = match[3] ? parseInt(match[3]) : fallbackYear;
@@ -738,6 +824,10 @@ function onGmailMessage(e) {
 
       if (foundZoom || foundIndico || foundDate) {
         var parts = [];
+        var fallbackTitle = extractMeetingTitle_(scanSubj, scanBody) ||
+            scanSubj.replace(/\[\[[^\]]*\]\]\s*/g, '')
+                    .replace(/^(?:Re|Fwd|Fw)\s*:\s*/gi, '').trim();
+        if (fallbackTitle) parts.push(fallbackTitle);
         if (foundZoom) parts.push('[zoom](' + foundZoom + ')');
         if (foundIndico) parts.push('[indico](' + foundIndico + ')');
         var prefillDate = today;
