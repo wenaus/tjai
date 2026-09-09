@@ -365,7 +365,7 @@ function extractMeetingTitle_(subject, body) {
  * "Wednesday, February 25, at 11:00 a.m. (EST)".
  * Returns {timestamp, displayDate, displayTime, tzInfo} or null.
  */
-function extractDateTime_(subject, body, msgYear, senderTz) {
+function extractDateTime_(subject, body, msgYear, senderTz, msgDate) {
   var defaultTz = senderTz || DEFAULT_TIMEZONE;
   // Try subject first
   var result = parseDateTimeText_(subject, msgYear, defaultTz);
@@ -385,7 +385,187 @@ function extractDateTime_(subject, body, msgYear, senderTz) {
     result = parseDateTimeText_(body, msgYear, defaultTz);
   }
 
+  // Last: a date written relative to when the message was sent.
+  if (!result && msgDate) {
+    var texts = [subject, body];
+    for (var s2 = 0; s2 < texts.length && !result; s2++) {
+      if (!texts[s2]) continue;
+      var rel = resolveRelativeDate_(texts[s2], msgDate);
+      var relTime = findTimeInText_(normalizeTimeRanges_(texts[s2]));
+      if (rel && relTime) {
+        result = buildDateTimeResult_(rel.year, rel.month, rel.day,
+                                      relTime.hour, relTime.minute,
+                                      relTime.tzName || defaultTz);
+      }
+    }
+  }
+
   return result;
+}
+
+
+var TZ_PAT_ = '(?:\\s*\\(?(E[SD]T|C[SD]T|M[SD]T|P[SD]T|ET|CT|MT|PT|UTC|GMT|CES?T)\\)?)?';
+
+
+/**
+ * Collapse a time range to its start, carrying the meridiem back.
+ *
+ * "1:00-2:00 PM" names one o'clock in the afternoon, but the am/pm sits on the
+ * end of the range, so the start was read bare and came out as 1:00 AM — a
+ * wrong entry rather than a missing one. A start that already carries its own
+ * meridiem is left alone.
+ */
+function normalizeTimeRanges_(text) {
+  if (!text) return text;
+  // The start must look like a time: either it carries minutes, or "at"/"from"
+  // introduces it. A bare number would otherwise swallow a day of the month —
+  // "September 11 - 1:00 PM" read 11 as the start of a range and returned
+  // eleven at night.
+  var end = '\\s*(?:[-–—]|\\bto\\b)\\s*\\d{1,2}(?::\\d{2})?\\s*([ap]\\.?m\\.?)';
+  return text
+    .replace(new RegExp('(\\d{1,2}:\\d{2})(?!\\s*[ap]\\.?m)' + end, 'gi'), '$1 $2')
+    .replace(new RegExp('\\b(at|from)\\s+(\\d{1,2}(?::\\d{2})?)(?!\\s*[ap]\\.?m)' + end, 'gi'),
+             '$1 $2 $3');
+}
+
+
+/**
+ * Find a time of day anywhere in the text.
+ *
+ * Used when a date and a time are both present but not adjacent, which is how
+ * announcements usually write them. Returns {hour, minute, tzName} or null.
+ */
+function findTimeInText_(text) {
+  if (!text) return null;
+  var tzOf = function (abbr) {
+    return abbr ? (TZ_ABBREV_[abbr.toUpperCase()] || null) : null;
+  };
+  var m;
+
+  // H[:MM] am/pm — the least ambiguous form, so it wins.
+  m = text.match(new RegExp('\\b(\\d{1,2})(?::(\\d{2}))?\\s*(a\\.?m\\.?|p\\.?m\\.?)' + TZ_PAT_, 'i'));
+  if (m) {
+    var h = parseInt(m[1]) % 12;
+    if (/^p/i.test(m[3])) h += 12;
+    return { hour: h, minute: m[2] ? parseInt(m[2]) : 0, tzName: tzOf(m[4]) };
+  }
+
+  m = text.match(new RegExp('\\b(noon|midday|midnight)\\b' + TZ_PAT_, 'i'));
+  if (m) {
+    return { hour: /midnight/i.test(m[1]) ? 0 : 12, minute: 0, tzName: tzOf(m[2]) };
+  }
+
+  m = text.match(new RegExp('\\b([01]?\\d|2[0-3]):([0-5]\\d)\\b' + TZ_PAT_, 'i'));
+  if (m) {
+    return { hour: parseInt(m[1]), minute: parseInt(m[2]), tzName: tzOf(m[3]) };
+  }
+
+  // Bare four digits are a time only when introduced by "at" or carrying a
+  // timezone; otherwise meeting IDs, years and phone numbers would read as one.
+  m = text.match(new RegExp('\\bat\\s+([01]\\d|2[0-3])([0-5]\\d)\\b' + TZ_PAT_, 'i'));
+  if (m) return { hour: parseInt(m[1]), minute: parseInt(m[2]), tzName: tzOf(m[3]) };
+  m = text.match(new RegExp('\\b([01]\\d|2[0-3])([0-5]\\d)\\s*\\(?(E[SD]T|C[SD]T|M[SD]T|P[SD]T|ET|CT|MT|PT|UTC|GMT|CES?T)\\)?', 'i'));
+  if (m) return { hour: parseInt(m[1]), minute: parseInt(m[2]), tzName: tzOf(m[3]) };
+
+  return null;
+}
+
+
+/**
+ * Assemble the parse result for a wall-clock time in a named timezone.
+ */
+function buildDateTimeResult_(year, month, day, hour, minute, tzName) {
+  var timestamp = dateInTimezone_(year, month, day, hour, minute, tzName);
+  var displayD = new Date(timestamp * 1000);
+  return {
+    timestamp: timestamp,
+    displayDate: Utilities.formatDate(displayD, DEFAULT_TIMEZONE, 'EEE MMM d, yyyy'),
+    displayTime: Utilities.formatDate(displayD, DEFAULT_TIMEZONE, 'HH:mm'),
+    tzInfo: Utilities.formatDate(displayD, DEFAULT_TIMEZONE, 'z')
+  };
+}
+
+
+var DAY_NAMES_ = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday',
+                  'friday', 'saturday'];
+
+
+/**
+ * Resolve a date written relative to when the message was sent.
+ *
+ * "this coming Friday" and "tomorrow" are clear to a reader holding the mail
+ * and meaningless without it, so this is the one parse that needs the
+ * message's own date. Anchored in the app timezone, so tomorrow is the
+ * reader's tomorrow.
+ *
+ * A day name resolves to its next occurrence after the message date, never the
+ * same day, and "next Friday" is read the same as "this Friday" — the sooner
+ * reading is the one usually meant, and a date that is too early is easier to
+ * notice than one a week late. Returns {year, month, day} or null.
+ */
+function resolveRelativeDate_(text, msgDate) {
+  if (!text || !msgDate) return null;
+
+  var stamp = Utilities.formatDate(msgDate, DEFAULT_TIMEZONE, 'yyyy-MM-dd').split('-');
+  var base = new Date(Date.UTC(parseInt(stamp[0]), parseInt(stamp[1]) - 1, parseInt(stamp[2])));
+  var out = function (d) {
+    return { year: d.getUTCFullYear(), month: d.getUTCMonth(), day: d.getUTCDate() };
+  };
+
+  if (/\btoday\b|\btonight\b/i.test(text)) return out(base);
+  if (/\btomorrow\b/i.test(text)) {
+    base.setUTCDate(base.getUTCDate() + 1);
+    return out(base);
+  }
+
+  // A bare day of the month, as in "Friday the 11th": more specific than the
+  // day name beside it, so it is tried first.
+  var dayNum = text.match(/\bthe\s+(\d{1,2})(?:st|nd|rd|th)\b/i);
+  if (dayNum) {
+    var d = parseInt(dayNum[1]);
+    if (d >= 1 && d <= 31) {
+      var y = base.getUTCFullYear(), m = base.getUTCMonth();
+      if (d < base.getUTCDate()) {
+        m += 1;
+        if (m > 11) { m = 0; y += 1; }
+      }
+      return { year: y, month: m, day: d };
+    }
+  }
+
+  var named = text.match(new RegExp(
+    '\\b(?:this\\s+|next\\s+|coming\\s+|this\\s+coming\\s+)?(' + DAY_NAMES_.join('|') + ')\\b', 'i'));
+  if (named) {
+    var want = DAY_NAMES_.indexOf(named[1].toLowerCase());
+    var delta = (want - base.getUTCDay() + 7) % 7;
+    if (delta === 0) delta = 7;
+    base.setUTCDate(base.getUTCDate() + delta);
+    return out(base);
+  }
+
+  return null;
+}
+
+
+/**
+ * Find a date and a time independently and combine them.
+ *
+ * The combined patterns require the two to sit adjacent in one expression.
+ * Announcements commonly label them on separate lines, a sentence may give the
+ * time first, and a separator the patterns do not anticipate breaks the match
+ * even when both parts are plainly present. This is also where a combined
+ * pattern lands when it matched something that turned out not to be a date —
+ * an ISO date read as a numeric one, say — so a misread never costs the parse.
+ */
+function decoupledDateTime_(text, fallbackYear, defaultTz) {
+  var loneDate = parseDateOnly_(text, fallbackYear);
+  var loneTime = findTimeInText_(text);
+  if (!loneDate || !loneTime) return null;
+  var ld = Utilities.formatDate(new Date(loneDate.timestamp * 1000),
+                                DEFAULT_TIMEZONE, 'yyyy-MM-dd').split('-');
+  return buildDateTimeResult_(parseInt(ld[0]), parseInt(ld[1]) - 1, parseInt(ld[2]),
+                              loneTime.hour, loneTime.minute,
+                              loneTime.tzName || defaultTz);
 }
 
 
@@ -397,6 +577,7 @@ function extractDateTime_(subject, body, msgYear, senderTz) {
 function parseDateTimeText_(text, fallbackYear, defaultTz) {
   if (!text) return null;
   defaultTz = defaultTz || DEFAULT_TIMEZONE;
+  text = normalizeTimeRanges_(text);
 
   var regex = new RegExp(
     '(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\\s*)?' +
@@ -509,7 +690,7 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
     if (match) { isNumeric = true; is24h = true; }
   }
 
-  if (!match) return null;
+  if (!match) return decoupledDateTime_(text, fallbackYear, defaultTz);
 
   // Check for IANA timezone path near the matched time (e.g., "Europe/Zurich", "America/New_York")
   var ianaMatch = text.match(/\b(Africa|America|Antarctica|Asia|Atlantic|Australia|Europe|Indian|Pacific)\/[A-Za-z_]+(?:\/[A-Za-z_]+)?\b/);
@@ -521,7 +702,9 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
     var numDay = parseInt(match[2]);
     var numYear = match[3] ? parseInt(match[3]) : fallbackYear;
     if (numYear < 100) numYear += 2000;  // handle 2-digit year
-    if (numMonth < 0 || numMonth > 11 || numDay < 1 || numDay > 31) return null;
+    if (numMonth < 0 || numMonth > 11 || numDay < 1 || numDay > 31) {
+      return decoupledDateTime_(text, fallbackYear, defaultTz);
+    }
 
     var numHour = parseInt(match[4]);
     var numMinute = parseInt(match[5] || '0');
@@ -551,7 +734,7 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
   }
 
   var month = monthIndex_(match[1]);
-  if (month === undefined) return null;
+  if (month === undefined) return decoupledDateTime_(text, fallbackYear, defaultTz);
 
   var day = parseInt(match[2]);
   var year = match[3] ? parseInt(match[3]) : fallbackYear;
@@ -573,14 +756,7 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
     tzName = ianaTz;
   }
 
-  var timestamp = dateInTimezone_(year, month, day, hour, minute, tzName);
-  var displayD = new Date(timestamp * 1000);
-  return {
-    timestamp: timestamp,
-    displayDate: Utilities.formatDate(displayD, DEFAULT_TIMEZONE, 'EEE MMM d, yyyy'),
-    displayTime: Utilities.formatDate(displayD, DEFAULT_TIMEZONE, 'HH:mm'),
-    tzInfo: Utilities.formatDate(displayD, DEFAULT_TIMEZONE, 'z')
-  };
+  return buildDateTimeResult_(year, month, day, hour, minute, tzName);
 }
 
 
@@ -592,7 +768,7 @@ function parseDateTimeText_(text, fallbackYear, defaultTz) {
  * Extract a date (no time) from subject, then body.
  * Returns {timestamp (noon), displayDate} or null.
  */
-function extractDateOnly_(subject, body, fallbackYear) {
+function extractDateOnly_(subject, body, fallbackYear, msgDate) {
   body = stripMailHeaders_(body);
   var result = parseDateOnly_(subject, fallbackYear);
   if (result) return result;
@@ -608,6 +784,11 @@ function extractDateOnly_(subject, body, fallbackYear) {
     }
     result = parseDateOnly_(body, fallbackYear);
   }
+  if (!result && msgDate) {
+    var rel2 = resolveRelativeDate_(subject, msgDate) || resolveRelativeDate_(body, msgDate);
+    if (rel2) result = buildDateOnlyResult_(rel2.year, rel2.month, rel2.day);
+  }
+
   return result;
 }
 
@@ -656,6 +837,20 @@ function parseDateOnly_(text, fallbackYear) {
       year = match[3] ? parseInt(match[3]) : fallbackYear;
       return buildDateOnlyResult_(year, month, day);
     }
+  }
+
+  // ISO, as automated mail writes it.
+  match = text.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (match) {
+    return buildDateOnlyResult_(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]));
+  }
+
+  // Numeric M/D[/YY[YY]], read US-order to match the combined patterns.
+  match = text.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+  if (match) {
+    year = match[3] ? parseInt(match[3]) : fallbackYear;
+    if (year < 100) year += 2000;
+    return buildDateOnlyResult_(year, parseInt(match[1]) - 1, parseInt(match[2]));
   }
 
   return null;
@@ -784,7 +979,7 @@ function onGmailMessage(e) {
         var title = extractMeetingTitle_(subject, bodyNoSig);
         if (!title) { diag.push('msg[' + t + ']: no title'); continue; }
 
-        var dt = extractDateTime_(subject, bodyNoSig, msgYear, senderTz);
+        var dt = extractDateTime_(subject, bodyNoSig, msgYear, senderTz, tryMsg.getDate());
         if (dt) {
           var zoomUrl = extractZoomUrl_(bodyNoSig) || extractZoomUrl_(subject);
           var indicoUrl = extractIndicoUrl_(bodyNoSig) || extractIndicoUrl_(subject);
@@ -799,7 +994,7 @@ function onGmailMessage(e) {
         // All-day fallback: date only + Indico
         var indicoUrl2 = extractIndicoUrl_(bodyNoSig) || extractIndicoUrl_(subject);
         if (indicoUrl2) {
-          var dateOnly = extractDateOnly_(subject, bodyNoSig, msgYear);
+          var dateOnly = extractDateOnly_(subject, bodyNoSig, msgYear, tryMsg.getDate());
           if (dateOnly) {
             prefill = eventToPrefill_({
               summary: title, timestamp: dateOnly.timestamp,
@@ -819,7 +1014,7 @@ function onGmailMessage(e) {
       var scanYear = message.getDate().getFullYear();
       var foundZoom = extractZoomUrl_(scanBody) || extractZoomUrl_(scanSubj);
       var foundIndico = extractIndicoUrl_(scanBody) || extractIndicoUrl_(scanSubj);
-      var foundDate = extractDateOnly_(scanSubj, scanBody, scanYear);
+      var foundDate = extractDateOnly_(scanSubj, scanBody, scanYear, message.getDate());
       var today = Utilities.formatDate(new Date(), DEFAULT_TIMEZONE, 'yyyyMMdd');
 
       if (foundZoom || foundIndico || foundDate) {

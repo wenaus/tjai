@@ -136,5 +136,52 @@ Join Zoom Meeting https://zoom.us/j/81234567890?pwd=abc
 Meeting ID: 812 3456 7890
 One tap mobile +13017158592,,81234567890#`), WANT);
 
+
+// Date and time need not sit adjacent, and a separator the combined patterns
+// do not anticipate must not lose a date that is plainly present.
+function whenFull(body, msgDate) {
+  const r = extractDateTime_('meeting', stripMailHeaders_(body), 2026, null, msgDate || null);
+  if (!r) return 'NULL';
+  return new Date(r.timestamp * 1000).toLocaleString('en-US',
+    { timeZone: ET, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+const AT_ONE = 'Sep 11, 1:00 PM';
+for (const [name, body] of [
+  ['at separator',            'meeting September 11 @ 1pm ET'],
+  ['dash separator',          'September 11 - 1:00 PM ET'],
+  ['time before date',        'meeting at 1PM ET on Friday September 11'],
+  ['separate lines',          'Date: Friday, September 11\nTime: 1:00 PM ET'],
+  ['ISO date',                'meeting 2026-09-11 at 13:00 ET'],
+  ['numeric date',            'meeting 9/11/2026 at 1:00 PM ET'],
+  ['24-hour bare',            'meeting September 11 at 1300 ET'],
+  ['indico arrow range',      '11 September 2026, 13:00 \u2192 14:00 (US/Eastern)'],
+]) eq(name, whenFull(body), AT_ONE);
+
+eq('noon', whenFull('meeting September 11 at noon ET'), 'Sep 11, 12:00 PM');
+
+// A range carries its meridiem on the end; the start must not be read bare,
+// and a day of the month must not be mistaken for the start of one.
+eq('hyphen range keeps pm', whenFull('meeting September 11, 1:00-2:00 PM ET'), AT_ONE);
+eq('en dash range keeps pm', whenFull('meeting September 11, 1:00 PM \u2013 2:00 PM ET'), AT_ONE);
+eq('day number is not a range', whenFull('September 11 - 1:00 PM ET'), AT_ONE);
+
+// Relative to the message date: Wednesday 9 September 2026.
+const MSG = new Date(Date.UTC(2026, 8, 9, 14, 0));
+for (const [name, body, want] of [
+  ['this Friday',        'meeting this Friday at 1PM ET',        AT_ONE],
+  ['this coming Friday', 'meeting this coming Friday at 1PM ET', AT_ONE],
+  ['next Friday',        'meeting next Friday at 1PM ET',        AT_ONE],
+  ['Friday the 11th',    'meeting Friday the 11th at 1PM ET',    AT_ONE],
+  ['tomorrow',           'meeting tomorrow at 1PM ET',           'Sep 10, 1:00 PM'],
+  ['today',              'meeting today at 1PM ET',              'Sep 9, 1:00 PM'],
+  ['same weekday means next week', 'meeting Wednesday at 1PM ET', 'Sep 16, 1:00 PM'],
+  ['day already past rolls forward', 'meeting the 3rd at 1PM ET', 'Oct 3, 1:00 PM'],
+]) eq(`relative: ${name}`, whenFull(body, MSG), want);
+
+// Without a message date there is nothing to anchor to, and inventing one
+// would be worse than declining.
+eq('relative declines without an anchor', whenFull('meeting this Friday at 1PM ET'), 'NULL');
+
 console.log(failed ? `\n${failed} failed` : '\nall passed');
 process.exit(failed ? 1 : 0);
