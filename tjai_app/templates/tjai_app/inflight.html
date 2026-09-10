@@ -14,8 +14,6 @@
         .head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
         .head h1 { font-size: 18px; font-weight: 600; margin: 0; color: #fff; }
         .meta { color: #8a8a8a; font-size: 12px; }
-        .meta .live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #66bb6a; margin-right: 5px; vertical-align: middle; }
-        .meta .live-dot.stale { background: #ef5350; }
         .btn { background: #2a2a2a; color: #e0e0e0; border: 1px solid #555; padding: 3px 10px; border-radius: 3px; cursor: pointer; font: inherit; font-size: 13px; }
         .btn:hover { background: #3a3a3a; }
         .btn.act { color: #9ccc65; border-color: #4a6a3a; }
@@ -49,14 +47,15 @@
 <body>
     <div class="main">
     {% if mode == 'index' %}
-        <div class="head"><h1>Inflight</h1><span class="meta" id="idx-meta">activities being worked, most recently touched first</span></div>
+        <div class="head"><h1>Inflight</h1><span class="meta" id="idx-meta">activities being worked, most recently touched first</span><button class="btn" id="idx-refresh-btn">Refresh</button></div>
         <div id="idx-list"><div class="empty">Loading…</div></div>
         <div class="err" id="idx-err"></div>
     {% else %}
         <div class="head">
             <a class="back" href="/tjai/inflight/?embed=1" title="All inflight todos">&lsaquo; inflight</a>
             <h1 id="title"></h1>
-            <span class="meta" id="meta"><span class="live-dot" id="live-dot"></span><span id="meta-text"></span></span>
+            <span class="meta" id="meta"><span id="meta-text"></span></span>
+            <button class="btn" id="refresh-btn">Refresh</button>
             <a class="btn" id="edit-btn" href="#" target="_blank" rel="noopener">Edit</a>
             <a class="btn" id="entry-btn" href="#" target="_blank" rel="noopener">Entry</a>
         </div>
@@ -100,7 +99,8 @@
                 document.getElementById('idx-err').textContent = '';
             } catch (e) { document.getElementById('idx-err').textContent = 'refresh failed: ' + e.message; }
         }
-        loadIndex(); setInterval(loadIndex, 10000);
+        loadIndex();
+        document.getElementById('idx-refresh-btn').addEventListener('click', loadIndex);
         return;
     }
 
@@ -144,18 +144,19 @@
             document.getElementById('err').textContent = '';
         } catch (e) {
             document.getElementById('err').textContent = action + ' failed: ' + e.message;
-            poll();
+            refresh();
         }
     }
 
-    async function poll() {
-        if (document.hidden || window.innerHeight === 0) return;   // page hidden, or this frame not the shown view
+    // Refresh on request only: the page is not watched continuously, so a
+    // timer polling for other people's changes bought nothing.
+    async function refresh() {
         try {
             const d = await getJson('/tjai/api/inflight/' + ref + '/state?since=' + encodeURIComponent(lastTs));
-            document.getElementById('live-dot').classList.remove('stale');
             if (d.changed) { state = d; lastTs = d.modified_ts; render(); }
+            document.getElementById('err').textContent = '';
         } catch (e) {
-            document.getElementById('live-dot').classList.add('stale');
+            document.getElementById('err').textContent = 'refresh failed: ' + e.message;
         }
     }
 
@@ -169,8 +170,7 @@
     addInput.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); addItem(); } });
 
     render();
-    setInterval(poll, 3000);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+    document.getElementById('refresh-btn').addEventListener('click', refresh);
 })();
 </script>
 </body>

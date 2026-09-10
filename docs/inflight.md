@@ -48,15 +48,15 @@ frame (index to activity and back) is mirrored into the address bar.
 
 - **Index** lists the inflight todos, most recently touched first, with
   open and done counts and time since last change. Each opens its live view
-  in place.
+  in place; Refresh re-reads the list.
 - **Live view** renders one activity:
   description, Live items each with a done button, an add-item field, Done
   items each with a reopen button, and Refs. Every action is a surgical edit
   of the current content, serialized per entry, attributed
-  `inflight:<user>` in the version history. The view polls the entry's
-  state every three seconds and re-renders when anyone has changed it, from
-  the editor, from MCP, or from another live view; a red dot means the poll
-  is failing. Edit opens the ordinary entry editor in a new tab, which
+  `inflight:<user>` in the version history. Refresh re-reads the
+  entry's state and re-renders it if anyone has changed it, from the editor,
+  from MCP, or from another live view. The view does not refresh itself: it
+  is not watched continuously, so a timer asking on its own bought nothing. Edit opens the ordinary entry editor in a new tab, which
   returns to the Capcom inflight view on save.
 - **Capcom** also shows an Inflight shelf on the left panel, one line per
   inflight todo with its open count and age; a click opens that activity in
