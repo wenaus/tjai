@@ -2,7 +2,7 @@
     <span class="menu-title">tjai</span>
     {% if current_page == "dashboard" %}<span style="color:#e0e0e0">Dash</span>{% else %}<a href="{% url 'dashboard' %}">Dash</a>{% endif %}
     <span><a href="{% url 'capcom' %}?view=feed" title="Capcom feed" {% if current_page == "capcom" %}style="color:#e0e0e0"{% endif %}>Capcom</a><a href="{% url 'capcom' %}?view=notepad&pad=notepad" title="Capcom notepad" style="margin-left:5px">N</a><a href="{% url 'capcom' %}?view=notepad&pad=pouch" title="Capcom pouch" style="margin-left:5px">P</a><a href="{% url 'capcom' %}?view=inflight" title="Inflight list" style="margin-left:5px">I</a></span>
-    {% if current_page == "diary" %}<span><span style="color:#e0e0e0">Diary</span><a href="{% url 'diary_today_edit' %}" title="Edit today's diary" style="margin-left:5px">T</a></span>{% elif current_page == "weekly" %}<span style="color:#e0e0e0">Weekly</span>{% else %}<span><a href="{% url 'diary_page' %}">Diary</a><a href="{% url 'diary_today_edit' %}" title="Edit today's diary" style="margin-left:5px">T</a></span>{% endif %}
+    {% if current_page == "weekly" %}<span style="color:#e0e0e0">Weekly</span>{% else %}<span><a href="{% url 'diary_page' %}" title="Diary list" {% if current_page == "diary" %}style="color:#e0e0e0"{% endif %}>Diary</a><a href="{% url 'diary_today_edit' %}" title="Edit today's diary" style="margin-left:5px">T</a></span>{% endif %}
     {% if current_page == "todo_bangs" %}<span style="color:#e0e0e0">!!!</span>{% else %}<a href="{% url 'todo_bangs' %}">!!!</a>{% endif %}
     <a href="{% url 'capcom' %}?view=inflight">Inflight</a>
     {% if current_page == "synopsis" %}<span style="color:#e0e0e0">Daily</span>{% else %}<a href="{% url 'daily_synopsis' %}">Daily</a>{% endif %}
