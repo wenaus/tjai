@@ -31,7 +31,7 @@ Days under about 175K tokens yield 13–27 events per 100K; the days over 200K y
 - `replay`: a session whose assistant turns are copies of an earlier session's on the same host (80% or more), written by the recorder when a thread is moved to background. On 2026-09-06 one replay held 285 copied turns, 86K tokens of the day's 550K.
 - `assessor`: an assessment call recorded as dialog. Running the assessor through Codex put each call's prompt into the day's record, so on 2026-09-08 seven such sessions held 1.21M of the day's 1.23M estimated tokens and the record carried the previous day's inside the current one. The calls no longer record (`TJAI_DIALOG_TURNS=0` in `call_codex`); the classification covers what was recorded before that.
 
-Assessment reads `session` and `codex`; `headless` and `replay` are dropped and named on the entry. The recorder defects behind the last two are to be fixed at the source; the classification holds until they are.
+Assessment reads `session` and `codex`; `headless` and `replay` are dropped and named on the entry. The recorder defects behind the last two were fixed at the source on 2026-09-09 in `computers/common/claude-hooks/record.py`: a transcript whose leading turns repeat ones already posted from this machine is a copied history and those turns are skipped, and a run started with `-p` records nothing. The classification stays for the days recorded before the fix.
 
 Sessions are packed into calls no larger than the call cap: a session over the cap gets a call of its own, the rest are packed first-fit by size up to it. The cap is the sysconfig key `assessment_call_token_cap`, 175000 estimated tokens. With that cap 2026-09-06 is three calls. Because a session is never split, the cap has a floor: the largest session of the day gets a call of its own whatever the cap says, 120K on 2026-09-06.
 
@@ -84,4 +84,4 @@ one at a time; a failed day stops nothing.
 
 ## Not covered
 
-The wasted-time factor the rules ask for (task walltime against error time) is not computed by the merge; whatever an assessor writes about it stays in that part's log. Splitting a session at task boundaries is not built; it becomes necessary only if per-session yields on the largest sessions prove thin against the small ones.
+The wasted-time factor the rules ask for (task walltime against error time) is not computed and is not planned; whatever an assessor writes about it stays in that part's log. Splitting a session at task boundaries is not built; it becomes necessary only if per-session yields on the largest sessions prove thin against the small ones.
