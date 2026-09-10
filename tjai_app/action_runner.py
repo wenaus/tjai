@@ -365,8 +365,17 @@ def create_journal_entry(action, target_date=None):
     return entry_id
 
 
-def dispatch_ai(action, entry_id=None, target_date=None, data_overrides=None):
-    """Dispatch the AI step via tj agent."""
+def dispatch_ai(action, entry_id=None, target_date=None, data_overrides=None,
+                worker_id=None):
+    """Dispatch the AI step via tj agent.
+
+    Returns True when there is nothing to dispatch or the launch was the
+    ordinary action-agent one. ``worker_id`` makes it a wrangler doer instead
+    (docs/wrangler.md): the worker id travels in the environment so
+    agent_complete.py closes that bullpen row, the process gets its own session
+    so it survives an agent restart, and the pid is returned for
+    ``record_doer_pid``.
+    """
     action_data = action.data or {}
     data = dict(action_data)
     if data_overrides:
@@ -421,6 +430,8 @@ def dispatch_ai(action, entry_id=None, target_date=None, data_overrides=None):
             env['TJAI_MCP_TOKEN'] = tok
     if action_id:
         env['TJAI_ACTION_ID'] = action_id
+    if worker_id:
+        env['TJAI_WRANGLER_WORKER_ID'] = str(worker_id)
 
     # Pass action config to tj agent via env vars
     model = data.get('model')
@@ -487,6 +498,7 @@ def dispatch_ai(action, entry_id=None, target_date=None, data_overrides=None):
     proc = subprocess.Popen(
         [sys.executable, str(TJ_PY), 'agent', prompt],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
+        start_new_session=bool(worker_id),
     )
     logger.info("tj agent launched (PID %d, non-blocking)", proc.pid)
 
@@ -521,7 +533,7 @@ def dispatch_ai(action, entry_id=None, target_date=None, data_overrides=None):
 
     thread = threading.Thread(target=_monitor, args=(proc, action_id), daemon=True)
     thread.start()
-    return True
+    return proc.pid if worker_id else True
 
 
 def load_reader_context():

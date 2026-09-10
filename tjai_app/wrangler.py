@@ -15,7 +15,7 @@ from datetime import date, timedelta
 from django.conf import settings
 from django.db import close_old_connections, connections, transaction
 
-from wrangle_ai import Worker
+from wrangle_ai import DETACHED, Worker
 from wrangle_ai.postgres import PgBullpen
 
 from .db_log_handler import DbLogHandler
@@ -191,6 +191,43 @@ def handle_mechanical(worker):
             raise RuntimeError("mechanical step failed (details in AppLog)")
         return {'action': payload['action_entry_id'],
                 'target_date': payload['target_date']}
+    finally:
+        connections.close_all()
+
+
+def handle_ai_dispatch(worker, bullpen):
+    """Journal and mechanical steps, then `tj agent` as a detached doer.
+
+    The agent outlives this handler and this process: its pid goes on the
+    worker row so a restart's reclaim leaves it alone, and agent_complete.py
+    closes the row when it exits. DETACHED tells the wrangler not to close it
+    here — without that the row would go done the moment this returns, while
+    the agent was still running (docs/wrangler.md).
+    """
+    from .action_runner import dispatch_ai
+    close_old_connections()
+    try:
+        payload = worker.payload
+        action = Entry.objects.filter(id=payload['action_uuid'],
+                                      deleted_at__isnull=True).first()
+        if not action:
+            raise RuntimeError(f"action {payload.get('action_entry_id')} not found")
+        target_date = date.fromisoformat(payload['target_date'])
+        if create_journal_entry(action, target_date=target_date) is None:
+            raise RuntimeError("journal entry creation failed")
+        if not run_mechanical(action, target_date=target_date):
+            raise RuntimeError("mechanical step failed (details in AppLog)")
+        pid = dispatch_ai(action, target_date=target_date, worker_id=worker.id)
+        if not isinstance(pid, int):
+            # No ai_prompt: nothing was launched, so this worker is finished.
+            logger.warning("ai_dispatch: %s has no ai_prompt; nothing dispatched",
+                           payload['action_entry_id'])
+            return {'action': payload['action_entry_id'],
+                    'target_date': payload['target_date'], 'dispatched': False}
+        bullpen.record_doer_pid(worker.id, pid)
+        logger.info("ai_dispatch: %s launched as pid %d, worker %s left to it",
+                    payload['action_entry_id'], pid, worker.id)
+        return DETACHED
     finally:
         connections.close_all()
 

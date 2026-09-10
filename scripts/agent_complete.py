@@ -367,6 +367,32 @@ def _research_completion_error(action_id, entry):
     )
 
 
+def _close_wrangler_worker(action_id, status, exit_code):
+    """Close this run's bullpen row when a wrangler worker launched it.
+
+    The ai_dispatch handler returns DETACHED and leaves the row running, so
+    this process is what finishes it (docs/wrangler.md). Absent the worker id
+    the launch came from the action agent and the sysconfig writes above are
+    the whole record — both worlds work through the transition.
+    """
+    worker_id = os.environ.get('TJAI_WRANGLER_WORKER_ID')
+    if not worker_id:
+        return
+    try:
+        from tjai_app.wrangler import TjaiBullpen, build_dsn
+        bullpen = TjaiBullpen(build_dsn(), identity='agent-complete')
+        if status == 'completed':
+            bullpen.mark_done(worker_id, {'action': action_id,
+                                          'exit_code': exit_code})
+        else:
+            bullpen.mark_failed(
+                worker_id, f"{action_id}: agent exited {exit_code} (details in AppLog)")
+        logger.info("worker %s marked %s", worker_id, status)
+    except Exception as e:
+        logger.error("worker %s: could not close the bullpen row: %s",
+                     worker_id, e, exc_info=True)
+
+
 def main():
     if len(sys.argv) < 2:
         logger.error("Usage: agent_complete.py <action_entry_id> [exit_code]")
@@ -489,6 +515,8 @@ def main():
     SysConfig.objects.update_or_create(
         key=f'agent_{action_id}_process_alive',
         defaults={'value': '0', 'timestamp_modified': now})
+
+    _close_wrangler_worker(action_id, status, exit_code)
 
     # Drain any queued research requests that piled up while this agent was
     # running. drain_after_complete() is a no-op if the agent is somehow
@@ -1016,12 +1044,13 @@ def _linkify_synthesis_sources(current_entry_uuid):
 
 
 
-try:
-    main()
-except Exception:
-    # Last resort: log to DB even if everything else fails
+if __name__ == '__main__':
     try:
-        logger.error("agent_complete.py crashed: %s",
-                     __import__('traceback').format_exc())
+        main()
     except Exception:
-        pass  # DB itself is down — nothing we can do
+        # Last resort: log to DB even if everything else fails
+        try:
+            logger.error("agent_complete.py crashed: %s",
+                         __import__('traceback').format_exc())
+        except Exception:
+            pass  # DB itself is down — nothing we can do
