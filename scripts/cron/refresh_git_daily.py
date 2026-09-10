@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Regenerate data/git_daily/<date>.md files from local git state.
 
-Refreshes today + yesterday (covers in-flight days and late-midnight commits)
-and heals any empty files in the last 30 days (catches past days whose file
-got written before that day's commits happened).
+Rewrites the last few days, which covers an in-flight day, a late-midnight
+commit, and a push that arrived after its day ended. Nothing older: the
+checkouts are pulled every 30 minutes and this fetches before it reads, so a
+day's file is complete once the day is over. `--days N` rewrites further back
+when a rule changes and the stored files predate it.
 
 Runs via cron; the git_activity view just reads the files.
 """
@@ -25,7 +27,10 @@ logger = logging.getLogger('refresh_git_daily')
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(levelname)s %(message)s')
 
-HEAL_LOOKBACK_DAYS = 30
+# Three days, not the thirty this once used: the wide window was compensation
+# for files written before the producer fetched and read every ref, which it
+# now does.
+HEAL_LOOKBACK_DAYS = 3
 
 
 def regen_date(target, fetch=True):
@@ -135,9 +140,6 @@ def main():
     if len(sys.argv) > 2 and sys.argv[1] == '--days':
         days = int(sys.argv[2])
 
-    # Regenerate the full recent window, not only empty files. This catches
-    # days that were non-empty but incomplete because an older refresh saw only
-    # the checked-out branch or stale local refs.
     targets = [today - timedelta(days=offset) for offset in range(days + 1)]
 
     for index, d in enumerate(targets):

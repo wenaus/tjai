@@ -25,11 +25,12 @@ repositories, every 5 minutes for `swf-*`).
 - **Producers** — a page load regenerates today's and yesterday's files from
   live git state (`_refresh_recent_git_daily`), so the page is current the
   moment it is viewed; `scripts/cron/refresh_git_daily.py` (system cron
-  02:30) additionally heals empty files up to 30 days back, covering days
-  whose file was last written before that day's commits happened;
-  `refresh_git_daily.py --days N` rebuilds that far back, which a change in
-  what counts as one of his commits requires, since every stored file predates
-  it.
+  02:30) rewrites the last three days, covering an in-flight day, a
+  late-midnight commit, and a push that arrived after its day ended. Nothing
+  older is touched: the checkouts are pulled every 30 minutes and the script
+  fetches before it reads, so a day's file is complete once the day is over.
+  `refresh_git_daily.py --days N` rewrites further back, which is how a change
+  in what counts as a commit of his reaches the days already stored.
 - **Page data** — `git_activity_data` reads the files: the grid's heatmap
   counts commit lines per file, and the newest 120 days are regrouped to
   app-level headers (`_restructure_git_md` maps tjrepo commit-message
