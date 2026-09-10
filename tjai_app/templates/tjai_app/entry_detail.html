@@ -176,6 +176,8 @@
     {% with current_page="recipes" %}{% include "tjai_app/_menu.html" %}{% endwith %}
     {% elif entry.context_id == "poetry" %}
     {% with current_page="poetry" %}{% include "tjai_app/_menu.html" %}{% endwith %}
+    {% elif entry.context_id == "diary" %}
+    {% with current_page="diary" %}{% include "tjai_app/_menu.html" %}{% endwith %}
     {% else %}
     {% with current_page="entry" %}{% include "tjai_app/_menu.html" %}{% endwith %}
     {% endif %}
