@@ -47,8 +47,13 @@ visit to those paths redirects into the Capcom view. Navigating inside the
 frame (index to activity and back) is mirrored into the address bar.
 
 - **Index** lists the inflight todos, most recently touched first, with
-  open and done counts and time since last change. Each opens its live view
-  in place; Refresh re-reads the list.
+  open and done counts and time since last change, and below them a
+  **Completed** section: the activities since closed or parked. Those carry
+  `data.activity`, stamped while the todo is inflight — a nightly agent
+  product is a todo with the same sections, entry_id shape and tag, so
+  nothing in a closed body distinguishes the two and the mark has to be set
+  in advance. A row with nothing open is dimmed, in either section. Each opens its live view in
+  place; Refresh re-reads the list.
 - **Live view** renders one activity:
   description, Live items each with a done button, an add-item field, Done
   items each with a reopen button, and Refs. Every action is a surgical edit

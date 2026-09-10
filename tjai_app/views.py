@@ -9416,12 +9416,20 @@ def _inflight_payload(entry):
     }
 
 
-def _inflight_list():
-    """Inflight todos, most recently touched first, with item counts."""
+def _inflight_list(statuses=None, activities_only=False):
+    """Activities, most recently touched first, with item counts.
+
+    Default is the ones in progress. Pass the closed and parked statuses with
+    activities_only for the historical list, which carries only todos marked
+    as activities while they were inflight — status and body shape cannot
+    tell one from a nightly agent product."""
     from . import inflight as inflight_lib
     rows = []
     qs = Entry.objects.filter(deleted_at__isnull=True, kind='todo',
-                              status=inflight_lib.STATUS).order_by('-timestamp_modified')
+                              status__in=statuses or [inflight_lib.STATUS]
+                              ).order_by('-timestamp_modified')
+    if activities_only:
+        qs = qs.filter(**{f'data__{inflight_lib.ACTIVITY_FLAG}': True})
     for e in qs:
         s = inflight_lib.summary(e.content or '')
         eid = (e.data or {}).get('entry_id') if isinstance(e.data, dict) else None
@@ -9435,8 +9443,12 @@ def _inflight_list():
             'url': f'/tjai/inflight/{quote(ref, safe="")}/?embed=1',
             'capcom_url': f'/tjai/capcom/?view=inflight&id={quote(ref, safe="")}',
             'context': e.context_id or '',
+            'status': e.status or '',
         })
     return rows
+
+
+HISTORICAL_STATUSES = ['done', 'blocked', 'archive']
 
 
 
@@ -9464,7 +9476,11 @@ def inflight_page(request, entry_id=None):
 
 @login_required
 def api_inflight_list(request):
-    return JsonResponse({'items': _inflight_list(), 'server_time': time.time()})
+    return JsonResponse({
+        'items': _inflight_list(),
+        'historical': _inflight_list(HISTORICAL_STATUSES, activities_only=True),
+        'server_time': time.time(),
+    })
 
 
 @login_required

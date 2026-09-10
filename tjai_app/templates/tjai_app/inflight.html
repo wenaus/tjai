@@ -43,6 +43,7 @@
         .row .counts .d { color: #777; }
         .row .ago { color: #8a8a8a; white-space: nowrap; min-width: 40px; text-align: right; }
         .row .ctx { color: #d8a070; font-size: 12px; }
+        .row.dim .t, .row.dim .counts { color: #8a8a8a; }
     </style>
 </head>
 <body>
@@ -92,12 +93,16 @@
             try {
                 const d = await getJson('/tjai/api/inflight/list');
                 const el = document.getElementById('idx-list');
-                if (!d.items.length) { el.innerHTML = '<div class="empty">No inflight todos. Set a todo’s status to inflight to start one.</div>'; return; }
-                el.innerHTML = d.items.map(i =>
-                    '<div class="row"><a class="t" href="' + escapeHtml(i.url) + '">' + escapeHtml(i.title) + '</a>' +
+                const history = d.historical || [];
+                if (!d.items.length && !history.length) { el.innerHTML = '<div class="empty">No inflight todos. Set a todo’s status to inflight to start one.</div>'; return; }
+                const row = (i, dim) =>
+                    '<div class="row' + (dim || !i.open ? ' dim' : '') + '"><a class="t" href="' + escapeHtml(i.url) + '">' + escapeHtml(i.title) + '</a>' +
                     (i.context ? '<span class="ctx">' + escapeHtml(i.context) + '</span>' : '') +
                     '<span class="counts">' + i.open + ' open <span class="d">· ' + i.done + ' done</span></span>' +
-                    '<span class="ago" title="' + escapeHtml(i.modified_display) + '">' + escapeHtml(i.ago) + '</span></div>').join('');
+                    '<span class="ago" title="' + escapeHtml(i.modified_display) + '">' + escapeHtml(i.ago) + '</span></div>';
+                el.innerHTML = d.items.map(i => row(i)).join('')
+                    + (history.length ? '<div class="section-head">Completed</div>'
+                       + history.map(i => row(i, true)).join('') : '');
                 document.getElementById('idx-err').textContent = '';
             } catch (e) { document.getElementById('idx-err').textContent = 'refresh failed: ' + e.message; }
         }

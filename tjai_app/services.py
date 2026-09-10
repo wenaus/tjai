@@ -2198,6 +2198,9 @@ def inflight_item(entry_id, action, text, source='mcp'):
         if not inflight_lib.is_inflight(entry):
             return {"error": f"Todo {entry_id!r} has status {entry.status!r}, not inflight",
                     "code": "BAD_REQUEST"}
+        # Mark it while it is inflight: after it closes nothing in the body
+        # tells an activity from a nightly agent product (docs/inflight.md).
+        inflight_lib.mark_activity(entry)
         try:
             if action == 'done':
                 new_content = inflight_lib.mark_done(entry.content or '', text)

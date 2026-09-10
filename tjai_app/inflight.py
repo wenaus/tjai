@@ -21,6 +21,35 @@ def is_inflight(entry):
     return entry.kind == 'todo' and entry.status == STATUS
 
 
+ACTIVITY_FLAG = 'activity'
+
+
+def mark_activity(entry):
+    """Stamp an activity so it stays recognisable after it closes.
+
+    Nightly agent products are todos with the same sections, entry_id shape
+    and tag as an activity, so nothing in the body distinguishes the two: the
+    Completed list needs a mark set while the todo is inflight, not a guess
+    made afterwards.
+    """
+    data = dict(entry.data or {})
+    if data.get(ACTIVITY_FLAG):
+        return False
+    data[ACTIVITY_FLAG] = True
+    entry.data = data
+    entry.save(update_fields=['data'])
+    return True
+
+
+def has_shape(content):
+    """True when a body carries the activity sections.
+
+    Status alone cannot tell a finished activity from any other done todo;
+    the sections can, which is what lets the index keep showing an activity
+    after it is closed."""
+    return any(h in (content or '') for h in ('## Live', '## Done', '## Refs'))
+
+
 CONFLICT_MARKERS = ('<<<<<<< yours', '=======', '>>>>>>> server')
 
 
