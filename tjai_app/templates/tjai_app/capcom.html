@@ -765,6 +765,8 @@
         }
         if (t.classList.contains('view-tab') || t.id === 'notepad-section') {
             if (view === 'notepad' && t.dataset.view !== 'notepad') flushNotepad();
+            // The Inflight tab is the way back to the list from one activity.
+            if (t.dataset.view === 'inflight') inflightId = null;
             view = t.dataset.view; syncStateToUrl(); renderAll(); return;
         }
         if (t.id === 'mark-all') { mark('all', 'read'); return; }

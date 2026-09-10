@@ -10,7 +10,6 @@
         a { color: #90caf9; text-decoration: none; }
         a:hover { text-decoration: underline; }
         .main { max-width: 1000px; margin: 0; padding: 8px 12px 40px; }
-        .back { color: #8a8a8a; font-size: 12px; }
         .head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
         .head .break { flex-basis: 100%; height: 0; }
         .head h1 { font-size: 18px; font-weight: 600; margin: 0; color: #fff; }
@@ -54,7 +53,6 @@
         <div class="err" id="idx-err"></div>
     {% else %}
         <div class="head">
-            <a class="back" href="/tjai/inflight/?embed=1" title="All inflight todos">&lsaquo; inflight</a>
             <h1 id="title"></h1>
             <span class="break"></span>
             <span class="meta" id="meta"><span id="meta-text"></span></span>
@@ -93,16 +91,21 @@
             try {
                 const d = await getJson('/tjai/api/inflight/list');
                 const el = document.getElementById('idx-list');
+                // Nothing outstanding is completed, whatever the status says, so
+                // the split is by open items and not by which list it came in.
                 const history = d.historical || [];
-                if (!d.items.length && !history.length) { el.innerHTML = '<div class="empty">No inflight todos. Set a todo’s status to inflight to start one.</div>'; return; }
+                const active = d.items.filter(i => i.open);
+                const completed = d.items.filter(i => !i.open).concat(history)
+                    .sort((a, b) => b.modified_ts - a.modified_ts);
+                if (!active.length && !completed.length) { el.innerHTML = '<div class="empty">No inflight todos. Set a todo’s status to inflight to start one.</div>'; return; }
                 const row = (i, dim) =>
-                    '<div class="row' + (dim || !i.open ? ' dim' : '') + '"><a class="t" href="' + escapeHtml(i.url) + '">' + escapeHtml(i.title) + '</a>' +
+                    '<div class="row' + (dim ? ' dim' : '') + '"><a class="t" href="' + escapeHtml(i.url) + '">' + escapeHtml(i.title) + '</a>' +
                     (i.context ? '<span class="ctx">' + escapeHtml(i.context) + '</span>' : '') +
                     '<span class="counts">' + i.open + ' open <span class="d">· ' + i.done + ' done</span></span>' +
                     '<span class="ago" title="' + escapeHtml(i.modified_display) + '">' + escapeHtml(i.ago) + '</span></div>';
-                el.innerHTML = d.items.map(i => row(i)).join('')
-                    + (history.length ? '<div class="section-head">Completed</div>'
-                       + history.map(i => row(i, true)).join('') : '');
+                el.innerHTML = active.map(i => row(i)).join('')
+                    + (completed.length ? '<div class="section-head">Completed</div>'
+                       + completed.map(i => row(i, true)).join('') : '');
                 document.getElementById('idx-err').textContent = '';
             } catch (e) { document.getElementById('idx-err').textContent = 'refresh failed: ' + e.message; }
         }
