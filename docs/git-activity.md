@@ -17,15 +17,19 @@ repositories, every 5 minutes for `swf-*`).
 ## Data flow
 
 - **Daily files** — `data/git_daily/<YYYY-MM-DD>.md`, one per Eastern day:
-  commits from `git log --all` bounded by that day's ET midnights, grouped by
-  repository, with tjrepo commits attributed to a top-level directory via
+  commits from `git log --all` by `GIT_AUTHOR` (beside `_GIT_REPOS`, the one
+  definition the weekly chart uses too) bounded by that day's ET midnights,
+  grouped by repository, with tjrepo commits attributed to a top-level directory via
   `diff-tree`. Each commit renders as a GitHub-linked line plus the first
   body line; `Co-Authored-By` trailers are dropped.
 - **Producers** — a page load regenerates today's and yesterday's files from
   live git state (`_refresh_recent_git_daily`), so the page is current the
   moment it is viewed; `scripts/cron/refresh_git_daily.py` (system cron
   02:30) additionally heals empty files up to 30 days back, covering days
-  whose file was last written before that day's commits happened.
+  whose file was last written before that day's commits happened;
+  `refresh_git_daily.py --days N` rebuilds that far back, which a change in
+  what counts as one of his commits requires, since every stored file predates
+  it.
 - **Page data** — `git_activity_data` reads the files: the grid's heatmap
   counts commit lines per file, and the newest 120 days are regrouped to
   app-level headers (`_restructure_git_md` maps tjrepo commit-message

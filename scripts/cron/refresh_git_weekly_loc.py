@@ -22,12 +22,12 @@ import bootstrap  # noqa: F401,E402 — Django setup
 
 from django.conf import settings as django_settings  # noqa: E402
 from tjai_app.services import get_timezone  # noqa: E402
+from tjai_app.views import GIT_AUTHOR as AUTHOR  # noqa: E402  (one definition)
 
 logger = logging.getLogger('refresh_git_weekly_loc')
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(levelname)s %(message)s')
 
-AUTHOR = 'wenaus@gmail.com'
 GITHUB_ROOT = Path('/home/admin/github')
 WEEK_ZERO = datetime(2025, 6, 2).date()  # Monday on/after 2025-06-01
 

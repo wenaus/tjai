@@ -19,7 +19,7 @@ import bootstrap  # noqa: F401,E402 — Django setup
 
 from django.conf import settings as django_settings  # noqa: E402
 from tjai_app.services import get_timezone  # noqa: E402
-from tjai_app.views import _GIT_REPOS  # noqa: E402
+from tjai_app.views import _GIT_REPOS, GIT_AUTHOR  # noqa: E402
 
 logger = logging.getLogger('refresh_git_daily')
 logging.basicConfig(level=logging.INFO,
@@ -54,6 +54,7 @@ def regen_date(target, fetch=True):
         try:
             result = subprocess.run(
                 ['git', '-c', 'safe.directory=*', 'log', '--all',
+                 f'--author={GIT_AUTHOR}',
                  f'--since={since_iso}', f'--until={until_iso}',
                  '--format=%H%x00%s%x00%b%x01'],
                 capture_output=True, timeout=10, cwd=repo_path,
@@ -128,11 +129,16 @@ def regen_date(target, fetch=True):
 def main():
     tz = get_timezone()
     today = datetime.now(tz=tz).date()
+    # A change in what counts as a commit of his makes every stored file wrong,
+    # not only the recent ones: `--days N` rebuilds that far back.
+    days = HEAL_LOOKBACK_DAYS
+    if len(sys.argv) > 2 and sys.argv[1] == '--days':
+        days = int(sys.argv[2])
 
     # Regenerate the full recent window, not only empty files. This catches
     # days that were non-empty but incomplete because an older refresh saw only
     # the checked-out branch or stale local refs.
-    targets = [today - timedelta(days=offset) for offset in range(HEAL_LOOKBACK_DAYS + 1)]
+    targets = [today - timedelta(days=offset) for offset in range(days + 1)]
 
     for index, d in enumerate(targets):
         try:

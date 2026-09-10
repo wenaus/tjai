@@ -3292,6 +3292,10 @@ def git_activity(request):
 
 # Single repo registry — scripts/section_git.py and
 # scripts/cron/refresh_git_daily.py import this.
+# The page is Torre's activity, not every contributor's: the followed repos are
+# shared, so an unfiltered log fills his days with other people's commits.
+GIT_AUTHOR = 'wenaus@gmail.com'
+
 _GIT_REPOS = [
     ('/home/admin/github/tjrepo', 'https://github.com/wenaus/tjrepo', 'tjrepo'),
     ('/home/admin/github/tjdev', 'https://github.com/wenaus/tjdev', 'tjdev'),
@@ -3345,6 +3349,7 @@ def _refresh_recent_git_daily():
             try:
                 result = subprocess.run(
                     ['git', '-c', 'safe.directory=*', 'log', '--all',
+                     f'--author={GIT_AUTHOR}',
                      f'--since={since_iso}', f'--until={until_iso}',
                      '--format=%H%x00%s%x00%b%x01'],
                     capture_output=True, timeout=10, cwd=repo_path,
