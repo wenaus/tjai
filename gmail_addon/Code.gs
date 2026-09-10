@@ -1076,7 +1076,8 @@ function onGmailMessage(e) {
       messageId: messageId,
       subject: cleanTitle || subj,
       sender: message.getFrom() || '',
-      count: imageAttachments_(message).length
+      count: newImageAttachments_(message).length,
+      threadCount: threadImageAttachments_(message).length
     };
     return [buildMainCard_(cleanTitle || subj, gmailUrl, prefill, capInfo)];
   } catch (err) {
@@ -1454,11 +1455,14 @@ function buildCapturesSection_(capInfo, gmailUrl) {
   var section = CardService.newCardSection()
     .setHeader('IMAGES');
   var n = capInfo ? capInfo.count : 0;
+  var t = capInfo ? (capInfo.threadCount || 0) : 0;
   section.addWidget(
     CardService.newDecoratedText()
-      .setText(n === 0 ? 'No images in this message' : (n + (n === 1 ? ' image' : ' images')))
+      .setText(n === 0
+        ? (t === 0 ? 'No images in this thread' : 'Nothing new in this mail · ' + t + ' in the thread')
+        : (n + (n === 1 ? ' image' : ' images') + ' in this mail · ' + t + ' in the thread'))
   );
-  if (n === 0) return section;
+  if (t === 0) return section;
 
   section.addWidget(
     CardService.newTextInput()
@@ -1468,19 +1472,30 @@ function buildCapturesSection_(capInfo, gmailUrl) {
       .setMultiline(true)
   );
 
-  var action = CardService.newAction()
-    .setFunctionName('stashCaptures')
-    .setParameters({
-      message_id: capInfo.messageId,
-      subject: capInfo.subject || '',
-      sender: capInfo.sender || '',
-      gmail_url: gmailUrl || ''
-    });
+  var params = {
+    message_id: capInfo.messageId,
+    subject: capInfo.subject || '',
+    sender: capInfo.sender || '',
+    gmail_url: gmailUrl || ''
+  };
+  function actionFor(scope) {
+    var p = {};
+    for (var k in params) p[k] = params[k];
+    p.scope = scope;
+    return CardService.newAction().setFunctionName('stashCaptures').setParameters(p);
+  }
 
+  if (n > 0) {
+    section.addWidget(
+      CardService.newTextButton()
+        .setText('Stash images')
+        .setOnClickAction(actionFor('mail'))
+    );
+  }
   section.addWidget(
     CardService.newTextButton()
-      .setText('Stash images')
-      .setOnClickAction(action)
+      .setText('Stash all from thread')
+      .setOnClickAction(actionFor('thread'))
   );
 
   return section;
@@ -1500,6 +1515,55 @@ function imageAttachments_(message) {
 
 
 /**
+ * A key identifying one image across the messages of a thread. A reply
+ * carries the quoted chain's inline images as its own, so the same picture
+ * arrives again in every later message, byte for byte.
+ */
+function imageKey_(att) {
+  return (att.getName() || '') + '|' + att.getSize() + '|' + (att.getContentType() || '');
+}
+
+
+/**
+ * The images this message introduces: the ones that appear in no earlier
+ * message of its thread. Without this, stashing from the latest mail restashes
+ * everything anyone ever pasted into the conversation.
+ */
+function newImageAttachments_(message) {
+  var here = imageAttachments_(message);
+  if (here.length === 0) return here;
+  var seen = {};
+  var id = message.getId();
+  var messages = message.getThread().getMessages();
+  for (var m = 0; m < messages.length; m++) {
+    if (messages[m].getId() === id) break;   // earlier messages only
+    var earlier = imageAttachments_(messages[m]);
+    for (var i = 0; i < earlier.length; i++) seen[imageKey_(earlier[i])] = true;
+  }
+  return here.filter(function(att) { return !seen[imageKey_(att)]; });
+}
+
+
+/**
+ * Every image in the thread, each one once, in thread order.
+ */
+function threadImageAttachments_(message) {
+  var seen = {}, out = [];
+  var messages = message.getThread().getMessages();
+  for (var m = 0; m < messages.length; m++) {
+    var atts = imageAttachments_(messages[m]);
+    for (var i = 0; i < atts.length; i++) {
+      var k = imageKey_(atts[i]);
+      if (seen[k]) continue;
+      seen[k] = true;
+      out.push(atts[i]);
+    }
+  }
+  return out;
+}
+
+
+/**
  * Action handler: post the message's images to tjai as a capture.
  */
 function stashCaptures(e) {
@@ -1511,9 +1575,13 @@ function stashCaptures(e) {
   }
 
   var message = GmailApp.getMessageById(params.message_id);
-  var images = imageAttachments_(message);
+  var scope = params.scope === 'thread' ? 'thread' : 'mail';
+  var images = scope === 'thread'
+    ? threadImageAttachments_(message)
+    : newImageAttachments_(message);
   if (images.length === 0) {
-    return notify_('No images in this message');
+    return notify_(scope === 'thread' ? 'No images in this thread'
+                                      : 'No new images in this mail');
   }
 
   var raw = (formInputs.cap_note && formInputs.cap_note.stringInputs.value[0]) || '';

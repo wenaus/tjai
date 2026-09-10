@@ -32,7 +32,9 @@ Server endpoint accepts: `{kind, content, tags, context, source, event_date, eve
 
 ### Stash images (captures)
 
-The IMAGES section shows how many image attachments the open message carries, inline pasted screenshots included; images under 1 KB (tracking pixels, icons) are ignored. It takes a note with the same `:tag` and `=context` tokens, and **Stash images** posts the images as a multipart form to `api/add-capture` with the subject, sender, Gmail permalink, and note.
+The IMAGES section counts what the open mail introduces and what its thread holds, inline pasted screenshots included; images under 1 KB (tracking pixels, icons) are ignored. **Stash images** takes the first: the images that appear in no earlier message of the thread. **Stash all from thread** takes every image in the conversation, each once. Both take a note with the same `:tag` and `=context` tokens and post as a multipart form to `api/add-capture` with the subject, sender, Gmail permalink, and note.
+
+The distinction is not cosmetic. A reply carries the quoted chain's inline images as its own attachments, so by the third reply "the images in this message" is the whole conversation's: four successive stashes of one thread wrote 6, 8, 9 and 10 files, the same bytes over and over. An image is matched across messages by name, size and content type. `scripts/test_gmail_addon_images.js` holds the two selections against a stubbed thread.
 
 The server stores the files under `data/captures/YYYY-MM/<entry uuid>/NN-name.ext`; the data directory is excluded from the deploy rsync and included in the nightly backup. It creates one memory entry tagged `gmail` and `capture`, in the given context, whose content is the subject, sender, and permalink on line 1, the note, and one markdown image line per file with its absolute URL. Accepted types are PNG, JPEG, GIF, WebP, BMP, TIFF, and HEIC, at most 20 files of 25 MB each per stash.
 
