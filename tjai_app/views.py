@@ -8080,13 +8080,18 @@ def api_system_data(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def api_system_refresh(request):
-    """Request system health data collection via action agent."""
-    now = time.time()
-    SysConfig.objects.update_or_create(
-        key='system_health_refresh_requested',
-        defaults={'value': str(now), 'timestamp_modified': now},
-    )
-    return JsonResponse({'status': 'requested'})
+    """Request system health collection as a plain enqueue of the
+    system-health action (docs/wrangler.md), replacing the polled
+    system_health_refresh_requested flag: the bell wakes the wrangler at
+    once and the worker row survives a restart."""
+    from .action_runner import run_action
+    result = run_action('system-health')
+    if result.get('error'):
+        logger.error("api_system_refresh: %s", result['error'])
+        return JsonResponse({'error': result['error']}, status=500)
+    logger.info("api_system_refresh: %s", result.get('message', 'enqueued'))
+    return JsonResponse({'status': 'requested',
+                         'message': result.get('message', '')})
 
 
 # --- RSS Reader ---

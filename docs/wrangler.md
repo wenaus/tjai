@@ -1,9 +1,12 @@
 # Wrangler — scheduled and on-demand execution
 
-Status: migration in progress. Stages 1–2 are complete — the wrangler runs
+Status: migration in progress. Stages 1–3 are complete — the wrangler runs
 the flagged mechanical actions, including all Capcom collection, system
-health, and the server backup; the action agent runs the remainder. New
-actions are created wrangler-owned (`runner: wrangler`).
+health, the server backup, and the daily products (synopsis, assessment,
+workweek assembler); the action agent runs the remainder. Stage 4 has begun:
+the System page's health refresh is an enqueue of the `system-health` action
+rather than the `system_health_refresh_requested` flag. New actions are
+created wrangler-owned (`runner: wrangler`).
 
 tjai adopts [wrangle-ai](https://github.com/BNLNPPS/wrangle-ai) as the
 execution substrate for scheduled and on-demand work, replacing the action
