@@ -59,9 +59,13 @@ modification time; `order_by='size'` by content length.
 
 ## Date filtering
 
-`search_entries` accepts `start_date`/`end_date` (YYYYMMDD, ISO, or natural
-language such as `7d`, `yesterday`, `monday`). Which timestamp they filter on
-is controlled by `date_field`:
+`search_entries` accepts `start_date`/`end_date` (`YYYYMMDD`, `YYYY-MM-DD`,
+ISO timestamps such as `2026-09-10T17:08:00Z`, or natural language such as
+`7d`, `yesterday`, `monday`). Explicit timestamps preserve their time and
+offset; date-only bounds span 00:00:00 through 23:59:59 in the configured
+application timezone. See [MCP date filters](mcp.md#date-filters) for accepted
+formats and timezone rules. Which timestamp they filter on is controlled by
+`date_field`:
 
 - `modified` — `timestamp_modified`.
 - `event` — the calendar placement in `data.event_date`; entries without one

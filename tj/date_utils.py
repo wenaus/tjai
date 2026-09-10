@@ -18,8 +18,10 @@ def parse_date_filter(date_str: str, default_days_ago: int = None, end_of_day: b
     - "N days ago" or "Nd": N days ago
     - "last week": 7 days ago
     - Day names (mon, tuesday, etc.): most recent occurrence
-    - YYYYMMDD: specific date
-    - ISO format: specific datetime
+    - YYYYMMDD or YYYY-MM-DD: specific date
+    - ISO datetime: T/t or space separator, optional fractional seconds,
+      Z/z for UTC or a numeric offset; surrounding whitespace is ignored
+    - Datetimes without an offset use the configured timezone
 
     Args:
         date_str: Date specification string
@@ -46,7 +48,8 @@ def parse_date_filter(date_str: str, default_days_ago: int = None, end_of_day: b
             return dt.timestamp(), None
         return None, None
 
-    date_str = date_str.lower().strip()
+    original_date_str = date_str.strip()
+    date_str = original_date_str.lower()
 
     # "today"
     if date_str == "today":
@@ -104,11 +107,13 @@ def parse_date_filter(date_str: str, default_days_ago: int = None, end_of_day: b
             dt = set_time(dt)
             return dt.timestamp(), None
         except ValueError:
-            return None, f"Invalid date '{date_str}'"
+            return None, f"Invalid date '{original_date_str}'"
 
     # ISO format
     try:
-        dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+        # Natural-language matching is case-insensitive; restore ISO T/Z
+        # after that normalization so UTC timestamps retain their offset.
+        dt = datetime.fromisoformat(date_str.upper().replace('Z', '+00:00'))
         is_date_only = 't' not in date_str and ' ' not in date_str
         if dt.tzinfo is None and tz:
             dt = dt.replace(tzinfo=tz)
@@ -116,6 +121,8 @@ def parse_date_filter(date_str: str, default_days_ago: int = None, end_of_day: b
             dt = set_time(dt)
         return dt.timestamp(), None
     except ValueError:
-        pass
-
-    return None, f"Cannot parse date '{date_str}'. Use YYYYMMDD, 'yesterday', '3d', 'monday', etc."
+        return None, (
+            f"Cannot parse date '{original_date_str}'. Use YYYYMMDD, YYYY-MM-DD, "
+            "an ISO timestamp such as '2026-09-10T17:08:00Z' or "
+            "'2026-09-10T13:08:00-04:00', or 'yesterday', '3d', 'monday', etc."
+        )

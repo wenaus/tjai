@@ -63,7 +63,9 @@ A failed call is retried once. If some parts fail, the day is written from the p
 
 ## Dashboard
 
-The assessment dashboard plots the daily endpoint (final cumulative) and integral. Vertical orange markers on both plots mark boundaries in the series; they are a list in `tjai_app/templates/tjai_app/assessment.html`. The marker `RC` between 2026-09-05 and 2026-09-06 divides the single-call assessments from V2: the days before it were scored by a reader whose yield fell with input size, so their endpoints are not comparable with the days after. The same marker divides the assessors: 2026-09-06 onward is scored by `gpt-5.6-sol`, the days before it by Gemini, so endpoints are not comparable across it on either count.
+The assessment dashboard plots Daily Endpoint (final cumulative) and Daily Mean Score (endpoint divided by the number of scored exchanges). The mean uses the existing `endpoint` and `scored_events` dashboard fields; it requires no rescoring. Its tooltip shows the mean to two decimal places, endpoint, and exchange count. Days with no scored exchanges leave a gap. Both plots link each point to its daily assessment. The integral plot is disabled.
+
+Vertical orange markers on both plots mark boundaries in the series; they are a list in `tjai_app/templates/tjai_app/assessment.html`. The marker `RC` between 2026-09-05 and 2026-09-06 divides the single-call assessments from V2: the days before it were scored by a reader whose yield fell with input size, so their endpoints are not comparable with the days after. The same marker divides the assessors: 2026-09-06 onward is scored by `gpt-5.6-sol`, the days before it by Gemini. Dividing by the exchange count removes the direct dependence on scored volume, but differences in event selection and scoring standards still affect the mean.
 
 ## Recovery and inspection
 

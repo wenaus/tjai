@@ -64,6 +64,26 @@ The startup tools `get_profile` and `get_ai_guidance` return size-bounded
 pages with a 12,000-character budget per response; clients follow
 `next_offset` until `complete` is true.
 
+### Date filters
+
+`get_dialog`, `get_memories`, `get_bookmarks`, `search_entries`, and `get_logs`
+share `tj/date_utils.py::parse_date_filter` for `start_date` and `end_date`;
+`get_capcom` uses it for `since`.
+
+Accepted forms are `YYYYMMDD`, `YYYY-MM-DD`, ISO timestamps such as
+`2026-09-10T17:08:00Z` or `2026-09-10T13:08:00-04:00`, and relative dates:
+`today`, `yesterday`, `last week`, weekday names or three-letter abbreviations,
+`3d` / `3 days ago`, and `2h` / `2 hours ago`. ISO timestamps accept `T` or `t`
+or a space between date and time, `Z` or `z` for UTC, numeric offsets, and
+fractional seconds. Surrounding whitespace is ignored.
+
+Explicit offsets determine the instant. Dates and timestamps without offsets
+use the configured application timezone (normally Eastern Time). Date-only
+lower bounds use 00:00:00 and upper bounds use 23:59:59, inclusive. Explicit
+timestamps and hour-relative values retain their time for either bound.
+Day-relative values and weekdays use day boundaries. An omitted upper bound
+does not restrict the range. `get_calendar` uses a separate calendar-day parser.
+
 ## Transport Policy
 
 tjai MCP is finite JSON request/response only:

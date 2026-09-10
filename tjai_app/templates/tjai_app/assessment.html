@@ -485,9 +485,13 @@
             const W = 1400, H = 390, pad = {l: 74, r: 20, t: 24, b: 46};
             const plotW = W - pad.l - pad.r;
             const plotH = H - pad.t - pad.b;
-            const vals = days.map(d => d[field]);
-            const mx = Math.max(...vals, 1);
-            const mn = Math.min(...vals, -1);
+            const isMean = field === 'mean';
+            const vals = days.map(d => isMean
+                ? (d.scored_events > 0 ? d.endpoint / d.scored_events : null)
+                : d[field]);
+            const finiteVals = vals.filter(Number.isFinite);
+            const mx = Math.max(...finiteVals, 1);
+            const mn = Math.min(...finiteVals, -1);
             const range = mx - mn || 1;
             function x(i) { return pad.l + (i / Math.max(days.length - 1, 1)) * plotW; }
             function y(v) { return pad.t + plotH - ((v - mn) / range) * plotH; }
@@ -497,33 +501,41 @@
             svg += `<text x="5" y="20" fill="#d8a070" font-size="22" font-family="monospace">${label}</text>`;
             // Zero line
             svg += `<line x1="${pad.l}" y1="${y0}" x2="${W-pad.r}" y2="${y0}" stroke="#555" stroke-dasharray="3,3"/>`;
-            // Y scale: ticks every 10 for endpoint, every 200 for integral
-            const tickStep = field === 'endpoint' ? 10 : 200;
+            // Mean scores need fractional ticks.
+            const tickStep = isMean ? 0.5 : field === 'endpoint' ? 10 : 200;
             const tickMin = Math.ceil(mn / tickStep) * tickStep;
             const tickMax = Math.floor(mx / tickStep) * tickStep;
             for (let tv = tickMin; tv <= tickMax; tv += tickStep) {
                 const ty = y(tv);
                 svg += `<line x1="${pad.l-3}" y1="${ty}" x2="${pad.l}" y2="${ty}" stroke="#8a8a8a"/>`;
                 svg += `<line x1="${pad.l}" y1="${ty}" x2="${W-pad.r}" y2="${ty}" stroke="#333" stroke-dasharray="2,4"/>`;
-                svg += `<text x="${pad.l-5}" y="${ty+6}" text-anchor="end" fill="#8a8a8a" font-size="18" font-family="monospace">${tv > 0 ? '+' : ''}${tv}</text>`;
+                svg += `<text x="${pad.l-5}" y="${ty+6}" text-anchor="end" fill="#8a8a8a" font-size="18" font-family="monospace">${tv > 0 ? '+' : ''}${isMean ? tv.toFixed(1) : tv}</text>`;
             }
 
             // Area fill
             for (let i = 0; i < days.length - 1; i++) {
                 const v1 = vals[i], v2 = vals[i+1];
+                if (!Number.isFinite(v1) || !Number.isFinite(v2)) continue;
                 const fillColor = (v1 >= 0 && v2 >= 0) ? '#9ccc6530' :
                                   (v1 <= 0 && v2 <= 0) ? '#ef535030' : '#88888820';
                 svg += `<polygon points="${x(i)},${y0} ${x(i)},${y(v1)} ${x(i+1)},${y(v2)} ${x(i+1)},${y0}" fill="${fillColor}"/>`;
             }
 
             // Line
-            const pts = days.map((d, i) => `${x(i)},${y(vals[i])}`).join(' ');
-            svg += `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5"/>`;
+            // Missing scores leave a gap while retaining the shared date axis.
+            const path = vals.map((v, i) => Number.isFinite(v)
+                ? `${i > 0 && Number.isFinite(vals[i-1]) ? 'L' : 'M'}${x(i)},${y(v)}`
+                : '').join(' ');
+            svg += `<path d="${path}" fill="none" stroke="${color}" stroke-width="1.5"/>`;
 
             // Dots
             days.forEach((d, i) => {
+                if (!Number.isFinite(vals[i])) return;
                 const dotColor = vals[i] > 0 ? '#9ccc65' : vals[i] < 0 ? '#ef5350' : '#8a8a8a';
-                svg += `<circle cx="${x(i)}" cy="${y(vals[i])}" r="3" fill="${dotColor}" style="cursor:pointer" onclick="selectDate('${d.entry_id || ('assessment-' + d.date + '-' + currentAssessor)}')"><title>${d.date}: ${vals[i]}</title></circle>`;
+                const tooltip = isMean
+                    ? `${d.date}: mean ${vals[i] > 0 ? '+' : ''}${vals[i].toFixed(2)}; endpoint ${d.endpoint > 0 ? '+' : ''}${d.endpoint}; ${d.scored_events} scored exchanges`
+                    : `${d.date}: ${vals[i]}`;
+                svg += `<circle cx="${x(i)}" cy="${y(vals[i])}" r="3" fill="${dotColor}" style="cursor:pointer" onclick="selectDate('${d.entry_id || ('assessment-' + d.date + '-' + currentAssessor)}')"><title>${tooltip}</title></circle>`;
             });
 
             // Vertical markers
@@ -587,6 +599,7 @@
 
                 // Daily endpoint plot
                 html += renderDailyPlot(days, 'endpoint', 'Daily Endpoint', '#e0e0e0');
+                html += renderDailyPlot(days, 'mean', 'Daily Mean Score', '#90caf9');
                 // Daily integral plot — off; the endpoint is the series watched.
                 if (false) {
                     html += renderDailyPlot(days, 'integral', 'Daily Integral', '#ce93d8');

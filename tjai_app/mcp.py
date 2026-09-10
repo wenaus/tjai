@@ -551,9 +551,15 @@ async def get_dialog(
     Args:
         host: Hostname to retrieve dialog for (e.g. 'ec2dev', 'MacbookPro'),
               or 'all' for all hosts.
-        start_date: Start of date range (YYYYMMDD, ISO format, or natural language
-                    like '1d', '7d', 'yesterday', 'monday'). Required.
-        end_date: End of date range. Optional — defaults to now.
+        start_date: Inclusive start: YYYYMMDD, YYYY-MM-DD, ISO timestamp
+                    (e.g. '2026-09-10T17:08:00Z', numeric offsets also accepted),
+                    or '1d', '7d', 'yesterday', 'monday'. Required.
+                    T/t, Z/z, a space separator, and fractional seconds are accepted.
+                    Dates and timestamps without an offset use the configured
+                    application timezone (normally Eastern Time).
+        end_date: Inclusive end, in the same formats. Date-only values include
+                  through 23:59:59; explicit timestamps retain their exact time.
+                  Optional — no upper bound when omitted.
         limit: Optional page size. Hard maximum: 500. If omitted, returns all
                matching dialog turns.
         offset: Zero-based result offset for pagination. Default: 0.
