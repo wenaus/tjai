@@ -7,6 +7,8 @@ scripts/wrangler_agent.py.
 """
 
 import logging
+import os
+import signal
 import sys
 import time
 import uuid
@@ -228,6 +230,56 @@ def handle_ai_dispatch(worker, bullpen):
         logger.info("ai_dispatch: %s launched as pid %d, worker %s left to it",
                     payload['action_entry_id'], pid, worker.id)
         return DETACHED
+    finally:
+        connections.close_all()
+
+
+def _doer_looks_like_ours(pid):
+    """True if pid's command line is one of our agent launches.
+
+    A recorded pid can be stale and reused by an unrelated process, and this
+    is a kill: check before signalling rather than trusting the row.
+    """
+    try:
+        with open(f'/proc/{pid}/cmdline', 'rb') as fh:
+            cmdline = fh.read().decode('utf-8', 'replace')
+    except (FileNotFoundError, ProcessLookupError, PermissionError):
+        return False
+    return 'agent' in cmdline and ('tj' in cmdline or 'tjai' in cmdline)
+
+
+def handle_abort(worker, bullpen):
+    """Kill a running worker's doer and mark that worker failed.
+
+    User-initiated abort as one more worker type, so it carries the same
+    durability and audit as the work it stops (docs/wrangler.md,
+    scheduler.md's Cancellation). The doer runs in its own session, so the
+    signal goes to its process group and takes the agent's children with it.
+    """
+    close_old_connections()
+    try:
+        target = worker.payload.get('target_worker_id')
+        row = WrangleWorker.objects.filter(id=target).first()
+        if not row:
+            raise RuntimeError(f"worker {target} not found")
+        if row.status != 'running':
+            logger.info("abort: worker %s is %s, nothing to kill", target, row.status)
+            return {'target': target, 'noop': f'status {row.status}'}
+        pid, killed = row.doer_pid, False
+        if pid and _doer_looks_like_ours(pid):
+            try:
+                os.killpg(os.getpgid(pid), signal.SIGTERM)
+                killed = True
+            except (ProcessLookupError, PermissionError) as e:
+                logger.warning("abort: worker %s pid %s not signalled: %s",
+                               target, pid, e)
+        elif pid:
+            logger.warning("abort: worker %s pid %s is not one of our agents; "
+                           "not signalling, marking the row failed only", target, pid)
+        bullpen.mark_failed(target, 'aborted by request')
+        logger.warning("abort: worker %s marked failed (doer pid %s, killed=%s)",
+                       target, pid, killed)
+        return {'target': target, 'pid': pid, 'killed': killed}
     finally:
         connections.close_all()
 

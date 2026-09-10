@@ -333,7 +333,7 @@ from django.db.models.functions import Lower
 from django.http import Http404
 from django.conf import settings as django_settings
 from .api_auth import rest_api_auth_required
-from .models import AppLog, Context, Entry, KozyChat, Relation, RssItem, Tag, TagStats, SubNote, Machine, SysConfig
+from .models import AppLog, Context, Entry, KozyChat, Relation, RssItem, Tag, TagStats, SubNote, Machine, SysConfig, WrangleWorker
 from .llm_usage import summarize_codex_usage
 
 
@@ -7221,11 +7221,12 @@ def api_picks_abort(request):
 
 
 def _abort_agent(status_key, agent_name):
-    """Request abort of a running agent. Resets status and requests process kill.
+    """Request abort of a running agent. Resets status and requests the kill.
 
     Cannot kill processes directly because Apache (www-data) lacks permission
-    to signal admin's processes. Sets a sysconfig flag that the action agent
-    daemon picks up to do the actual kill.
+    to signal admin's processes. A wrangler-owned action's run is a worker row,
+    so the kill is an abort worker against it (docs/wrangler.md); everything
+    else sets the sysconfig flag the action agent polls.
     """
     status = SysConfig.objects.filter(
         key=status_key
@@ -7237,11 +7238,23 @@ def _abort_agent(status_key, agent_name):
     SysConfig.objects.update_or_create(
         key=status_key,
         defaults={'value': 'idle', 'timestamp_modified': now})
-    # Request the action agent daemon to kill zombie processes
-    SysConfig.objects.update_or_create(
-        key='agent_kill_requested',
-        defaults={'value': '1', 'timestamp_modified': now})
-    logger.warning("Abort requested for %s, status reset to idle", agent_name)
+
+    action_id = status_key[len('agent_'):-len('_status')]
+    running = (WrangleWorker.objects
+               .filter(status='running', payload__action_entry_id=action_id)
+               .order_by('-created_at').first())
+    if running:
+        from .wrangler import enqueue_worker
+        enqueue_worker('abort', {'target_worker_id': running.id,
+                                 'action_entry_id': action_id})
+        logger.warning("Abort requested for %s: abort worker enqueued against %s",
+                       agent_name, running.id)
+    else:
+        # Request the action agent daemon to kill zombie processes
+        SysConfig.objects.update_or_create(
+            key='agent_kill_requested',
+            defaults={'value': '1', 'timestamp_modified': now})
+        logger.warning("Abort requested for %s, status reset to idle", agent_name)
     return JsonResponse({'ok': True})
 
 

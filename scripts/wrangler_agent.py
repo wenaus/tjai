@@ -18,8 +18,9 @@ from wrangle_ai.postgres import PgBell
 
 from tjai_app.models import SysConfig
 from tjai_app.wrangler import (
-    BELL_CHANNEL, TjaiBullpen, TjaiRoster, build_dsn, handle_ai_dispatch,
-    handle_capcom_refresh, handle_mechanical, logger, write_pulse,
+    BELL_CHANNEL, TjaiBullpen, TjaiRoster, build_dsn, handle_abort,
+    handle_ai_dispatch, handle_capcom_refresh, handle_mechanical, logger,
+    write_pulse,
 )
 
 
@@ -39,6 +40,9 @@ def main():
     wrangler.register(
         'ai_dispatch', lambda w: handle_ai_dispatch(w, bullpen), timeout=600.0,
         key_fn=lambda w: f"action:{w.payload.get('action_entry_id')}")
+    wrangler.register(
+        'abort', lambda w: handle_abort(w, bullpen), timeout=60.0,
+        key_fn=lambda w: f"abort:{w.payload.get('target_worker_id')}")
     wrangler.register(
         'capcom_refresh', handle_capcom_refresh, timeout=600.0,
         key_fn=lambda w: f"capcom:{w.payload.get('target')}")
