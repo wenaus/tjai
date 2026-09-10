@@ -4,10 +4,10 @@ Status: migration in progress. Stages 1–3 are complete — the wrangler runs
 the flagged mechanical actions, including all Capcom collection, system
 health, the server backup, and the daily products (synopsis, assessment,
 workweek assembler); the action agent runs the remainder. Stage 4 is under
-way: the System page's health refresh and the assessment dashboard's Rerun
-are enqueues of their actions — the latter carrying its target date — rather
-than the `system_health_refresh_requested` and `assessment_gemini_rerun_date`
-flags. New actions are created wrangler-owned (`runner: wrangler`).
+way: the System page's health refresh, the assessment dashboard's Rerun and
+the assessment backfill are enqueues of their actions — the last two carrying
+their target dates — rather than the `system_health_refresh_requested`,
+`assessment_gemini_rerun_date` and `assessment_gemini_backfill_all` flags. New actions are created wrangler-owned (`runner: wrangler`).
 
 tjai adopts [wrangle-ai](https://github.com/BNLNPPS/wrangle-ai) as the
 execution substrate for scheduled and on-demand work, replacing the action

@@ -71,6 +71,17 @@ The assessment dashboard plots the daily endpoint (final cumulative) and integra
 - `--from-saved` re-parses the saved raw responses for a date instead of calling the API, for a day whose responses arrived whole but failed to parse. A single-call response from before the split (`<date>-gemini.txt`) is read as one part.
 - `--no-write` runs everything but the entry write.
 
+`scripts/assessment_backfill.py <start-date>` fills gaps: it walks back from
+the date (30 days by default, 90 at most) and enqueues one wrangler worker per
+day that has dialog and no assessment, printing the plan and queueing nothing
+until `--enqueue`. A day that already has an assessment is left alone, so a
+backfill cannot re-score; days scored by an earlier assessor are left alone for
+the same reason, since the dashboard plots every assessor it knows and a second
+entry for one day would put two points on that date. `--missing-assessor`
+fills those days deliberately. The workers are ordinary `llm-assessment-gemini`
+runs carrying their target date, one durable row each, which the wrangler runs
+one at a time; a failed day stops nothing.
+
 ## Not covered
 
 The wasted-time factor the rules ask for (task walltime against error time) is not computed by the merge; whatever an assessor writes about it stays in that part's log. Splitting a session at task boundaries is not built; it becomes necessary only if per-session yields on the largest sessions prove thin against the small ones.
