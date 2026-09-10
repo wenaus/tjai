@@ -12,6 +12,7 @@
         .main { max-width: 1000px; margin: 0; padding: 8px 12px 40px; }
         .back { color: #8a8a8a; font-size: 12px; }
         .head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
+        .head .break { flex-basis: 100%; height: 0; }
         .head h1 { font-size: 18px; font-weight: 600; margin: 0; color: #fff; }
         .meta { color: #8a8a8a; font-size: 12px; }
         .btn { background: #2a2a2a; color: #e0e0e0; border: 1px solid #555; padding: 3px 10px; border-radius: 3px; cursor: pointer; font: inherit; font-size: 13px; }
@@ -54,6 +55,7 @@
         <div class="head">
             <a class="back" href="/tjai/inflight/?embed=1" title="All inflight todos">&lsaquo; inflight</a>
             <h1 id="title"></h1>
+            <span class="break"></span>
             <span class="meta" id="meta"><span id="meta-text"></span></span>
             <button class="btn" id="refresh-btn">Refresh</button>
             <a class="btn" id="edit-btn" href="#" target="_blank" rel="noopener">Edit</a>

@@ -190,13 +190,13 @@
             <div class="notepad-section" id="notepad-section" data-view="notepad"><span class="pad-link" data-pad="notepad">Notepad</span><span class="pad-sep">·</span><span class="pad-link" data-pad="pouch">Pouch</span></div>
             <div class="section-head">State</div>
             <div id="state-tiles"><div class="feed-note">No state reports yet.</div></div>
-            <div class="section-head">Inflight</div>
-            <div id="inflight-shelf"><div class="feed-note">No inflight todos.</div></div>
             <div class="section-head">Pins</div>
             <div id="pins-special"></div>
             <div id="pins-top"></div>
             <div class="pins-divider" id="pins-divider" style="display:none"></div>
             <div id="pins-rest"></div>
+            <div class="section-head">Inflight</div>
+            <div id="inflight-shelf"><div class="feed-note">No activity with open items.</div></div>
         </div>
         <div class="right-panel">
             <div class="pane-header">
@@ -303,7 +303,7 @@
     function renderInflight() {
         const items = (lastData && lastData.inflight) || [];
         const el = document.getElementById('inflight-shelf');
-        if (!items.length) { el.innerHTML = '<div class="feed-note">No inflight todos.</div>'; return; }
+        if (!items.length) { el.innerHTML = '<div class="feed-note">No activity with open items.</div>'; return; }
         el.innerHTML = items.map(i =>
             '<div class="pin inflight-row"><a href="' + escapeHtml(i.capcom_url) + '" data-inflight="' +
             escapeHtml(i.ref) + '" title="' + escapeHtml(i.modified_display) + '">' + escapeHtml(i.title) + '</a>' +

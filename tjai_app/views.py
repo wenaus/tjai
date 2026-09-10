@@ -9207,7 +9207,9 @@ def api_capcom_feed(request):
         'next_meeting': next_meeting,
         'diary_pin': diary_pin,
         'pins': {'top': top, 'rest': rest},
-        'inflight': _inflight_list()[:20],
+        # The shelf is the quick list of what has work outstanding; the
+        # Inflight view in the right panel carries every one of them.
+        'inflight': [i for i in _inflight_list() if i['open']][:20],
         'sources': capcom_lib.get_sources(),
         'counts_24h': counts_24h,
         'retention_days': capcom_lib._get_json_config('capcom_retention_days',
