@@ -617,9 +617,12 @@
                 }
                 btn.textContent = 'Running...';
                 let attempts = 0;
+                // 10s x 540 = 90 min, the llm-assessment-gemini action timeout
+                // (5400s): a sol assessment runs 12-32 min, past the old 10.
                 const poll = setInterval(async () => {
                     attempts++;
-                    if (attempts > 120) { clearInterval(poll); btn.textContent = 'Timeout'; return; }
+                    if (attempts > 540) { clearInterval(poll); btn.textContent = 'Timeout'; return; }
+                    if (attempts % 6 === 0) btn.textContent = `Running ${attempts / 6} min...`;
                     try {
                         const cr = await fetch(`/tjai/api/assessment/content?entry_id=${encodeURIComponent(entryId)}`);
                         if (cr.ok) {
@@ -630,7 +633,7 @@
                             }
                         }
                     } catch(e) {}
-                }, 5000);
+                }, 10000);
             } catch (e) {
                 btn.textContent = 'Error';
             }

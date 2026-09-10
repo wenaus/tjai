@@ -3151,17 +3151,33 @@ def api_assessment_rerun(request):
 
     from datetime import datetime as dt
     try:
-        dt.strptime(date_str, '%Y-%m-%d').date()
+        target = dt.strptime(date_str, '%Y-%m-%d').date()
     except ValueError:
         return JsonResponse({'error': f'Cannot parse date from {entry_id}'}, status=400)
 
-    now = time.time()
-    SysConfig.objects.update_or_create(
-        key='assessment_gemini_rerun_date',
-        defaults={'value': date_str, 'timestamp_modified': now})
-    SysConfig.objects.update_or_create(
-        key='action_agent_wake_requested',
-        defaults={'value': '1', 'timestamp_modified': now})
+    action = Entry.objects.filter(kind='action', deleted_at__isnull=True,
+                                  data__entry_id='llm-assessment-gemini').first()
+    if not action:
+        logger.error("api_assessment_rerun: llm-assessment-gemini action not found")
+        return JsonResponse({'error': 'llm-assessment-gemini action not found'},
+                            status=500)
+
+    if (action.data or {}).get('runner') == 'wrangler':
+        # Durable worker carrying its target date (docs/wrangler.md), replacing
+        # the polled assessment_gemini_rerun_date flag. The legacy path below
+        # stays reachable so removing the runner flag still reverts the move.
+        from .wrangler import enqueue_action
+        worker_type = enqueue_action(action, target_date=target)
+        logger.info("api_assessment_rerun: enqueued %s worker for %s",
+                    worker_type, date_str)
+    else:
+        now = time.time()
+        SysConfig.objects.update_or_create(
+            key='assessment_gemini_rerun_date',
+            defaults={'value': date_str, 'timestamp_modified': now})
+        SysConfig.objects.update_or_create(
+            key='action_agent_wake_requested',
+            defaults={'value': '1', 'timestamp_modified': now})
 
     return JsonResponse({'success': True, 'date': date_str})
 
