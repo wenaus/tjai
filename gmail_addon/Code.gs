@@ -6,6 +6,7 @@
  * or meeting details in the email subject/body.
  * The user clicks "Add to tjai" to create a journal entry on etaverse.com.
  *
+ * Install Code.gs and appsscript.json (enables the advanced Gmail service).
  * AI: After editing this file, give the user the Apps Script editor URL to paste it:
  * https://script.google.com/home/projects/18IPT5WjVYnsecm_j9Sv8LSsgbYi9hDM49Pjxc48rWH9tGNLbaN4Fq4jO/edit
  */
@@ -906,21 +907,6 @@ function buildDateOnlyResult_(year, month, day) {
 
 
 // ============================================================
-// ICS extraction
-// ============================================================
-
-/**
- * Extract ICS text from raw MIME content.
- * Google Calendar sends invites as inline text/calendar MIME parts
- * that GmailApp.getAttachments() does not return.
- */
-function extractICSFromRaw_(rawContent) {
-  var match = rawContent.match(/BEGIN:VCALENDAR[\s\S]*?END:VCALENDAR/);
-  return match ? match[0] : null;
-}
-
-
-// ============================================================
 // Main trigger and card building
 // ============================================================
 
@@ -945,34 +931,16 @@ function onGmailMessage(e) {
     var messageId = e.gmail.messageId;
     var message = GmailApp.getMessageById(messageId);
     var thread = message.getThread();
-    var messages = thread.getMessages();
+    var mail = currentMailParts_(messageId);
+    var plainBody = message.getPlainBody();
 
-    diag.push('Thread messages: ' + messages.length);
-
-    // Search backwards (most recent first) for a message with ICS data
+    // Inspect calendar parts in the open message, without downloading images
+    // or reading raw MIME (which includes every attachment's encoded bytes).
     var icsTexts = [];
-    for (var m = messages.length - 1; m >= 0; m--) {
-      var msg = messages[m];
-      var attachments = msg.getAttachments();
-      var icsAttachments = attachments.filter(function(att) {
-        return att.getName().toLowerCase().endsWith('.ics') ||
-               att.getContentType().indexOf('text/calendar') !== -1;
-      });
-
-      if (icsAttachments.length > 0) {
-        diag.push('ICS found in msg[' + m + '] via attachment (' + icsAttachments.length + ')');
-        for (var i = 0; i < icsAttachments.length; i++) {
-          icsTexts.push(icsAttachments[i].getDataAsString());
-        }
-        break;
-      }
-
-      var rawContent = msg.getRawContent();
-      var icsFromRaw = extractICSFromRaw_(rawContent);
-      if (icsFromRaw) {
-        diag.push('ICS found in msg[' + m + '] via raw MIME (' + icsFromRaw.length + ' chars)');
-        icsTexts.push(icsFromRaw);
-        break;
+    for (var m = 0; m < mail.parts.length; m++) {
+      var part = mail.parts[m];
+      if (part.mimeType === 'text/calendar' || /\.ics$/i.test(part.filename || '')) {
+        icsTexts.push(mailPartText_(messageId, part));
       }
     }
 
@@ -999,14 +967,11 @@ function onGmailMessage(e) {
     if (!prefill) {
       diag.push('Trying body parse');
       var tryMsgs = [message];
-      if (messages.length > 1 && messages[0].getId() !== message.getId()) {
-        tryMsgs.push(messages[0]);
-      }
 
       for (var t = 0; t < tryMsgs.length; t++) {
         var tryMsg = tryMsgs[t];
         var subject = tryMsg.getSubject();
-        var body = tryMsg.getPlainBody();
+        var body = plainBody;
         var msgYear = tryMsg.getDate().getFullYear();
         var senderTz = senderTimezone_(tryMsg.getFrom());
         var bodyNoSig = stripSignature_(body);
@@ -1044,7 +1009,7 @@ function onGmailMessage(e) {
 
     // Even if full event detection failed, best-effort: grab dates, zoom/indico URLs
     if (!prefill) {
-      var scanBody = stripSignature_(message.getPlainBody());
+      var scanBody = stripSignature_(plainBody);
       var scanSubj = message.getSubject() || '';
       var scanYear = message.getDate().getFullYear();
       var foundZoom = extractZoomUrl_(scanBody) || extractZoomUrl_(scanSubj);
@@ -1076,11 +1041,11 @@ function onGmailMessage(e) {
       messageId: messageId,
       subject: cleanTitle || subj,
       sender: message.getFrom() || '',
-      count: newImageAttachments_(message).length,
-      threadCount: threadImageAttachments_(message).length
+      count: currentImageParts_(mail).length
     };
     return [buildMainCard_(cleanTitle || subj, gmailUrl, prefill, capInfo)];
   } catch (err) {
+    console.error('onGmailMessage: ' + err.message);
     diag.push('ERROR: ' + err.message);
     return [buildDiagCard_(diag)];
   }
@@ -1455,14 +1420,13 @@ function buildCapturesSection_(capInfo, gmailUrl) {
   var section = CardService.newCardSection()
     .setHeader('IMAGES');
   var n = capInfo ? capInfo.count : 0;
-  var t = capInfo ? (capInfo.threadCount || 0) : 0;
   section.addWidget(
     CardService.newDecoratedText()
       .setText(n === 0
-        ? (t === 0 ? 'No images in this thread' : 'Nothing new in this mail · ' + t + ' in the thread')
-        : (n + (n === 1 ? ' image' : ' images') + ' in this mail · ' + t + ' in the thread'))
+        ? 'No images in this mail'
+        : (n + (n === 1 ? ' image' : ' images') + ' in this mail'))
   );
-  if (t === 0) return section;
+  if (n === 0) return section;
 
   section.addWidget(
     CardService.newTextInput()
@@ -1478,88 +1442,124 @@ function buildCapturesSection_(capInfo, gmailUrl) {
     sender: capInfo.sender || '',
     gmail_url: gmailUrl || ''
   };
-  function actionFor(scope) {
-    var p = {};
-    for (var k in params) p[k] = params[k];
-    p.scope = scope;
-    return CardService.newAction().setFunctionName('stashCaptures').setParameters(p);
-  }
-
-  if (n > 0) {
-    section.addWidget(
-      CardService.newTextButton()
-        .setText('Stash images')
-        .setOnClickAction(actionFor('mail'))
-    );
-  }
   section.addWidget(
     CardService.newTextButton()
-      .setText('Stash all from thread')
-      .setOnClickAction(actionFor('thread'))
+      .setText('Stash images')
+      .setOnClickAction(CardService.newAction().setFunctionName('stashCaptures').setParameters(params))
   );
 
   return section;
 }
 
 
-/**
- * The message's image attachments, inline images included, above the size floor.
- */
-function imageAttachments_(message) {
-  var atts = message.getAttachments({ includeInlineImages: true, includeAttachments: true });
-  return atts.filter(function(att) {
-    var ct = (att.getContentType() || '').toLowerCase();
-    return ct.indexOf('image/') === 0 && att.getSize() >= CAPTURE_MIN_BYTES;
+/** Read one message's MIME structure; attachment bodies remain on Gmail. */
+function currentMailParts_(messageId) {
+  var result = Gmail.Users.Messages.get('me', messageId, { format: 'full', fields: 'id,payload' });
+  if (!result || !result.payload) throw new Error('Gmail returned no message content');
+  var parts = [];
+  function visit(part) {
+    if (part.mimeType === 'message/rfc822') return; // attached mail is a separate message
+    if (part.parts && part.parts.length) part.parts.forEach(visit);
+    else parts.push(part);
+  }
+  visit(result.payload);
+  var html = parts.filter(function(p) { return p.mimeType === 'text/html' && !p.filename; })
+    .map(function(p) { return mailPartText_(messageId, p); }).join('\n');
+  return { parts: parts, html: html };
+}
+
+
+function mailPartBytes_(messageId, part) {
+  var body = part.body || {};
+  if (body.attachmentId) {
+    body = Gmail.Users.Messages.Attachments.get('me', messageId, body.attachmentId);
+  }
+  if (!body || typeof body.data !== 'string') throw new Error('Gmail returned no data for ' + (part.filename || part.mimeType));
+  return Utilities.base64DecodeWebSafe(body.data);
+}
+
+
+function mailPartText_(messageId, part) {
+  return Utilities.newBlob(mailPartBytes_(messageId, part)).getDataAsString('UTF-8');
+}
+
+
+function partHeader_(part, name) {
+  var headers = part.headers || [];
+  for (var i = 0; i < headers.length; i++) {
+    if (headers[i].name.toLowerCase() === name.toLowerCase()) return headers[i].value;
+  }
+  return '';
+}
+
+
+function htmlAttribute_(tag, name) {
+  var match = tag.match(new RegExp('\\s' + name + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s>]+))', 'i'));
+  return match ? (match[1] || match[2] || match[3] || '').replace(/&amp;/gi, '&') : '';
+}
+
+
+/** Image references outside reply quotations, without reading earlier mail. */
+function mailImageReferences_(html) {
+  var all = Object.create(null), current = Object.create(null), stack = [];
+  var quoted = false, outlookQuote = false;
+  // Respect quoted attribute values, which may themselves contain > characters.
+  var tags = /<!--[\s\S]*?-->|<\/?([a-z][\w:-]*)\b(?:[^"'<>]|"[^"]*"|'[^']*')*>/gi;
+  var match;
+  while ((match = tags.exec(html))) {
+    if (!match[1]) continue;
+    var tag = match[0], name = match[1].toLowerCase();
+    if (/^<\//.test(tag)) {
+      for (var i = stack.length - 1; i >= 0; i--) {
+        if (stack[i].name === name) {
+          quoted = stack[i].quoted;
+          stack.length = i;
+          break;
+        }
+      }
+      continue;
+    }
+    var classes = htmlAttribute_(tag, 'class');
+    var id = htmlAttribute_(tag, 'id');
+    if (/^divRplyFwdMsg$/i.test(id)) outlookQuote = true;
+    var thisQuoted = quoted || outlookQuote || name === 'blockquote' ||
+      /(?:^|\s)(?:gmail_quote|gmail_extra|yahoo_quoted|protonmail_quote)(?:\s|$)/i.test(classes);
+    if (name === 'img') {
+      var src = htmlAttribute_(tag, 'src');
+      if (src) {
+        all[src] = true;
+        if (!thisQuoted) current[src] = true;
+      }
+    }
+    if (!/^(?:area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)$/.test(name) && !/\/\s*>$/.test(tag)) {
+      stack.push({ name: name, quoted: quoted });
+      quoted = thisQuoted;
+    }
+  }
+  return { all: all, current: current };
+}
+
+
+function currentImageParts_(mail) {
+  var refs = mailImageReferences_(mail.html);
+  return mail.parts.filter(function(part) {
+    if ((part.mimeType || '').indexOf('image/') !== 0 || (part.body || {}).size < CAPTURE_MIN_BYTES) return false;
+    var disposition = partHeader_(part, 'Content-Disposition');
+    if (/^attachment\b/i.test(disposition)) return true;
+    var cid = partHeader_(part, 'Content-ID').replace(/^<|>$/g, '');
+    var ref = cid ? 'cid:' + cid : partHeader_(part, 'Content-Location');
+    if (ref && refs.all[ref]) return !!refs.current[ref];
+    // Unreferenced inline parts belong to quoted/hidden content. Ordinary
+    // attached files, including images on a plain-text message, still count.
+    return !/^inline\b/i.test(disposition);
   });
 }
 
 
-/**
- * A key identifying one image across the messages of a thread. A reply
- * carries the quoted chain's inline images as its own, so the same picture
- * arrives again in every later message, byte for byte.
- */
-function imageKey_(att) {
-  return (att.getName() || '') + '|' + att.getSize() + '|' + (att.getContentType() || '');
-}
-
-
-/**
- * The images this message introduces: the ones that appear in no earlier
- * message of its thread. Without this, stashing from the latest mail restashes
- * everything anyone ever pasted into the conversation.
- */
-function newImageAttachments_(message) {
-  var here = imageAttachments_(message);
-  if (here.length === 0) return here;
-  var seen = {};
-  var id = message.getId();
-  var messages = message.getThread().getMessages();
-  for (var m = 0; m < messages.length; m++) {
-    if (messages[m].getId() === id) break;   // earlier messages only
-    var earlier = imageAttachments_(messages[m]);
-    for (var i = 0; i < earlier.length; i++) seen[imageKey_(earlier[i])] = true;
-  }
-  return here.filter(function(att) { return !seen[imageKey_(att)]; });
-}
-
-
-/**
- * Every image in the thread, each one once, in thread order.
- */
-function threadImageAttachments_(message) {
-  var seen = {}, out = [];
-  var messages = message.getThread().getMessages();
-  for (var m = 0; m < messages.length; m++) {
-    var atts = imageAttachments_(messages[m]);
-    for (var i = 0; i < atts.length; i++) {
-      var k = imageKey_(atts[i]);
-      if (seen[k]) continue;
-      seen[k] = true;
-      out.push(atts[i]);
-    }
-  }
-  return out;
+function captureImageBlob_(messageId, part, index) {
+  var ext = (part.mimeType.split('/')[1] || 'png').replace('jpeg', 'jpg');
+  return Utilities.newBlob(mailPartBytes_(messageId, part), part.mimeType,
+                           part.filename || 'image-' + (index + 1) + '.' + ext);
 }
 
 
@@ -1567,6 +1567,16 @@ function threadImageAttachments_(message) {
  * Action handler: post the message's images to tjai as a capture.
  */
 function stashCaptures(e) {
+  try {
+    return stashCurrentCaptures_(e);
+  } catch (err) {
+    console.error('stashCaptures: ' + err.message);
+    return notify_('Error: ' + err.message);
+  }
+}
+
+
+function stashCurrentCaptures_(e) {
   var params = e.commonEventObject.parameters;
   var formInputs = e.commonEventObject.formInputs || {};
   var apiKey = getApiKey_();
@@ -1575,13 +1585,9 @@ function stashCaptures(e) {
   }
 
   var message = GmailApp.getMessageById(params.message_id);
-  var scope = params.scope === 'thread' ? 'thread' : 'mail';
-  var images = scope === 'thread'
-    ? threadImageAttachments_(message)
-    : newImageAttachments_(message);
+  var images = currentImageParts_(currentMailParts_(params.message_id));
   if (images.length === 0) {
-    return notify_(scope === 'thread' ? 'No images in this thread'
-                                      : 'No new images in this mail');
+    return notify_('No images in this mail');
   }
 
   var raw = (formInputs.cap_note && formInputs.cap_note.stringInputs.value[0]) || '';
@@ -1597,12 +1603,7 @@ function stashCaptures(e) {
     source: 'gmail'
   };
   for (var i = 0; i < images.length; i++) {
-    var blob = images[i].copyBlob();
-    if (!blob.getName()) {
-      var ext = ((blob.getContentType() || 'image/png').split('/')[1] || 'png').replace('jpeg', 'jpg');
-      blob.setName('image-' + (i + 1) + '.' + ext);
-    }
-    payload['img' + i] = blob;
+    payload['img' + i] = captureImageBlob_(params.message_id, images[i], i);
   }
 
   // A payload object holding blobs goes out as multipart/form-data.

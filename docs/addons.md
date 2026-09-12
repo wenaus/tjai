@@ -7,7 +7,7 @@ A Gmail sidebar add-on that creates tjai entries from the email being viewed. Th
 ### What It Does
 
 - The contextual trigger is unconditional: the card renders for every open email
-- Journal prefill from event detection, tried in order: `.ics` attachments, ICS in the raw MIME content, then a meeting-details parse of the subject/body (date/time, Zoom URL, Indico URL)
+- Journal prefill from the open message's `.ics` attachments or inline `text/calendar` MIME parts, then a meeting-details parse of its subject/body (date/time, Zoom URL, Indico URL). No earlier messages are fetched.
 - Parses ICS VEVENT: summary, date/time, location, Zoom URL
 - Handles Outlook/Exchange Windows timezone names (WINDOWS_TZ_ map), IANA names (validated via probe), and UTC; body-parsed times with no explicit timezone use one inferred from the sender's country-code TLD
 - Displays time in Eastern with EST/EDT abbreviation
@@ -18,7 +18,7 @@ A Gmail sidebar add-on that creates tjai entries from the email being viewed. Th
 ### Files
 
 - `gmail_addon/Code.gs` — Apps Script code, manually pasted into the [Apps Script project](https://script.google.com/home/projects/18IPT5WjVYnsecm_j9Sv8LSsgbYi9hDM49Pjxc48rWH9tGNLbaN4Fq4jO/edit)
-- `gmail_addon/appsscript.json` — Manifest (OAuth scopes: `gmail.addons.execute`, `gmail.readonly`, `script.external_request`)
+- `gmail_addon/appsscript.json` — Manifest with the advanced Gmail v1 service (OAuth scopes: `gmail.addons.execute`, `gmail.readonly`, `script.external_request`)
 - Server endpoint: `api/add-entry` in `tjai_app/views.py` (Bearer token auth)
 
 ### Setup
@@ -28,13 +28,36 @@ A Gmail sidebar add-on that creates tjai entries from the email being viewed. Th
 3. From the editor, run `setApiKey("<key>")` once with the value from SysConfig `gmail_addon_api_key` (also in `~/.env` as `TJAI_GMAIL_ADDON_API_KEY`); the key is stored in the script's UserProperties
 4. Deploy as test deployment (Gmail Add-on type)
 
+Updates to message-part handling require pasting both `Code.gs` and
+`appsscript.json`. The manifest enables the advanced Gmail service, which
+fetches message structure and individual attachments separately. Apps Script
+enables the Gmail API automatically for its default Cloud project; a standard
+Cloud project requires enabling that API in the Cloud console. See Google's
+[advanced service setup](https://developers.google.com/apps-script/guides/services/advanced).
+
 Server endpoint accepts: `{kind, content, tags, context, source, event_date, event_time, all_day}`
 
 ### Stash images (captures)
 
-The IMAGES section counts what the open mail introduces and what its thread holds, inline pasted screenshots included; images under 1 KB (tracking pixels, icons) are ignored. **Stash images** takes the first: the images that appear in no earlier message of the thread. **Stash all from thread** takes every image in the conversation, each once. Both take a note with the same `:tag` and `=context` tokens and post as a multipart form to `api/add-capture` with the subject, sender, Gmail permalink, and note.
+The IMAGES section counts images in the open mail, inline pasted screenshots
+included; images under 1 KB (tracking pixels, icons) are ignored. **Stash
+images** posts those images as a multipart form to `api/add-capture` with the
+subject, sender, Gmail permalink, and a note supporting `:tag` and `=context`.
 
-The distinction is not cosmetic. A reply carries the quoted chain's inline images as its own attachments, so by the third reply "the images in this message" is the whole conversation's: four successive stashes of one thread wrote 6, 8, 9 and 10 files, the same bytes over and over. An image is matched across messages by name, size and content type. `scripts/test_gmail_addon_images.js` holds the two selections against a stubbed thread.
+Opening the card fetches only the current message's MIME structure and body.
+Inline images are selected by Content-ID or Content-Location references in
+the unquoted HTML. Gmail, Yahoo and Proton quote wrappers, HTML blockquotes,
+and the Outlook reply boundary exclude quoted inline images; explicitly
+attached image files remain selectable. Attached email messages are excluded.
+Image attachment bodies are fetched individually when Stash is clicked. No
+action enumerates the thread, compares earlier attachments, or downloads raw
+MIME to look for calendar data. Calendar detection still handles inline and
+attached ICS and the existing subject/body date forms within the open mail.
+
+`scripts/test_gmail_addon_images.js` checks selection, card rendering and
+stashing with 300 quoted image parts, verifies that opening the card fetches
+no image attachment bodies, and checks inline and attached calendar prefill.
+`scripts/test_gmail_addon_parse.js` covers the calendar text parser.
 
 The server stores the files under `data/captures/YYYY-MM/<entry uuid>/NN-name.ext`; the data directory is excluded from the deploy rsync and included in the nightly backup. It creates one memory entry tagged `gmail` and `capture`, in the given context, whose content is the subject, sender, and permalink on line 1, the note, and one markdown image line per file with its absolute URL. Accepted types are PNG, JPEG, GIF, WebP, BMP, TIFF, and HEIC, at most 20 files of 25 MB each per stash.
 

@@ -5466,6 +5466,21 @@ def api_dialog(request):
         return JsonResponse({"error": "role must be 'user' or 'assistant'"}, status=400)
 
     now = time.time()
+    recorded_at = now
+    source_timestamp = data.get("timestamp")
+    if source_timestamp is not None:
+        try:
+            stamp = datetime.fromisoformat(source_timestamp.replace('Z', '+00:00'))
+            if stamp.utcoffset() is None:
+                raise ValueError("timestamp requires a timezone")
+            recorded_at = stamp.timestamp()
+        except (ValueError, TypeError, AttributeError, OverflowError) as e:
+            return JsonResponse({"error": f"invalid timestamp: {e}"}, status=400)
+    source_id = data.get("source_id") or ""
+    if not isinstance(source_id, str) or len(source_id) > 512:
+        return JsonResponse({"error": "source_id must be a string of at most 512 characters"}, status=400)
+    if source_id and not all(data.get(k) for k in ("hostname", "client", "session_id")):
+        return JsonResponse({"error": "source_id requires hostname, client and session_id"}, status=400)
     entry_data = {
         "role": role,
         "client": data.get("client"),
@@ -5476,6 +5491,12 @@ def api_dialog(request):
         "project_path": data.get("project_path"),
         "hostname": data.get("hostname"),
     }
+    if source_id:
+        entry_data["source_id"] = source_id
+    if source_timestamp is not None:
+        entry_data["source_timestamp"] = source_timestamp
+    if data.get("content_type"):
+        entry_data["content_type"] = data["content_type"]
 
     extra_tags = []
 
@@ -5512,19 +5533,25 @@ def api_dialog(request):
             'timestamp_modified': now,
         },
     )
-    entry = Entry.objects.create(
-        id=str(uuid.uuid7()),
-        content=content,
-        kind='memory',
-        context_id=CURRENT_DIALOG_CONTEXT,
-        timestamp_created=now,
-        timestamp_modified=now,
-        is_dirty=0,
-        data=entry_data,
-    )
-    Tag.objects.create(tag_name=DIALOG_TAG, entry=entry)
-    for tag in extra_tags:
-        Tag.objects.create(tag_name=tag, entry=entry)
+    # Stable primary key makes retries (including a lost HTTP response) and
+    # overlapping async hooks idempotent without a content/time dedup window.
+    identity = json.dumps(["tjai-dialog-v1", data.get("hostname"), data.get("client"),
+                           data.get("session_id"), role, source_id])
+    entry_id = str(uuid.uuid5(uuid.NAMESPACE_URL, identity) if source_id else uuid.uuid7())
+    with transaction.atomic():
+        entry, created = Entry.objects.get_or_create(id=entry_id, defaults={
+            "content": content,
+            "kind": "memory",
+            "context_id": CURRENT_DIALOG_CONTEXT,
+            "timestamp_created": recorded_at,
+            "timestamp_modified": now,
+            "is_dirty": 0,
+            "data": entry_data,
+        })
+        if created:
+            Tag.objects.create(tag_name=DIALOG_TAG, entry=entry)
+            for tag in extra_tags:
+                Tag.objects.create(tag_name=tag, entry=entry)
 
     return JsonResponse({"status": "ok", "entry_id": entry.id})
 

@@ -116,6 +116,10 @@ any machine can load recent dialog context.
 [User submits prompt] → UserPromptSubmit hook → record.py / codex_record.py
   → HTTP POST /api/dialog → creates tjai entry with role='user'
 
+[Claude calls a tool] → PreToolUse + PostToolUse hooks → record.py
+  → Uploads complete assistant text and plaintext thinking blocks
+    (Claude stores displayed during-turn narration in thinking blocks)
+
 [Assistant finishes] → Stop hook → record.py / codex_record.py
   → Extracts new assistant messages from the JSONL transcript
     (resuming from a per-transcript byte offset)
@@ -130,13 +134,45 @@ Dialog entries: `kind='memory'`, `tag='ccdialog'`, `is_dirty=0`
 (server-only). Dialog writes use `context='co-code'`, meaning
 co-development dialog across Claude Code, Codex, and future coding assistants,
 with `ccdialog` as the durable technical discriminator.
-Uses `Entry.objects.create()` directly (bypasses 60s dedup). Metadata in
+Writes bypass the general 60s content deduplication. Metadata in
 `Entry.data` includes `role`, `client`, `model`, `model_provider`,
 `reasoning_effort`, `session_id`, `project_path`, and `hostname` when the
 recording hook can determine them. Older entries may lack the model fields.
 POSTed content starting with `<task-notification>` (research subagent
 products) is additionally tagged `research-subagent` and annotated with the
 source research action entry.
+
+Claude records both `text` and plaintext `thinking` as assistant dialog, with
+`content_type` identifying the block type. Tool inputs, thinking signatures,
+redacted thinking and sidechain messages are excluded. Transcript timestamps
+set the entry's creation time, so dialog and assessment retain the order in
+which updates were emitted. The modification time records ingestion.
+
+Each transcript message UUID and content type supplies a `source_id`. The API
+derives a stable entry UUID from host, client, session, role and source ID;
+retries return the existing entry. Older callers without these fields retain
+their existing behavior. Explicit timestamps must be ISO timestamps with a
+timezone.
+
+The Claude recorder serializes overlapping hooks per transcript, checkpoints
+after successful uploads, and leaves partial JSONL records for the next hook.
+A failed upload leaves its record pending. PreToolUse uploads narration before
+a long tool call; PostToolUse catches records flushed during the call; Stop
+uploads the final response. These command hooks run asynchronously. The
+[Claude hook reference](https://code.claude.com/docs/en/hooks) describes their
+lifecycle and settings.
+
+To recover plaintext thinking skipped by the older recorder on a specific
+transcript, run on its originating host with the normal recording environment:
+
+```bash
+python3 ~/.claude/hooks/record.py --backfill-thinking /absolute/path/session.jsonl
+```
+
+Recovery reads only thinking blocks and keeps a separate
+`.tjai_thinking_offset`, leaving the normal `.tjai_offset` intact. Source IDs
+make overlap with normal recording safe. This repairs the dialog and future
+assessment input; it does not rerun existing assessments.
 
 ### Hook Scripts
 
@@ -145,7 +181,8 @@ Located in `computers/common/claude-hooks/`:
   authoritative local date in America/New_York (overriding Claude Code's
   UTC-derived date context), a mandatory session-start bootstrap directive
   (see below), and dialog history.
-- `record.py` — UserPromptSubmit + Stop (async). Records prompts and responses.
+- `record.py` — UserPromptSubmit, PreToolUse, PostToolUse and Stop (async).
+  Records prompts, during-turn updates and final responses.
 - `SYSPROMPT.md` — Static context injected at session start.
 - `stop-phrase-guard.sh` — Stop hook that blocks the assistant from stopping
   when its last message matches ownership-dodging, session-quitting, or
