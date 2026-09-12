@@ -49,6 +49,11 @@ def run():
         b = comms.register_session("native-b", "claude-proof", "test-host-b", "claude", resources=["proof"])
         assert a["id"] == comms.register_session("native-a", "codex-proof", "test-host-a", "codex", resources=["proof"])["id"]
         assert len(comms.list_sessions(resource="proof")) == 2
+        comms.heartbeat_session(b["id"], name="renamed-claude-proof", model="native-model")
+        updated = LLMSession.objects.get(id=b["id"])
+        assert updated.name == "renamed-claude-proof" and updated.resources == ["proof"]
+        comms.heartbeat_session(b["id"], "unknown")
+        assert len(comms.list_sessions(resource="proof")) == 2
         comms.heartbeat_session(b["id"], "offline")
         assert len(comms.list_sessions(resource="proof")) == 1
         comms.heartbeat_session(b["id"])

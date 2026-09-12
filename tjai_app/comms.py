@@ -17,7 +17,8 @@ from .comms_models import LLMDelivery, LLMMessage, LLMSession
 
 
 FRESH_SECONDS = 90
-DELIVERY_STATES = {"pending", "written_to_transport", "accepted_by_client", "uncertain", "failed", "acknowledged"}
+SESSION_STATES = {"idle", "active", "unknown", "offline"}
+DELIVERY_STATES = {"pending", "written_to_transport", "accepted_by_client", "queued_in_client", "uncertain", "failed", "acknowledged"}
 
 
 def _uuid(value):
@@ -42,9 +43,9 @@ def register_session(native_id, name, host, client, model="", cwd="", resources=
     native_id = _text(native_id, "native_id", 128)
     host = _text(host, "host", 160)
     client = _text(client, "client", 80)
-    if state not in {"idle", "active", "offline"}:
-        raise ValueError("state must be idle, active or offline")
-    if delivery not in {"pull", "codex_app_server", "claude_socket"}:
+    if state not in SESSION_STATES:
+        raise ValueError("state must be idle, active, unknown or offline")
+    if delivery not in {"pull", "codex_app_server", "codex_queue", "claude_socket"}:
         raise ValueError("Unsupported delivery capability")
     resources = resources or []
     if not isinstance(resources, list) or len(resources) > 20:
@@ -60,10 +61,14 @@ def register_session(native_id, name, host, client, model="", cwd="", resources=
     return _session(row)
 
 
-def heartbeat_session(session_id, state="idle"):
-    if state not in {"idle", "active", "offline"}:
-        raise ValueError("state must be idle, active or offline")
-    changed = LLMSession.objects.filter(id=_uuid(session_id)).update(state=state, last_seen=timezone.now())
+def heartbeat_session(session_id, state="idle", name=None, model=None, cwd=None):
+    if state not in SESSION_STATES:
+        raise ValueError("state must be idle, active, unknown or offline")
+    changes = {"state": state, "last_seen": timezone.now()}
+    for field, value, maximum in [("name", name, 160), ("model", model, 120), ("cwd", cwd, 4096)]:
+        if value is not None:
+            changes[field] = _text(value, field, maximum, field == "name")
+    changed = LLMSession.objects.filter(id=_uuid(session_id)).update(**changes)
     if not changed:
         raise ValueError("Unknown session; register first")
     return {"session_id": session_id, "state": state}

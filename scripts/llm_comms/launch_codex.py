@@ -1,63 +1,123 @@
-"""Opt-in Codex TUI with its own reachable app-server and TJAI receiver.
+"""Normal interactive Codex launcher with automatic TJAI native delivery.
 
-The runtime and receiver persist after the TUI disconnects, just as native
-remote Codex does. Reconnect using the command printed on exit. No existing
-session is resumed or moved, and the normal shell launcher is unchanged.
+Each launch owns one private app-server. SessionStart registers each thread;
+the supervisor covers clients with hooks disabled and later /new or /resume.
+Noninteractive and administrative subcommands pass through untouched.
 """
 
-import argparse
 import asyncio
 import json
 import os
 from pathlib import Path
-import shlex
-import socket
+import signal
 import subprocess
 import sys
 import tempfile
 import time
 
 from codex_client import CodexClient
+from startup import machine, start
 
 
-async def receive(args):
-    """Wait for the new TUI's first thread, then become its ordinary bridge."""
-    from bridge import run
+VALUE_OPTIONS = {"-c", "--config", "-C", "--cd", "-m", "--model", "-p", "--profile",
+                 "-s", "--sandbox", "-a", "--ask-for-approval", "--enable", "--disable",
+                 "--add-dir", "--image", "-i", "--local-provider", "--remote-auth-token-env"}
+COMMANDS = {"agents", "exec", "e", "review", "login", "logout", "mcp", "plugin", "app-server",
+            "remote-control", "completion", "update", "doctor", "sandbox", "debug", "apply", "a",
+            "queue", "archive", "delete", "migrate-rollouts", "unarchive", "cloud", "exec-server",
+            "features", "help"}
+
+
+def launch_options(arguments):
+    """Inspect routing/cwd only; forward the original argument list verbatim."""
+    cwd = os.getcwd()
+    server_config = []
+    i = 0
+    while i < len(arguments):
+        arg = arguments[i]
+        if arg in {"-h", "--help", "-V", "--version", "--remote"} or arg.startswith("--remote="):
+            return None
+        if arg in VALUE_OPTIONS:
+            if i + 1 >= len(arguments):
+                return None  # Native CLI reports the malformed argument.
+            value = arguments[i + 1]
+            if arg in {"-C", "--cd"}:
+                cwd = os.path.abspath(os.path.expanduser(value))
+            if arg in {"-c", "--config", "--enable", "--disable"}:
+                server_config.extend([arg, value])
+            i += 2
+            continue
+        if arg.startswith("--cd="):
+            cwd = os.path.abspath(os.path.expanduser(arg.split("=", 1)[1]))
+        elif arg.startswith(("--config=", "--enable=", "--disable=")):
+            server_config.append(arg)
+        elif not arg.startswith("-"):
+            if arg in COMMANDS:
+                return None
+            break  # Interactive prompt, resume or fork: other arguments stay native.
+        i += 1
+    return cwd, server_config
+
+
+def read_runtime(directory):
+    return json.loads((directory / "runtime.json").read_text())
+
+
+async def supervise(directory):
+    runtime = read_runtime(directory)
+    host, _ = machine()
+    watched = set()
     while True:
-        async with CodexClient(args.socket) as client:
-            loaded = await client.loaded_threads()
-        if len(loaded) > 1:
-            raise RuntimeError("Multiple loaded threads: select one explicitly with bridge.py")
-        if loaded:
-            args.native_id = loaded[0]
-            runtime_file = Path(args.socket).parent / "runtime.json"
-            runtime = json.loads(runtime_file.read_text())
-            runtime["native_id"] = args.native_id
-            runtime_file.write_text(json.dumps(runtime, indent=2) + "\n")
-            args.client, args.model, args.once = "codex", "", False
-            await run(args)
+        try:
+            os.kill(runtime["server_pid"], 0)
+            async with CodexClient(str(directory / "codex.sock")) as client:
+                loaded = await client.loaded_threads()
+                active = False
+                for native_id in loaded:
+                    response = await client.call("thread/read", {"threadId": native_id, "includeTurns": False})
+                    thread = response["thread"]
+                    if thread.get("threadSource") != "user":
+                        continue  # Internal title/housekeeping models are not operator sessions.
+                    active |= thread["status"]["type"] == "active"
+                    if native_id not in watched:
+                        data = {"session_id": native_id, "cwd": thread.get("cwd", runtime["cwd"]),
+                                "session_name": thread.get("name") or f"{host}-codex-{native_id[-8:]}",
+                                "model": thread.get("model") or "",
+                                "owner_pid": runtime["server_pid"]}
+                        start("codex", data, host)
+                        watched.add(native_id)
+                watched.intersection_update(loaded)
+            # TUI exit keeps an already-running turn alive until completion.
+            disconnected = (directory / "disconnected").exists()
+            try:
+                os.kill(runtime["launcher_pid"], 0)
+            except ProcessLookupError:
+                disconnected = True
+            if disconnected and not active:
+                os.killpg(runtime["server_pid"], signal.SIGTERM)
+                return
+        except (FileNotFoundError, ProcessLookupError, ConnectionError):
             return
-        await asyncio.sleep(1)
+        except (OSError, ValueError, RuntimeError) as exc:
+            print(f"TJAI runtime supervisor: {exc}", flush=True)
+        await asyncio.sleep(2)
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--name", required=True)
-    parser.add_argument("--host", default=socket.gethostname())
-    parser.add_argument("--cwd", default=os.getcwd())
-    parser.add_argument("--resource", action="append", default=[])
-    parser.add_argument("--socket", help=argparse.SUPPRESS)
-    parser.add_argument("codex_args", nargs=argparse.REMAINDER)
-    args = parser.parse_args()
-    if args.socket:
-        asyncio.run(receive(args))
+    arguments = sys.argv[1:]
+    if arguments[:1] == ["--tjai-supervise"]:
+        asyncio.run(supervise(Path(arguments[1])))
         return 0
+    options = launch_options(arguments)
+    if options is None or not sys.stdin.isatty():
+        os.execvp("codex", ["codex", *arguments])
+    cwd, server_config = options
     directory = Path(tempfile.mkdtemp(prefix="tjai-codex-"))
     address = "unix://" + str(directory / "codex.sock")
-    env = {**os.environ}
+    env = {**os.environ, "TJAI_CODEX_SOCKET": str(directory / "codex.sock"), "TJAI_COMMS_PYTHON": sys.executable}
     with open(directory / "runtime.log", "w") as log:
-        server = subprocess.Popen(["codex", "app-server", "--listen", address],
-            cwd=args.cwd, env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
+        server = subprocess.Popen(["codex", *server_config, "app-server", "--listen", address],
+            cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
     for _ in range(100):
         if server.poll() is not None:
             raise RuntimeError(f"App-server exited; see {directory}/runtime.log")
@@ -65,33 +125,19 @@ def main():
             break
         time.sleep(.1)
     else:
-        server.terminate()
+        os.killpg(server.pid, signal.SIGTERM)
         raise RuntimeError(f"App-server did not open its socket; see {directory}/runtime.log")
-    receiver_args = [sys.executable, str(Path(__file__).resolve()), "--socket", str(directory / "codex.sock"),
-                     "--name", args.name, "--host", args.host, "--cwd", args.cwd]
-    for resource in args.resource:
-        receiver_args.extend(["--resource", resource])
-    with open(directory / "bridge.log", "w") as log:
-        receiver = subprocess.Popen(receiver_args, cwd=args.cwd, env=env,
-            stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
-    extra = args.codex_args[1:] if args.codex_args[:1] == ["--"] else args.codex_args
-    tui = ["codex", "--remote", address, *extra]
-    (directory / "runtime.json").write_text(json.dumps({
-        "server_pid": server.pid, "receiver_pid": receiver.pid, "address": address,
-        "name": args.name, "cwd": args.cwd,
-    }, indent=2) + "\n")
-    print(f"TJAI Codex runtime: {directory}\nReceiver log: {directory}/bridge.log", flush=True)
+    (directory / "runtime.json").write_text(json.dumps({"server_pid": server.pid, "launcher_pid": os.getpid(), "address": address, "cwd": cwd}) + "\n")
+    with open(directory / "supervisor.log", "w") as log:
+        subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--tjai-supervise", str(directory)],
+            cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
+    if os.environ.get("TJAI_COMMS_DEBUG"):
+        print(f"TJAI communications runtime: {directory}", flush=True)
     try:
-        return subprocess.call(tui, cwd=args.cwd, env=env)
+        return subprocess.call(["codex", "--remote", address, *arguments], cwd=cwd, env=env)
     finally:
-        runtime = json.loads((directory / "runtime.json").read_text())
-        reconnect = ["codex", "--remote", address]
-        if runtime.get("native_id"):
-            reconnect.extend(["resume", runtime["native_id"]])
-        else:
-            reconnect.append("agents")
-        print("Runtime and receiver remain running. Reconnect with:\n" + shlex.join(reconnect), flush=True)
-        print(f"After all work has finished, stop these runtime processes: {server.pid} {receiver.pid}", flush=True)
+        (directory / "disconnected").touch()
+        print("Any running turn will finish before this runtime closes.", flush=True)
 
 
 if __name__ == "__main__":

@@ -120,7 +120,8 @@ async def register_session(native_id: str, name: str, host: str, client: str,
 
     Returns a stable TJAI session ID for the client/host/native_id combination.
     Resources name shared work such as swf-monitor. Delivery is pull,
-    codex_app_server or claude_socket. State is idle, active or offline.
+    codex_app_server, codex_queue (deferred), or claude_socket. State is idle,
+    active, unknown (turn status unavailable), or offline.
     This registration is asserted provenance within the operator's MCP account.
     """
     return await _comms_call(comms.register_session, native_id=native_id, name=name,
@@ -129,12 +130,15 @@ async def register_session(native_id: str, name: str, host: str, client: str,
 
 
 @mcp.tool()
-async def heartbeat_session(session_id: str, state: str = "idle") -> dict:
+async def heartbeat_session(session_id: str, state: str = "idle", name: str = None,
+                            model: str = None, cwd: str = None) -> dict:
     """Adapter heartbeat; online discovery expires after 90 seconds without one.
 
-    State is idle, active or offline. Heartbeats do not start model turns.
+    State is idle, active, unknown or offline. Optional native name/model/cwd refresh
+    metadata without changing resource membership. No model turn is started.
     """
-    return await _comms_call(comms.heartbeat_session, session_id=session_id, state=state)
+    return await _comms_call(comms.heartbeat_session, session_id=session_id, state=state,
+                            name=name, model=model, cwd=cwd)
 
 
 @mcp.tool()
@@ -195,7 +199,7 @@ async def acknowledge_message(session_id: str, message_id: str) -> dict:
 
 @mcp.tool()
 async def record_delivery(session_id: str, message_id: str, state: str, detail: str = "", claim: bool = False) -> dict:
-    """Adapter receipt: written_to_transport, accepted_by_client, uncertain or failed.
+    """Adapter receipt: written_to_transport, accepted_by_client, queued_in_client, uncertain or failed.
 
     Never claims model acknowledgment. An uncertain result must not be retried
     blindly. An adapter receipt cannot overwrite a model acknowledgment.

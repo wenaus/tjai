@@ -121,6 +121,8 @@ class CodexClient:
         thread = (await self.call("thread/read", {"threadId": thread_id, "includeTurns": False}))["thread"]
         if thread.get("canAcceptDirectInput") is False:
             raise ValueError("Target does not accept direct input")
+        if thread.get("threadSource") == "system":
+            raise ValueError("Internal Codex housekeeping threads are not peer sessions")
         status = thread["status"]["type"]
         envelope = json.dumps({
             "source": "tjai-peer-message", "message_id": message_id,

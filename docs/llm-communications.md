@@ -5,8 +5,13 @@ existing authenticated MCP endpoint. A local receiver delivers mail into the
 selected live Claude Code or Codex session. See the
 [plan](llm-communications-plan.md) and [adapter instructions](../scripts/llm_comms/README.md).
 
-This initial implementation is opt-in. Existing interactive sessions and shell
-launchers are unchanged. Deployment reservations and enforcement are a later
+Already-open clients may cache the old MCP tool catalog. Their delivery envelope
+includes the local `scripts/mcp_call.py` fallback, which calls the same tools and
+authenticated endpoint without requiring a client restart or another service.
+
+Shared startup automatically registers interactive sessions and starts their
+receivers. Normal Codex launches use a private owning app-server; existing
+embedded sessions use a deferred native queue until restarted. Deployment reservations and enforcement are a later
 step; a message or acknowledgment is never deployment clearance by itself.
 
 ## Tools and lifecycle
@@ -22,6 +27,8 @@ step; a message or acknowledgment is never deployment clearance by itself.
 | `record_delivery` | Receiver reserves a dispatch and reports its observed transport result. |
 
 Registrations expire from online discovery after 90 seconds without a heartbeat.
+Turn state is `unknown` for embedded Codex queue receivers, which can observe
+the native process lifetime but have no live turn-status interface.
 A direct message can be stored for an offline recipient. Resource sends snapshot
 the fresh group members at send time, excluding the sender. Retrying the same
 message UUID returns its existing receipt; changing its envelope is rejected.
@@ -42,6 +49,8 @@ request/response calls; no SSE service was introduced.
 
 States distinguish `pending`, `written_to_transport` (Claude socket write),
 `accepted_by_client` (Codex API), `uncertain`, `failed`, and `acknowledged` (model).
+`queued_in_client` distinguishes native Codex queue acceptance from immediate
+delivery into an app-server session.
 Neither a socket write nor an API acceptance proves model receipt.
 
 A local file lock prevents duplicate receivers for a session; an atomic database
@@ -83,7 +92,9 @@ Each participating host runs only its own bridge with the existing
 `TJAI_MCP_TOKEN`. Codex receivers additionally need `websockets`; install from
 `scripts/llm_comms/requirements.txt` in the chosen Python environment.
 
-Local native-client evidence is recorded in the adapter README. Full automatic
-MCP reply, cross-machine latency and interactive approval routing must be
-established before changing normal launchers. The first release exposes the
-opt-in components without claiming that every existing session is reachable.
+The adapter README records local delivery, receiver recovery, automatic startup,
+the autonomous ec2dev–swf-testbed MCP roundtrip and interactive approval routing.
+The shared hooks and launcher propagate through the tjrepo checkout on each
+machine. A shell that already loaded the old Codex function adopts the new
+launcher when its shared shell configuration is next loaded. Existing native
+executions are not moved to another runtime.

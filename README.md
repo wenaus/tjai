@@ -49,7 +49,7 @@ interfaces, not the center of the system architecture.
 | [Server & Deployment](docs/server.md) | Production environment, deploy, endpoints, logging, health, backups |
 | [MCP Server](docs/mcp.md) | Standalone MCP ASGI service: transport policy, bearer auth, Apache routing, deployment; related read-only Postgres MCP |
 | [Distributed LLM Communications Plan](docs/llm-communications-plan.md) | Proposed session directory, durable mailbox and native client delivery adapters; feasibility sequence and deployment coordination |
-| [LLM Communications](docs/llm-communications.md) | Implemented MCP mailbox, opt-in receivers, delivery states and peer dialog attribution |
+| [LLM Communications](docs/llm-communications.md) | MCP mailbox, automatic session receivers, delivery states and peer dialog attribution |
 | [Action Agent](docs/action-agent.md) | Scheduled task daemon, execution pipeline, action entry schema |
 | [Wrangler](docs/wrangler.md) | Successor execution design on wrangle-ai: durable workers, roster over action entries, migration plan |
 | [Page Refresh](docs/page-refresh.md) | Scheduled synchronous rebuild of the cached products behind listed pages, with authenticated fetching |

@@ -5440,6 +5440,8 @@ def api_dialog(request):
                 "id": e.id,
                 "content": e.content[:2000] + (f"\n[truncated — full entry: {e.id}]" if len(e.content) > 2000 else ""),
                 "role": data.get("role", "unknown"),
+                **({k: data.get(k) for k in ("peer_sender", "message_id", "reply_to")}
+                   if data.get("role") == "peer" else {}),
                 "client": data.get("client"),
                 "model": data.get("model"),
                 "model_provider": data.get("model_provider"),

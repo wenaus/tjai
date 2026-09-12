@@ -6,7 +6,9 @@ Status: implementation started. Local Codex and Claude delivery adapters have
 passed a bounded active/idle proof in designated interactive sessions. Native
 Codex offline-queue recovery was also demonstrated. The TJAI directory/mailbox,
 MCP tools, receiver, opt-in Codex launcher and canonical peer dialog are
-implemented. Cross-machine and general launcher rollout remain open.
+implemented. Automatic shared startup, native approval routing and an autonomous
+MCP reply between ec2dev Codex and swf-testbed Claude have also been verified.
+Deployment reservations remain the next independent extension.
 The service is deployed; both native clients received live HTTPS mailbox probes,
 and a pending TJAI message reached Codex after its receiver restarted.
 
@@ -228,6 +230,8 @@ acknowledged, whether active and idle behavior both worked, and how reconnect
 recovery behaved. A successful API response or a message appearing only in a
 saved transcript is insufficient evidence of delivery into the live session.
 
-The first unresolved decision is the Codex integration route. Remaining API
-shapes and storage details should follow that proof rather than presuppose a
-capability the interactive client may not expose.
+The Codex integration route is now established: normal interactive launches
+expose their own private app-server, while already-running embedded sessions
+use a labeled queue fallback. The mailbox and adapter contracts followed the
+native-client proof. Shared startup is installed on ec2dev and swf-testbed;
+other machines adopt the versioned configuration when their checkout updates.

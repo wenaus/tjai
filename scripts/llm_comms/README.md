@@ -1,7 +1,8 @@
 # LLM communications adapters
 
 Local delivery components for the [communications plan](../../docs/llm-communications-plan.md).
-The scripts are not installed into normal client startup yet.
+The shared SessionStart hooks and normal Codex launcher start these components
+automatically. Direct commands below are for diagnostics and designated tests.
 
 ## Codex
 
@@ -30,8 +31,8 @@ a file or stdin (`--message-file -`) rather than interpolated into shell code.
 The response `accepted_by_client` is not model acknowledgment. Ambiguous network
 failures are not automatically retried.
 
-The normal embedded Codex CLI has no external app-server connection. An opt-in
-session can use the same interactive TUI with an external owning runtime:
+An embedded Codex CLI has no external app-server connection. The normal shared
+launcher now uses the same interactive TUI with an external owning runtime:
 
 ```bash
 codex app-server --listen unix:///private/path/codex.sock
@@ -41,16 +42,16 @@ codex --remote unix:///private/path/codex.sock
 Run these in separate terminals. The socket directory must be private. Preserve
 the normal workspace and permission options when integrating this with the
 shared launch function. Do not resume a session into this runtime while it is
-still executing in another embedded CLI. No global daemon or launch-function
-change was installed by the initial proof.
+still executing in another embedded CLI. Each normal launch owns a private
+runtime; no shared system daemon is required.
 
-The RPC reader exposes selected lifecycle events, excluding token deltas. A
-connection does not automatically subscribe to a thread merely by sending input.
-The proof explicitly attached an observer to the already-loaded test thread to
-receive completion events. Production lifecycle integration must establish its
-subscription when the session is created. The adapter does not answer approval
-requests; interactive permission routing needs verification before general
-launcher rollout.
+The receiver uses bounded metadata reads and does not depend on subscribing to
+token streams. The supervisor registers user sessions, excluding internal
+housekeeping models, and handles later `/new` and `/resume` threads. On TUI exit
+or launcher loss, any active turn can finish before the runtime closes. The
+adapter never answers approval requests; a live test verified that an approval
+requested during externally initiated input reached the TUI and that declining
+it canceled the command.
 
 ## Claude Code
 
@@ -119,11 +120,28 @@ passed concurrent idempotency, dispatch claims, dialog deduplication, assessment
 attribution and notification wake (approximately 10 ms locally).
 
 The directory/mailbox, receiver, acknowledgment and canonical peer dialog are
-now implemented; see [service behavior](../../docs/llm-communications.md).
-Remaining rollout checks include an autonomous MCP reply loop, cross-machine
-proof, and general client lifecycle and permission-routing integration.
+implemented; see [service behavior](../../docs/llm-communications.md).
 
-## Opt-in receiver
+### Automatic cross-machine proof
+
+On 2026-09-12, the shared Codex launcher on ec2dev registered its session without
+a manual receiver command. A designated Claude session on swf-testbed registered
+through the SessionStart integration. Codex invoked TJAI `send_message`, Claude
+replied through `send_message(reply_to=...)`, and Codex invoked
+`acknowledge_message`. The test driver did not relay the response.
+
+- Original message: `841f9ac0-b028-4eae-9022-861286b10c96`.
+- Claude reply: `7c3e9b2a-4d1f-4e8a-9b6c-2f5d8a1e3c47`, body `COMMS_CROSSHOST_REPLY_01`.
+- Both deliveries reached `acknowledged`; each had exactly one `role=peer`
+  dialog entry, on its receiving host, with the reply linked to the original.
+- Native clients: Codex 0.154.0 on ec2dev; Claude Code 2.1.269 on swf-testbed.
+
+The first automatic-discovery check exposed an internal Codex title-generation
+thread in the directory. The supervisor now selects `threadSource=user`, and
+the delivery adapter rejects `threadSource=system`. Native names/models are
+refreshed by heartbeat without changing resource membership.
+
+## Shared startup and direct receiver
 
 For an existing Claude session, use its exact `sessionId` and
 `messagingSocketPath` from `~/.claude/sessions/`. For Codex, use a thread loaded
@@ -140,18 +158,31 @@ ID, maintains heartbeat freshness and receives mail without model polling. It
 uses the existing `TJAI_MCP_TOKEN` environment variable or `~/.env`; optional
 `TJAI_MCP_URL` overrides the endpoint. `--once` receives one bounded batch.
 
-For a new opt-in Codex TUI with automatic receiver startup:
+Normal use is simply `codex` or `claude`. The shared Codex shell function calls
+`computers/common/codex-launch.sh`, retaining its existing status line, sandbox,
+approval, search and working-directory arguments. Administrative commands and
+noninteractive execution pass through to native Codex. The wrapper reuses a
+Python environment with `websockets`, or prepares `~/.tjai/comms-venv` once.
+
+For a direct launcher check outside the shared shell function:
 
 ```bash
 /var/www/tjai/.venv/bin/python scripts/llm_comms/launch_codex.py \
-  --name comms-codex --host ec2dev --cwd /home/admin/github \
-  --resource swf-monitor -- --no-alt-screen
+  -C /home/admin/github --sandbox danger-full-access --ask-for-approval on-request --search
 ```
 
-This starts a private runtime and a receiver that registers the TUI's first
-loaded thread. Normal Codex config and extra TUI options apply; the wrapper
-does not invoke a shell function. It prints a private runtime directory with
-logs and process IDs. The runtime and receiver remain running when the TUI
-disconnects; the printed reconnect command returns to that runtime. Stop the
-printed processes only after their work has finished. Use one thread per opt-in
-runtime, or select threads explicitly with `bridge.py`.
+SessionStart supplies the model its TJAI session ID and common messaging
+instructions. Receivers use the canonical `location_name` and optional
+`comms_resources` list in `~/.tjai/config.json`; `TJAI_COMMS_RESOURCES` can add
+comma-separated resources. Every session joins `host:<location_name>`.
+
+Existing embedded Codex sessions enroll through the recording hook on their
+next user prompt, using `codex_queue` delivery. This queues input for the next
+native input boundary and cannot steer their current turn. Restart through the
+normal launcher for immediate delivery. Scheduled action/research workers with
+`TJAI_ACTION_ID` are excluded; designated transport tests can set
+`TJAI_COMMS_TEST=1` explicitly.
+
+Logs live under `~/.tjai/comms/<session-id>.log`; the private runtime has a
+`runtime.json`, `runtime.log` and `supervisor.log`. Set `TJAI_COMMS_DEBUG=1` to
+print its path at launch. No receiver grants approvals or changes client policy.
