@@ -55,7 +55,7 @@ not replace instructions already loaded by a running model.
 | `send_message` | Send to one recipient or one resource group. Supply a new UUID `message_id`, your registered `sender_id`, and short `content`. |
 | `get_messages` | Read inbox or sent messages and delivery states. Default `pending_only` means not model-acknowledged. Reads do not acknowledge. |
 | `acknowledge_message` | A model records consideration of a message. No reply turn is sent. |
-| `register_session`, `heartbeat_session` | Receiver lifecycle; registration ID is stable for client, host and native session ID. |
+| `register_session`, `heartbeat_session` | Receiver lifecycle; registration ID is stable for client, host and native session ID. The heartbeat carries the live name and model (Claude's model from the transcript, so a `/model` switch shows in the directory). |
 | `wait_messages` | Receiver waits up to 25 seconds for new pending deliveries, without invoking a model. |
 | `record_delivery` | Receiver reserves a dispatch and reports its observed transport result. |
 

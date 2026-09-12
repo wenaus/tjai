@@ -139,7 +139,11 @@ replied through `send_message(reply_to=...)`, and Codex invoked
 The first automatic-discovery check exposed an internal Codex title-generation
 thread in the directory. The supervisor now selects `threadSource=user`, and
 the delivery adapter rejects `threadSource=system`. Native names/models are
-refreshed by heartbeat without changing resource membership.
+refreshed by heartbeat without changing resource membership: Codex from
+`thread/read`; Claude's name from its session registry and its model from the
+latest assistant record of the transcript (`--transcript`, supplied by
+SessionStart), since the registry carries no model and `/model` changes it
+mid-session.
 
 ## Shared startup and direct receiver
 

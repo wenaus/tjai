@@ -35,6 +35,32 @@ def emit(**data):
     print(json.dumps(data), flush=True)
 
 
+def transcript_model(path, tail_bytes=262144):
+    """The model that answered the latest assistant turn of a Claude transcript.
+
+    Claude's session registry carries no model and /model changes it mid-session,
+    so the transcript is the live source; empty when nothing can be read."""
+    if not path:
+        return ""
+    try:
+        with open(path, "rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            handle.seek(max(0, handle.tell() - tail_bytes))
+            lines = handle.read().splitlines()
+    except OSError:
+        return ""
+    for line in reversed(lines):
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        if record.get("type") == "assistant":
+            model = (record.get("message") or {}).get("model")
+            if isinstance(model, str) and model and not model.startswith("<"):
+                return model
+    return ""
+
+
 async def target_state(args):
     if getattr(args, "pid", None):
         os.kill(args.pid, 0)
@@ -62,6 +88,7 @@ async def target_state(args):
         if record.get("sessionId") == args.native_id and record.get("messagingSocketPath") == args.socket:
             os.kill(record["pid"], 0)
             args.name = record.get("name") or args.name
+            args.model = transcript_model(args.transcript) or args.model
             return "active" if record.get("status") in {"busy", "active", "working"} else "idle"
     raise TargetGone("Selected Claude session is not in the live local registry")
 
@@ -194,6 +221,7 @@ def main():
     parser.add_argument("--host", required=True)
     parser.add_argument("--name", required=True)
     parser.add_argument("--model", default="")
+    parser.add_argument("--transcript", default="", help="Claude transcript; refreshes --model each heartbeat")
     parser.add_argument("--cwd", default="")
     parser.add_argument("--resource", action="append", default=[])
     parser.add_argument("--once", action="store_true", help="Receive one bounded batch, then stop")

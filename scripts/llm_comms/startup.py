@@ -71,6 +71,7 @@ def start(client, data, host=None, *, context_loaded=False):
     model = data.get("model") or ""
     if isinstance(model, dict):
         model = model.get("id") or model.get("display_name") or ""
+    transcript = data.get("transcript_path") or ""  # Claude: the live model is read from here
     session_id = str(uuid.uuid5(uuid.NAMESPACE_URL, json.dumps(["tjai:llm", client, host, native_id])))
     transport = client if native_socket else "codex_queue" if client == "codex" else None
     if not transport or not pid:
@@ -95,7 +96,8 @@ def start(client, data, host=None, *, context_loaded=False):
         python = os.environ.get("TJAI_COMMS_PYTHON") or sys.executable
         command = [python, str(DIRECTORY / "bridge.py"), "--client", transport,
                    "--native-id", native_id, "--host", host, "--name", name,
-                   "--cwd", cwd, "--model", model, "--socket", native_socket, "--pid", str(pid)]
+                   "--cwd", cwd, "--model", model, "--socket", native_socket, "--pid", str(pid),
+                   "--transcript", transcript]
         for resource in resources:
             command.extend(["--resource", resource])
         with open(directory / f"{session_id}.log", "a") as log:
