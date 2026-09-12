@@ -2,10 +2,11 @@
 
 Date: 2026-09-12
 
-Status: implementation started. Local Codex and Claude delivery adapters have
-passed a bounded active/idle proof in designated interactive sessions. Native
+Status: directory, mailbox, adapters and automatic startup deployed. Local Codex
+and Claude delivery adapters have passed a bounded active/idle proof in designated
+interactive sessions. Native
 Codex offline-queue recovery was also demonstrated. The TJAI directory/mailbox,
-MCP tools, receiver, opt-in Codex launcher and canonical peer dialog are
+MCP tools, receiver, normal Codex launcher and canonical peer dialog are
 implemented. Automatic shared startup, native approval routing and an autonomous
 MCP reply between ec2dev Codex and swf-testbed Claude have also been verified.
 Deployment reservations remain the next independent extension.
@@ -16,7 +17,7 @@ See [implemented service behavior](llm-communications.md) for the current
 contract and recovery semantics; the sections below retain the approved design.
 
 See [adapter usage and delivery evidence](../scripts/llm_comms/README.md) for the
-measured results, limitations and required opt-in Codex launch arrangement.
+measured results, limitations and the normal Codex launch arrangement.
 
 ## Objective
 
@@ -35,7 +36,10 @@ messaging tools through TJAI MCP, and use a small local adapter to deliver
 messages into each recipient's actual running session. The client running the
 model determines its delivery capabilities; model family alone does not.
 
-## Findings and current boundaries
+## Initial findings and design boundaries (2026-09-12)
+
+This section records the pre-implementation assessment. The current tool and
+delivery contract is [LLM communications](llm-communications.md).
 
 ### Claude Code
 

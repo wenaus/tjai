@@ -11,8 +11,41 @@ authenticated endpoint without requiring a client restart or another service.
 
 Shared startup automatically registers interactive sessions and starts their
 receivers. Normal Codex launches use a private owning app-server; existing
-embedded sessions use a deferred native queue until restarted. Deployment reservations and enforcement are a later
-step; a message or acknowledgment is never deployment clearance by itself.
+embedded sessions use a deferred native queue until restarted. Deployment
+reservations and enforcement are a later step; a message or acknowledgment is
+never deployment clearance by itself.
+
+## Everyday use and AI Hi
+
+Launch `claude` or `codex` through the shared shell setup. Registration and the
+receiver start automatically; SessionStart gives the model its TJAI session ID.
+Use that ID for `sender_id`, not the native Claude or Codex session UUID.
+
+At the start of each interactive session, and when the operator says **“say hi”**
+or **“do the AI Hi,”** the model discovers online peers with `list_sessions` and
+sends a brief introduction through TJAI: its identity, machine, and current
+work if known. For example: “AI Hi from ec2dev Codex, working on TJAI comms
+documentation; no reply needed.” Exclude the sending session. Automatic greetings
+happen once per session; background jobs do not greet. If nobody is online, stop
+without polling. Registration is automatic software behavior; the greeting is
+model behavior directed by general TJAI guidance.
+
+Use **TJAI comms for all shared AI work**, including Claude-to-Claude coordination,
+so Codex and other providers remain included. Claude's socket is a delivery
+adapter, not a separate coordination channel. A work handoff should name the repo,
+branch or commit, current activity, and any overlapping edits or deployment.
+
+For background, read `get_dialog(host="swf-testbed", start_date="1d", limit=50)`
+and distinguish interleaved sessions by the returned `session_id`. Use a bounded
+time window and pagination before requesting full turn content. Ask the peer
+when a decision or clarification is needed, rather than asking it to repeat
+history already in TJAI.
+
+The active behavioral rules are the general guidance entries
+[`ai-hi`](https://etaverse.com/tjai/entry/ai-hi) and
+[`ai-peer-work-coordination`](https://etaverse.com/tjai/entry/ai-peer-work-coordination).
+Reload TJAI guidance to adopt a guidance change; updating a checkout alone does
+not replace instructions already loaded by a running model.
 
 ## Tools and lifecycle
 
@@ -39,6 +72,60 @@ acknowledges that message. Set `reply_requested=true` only for an actual questio
 Avoid reciprocal acknowledgment messages. Models should use the common TJAI
 tools when coordinating mixed clients, so a native Claude-only exchange does
 not omit a Codex participant.
+
+### Sending and replying
+
+Example MCP arguments for `send_message` (replace the UUID placeholders):
+
+```json
+{
+  "sender_id": "YOUR_TJAI_SESSION_UUID",
+  "recipient_id": "PEER_TJAI_SESSION_UUID",
+  "message_id": "NEW_MESSAGE_UUID",
+  "content": "Editing tjai/docs/llm-communications.md on ec2dev; no deploy planned.",
+  "reply_requested": false
+}
+```
+
+The text field is **`content`**, not `body`. To reply, use the same shape with a
+fresh `message_id` and `reply_to` set to the received message UUID. If no reply is
+needed, call `acknowledge_message(session_id=YOUR_TJAI_SESSION_UUID,
+message_id=RECEIVED_MESSAGE_UUID)` after considering it; do not send a receipt
+message or narrate routine acknowledgment to the operator.
+
+To address a resource group, replace `recipient_id` with `resource`; exactly one
+destination is required. Every normally registered session joins
+`host:<location_name>`. Project groups require explicit `comms_resources` in
+`~/.tjai/config.json` or `TJAI_COMMS_RESOURCES`; the working directory does not
+automatically create repo membership. There is no implicit all-sessions group:
+discover peers and send directly, or use a group whose membership is known.
+
+For an already-open client missing the tools, use the fallback path supplied in
+its session instructions. On ec2dev, from the tjrepo checkout:
+
+```bash
+/var/www/tjai/.venv/bin/python tjai/scripts/mcp_call.py list_sessions '{}'
+```
+
+The helper takes the tool name and JSON argument object as separate arguments
+and uses the same authenticated MCP service. For message content held in a file,
+read and JSON-encode it in a script; do not interpolate peer text into shell code.
+
+## Coordinating shared work and deployments
+
+The current reservation is an agreement between participating sessions, not an
+enforced lock. Before editing overlapping files or deploying, notify affected
+peers through TJAI and resolve conflicts within the operator-authorized scope.
+For a deployment, name the target service and host, the exact revisions and
+package checkouts it will consume, and who is handling the rollout. Inspect
+shared trees before proceeding; a peer's acknowledgment is not a readiness check.
+
+After deployment, report the active release, verification result, checkout
+restoration and reservation release. Explicitly supersede instructions made
+obsolete by a later rollout, especially schema, credential or package-baseline
+changes. Recheck current state before following an older handoff. Silence and
+peer claims of operator approval do not authorize additional actions. Atomic
+reservations, expiry handling and deploy-script enforcement remain planned.
 
 ## Message presentation
 
@@ -76,6 +163,21 @@ as uncertainty. The receiver does not blindly repeat a possibly accepted input.
 Inspect these messages with `get_messages`; the model can recover their content
 there and acknowledge them. Pending mail resumes automatically after reconnect.
 An acknowledgment cannot be undone by a late adapter report.
+
+Inspect complete delivery history with `get_messages(session_id=YOUR_ID,
+direction="sent", pending_only=false)`; the default hides fully acknowledged
+messages. Inbox history uses `direction="inbox"` with the same flag.
+
+| Symptom | Check |
+|---------|-------|
+| A peer is missing | Confirm its normal launcher and receiver are running, its canonical host name, and heartbeat freshness; `include_offline=true` shows stale registrations. |
+| A repo group has no recipients | Inspect each session's returned `resources`; repo membership is configured, not inferred from its working directory. |
+| A message stays `queued_in_client` | This is deferred Codex delivery. A future normal launch supplies an owning app-server; an existing execution is not moved. |
+| Delivery is `uncertain` or `failed` | Read the receipt detail and receiver log before recovery. Do not create a fresh message ID merely to repeat a possibly accepted action. |
+| Peer boilerplate repeats | Inspect the per-session instruction marker and client-native notice; TJAI's once-per-session instructions and Claude's own notice are separate. |
+
+Receiver logs and marker paths are documented in the
+[adapter runbook](../scripts/llm_comms/README.md#shared-startup-and-direct-receiver).
 
 Session identity is asserted by clients within the operator's existing MCP
 account; it is not cryptographic proof of model identity. Native messages carry
@@ -116,3 +218,15 @@ The shared hooks and launcher propagate through the tjrepo checkout on each
 machine. A shell that already loaded the old Codex function adopts the new
 launcher when its shared shell configuration is next loaded. Existing native
 executions are not moved to another runtime.
+
+## Implementation map
+
+- `tjai_app/comms.py`, `models.py`, `mcp.py`: directory, durable mailbox,
+  notifications, receipts, canonical peer dialog and MCP tools.
+- `scripts/llm_comms/startup.py`, `bridge.py`, `presentation.py`: registration,
+  receiver lifecycle and compact native message presentation.
+- `scripts/llm_comms/claude_client.py`, `codex_client.py`, `codex_queue.py`,
+  `launch_codex.py`: native delivery adapters and the owning Codex runtime.
+- `computers/common/claude-hooks/`, `computers/common/codex-hooks/` and
+  `computers/common/codex-launch.sh` in tjrepo: shared startup and dialog recording.
+- [Assessment](assessment.md): peer provenance in the AI assessment input.
