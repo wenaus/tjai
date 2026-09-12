@@ -103,6 +103,47 @@ def run():
         assert recorded_native_peer(content, data, time.time()).id == peer.id
         assert recorded_native_peer(content, {**data, 'session_id': 'wrong'}, time.time()) is None
         assert recorded_native_peer('Please review this quoted code: ' + content, data, time.time()) is None
+        sys.path.insert(0, str(Path(__file__).resolve().parent / 'llm_comms'))
+        from presentation import envelope, message_text
+        compact = envelope(message_text({
+            'sender': {'name': 'codex-proof', 'host': 'test-host-a'},
+            'sender_id': a['id'], 'reply_requested': False,
+            'content': 'Visible text\nwith real newlines, not JSON escapes',
+        }), mid)
+        assert 'with real newlines' in compact and '\\n' not in compact
+        for native_input in (compact, 'Another Claude session sent a message:\n' + compact):
+            recorded = recorded_native_peer(native_input, data, time.time())
+            assert recorded.id == peer.id and recorded.content == 'bounded proof'
+        for invalid_data in ({**data, 'session_id': 'wrong'}, {**data, 'hostname': 'wrong'},
+                             {**data, 'client': 'codex'}):
+            assert recorded_native_peer(compact, invalid_data, time.time()) is None
+        assert recorded_native_peer('Please review: ' + compact, data, time.time()) is None
+        assert recorded_native_peer(envelope('unknown', fresh_id()), data, time.time()) is None
+        print("PASS compact native delivery, broker-owned content and recipient validation")
+        from tempfile import TemporaryDirectory
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, patch
+        import bridge
+        import presentation
+        with TemporaryDirectory() as home, patch.object(Path, 'home', return_value=Path(home)):
+            receiver = SimpleNamespace(client='claude', socket='/test/inbox', native_id='native-b')
+            delivery_message = dict(message_id=mid, sender_id=a['id'], sender={'name': 'codex-proof'},
+                                    content='Short update', reply_requested=False)
+            with patch.object(bridge, 'call', new=AsyncMock(return_value={'claimed': True})), \
+                 patch.object(bridge, 'emit'), \
+                 patch.object(bridge, 'send_claude', return_value={'state': 'written_to_transport'}) as native:
+                asyncio.run(bridge.deliver(receiver, b, delivery_message))
+                first = native.call_args.args[2]
+                assert 'TJAI session instructions (once)' in first and 'content=your reply text' in first
+                assert presentation.instruction_marker(b['id']).exists()
+                asyncio.run(bridge.deliver(receiver, b, delivery_message))
+                second = native.call_args.args[2]
+                assert second.endswith('Short update') and 'session instructions' not in second
+                # Fresh SessionStart supplies the same guidance before delivery.
+                presentation.mark_instructions(a['id'])
+                asyncio.run(bridge.deliver(receiver, a, delivery_message))
+                assert 'session instructions' not in native.call_args.args[2]
+                print(f"PASS session guidance supplied once ({len(first)} -> {len(second)} delivery characters)")
         turn = dict(peer.data, content=peer.content, timestamp='2026-09-12T12:00:00+00:00', id=peer.id)
         session = split_sessions([turn])[0]
         assert session['kind'] == 'session' and session['peer_turns'] == 1

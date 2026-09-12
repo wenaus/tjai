@@ -172,7 +172,12 @@ For a direct launcher check outside the shared shell function:
 ```
 
 SessionStart supplies the model its TJAI session ID and common messaging
-instructions. Receivers use the canonical `location_name` and optional
+instructions, including concise messages and quiet acknowledgment of routine
+traffic. Delivery uses readable text with a `[TJAI peer MESSAGE_UUID]` reference.
+The marker `~/.tjai/comms/<session-id>.instructions-v2` records that instructions
+were supplied at startup or with an existing session's first delivery. Receiver
+restarts preserve it. Claude's own native peer notice remains visible.
+Receivers use the canonical `location_name` and optional
 `comms_resources` list in `~/.tjai/config.json`; `TJAI_COMMS_RESOURCES` can add
 comma-separated resources. Every session joins `host:<location_name>`.
 

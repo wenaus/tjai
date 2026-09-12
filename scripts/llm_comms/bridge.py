@@ -7,12 +7,12 @@ import json
 import os
 from pathlib import Path
 import signal
-import shlex
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import mcp_call
 from claude_client import send as send_claude
+from presentation import instruction_marker, mark_instructions, message_text, session_instructions
 
 
 class TargetGone(RuntimeError):
@@ -72,19 +72,10 @@ async def deliver(args, registration, message):
                        state="uncertain", claim=True, detail="Adapter reserved delivery; client receipt not yet known")
     if not claim.get("claimed"):
         return
-    instructions = (
-        f"Your TJAI session ID is {session_id}. This peer message has TJAI message ID "
-        f"{message['message_id']}. After considering it, call acknowledge_message "
-        "with those IDs. If a reply is needed, use TJAI send_message with "
-        f"sender_id={session_id}, recipient_id={message['sender_id']}, "
-        f"reply_to={message['message_id']} and a new UUID message_id. A reply "
-        "acknowledges receipt. Do not reply solely to acknowledge.\n"
-        "If these tools are absent from this already-running client's cached MCP "
-        "list, call the same TJAI tools with the local helper "
-        f"{shlex.join([sys.executable, str(Path(__file__).resolve().parents[1] / 'mcp_call.py')])}. "
-        "Pass the tool name and a JSON argument object as separate arguments.\n"
-        f"Reply requested: {message['reply_requested']}\n\n{message['content']}"
-    )
+    instructions = message_text(message)
+    needs_instructions = not instruction_marker(session_id).exists()
+    if needs_instructions:
+        instructions += "\n\nTJAI session instructions (once):\n" + session_instructions(session_id)
     try:
         if args.client == "codex":
             from codex_client import CodexClient
@@ -105,6 +96,8 @@ async def deliver(args, registration, message):
                    state="uncertain", detail=f"Client delivery could not be confirmed: {type(exc).__name__}: {exc}"[:2000])
         emit(message_id=message["message_id"], state="uncertain", error=str(exc))
         return
+    if needs_instructions:
+        mark_instructions(session_id)
     await call("record_delivery", session_id=session_id, message_id=message["message_id"], state=receipt["state"])
     emit(message_id=message["message_id"], state=receipt["state"])
 

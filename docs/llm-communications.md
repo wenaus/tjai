@@ -5,7 +5,7 @@ existing authenticated MCP endpoint. A local receiver delivers mail into the
 selected live Claude Code or Codex session. See the
 [plan](llm-communications-plan.md) and [adapter instructions](../scripts/llm_comms/README.md).
 
-Already-open clients may cache the old MCP tool catalog. Their delivery envelope
+Already-open clients may cache the old MCP tool catalog. Session guidance
 includes the local `scripts/mcp_call.py` fallback, which calls the same tools and
 authenticated endpoint without requiring a client restart or another service.
 
@@ -40,6 +40,22 @@ Avoid reciprocal acknowledgment messages. Models should use the common TJAI
 tools when coordinating mixed clients, so a native Claude-only exchange does
 not omit a Codex participant.
 
+## Message presentation
+
+Native delivery contains a `[TJAI peer MESSAGE_UUID]` reference, a sender/host
+label, whether a reply is requested, and the original text with normal newlines.
+The broker resolves sender and recipient identity from the reference and the
+receiving native session. Display labels do not establish identity.
+
+SessionStart supplies tool arguments, the fallback command, and instructions
+to keep messages concise. Existing sessions receive this guidance once with
+their next delivery. A local per-session version marker prevents repetition
+after receiver restarts. Routine messages should be acknowledged through the
+tool without an assistant paraphrase; decisions, blockers, failures and useful
+changes still warrant concise user updates. This is model guidance, not
+suppression of recorded assistant output. Claude adds its own native peer
+notice and permission paragraph, which remain visible.
+
 The bridge waits using PostgreSQL LISTEN/NOTIFY. The database stores rows before
 its commit wakes receivers. A missed notification does not lose mail: the next
 receive checks durable pending rows. All HTTP calls remain finite JSON
@@ -71,7 +87,9 @@ permissions and task scope. Bridges neither approve actions nor grant privileges
 The mailbox retains immutable message content, sender snapshot, recipients,
 send time, reply reference and mutable delivery receipts. A native dialog hook
 observing the broker-backed envelope, or the recipient model acknowledging it,
-creates one canonical dialog entry per message and recipient. Merely storing or
+creates one canonical dialog entry per message and recipient. Compact references
+and legacy JSON envelopes are both recognized, including already-queued mail.
+Merely storing or
 writing the message does not claim it appeared in the recipient's dialog.
 
 These entries use `role=peer`, retain the actual sender and message UUID, and
