@@ -1460,8 +1460,8 @@
                     var e = tagged[t];
                     var ed = e.data || {};
                     var content = e.content || '';
-                    var speaker = ed.role === 'assistant' ? 'AI' : 'Human';
-                    var isHuman = ed.role !== 'assistant';
+                    var speaker = ed.role === 'peer' ? 'AI peer' : ed.role === 'assistant' ? 'AI' : 'Human';
+                    var isHuman = ed.role === 'user';
                     var color = isHuman ? '#a0a0a0' : '#90caf9';
                     var ts = e.modified_display || '';
                     // Build dashboard dialog context link using server-provided ISO modified timestamp

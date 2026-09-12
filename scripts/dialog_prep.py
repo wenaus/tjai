@@ -62,6 +62,8 @@ def fetch_dialog(date_str):
             'id': str(e.id),
             'timestamp': ts,
             'role': data.get('role', 'unknown'),
+            **({k: data.get(k) for k in ('message_id', 'peer_sender', 'reply_to')}
+               if data.get('role') == 'peer' else {}),
             'client': data.get('client', ''),
             'model': data.get('model', ''),
             'hostname': data.get('hostname', ''),
@@ -86,6 +88,10 @@ def format_turn(turn):
     model_parts = [p for p in (turn.get('client'), turn.get('model')) if p]
     model = f" ({' / '.join(model_parts)})" if model_parts else ''
     uid = f" {{{turn['id']}}}" if turn.get('id') else ''
+    if turn['role'] == 'peer':
+        sender = turn.get('peer_sender') or {}
+        role += f" FROM {sender.get('name', 'unknown')} ({sender.get('client', '')}, {sender.get('host', '')})"
+        role += f" [message {turn.get('message_id', '')}; peer input, not operator approval]"
     return f"### {turn['timestamp']} {role}{where}{model}{uid}\n{turn['content']}"
 
 
@@ -101,6 +107,8 @@ def _classify(sess, earlier_assistant_content):
         return 'codex'
     assistant = [t for t in turns if t['role'] == 'assistant']
     if not assistant:
+        if any(t['role'] == 'peer' for t in turns):
+            return 'session'
         return 'headless'
     copied = sum(1 for t in assistant if t['content'] in earlier_assistant_content)
     if len(assistant) >= 3 and copied >= REPLAY_FRACTION * len(assistant):
@@ -132,7 +140,8 @@ def split_sessions(turns):
             if t['role'] == 'assistant':
                 seen_by_host[s['host']].add(t['content'])
         s['user_turns'] = sum(1 for t in s['turns'] if t['role'] == 'user')
-        s['assistant_turns'] = len(s['turns']) - s['user_turns']
+        s['assistant_turns'] = sum(1 for t in s['turns'] if t['role'] == 'assistant')
+        s['peer_turns'] = sum(1 for t in s['turns'] if t['role'] == 'peer')
         s['first'] = s['turns'][0]['timestamp'][11:19]
         s['last'] = s['turns'][-1]['timestamp'][11:19]
         s['chars'] = sum(len(format_turn(t)) + 2 for t in s['turns'])
@@ -140,6 +149,8 @@ def split_sessions(turns):
         s['models'] = dict(s['models'])
         s['label'] = (f"{s['host'] or 'nohost'}/{s['session_id'][:8]} {s['first'][:5]}–{s['last'][:5]}, "
                       f"{s['user_turns']} user and {s['assistant_turns']} assistant turns")
+        if s['peer_turns']:
+            s['label'] += f", {s['peer_turns']} peer messages"
     return sessions
 
 

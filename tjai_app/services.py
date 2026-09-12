@@ -855,11 +855,13 @@ def get_dialog(host, start_date=None, end_date=None, limit=None, offset=0, max_c
     for e in qs:
         data = e.data if isinstance(e.data, dict) else {}
         role = data.get('role', 'unknown')
-        speaker_type = 'human' if role == 'user' else 'ai' if role == 'assistant' else 'unknown'
+        speaker_type = 'human' if role == 'user' else 'ai' if role == 'assistant' else 'ai_peer' if role == 'peer' else 'unknown'
         if speaker_type == 'human':
             speaker = 'Torre'
         elif speaker_type == 'ai':
             speaker = data.get('client') or 'AI'
+        elif speaker_type == 'ai_peer':
+            speaker = (data.get('peer_sender') or {}).get('name') or 'AI peer'
         else:
             speaker = 'Unknown'
         content = e.content
@@ -871,6 +873,8 @@ def get_dialog(host, start_date=None, end_date=None, limit=None, offset=0, max_c
             'role': role,
             'speaker': speaker,
             'speaker_type': speaker_type,
+            **({k: data.get(k) for k in ('message_id', 'sender_id', 'recipient_id', 'peer_sender', 'reply_to')}
+               if role == 'peer' else {}),
             'client': data.get('client', ''),
             'model': data.get('model', ''),
             'model_provider': data.get('model_provider', ''),

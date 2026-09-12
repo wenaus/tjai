@@ -469,7 +469,7 @@
                 for (const e of tagged) {
                     const eData = e.data || {};
                     const firstLine = (e.content || '').split('\n')[0];
-                    const speaker = eData.role === 'assistant' ? 'AI' : 'Human';
+                    const speaker = eData.role === 'peer' ? 'AI peer' : eData.role === 'assistant' ? 'AI' : 'Human';
                     html += '<div class="rel-item">';
                     html += `<span class="rel-type" style="color:#90caf9;min-width:50px">${speaker}</span>`;
                     html += `<span class="rel-entry"><a href="${entryUrl(e.id, eData)}">${escapeHtml(firstLine)}</a></span>`;

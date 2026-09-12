@@ -1,5 +1,10 @@
 # AI assessment
 
+Received [peer messages](llm-communications.md#dialog-and-assessment) enter the
+dialog with `role=peer`, sender provenance and the broker message UUID. The
+assessor sees an explicit PEER header; these messages are counted separately
+from human and assistant turns and never convey operator approval.
+
 The daily AI performance assessment scores a day's human–AI dialog against the rules in the `assessment-system-prompt` entry and writes one entry per day, which the assessment dashboard reads. The assessor is `gpt-5.6-sol`, run through the Codex subscription, a model outside the family that supplies most of the assessed dialog. Action `llm-assessment-gemini`, daily at 02:20 for the previous day, script `scripts/assessment_gemini.py`.
 
 The entry id is `assessment-<date>-<assessor>`, so a change of assessor leaves the previous reader's history under its own name rather than overwriting it: days before 2026-09-06 end in `-gemini`, days from 2026-09-06 in `-sol`. The dashboard plots the assessors named in `ASSESSOR_SUFFIXES` (`tjai_app/views.py`); assessments written before the suffix existed are not plotted.

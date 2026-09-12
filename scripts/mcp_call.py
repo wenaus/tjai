@@ -25,13 +25,13 @@ def token():
     sys.exit('TJAI_MCP_TOKEN not found')
 
 
-def call(tool, arguments):
+def call(tool, arguments, timeout=120):
     body = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": {"name": tool, "arguments": arguments}}
     req = urllib.request.Request(URL, data=json.dumps(body).encode(), method='POST', headers={
         'Authorization': f'Bearer {token()}', 'Content-Type': 'application/json',
         'Accept': 'application/json, text/event-stream'})
-    with urllib.request.urlopen(req, timeout=120) as r:
+    with urllib.request.urlopen(req, timeout=timeout) as r:
         resp = json.loads(r.read().decode())
     if 'error' in resp:
         sys.exit(f"MCP error: {resp['error']}")

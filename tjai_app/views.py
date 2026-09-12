@@ -5481,6 +5481,11 @@ def api_dialog(request):
         return JsonResponse({"error": "source_id must be a string of at most 512 characters"}, status=400)
     if source_id and not all(data.get(k) for k in ("hostname", "client", "session_id")):
         return JsonResponse({"error": "source_id requires hostname, client and session_id"}, status=400)
+    if role == "user":
+        from .comms_dialog import recorded_native_peer
+        peer_entry = recorded_native_peer(content, data, recorded_at)
+        if peer_entry:
+            return JsonResponse({"status": "ok", "entry_id": peer_entry.id})
     entry_data = {
         "role": role,
         "client": data.get("client"),

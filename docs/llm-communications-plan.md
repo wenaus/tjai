@@ -2,9 +2,19 @@
 
 Date: 2026-09-12
 
-Status: proposed architecture accepted for planning; implementation has not begun.
-The first implementation step is a bounded feasibility check of delivery into
-the existing interactive clients, especially Codex.
+Status: implementation started. Local Codex and Claude delivery adapters have
+passed a bounded active/idle proof in designated interactive sessions. Native
+Codex offline-queue recovery was also demonstrated. The TJAI directory/mailbox,
+MCP tools, receiver, opt-in Codex launcher and canonical peer dialog are
+implemented. Cross-machine and general launcher rollout remain open.
+The service is deployed; both native clients received live HTTPS mailbox probes,
+and a pending TJAI message reached Codex after its receiver restarted.
+
+See [implemented service behavior](llm-communications.md) for the current
+contract and recovery semantics; the sections below retain the approved design.
+
+See [adapter usage and delivery evidence](../scripts/llm_comms/README.md) for the
+measured results, limitations and required opt-in Codex launch arrangement.
 
 ## Objective
 

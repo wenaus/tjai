@@ -1,5 +1,7 @@
 import logging
 
+from .comms_models import LLMDelivery, LLMMessage, LLMSession  # noqa: F401
+
 from django.contrib.postgres.search import SearchVectorField
 from django.db import connection, models, transaction
 from django.db.models import Max

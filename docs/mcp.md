@@ -1,5 +1,10 @@
 # MCP Server
 
+Peer-session tools (`list_sessions`, `send_message`, `get_messages`,
+`acknowledge_message` and receiver lifecycle tools) are documented in
+[LLM communications](llm-communications.md). Receiver waits are finite async
+JSON calls, up to 25 seconds, and retain the transport policy below.
+
 tjai exposes a remote MCP endpoint at:
 
 ```text

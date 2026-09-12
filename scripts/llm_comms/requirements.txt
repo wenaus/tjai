@@ -1,0 +1,2 @@
+# Local delivery adapter dependency; Claude socket delivery uses only stdlib.
+websockets>=15
