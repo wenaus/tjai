@@ -1231,14 +1231,18 @@
             // Always save to localStorage
             var now = Date.now() / 1000;
             try { localStorage.setItem(_autosaveKey, JSON.stringify({content: content, ts: now})); } catch(e) {}
-            // sendBeacon — fire-and-forget, but it's the best we can do on tab close.
-            // localStorage is the real safety net; sendBeacon is best-effort server sync.
-            var sent = false;
-            try { sent = navigator.sendBeacon(saveUrl + '?beacon=1', new Blob([JSON.stringify({content: content, autosave: true})], {type: 'application/json'})); } catch(e) {}
-            if (!sent) {
-                // Can't show UI on beforeunload (page is closing), but localStorage has the content.
-                // Next page load will offer restore from localStorage.
-            }
+            // keepalive permits a CSRF-protected save after the tab closes.
+            // localStorage remains the recovery copy if delivery fails.
+            fetch(saveUrl, {
+                method: 'POST', keepalive: true,
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+                body: JSON.stringify({content: content, autosave: true,
+                                      expected_ts: _serverTimestamp, base_hash: _baseHash})
+            }).then(function(response) {
+                if (!response.ok) console.warn('Close-time save failed:', response.status);
+            }).catch(function(error) {
+                console.warn('Close-time save failed; local recovery retained:', error);
+            });
         }
 
         window._updateLocalVersionRow = function(localData) {

@@ -185,7 +185,7 @@ def main():
     assert_equal(_diary_hard_breaks(restripped), swept, "diary sweep idempotent")
     diary_html = _render_markdown(
         swept, extensions=["tables", "fenced_code", "pymdownx.arithmatex"])
-    assert_contains(diary_html, "Hi Anil,<br />\nSecond line<br />\nThird line</p>", "diary prose renders breaks")
+    assert_contains(diary_html, "Hi Anil,<br>\nSecond line<br>\nThird line</p>", "diary prose renders breaks")
     assert_not_contains(diary_html, "bullet one<br", "diary list renders without breaks")
 
     print("markdown render tests passed")

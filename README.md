@@ -1,5 +1,8 @@
 # tjai - Personal AI Memory Aid
 
+TJAI is Torre Wenaus's single-user personal knowledge and AI assistant system,
+developed with AI assistance since November 2025.
+
 A personal knowledge system and AI memory aid. TJAI is used primarily through
 its web application and authenticated MCP service, with PostgreSQL as the
 authoritative store for personal context, projects, and knowledge.
@@ -68,3 +71,15 @@ interfaces, not the center of the system architecture.
 | [Add-ons: Gmail & Chrome](docs/addons.md) | Gmail calendar add-on, Chrome bookmark extension |
 | [Bulk Import](docs/bulk-import.md) | Importing bookmarks from external sources |
 | [Entry Versions](docs/versions.md) | Automatic version history, MCP retrieval, change detection |
+
+## License and history
+
+TJAI code is licensed under [Apache 2.0](LICENSE). Bundled third-party software
+retains its own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
+
+The standalone repository retains TJAI's development history from the personal
+`tjrepo` repository, including author and committer metadata. Extraction excludes
+unrelated projects, recipe import files and credentials. Commit hashes change
+with this filtering. Historical design notes are retained under `docs/origins/`.
+Recipes and poetry remain in their existing source locations; the live database
+and deployment data are outside this repository.

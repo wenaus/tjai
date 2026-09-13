@@ -655,6 +655,7 @@
     <script>
     const tg = window.Telegram?.WebApp;
     let authenticated = false;
+    let csrfToken = '{{ csrf_token|escapejs }}';
     const loaded = {};  // track which tabs have loaded
     const DEFAULT_NAMED_ENTRY = 'shopping';
     let defaultNamedEntryPending = true;
@@ -681,6 +682,7 @@
                 const data = await resp.json();
                 if (data.status === 'ok') {
                     authenticated = true;
+                    csrfToken = data.csrf_token;
                 } else {
                     showError('panel-cal', 'Auth failed: ' + (data.error || 'unknown'));
                     return;
@@ -1266,8 +1268,7 @@
 
     // --- Helpers ---
     function getCsrf() {
-        const c = document.cookie.match(/csrftoken=([^;]+)/);
-        return c ? c[1] : '';
+        return csrfToken;
     }
 
     function showToast(msg) {

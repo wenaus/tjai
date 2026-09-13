@@ -63,8 +63,10 @@ logs in the Django superuser. The Mini App then holds a normal Django session,
 and the `@login_required` API endpoints it calls authenticate against that
 session.
 
-`api_entry_save` (`api/entry/<uuid>/save`), used by the Mini App editor, also
-carries no `@login_required` by design.
+`api_entry_save` (`api/entry/<uuid>/save`), used by the Mini App editor, requires
+that authenticated session and a CSRF-protected POST, like the desktop editor.
+Authentication returns the rotated CSRF token explicitly; the Mini App does not
+guess which cookie belongs to TJAI on a host shared with other applications.
 
 ## Management
 

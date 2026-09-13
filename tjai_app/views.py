@@ -148,6 +148,24 @@ def _neutralize_raw_html_hazards(text):
 
 
 _MD_INSTANCES = {}
+_HTML_CLEANER = None
+
+
+def _sanitize_rendered_html(html):
+    """Allow formatted content while removing active HTML; sync with md_render.py."""
+    import nh3
+    global _HTML_CLEANER
+    if _HTML_CLEANER is None:
+        attrs = {tag: set(values) for tag, values in nh3.ALLOWED_ATTRIBUTES.items()}
+        attrs.setdefault('*', set()).update({'class', 'id', 'style'})
+        attrs.setdefault('a', set()).add('target')
+        _HTML_CLEANER = nh3.Cleaner(
+            tags=nh3.ALLOWED_TAGS | {'details', 'summary'}, attributes=attrs,
+            link_rel=None,
+            filter_style_properties={'text-align', 'color', 'background-color',
+                                     'font-weight', 'font-style', 'white-space'},
+        )
+    return _HTML_CLEANER.clean(html)
 
 
 def _render_markdown(text, extensions=None):
@@ -175,7 +193,7 @@ def _render_markdown(text, extensions=None):
     safe_text = _neutralize_raw_html_hazards(text)
     html = md.reset().convert(_fix_md_list_spacing(safe_text))
     html = _neutralize_raw_html_hazards(html)
-    return _render_text_fences(html)
+    return _sanitize_rendered_html(_render_text_fences(html))
 
 
 _BARE_URL_RE = re.compile(r'https?://[^\s<]+')
@@ -4215,24 +4233,17 @@ def api_entry_tag_delete(request, entry_id, tag_name):
     return JsonResponse({'ok': deleted > 0})
 
 
+@login_required
+@require_http_methods(["POST"])
 @transaction.atomic
 def api_entry_save(request, entry_id):
     """Save entry content from the inline editor.
 
-    No @login_required by design. The Telegram Mini App (the `miniapp`
-    view) is not login-gated and carries no Django session, and it saves
-    through this endpoint. Adding @login_required here redirects Mini App
-    saves to the login page and breaks editing. See docs/telegram.md.
-
-    Accepts ?beacon=1 for sendBeacon saves on tab close (CSRF skipped for
-    the beacon case only).
+    Browser and Telegram Mini App editors use an authenticated Django
+    session and CSRF-protected POST, including saves on tab close.
     """
+    from . import inflight as inflight_lib
     from .signals import entry_change_source
-    # sendBeacon can't set X-CSRFToken header — skip CSRF for beacon saves
-    # (still authenticated by session cookie)
-    if request.GET.get('beacon') == '1':
-        from django.middleware.csrf import CsrfViewMiddleware
-        setattr(request, '_dont_enforce_csrf_checks', True)
     # Serialize saves for one entry so near-simultaneous browser tabs cannot
     # both read the same old state and then last-write-wins over each other.
     entry = Entry.objects.select_for_update().filter(
@@ -4302,7 +4313,6 @@ def api_entry_save(request, entry_id):
         # if it differs, the base is the version snapshot carrying that hash
         # and the save is merged three-way. Only when no snapshot matches
         # does the line union below apply. Other entries keep the union.
-        from . import inflight as inflight_lib
         base_hash = data.get('base_hash')
         try:
             base_hash = int(base_hash) if base_hash is not None else None
@@ -5770,7 +5780,9 @@ def tg_auth(request):
         return JsonResponse({"error": "No admin user"}, status=500)
 
     login(request, user)
-    return JsonResponse({"status": "ok", "user": user_data.get("first_name", "")})
+    from django.middleware.csrf import get_token
+    return JsonResponse({"status": "ok", "user": user_data.get("first_name", ""),
+                         "csrf_token": get_token(request)})
 
 
 @login_required

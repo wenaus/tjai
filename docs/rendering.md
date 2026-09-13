@@ -20,6 +20,11 @@ Keep the two in sync when the rendering policy changes.
    `<style>`, and similar raw-text tags in content, so a stray tag in an external PR
    body cannot swallow the rest of the page render.
 4. `_render_text_fences` — see below.
+5. `_sanitize_rendered_html` — nh3 parses the resulting HTML and removes active
+   elements, event-handler attributes and unsafe URL schemes. Ordinary formatting,
+   images, tables, details/summary, code classes and math wrappers survive.
+   Inline styles are limited to text alignment, colors, font weight/style and
+   whitespace. Stored Markdown is unchanged. Both render copies use this policy.
 
 Bare URLs are linkified by `_linkify_rendered_html`, which walks the rendered HTML and
 skips `<a>`, `<code>`, `<pre>`, `<script>`, `<style>` so existing anchors and code are

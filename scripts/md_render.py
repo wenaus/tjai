@@ -115,6 +115,26 @@ def _neutralize_raw_html_hazards(text):
     return _RAW_HTML_TAG_RE.sub(repl, text)
 
 
+_HTML_CLEANER = None
+
+
+def _sanitize_rendered_html(html):
+    """Allow formatted content while removing active HTML; sync with views.py."""
+    import nh3
+    global _HTML_CLEANER
+    if _HTML_CLEANER is None:
+        attrs = {tag: set(values) for tag, values in nh3.ALLOWED_ATTRIBUTES.items()}
+        attrs.setdefault('*', set()).update({'class', 'id', 'style'})
+        attrs.setdefault('a', set()).add('target')
+        _HTML_CLEANER = nh3.Cleaner(
+            tags=nh3.ALLOWED_TAGS | {'details', 'summary'}, attributes=attrs,
+            link_rel=None,
+            filter_style_properties={'text-align', 'color', 'background-color',
+                                     'font-weight', 'font-style', 'white-space'},
+        )
+    return _HTML_CLEANER.clean(html)
+
+
 def render_markdown(text, extensions=None):
     """Unified render: list-spacing fix + markdown + hazard-tag neutralization.
     Use this instead of markdown.markdown() directly so every render path gets
@@ -131,7 +151,7 @@ def render_markdown(text, extensions=None):
     html = markdown.markdown(_fix_md_list_spacing(safe_text), extensions=exts,
                              extension_configs=cfgs, tab_length=2)
     html = _neutralize_raw_html_hazards(html)
-    return _render_text_fences(html)
+    return _sanitize_rendered_html(_render_text_fences(html))
 
 
 _BARE_URL_RE = re.compile(r'https?://[^\s<]+')
