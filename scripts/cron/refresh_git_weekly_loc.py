@@ -23,6 +23,7 @@ import bootstrap  # noqa: F401,E402 — Django setup
 from django.conf import settings as django_settings  # noqa: E402
 from tjai_app.services import get_timezone  # noqa: E402
 from tjai_app.views import GIT_AUTHOR as AUTHOR  # noqa: E402  (one definition)
+from tjai_app.views import git_history_exclusions  # noqa: E402
 
 logger = logging.getLogger('refresh_git_weekly_loc')
 logging.basicConfig(level=logging.INFO,
@@ -46,6 +47,7 @@ PROJECTS = ['tjai', 'AI', 'swf', 'swf-monitor',
 # corun-ai, wrangle-ai, snapper-ai (generic in service of swf, not
 # swf-bound), and the MCP servers. tjai stays its own project.
 REPO_PROJECT = {
+    'tjai': 'tjai', 'tjlinks': 'tjai',
     'swf-monitor': 'swf-monitor', 'swf-epicprod': 'swf-epicprod',
     'swf-testbed': 'swf-testbed',
     'swf-common-lib': 'swf', 'swf-remote': 'swf', 'epic-wfms-docs': 'swf',
@@ -149,10 +151,10 @@ def collect():
             # (with --no-renames, an in-repo rename booked every moved line
             # as new — a 2025-08 directory rename inflated primus by 21k).
             result = subprocess.run(
-                ['git', '-c', 'safe.directory=*', 'log',
+                ['git', '-c', 'safe.directory=*', 'log', 'HEAD',
                  f'--author={AUTHOR}', f'--since={WEEK_ZERO}T00:00:00',
                  '--numstat', '-M', '--format=@%H %ad',
-                 '--date=format-local:%Y-%m-%d'],
+                 '--date=format-local:%Y-%m-%d', *git_history_exclusions(repo)],
                 capture_output=True, timeout=120, cwd=repo,
                 encoding='utf-8', errors='replace',
                 env={**os.environ, 'TZ': str(tz)},

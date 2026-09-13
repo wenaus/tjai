@@ -5,7 +5,7 @@ Scheduled jobs for the tjai ec2dev server. All run under the `admin` user cronta
 ## Install
 
 ```bash
-crontab /home/admin/github/tjrepo/tjai/scripts/cron/crontab
+crontab /home/admin/github/tjai/scripts/cron/crontab
 ```
 
 ## Jobs
@@ -27,4 +27,4 @@ crontab /home/admin/github/tjrepo/tjai/scripts/cron/crontab
 1. Create the script in this directory
 2. Add it to the `crontab` file
 3. Update this table
-4. Install: `crontab /home/admin/github/tjrepo/tjai/scripts/cron/crontab`
+4. Install: `crontab /home/admin/github/tjai/scripts/cron/crontab`

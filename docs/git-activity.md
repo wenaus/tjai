@@ -14,6 +14,13 @@ it; adding a repository is one row. Local checkouts are kept current by
 `scripts/cron/git_pull_repos.sh` (system cron: every 30 minutes for all
 repositories, every 5 minutes for `swf-*`).
 
+TJAI and tjlinks use standalone checkouts. `GIT_IMPORTED_HEADS` records the final
+imported commit in each; every producer excludes that commit and its ancestors
+with `git_history_exclusions`. Their earlier activity remains recorded through
+tjrepo, and subsequent commits link to the public repositories. The weekly chart
+attributes both repositories to the tjai project without counting the imported
+history a second time.
+
 ## Data flow
 
 - **Daily files** — `data/git_daily/<YYYY-MM-DD>.md`, one per Eastern day:

@@ -28,7 +28,7 @@ tjai shares server infrastructure with primus. The following are in `primus/depl
 
 2. Deploy tjai:
    ```bash
-   cd ~/github/tjrepo/tjai/deploy
+   cd ~/github/tjai/deploy
 
    # Create .env (get DB password from setup_postgres.sh output)
    cp ../.env.example /var/www/tjai/.env

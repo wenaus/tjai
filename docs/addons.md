@@ -71,7 +71,10 @@ Files: `tjai_app/captures.py` (storage, listing, delete); the `api_add_capture`,
 
 ## Chrome Extension (tj-getlink)
 
-A Chrome extension for copying markdown links and saving bookmarks to tjai. Source code in the `tj-getlink/` directory at the tjrepo root (a sibling of `tjai/`).
+A Chrome extension for copying markdown links and saving bookmarks to tjai.
+Source code is in [wenaus/tjlinks](https://github.com/wenaus/tjlinks), checked out
+beside TJAI at `~/github/tjlinks`. The former `tjrepo/tj-getlink` path is a
+compatibility symlink to that checkout.
 
 ### Features
 
@@ -112,12 +115,12 @@ renders `[indico](url)`.
 
 ### Files
 
-- `tj-getlink/manifest.json` — Manifest V3 (permissions: `activeTab`, `clipboardWrite`, `storage`, `scripting`)
-- `tj-getlink/popup.html/js/css` — Extension popup UI and logic
+- `tjlinks/manifest.json` — Manifest V3 (permissions: `activeTab`, `clipboardWrite`, `storage`, `scripting`)
+- `tjlinks/popup.html/js/css` — Extension popup UI and logic
 - Server endpoints: `api/add-bookmark` (bookmarks) and `api/add-journal` (events) in `tjai_app/views.py` (same Bearer token as Gmail add-on)
 
 ### Setup
 
 1. Chrome → `chrome://extensions/` → Enable Developer Mode
-2. "Load unpacked" → select `tj-getlink/` directory
+2. "Load unpacked" → select the `tjlinks/` checkout
 3. Click extension icon → "Save to tjai" → enter API key when prompted (same key as Gmail add-on, from SysConfig `gmail_addon_api_key`)

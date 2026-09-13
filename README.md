@@ -11,6 +11,12 @@ The concise `tj` CLI remains available for fast local and offline capture. Its
 per-machine SQLite database and background sync agent are retained secondary
 interfaces, not the center of the system architecture.
 
+Development uses the standalone `wenaus/tjai` checkout at `~/github/tjai`;
+the browser extension is `wenaus/tjlinks` at `~/github/tjlinks`. Existing
+`tjrepo/tjai` and `tjrepo/tj-getlink` paths are compatibility symlinks to those
+checkouts. Production remains at `/var/www/tjai`; deploy from the TJAI checkout
+with `deploy/update_from_dev.sh`.
+
 ## Core Principles
 
 - **Authoritative** - PostgreSQL holds the canonical state used by the web app,

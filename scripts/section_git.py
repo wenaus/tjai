@@ -9,7 +9,7 @@ from pathlib import Path
 import bootstrap  # noqa: F401 - Django setup
 from django.conf import settings
 from tjai_app.tjai_utils import get_app_tz
-from tjai_app.views import _GIT_REPOS
+from tjai_app.views import _GIT_REPOS, git_history_exclusions
 from synopsis_utils import main_section
 GIT_DAILY_DIR = Path(settings.BASE_DIR) / 'data' / 'git_daily'
 REPOS = [(Path(path), url, label) for path, url, label in _GIT_REPOS]
@@ -32,6 +32,7 @@ def _repo_commits(repo_dir, github_url, since_iso, until_iso=None):
                '--format=%H%x00%s%x00%b%x01']
         if until_iso:
             cmd.insert(3, f'--until={until_iso}')
+        cmd.extend(git_history_exclusions(repo_dir))
         result = subprocess.run(
             cmd,
             capture_output=True, text=True, timeout=10, cwd=repo_dir,

@@ -4,7 +4,7 @@
 
 - **Server:** etaverse.com (AWS Debian), gunicorn behind Apache reverse proxy
 - **Shell:** Bash only
-- **Git repo (dev):** `/home/admin/github/tjrepo/tjai`
+- **Git repo (dev):** `/home/admin/github/tjai`
 - **Production deployment:** `/var/www/tjai` (not a git repo)
 - **Database:** PostgreSQL 15. `DJANGO_DATABASE_URL` is in `/var/www/tjai/.env` only. Server config: `shared_buffers = 1GB` and `shared_preload_libraries = 'pg_stat_statements'` (set 2026-07-19 in `/etc/postgresql/15/main/postgresql.conf`; the 128MB Debian default made every seq scan of `entries` bypass the buffer cache).
 - **Django settings:** `tjai_project/settings/base.py` (split settings dir)
@@ -20,7 +20,7 @@ MCP operations are documented in `docs/mcp.md`.
 ## Deploying
 
 ```bash
-cd /home/admin/github/tjrepo/tjai
+cd /home/admin/github/tjai
 ./deploy/update_from_dev.sh
 ```
 
@@ -42,7 +42,7 @@ The dev tree has no `.env`. Django needs `DJANGO_DATABASE_URL` from production's
 
 ```bash
 set -a && source /var/www/tjai/.env && set +a
-cd /home/admin/github/tjrepo/tjai
+cd /home/admin/github/tjai
 .venv/bin/python manage.py makemigrations tjai_app --name <name>
 .venv/bin/python manage.py migrate
 ```

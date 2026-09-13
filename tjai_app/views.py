@@ -3314,8 +3314,23 @@ def git_activity(request):
 # shared, so an unfiltered log fills his days with other people's commits.
 GIT_AUTHOR = 'wenaus@gmail.com'
 
+# Imported ancestry is already recorded under tjrepo. Count subsequent public
+# development once, regardless of its dates or branch names.
+GIT_IMPORTED_HEADS = {
+    'tjai': '7c202f92f9241525d0b820737b098e4de35101a7',
+    'tjlinks': '57caf0984007f1a251b076e6ff404c7863c47259',
+}
+
+
+def git_history_exclusions(repo_path):
+    baseline = GIT_IMPORTED_HEADS.get(os.path.basename(os.fspath(repo_path)))
+    return ['^' + baseline] if baseline else []
+
+
 _GIT_REPOS = [
     ('/home/admin/github/tjrepo', 'https://github.com/wenaus/tjrepo', 'tjrepo'),
+    ('/home/admin/github/tjai', 'https://github.com/wenaus/tjai', 'tjai'),
+    ('/home/admin/github/tjlinks', 'https://github.com/wenaus/tjlinks', 'tjlinks'),
     ('/home/admin/github/tjdev', 'https://github.com/wenaus/tjdev', 'tjdev'),
     ('/home/admin/github/swf-testbed', 'https://github.com/BNLNPPS/swf-testbed', 'swf-testbed'),
     ('/home/admin/github/swf-monitor', 'https://github.com/BNLNPPS/swf-monitor', 'swf-monitor'),
@@ -3369,7 +3384,7 @@ def _refresh_recent_git_daily():
                     ['git', '-c', 'safe.directory=*', 'log', '--all',
                      f'--author={GIT_AUTHOR}',
                      f'--since={since_iso}', f'--until={until_iso}',
-                     '--format=%H%x00%s%x00%b%x01'],
+                     '--format=%H%x00%s%x00%b%x01', *git_history_exclusions(repo_path)],
                     capture_output=True, timeout=10, cwd=repo_path,
                     encoding='utf-8', errors='replace',
                 )

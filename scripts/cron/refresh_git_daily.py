@@ -21,7 +21,7 @@ import bootstrap  # noqa: F401,E402 — Django setup
 
 from django.conf import settings as django_settings  # noqa: E402
 from tjai_app.services import get_timezone  # noqa: E402
-from tjai_app.views import _GIT_REPOS, GIT_AUTHOR  # noqa: E402
+from tjai_app.views import _GIT_REPOS, GIT_AUTHOR, git_history_exclusions  # noqa: E402
 
 logger = logging.getLogger('refresh_git_daily')
 logging.basicConfig(level=logging.INFO,
@@ -61,7 +61,7 @@ def regen_date(target, fetch=True):
                 ['git', '-c', 'safe.directory=*', 'log', '--all',
                  f'--author={GIT_AUTHOR}',
                  f'--since={since_iso}', f'--until={until_iso}',
-                 '--format=%H%x00%s%x00%b%x01'],
+                 '--format=%H%x00%s%x00%b%x01', *git_history_exclusions(repo_path)],
                 capture_output=True, timeout=10, cwd=repo_path,
                 encoding='utf-8', errors='replace',
             )

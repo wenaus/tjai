@@ -11,8 +11,9 @@ import urllib.error
 
 # Default server URL
 DEFAULT_SERVER = "https://etaverse.com/tjai"
+_REPO_PARENT = Path(__file__).resolve().parents[2]
 REPO_ENV_FILE = (
-    Path(__file__).resolve().parents[2]
+    (_REPO_PARENT if _REPO_PARENT.name == 'tjrepo' else _REPO_PARENT / 'tjrepo')
     / "computers"
     / "laptop"
     / "config-files"
