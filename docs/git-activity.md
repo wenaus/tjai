@@ -40,8 +40,11 @@ repositories, every 5 minutes for `swf-*`).
   cron 02:40) writes `data/git_weekly_loc.json`: lines added (`numstat`) in
   the configured author's commits, bucketed by ISO week in the tjai
   timezone, attributed to a project by repository — for tjrepo, by top-level
-  directory. `git_weekly_loc_data` serves the file; the stacked-bar chart
-  below the grid renders it.
+  directory. Every repository under `/home/admin/github` is read; git
+  worktrees (a `.git` file, not a directory) are skipped, since a worktree
+  of a followed repository would count its history a second time.
+  `git_weekly_loc_data` serves the file; the stacked-bar chart below the
+  grid renders it.
 
 ## Dates
 

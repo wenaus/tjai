@@ -138,8 +138,11 @@ def collect():
     n_weeks = _week_index(today) + 1
     counts = {p: [0] * n_weeks for p in PROJECTS}
 
+    # A worktree's .git is a file, not a directory; a worktree of a
+    # followed repo would book its history a second time (2026-09-12: a
+    # deploy worktree of swf-epicprod doubled it into 'other').
     repos = [d for d in sorted(GITHUB_ROOT.iterdir())
-             if d.is_dir() and (d / '.git').exists()]
+             if d.is_dir() and (d / '.git').is_dir()]
     for repo in repos:
         try:
             # -M enables rename detection so pure moves count ~zero lines
