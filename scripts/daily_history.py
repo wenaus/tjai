@@ -11,6 +11,7 @@ Usage:
 import argparse
 import json
 import sys
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.request import urlopen, Request
@@ -21,16 +22,24 @@ USER_AGENT = 'tjai-daily/1.0 (torre@wenaus.org)'
 HISTORY_DIR = Path(__file__).resolve().parent.parent / 'data' / 'history'
 
 
-def fetch_on_this_day(month, day):
-    """Fetch Wikipedia on-this-day data."""
+def fetch_on_this_day(month, day, attempts=3, wait=60):
+    """Fetch Wikipedia on-this-day data, retrying a transient failure.
+
+    A gateway timeout (2026-09-11) cost the whole night's product; the
+    schedule's next firing is a day away.
+    """
     url = WIKI_API.format(month=month, day=day)
     req = Request(url, headers={'User-Agent': USER_AGENT})
-    try:
-        with urlopen(req, timeout=15) as resp:
-            return json.loads(resp.read())
-    except URLError as e:
-        print(f"Error fetching Wikipedia API: {e}", file=sys.stderr)
-        return None
+    for attempt in range(1, attempts + 1):
+        try:
+            with urlopen(req, timeout=15) as resp:
+                return json.loads(resp.read())
+        except URLError as e:
+            print(f"Error fetching Wikipedia API (attempt {attempt}/{attempts}): {e}",
+                  file=sys.stderr)
+            if attempt < attempts:
+                time.sleep(wait)
+    return None
 
 
 def format_item(item):
