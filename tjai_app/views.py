@@ -9091,12 +9091,25 @@ def _capcom_pad_entry(pad):
 
 @login_required
 @xframe_options_exempt
+@require_http_methods(["GET", "POST"])
 def capcom_notepad(request):
     """Content-only editor page for the Capcom pads (notepad, pouch).
 
     An explicit ?pad= selects and is remembered (capcom_pad_last
     sysconfig); a bare request serves the last-visited pad.
     """
+    if request.method == 'POST':
+        # Render an editor buffer for reading; never save or select a pad.
+        try:
+            body = json.loads(request.body)
+        except (ValueError, UnicodeDecodeError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        if not isinstance(body, dict) or not isinstance(body.get('content'), str):
+            return JsonResponse({'error': 'content must be a string'}, status=400)
+        return JsonResponse({
+            'html': _linkify_rendered_html(_render_markdown(body['content'])),
+        })
+
     from . import capcom as capcom_lib
     pad = request.GET.get('pad')
     if pad in CAPCOM_PADS:
@@ -9111,6 +9124,7 @@ def capcom_notepad(request):
         'pad': pad,
         'pad_entry_id': CAPCOM_PADS[pad]['entry_id'],
         'pad_label': CAPCOM_PADS[pad]['label'],
+        'content_html': _linkify_rendered_html(_render_markdown(entry.content)) if pad == 'pouch' else '',
     })
 
 

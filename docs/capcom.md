@@ -44,6 +44,13 @@ Two panels:
   simultaneous tab saves. The first save of each focus/edit session creates
   a pre-edit version; a compact **history** link opens the conventional entry
   editor and version history in a new tab. Only save failures are surfaced.
+  Beside **Pouch** in the editor's tab bar, **prettified** switches between
+  the source editor and a rendered Markdown reading view. The preference is
+  remembered in the browser across reloads and pad visits. Headings, lists,
+  tables, links, code, and math use the existing sanitized Markdown renderer.
+  The reading view renders the current editor buffer; switching modes does
+  not rewrite the entry or discard pending edits. Turning prettified off
+  restores the same editor. External links open in a new tab.
   Current-state tiles follow: compact
   indicators for sources with a meaningful present state (service health,
   testbed and production activity, the Ahbazon gate camp). Tile values are
