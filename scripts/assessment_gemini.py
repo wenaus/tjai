@@ -704,7 +704,7 @@ def main():
             from tjai_app import capcom
             capcom.emit_tjai_notice(
                 title=f'AI performance assessment completed — {date_str}',
-                url=f'/tjai/entry/assessment-{date_str}-gemini/',
+                url=f'/tjai/entry/assessment-{date_str}-{assessor_name()}/',
                 dedup_key=f'tjai-assessment-{date_str}',
                 detail=(f"{assessor_name()} assessment completed: {scores_data['scored_events']} events, "
                         f"cumulative {scores_data['final_cumulative']:+d}, {len(parts)} calls"
