@@ -1,6 +1,6 @@
-# tjai - Personal AI Memory Aid
+# tjai - TJ's Personal AI Assistant
 
-TJAI is Torre Wenaus's single-user personal knowledge and AI assistant system,
+TJAI is Torre Wenaus's single-user personal knowledge base and AI assistant system,
 developed with AI assistance since November 2025.
 
 A personal knowledge system and AI memory aid. TJAI is used primarily through
