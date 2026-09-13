@@ -495,36 +495,39 @@ def dispatch_ai(action, entry_id=None, target_date=None, data_overrides=None,
         action.data = persisted_data
         action.save(update_fields=['data'])
 
+    # One merged stream, read as it comes: as a wrangler doer the process
+    # lives for the whole agent run (tj agent execs the wrapper), and the
+    # TRACKING_ID line must reach sysconfig at launch, not at exit.
     proc = subprocess.Popen(
         [sys.executable, str(TJ_PY), 'agent', prompt],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env,
         start_new_session=bool(worker_id),
     )
     logger.info("tj agent launched (PID %d, non-blocking)", proc.pid)
 
     def _monitor(proc, action_id):
-        """Background thread: read stdout/stderr, capture tracking ID.
+        """Background thread: read output, capture tracking ID.
 
         Status-setting is agent_complete.py's job — we only log I/O here
         to avoid race conditions.
         """
         close_old_connections()
         try:
-            stdout, stderr = proc.communicate()
-            if stdout:
-                for line in stdout.rstrip().split('\n'):
-                    if action_id and line.startswith('TRACKING_ID='):
-                        tracking_id = line.split('=', 1)[1].strip()
-                        SysConfig.objects.update_or_create(
-                            key=f'agent_{action_id}_tracking',
-                            defaults={'value': tracking_id,
-                                      'timestamp_modified': time.time()})
+            lines = []
+            for line in proc.stdout:
+                lines.append(line)
+                if action_id and line.startswith('TRACKING_ID='):
+                    tracking_id = line.split('=', 1)[1].strip()
+                    SysConfig.objects.update_or_create(
+                        key=f'agent_{action_id}_tracking',
+                        defaults={'value': tracking_id,
+                                  'timestamp_modified': time.time()})
+            proc.wait()
             if proc.returncode != 0:
                 logger.error(process_failure_details(
                     "tj agent (status set by agent_complete)",
                     proc.returncode,
-                    stdout=stdout,
-                    stderr=stderr,
+                    stdout=''.join(lines),
                 ))
         except Exception:
             logger.error("Agent monitor thread error:\n%s", traceback.format_exc())

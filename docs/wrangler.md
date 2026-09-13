@@ -74,7 +74,11 @@ One wrangler agent process under supervisord hosts a `Wrangler` and a
 - **`ai_dispatch`** — launches `tj agent` as a detached, self-completing doer:
   `start_new_session=True`, pid recorded via `record_doer_pid`, and
   `agent_complete.py` writes the outcome to the bullpen row when the agent
-  exits. A deploy restarts the wrangler without killing running agents; the
+  exits. In this mode `tj agent` execs its run-then-complete shell wrapper
+  rather than spawning it, so the recorded pid is the doer's for the whole
+  run; a pid that exits at launch reads as dead to the bullpen's liveness
+  reclaim, which re-runs the worker five minutes in (2026-09-10 to 09-13,
+  `daily-history` twice a night). A deploy restarts the wrangler without killing running agents; the
   bullpen's liveness-checked reclaim leaves surviving doers alone. This
   retires the agent-health check, the tracking-entry heartbeat, and the stale
   auto-recovery.

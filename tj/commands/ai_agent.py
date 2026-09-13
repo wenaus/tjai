@@ -482,13 +482,8 @@ def _launch_codex(codex_path: str, system_prompt: str, prompt: str, entry_id: st
             f'{completion_cmd} $CODE "$ERRFILE" {usage_args} ; '
             f'rm -rf {shlex.quote(work_dir)}'
         )
-        subprocess.Popen(
-            ['bash', '-c', shell_cmd],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-            env=env,
+        _run_wrapper(
+            ['bash', '-c', shell_cmd], env,
             cwd='/var/www/tjai' if os.path.isdir('/var/www/tjai') else os.getcwd(),
         )
     else:
@@ -508,6 +503,33 @@ def _launch_codex(codex_path: str, system_prompt: str, prompt: str, entry_id: st
         proc.stdin.close()
 
     print("Agent launched")
+
+
+def _run_wrapper(argv, env, cwd=None):
+    """Start the run-then-complete shell wrapper.
+
+    As a wrangler doer (TJAI_WRANGLER_WORKER_ID set) this process is the pid
+    the bullpen recorded, so it must be the process that lives for the run:
+    exec the wrapper in place. Spawning it and exiting left a dead pid on the
+    worker row, and the bullpen's liveness reclaim re-ran the whole worker
+    five minutes in (docs/wrangler.md). Otherwise — the action agent's
+    fire-and-forget launch — spawn it detached as before.
+    """
+    if os.environ.get('TJAI_WRANGLER_WORKER_ID'):
+        sys.stdout.flush()
+        sys.stderr.flush()
+        if cwd:
+            os.chdir(cwd)
+        os.execvpe(argv[0], argv, env)
+    subprocess.Popen(
+        argv,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+        env=env,
+        cwd=cwd,
+    )
 
 
 def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: str) -> None:
@@ -597,14 +619,7 @@ def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: 
             f'{claude_cmd} >"$ERRFILE" 2>&1 ; '
             f'{completion_cmd} $? "$ERRFILE"'
         )
-        subprocess.Popen(
-            ['bash', '-c', shell_cmd],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-            env=env,
-        )
+        _run_wrapper(['bash', '-c', shell_cmd], env)
     else:
         if timeout_secs > 0:
             cmd = ['timeout', str(timeout_secs)] + cmd
