@@ -3330,6 +3330,7 @@ def git_history_exclusions(repo_path):
 _GIT_REPOS = [
     ('/home/admin/github/tjrepo', 'https://github.com/wenaus/tjrepo', 'tjrepo'),
     ('/home/admin/github/tjai', 'https://github.com/wenaus/tjai', 'tjai'),
+    ('/home/admin/github/teamcomms-ai', 'https://github.com/wenaus/teamcomms-ai', 'teamcomms-ai'),
     ('/home/admin/github/tjlinks', 'https://github.com/wenaus/tjlinks', 'tjlinks'),
     ('/home/admin/github/tjdev', 'https://github.com/wenaus/tjdev', 'tjdev'),
     ('/home/admin/github/swf-testbed', 'https://github.com/BNLNPPS/swf-testbed', 'swf-testbed'),

@@ -19,7 +19,8 @@ imported commit in each; every producer excludes that commit and its ancestors
 with `git_history_exclusions`. Their earlier activity remains recorded through
 tjrepo, and subsequent commits link to the public repositories. The weekly chart
 attributes both repositories to the tjai project without counting the imported
-history a second time.
+history a second time. TeamComms AI is followed as `wenaus/teamcomms-ai`;
+its weekly lines contribute to the AI category.
 
 ## Data flow
 

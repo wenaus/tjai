@@ -53,7 +53,7 @@ REPO_PROJECT = {
     'swf-common-lib': 'swf', 'swf-remote': 'swf', 'epic-wfms-docs': 'swf',
     'site-canary': 'swf',
     'corun-ai': 'AI', 'corun-mcp-server': 'AI',
-    'wrangle-ai': 'AI', 'snapper-ai': 'AI',
+    'wrangle-ai': 'AI', 'snapper-ai': 'AI', 'teamcomms-ai': 'AI',
     'lxr-mcp-server': 'AI', 'xrootd-mcp-server': 'AI',
     'rucio-eic-mcp-server': 'swf',
     # dev: development support — web/doc sites, tooling, machine and
