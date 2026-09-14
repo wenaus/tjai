@@ -80,7 +80,8 @@ with `deploy/update_from_dev.sh`.
 
 ## License and history
 
-TJAI code is licensed under [Apache 2.0](LICENSE). Bundled third-party software
+TJAI is Copyright 2025-2026 Torre Wenaus, licensed under [Apache 2.0](LICENSE).
+Bundled third-party software
 retains its own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
 
 The standalone repository retains TJAI's development history from the personal
