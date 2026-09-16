@@ -386,7 +386,7 @@ def _collect_agents(now):
         'heartbeat_min': hb_min,
         'uptime_min': uptime_min,
         'restart_pending': restart_pending,
-        'status': 'running' if alive and hb_min and hb_min < 10 else 'stale' if alive else 'down',
+        'status': 'running' if alive and hb_min is not None and hb_min < 10 else 'stale' if alive else 'down',
     })
 
     # Wrangler agent — PID + pulse from sysconfig (docs/wrangler.md). The pulse
