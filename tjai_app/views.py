@@ -3350,6 +3350,7 @@ _GIT_REPOS = [
     ('/home/admin/github/rucio-eic-mcp-server', 'https://github.com/BNLNPPS/rucio-eic-mcp-server', 'rucio-eic-mcp-server'),
     ('/home/admin/github/epic-web-demo', 'https://github.com/BNLNPPS/epic-web-demo', 'epic-web-demo'),
     ('/home/admin/github/wrangle-ai', 'https://github.com/BNLNPPS/wrangle-ai', 'wrangle-ai'),
+    ('/home/admin/github/distcomp-services', 'https://github.com/BNLNPPS/distcomp-services', 'distcomp-services'),
 ]
 
 

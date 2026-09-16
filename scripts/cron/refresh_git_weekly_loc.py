@@ -51,7 +51,7 @@ REPO_PROJECT = {
     'swf-monitor': 'swf-monitor', 'swf-epicprod': 'swf-epicprod',
     'swf-testbed': 'swf-testbed',
     'swf-common-lib': 'swf', 'swf-remote': 'swf', 'epic-wfms-docs': 'swf',
-    'site-canary': 'swf',
+    'site-canary': 'swf', 'distcomp-services': 'swf',
     'corun-ai': 'AI', 'corun-mcp-server': 'AI',
     'wrangle-ai': 'AI', 'snapper-ai': 'AI', 'teamcomms-ai': 'AI',
     'lxr-mcp-server': 'AI', 'xrootd-mcp-server': 'AI',
