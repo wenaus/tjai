@@ -66,7 +66,7 @@ No agent restart needed — section scripts run as subprocesses.
 
 Sections with a 24h window skip silently on quiet days (`build()` returns None). `section_todos.py` ignores the window — all pending todos are surfaced regardless of age. `section_goals.py` also ignores it, covering 60 days and writing a no-activity line instead of skipping.
 
-`scripts/section_dev.py` is not part of this pipeline despite the name: it runs standalone from cron (daily 03:00) and writes dev-activity reports to `data/dev_daily/`.
+`scripts/section_dev.py` is not part of this pipeline despite the name: it runs standalone from cron (daily 03:30 ET) and writes dev-activity reports to `data/dev_daily/`.
 
 ### Web UI
 

@@ -1,6 +1,22 @@
-# tjai ec2dev cron jobs
+# ec2dev cron jobs — the complete crontab for user admin on this host.
 # Install: crontab /home/admin/github/tjai/scripts/cron/crontab
 # Source: tjai/scripts/cron/
+#
+# A user has one crontab, so this file carries every scheduled job on the
+# host, including those whose scripts live in other repos (epic-web-demo,
+# swf-remote stage-out). Change a job here and reinstall: editing with
+# `crontab -e` alone leaves this file behind, and the next install then
+# silently drops whatever the file does not have.
+#
+# Schedules are UTC — this cron has no CRON_TZ and the host is Etc/UTC,
+# while tjai itself reckons in America/New_York. A job that must land on
+# an Eastern wall-clock hour fires at both candidate UTC hours behind a
+# guard that passes exactly one. Every dated job below is written that way.
+#
+# The nightly chain runs 03:00-04:30 ET, which is 02:00-03:30 Central: after
+# Torre has stopped for the night and before he starts again around 04:30
+# Central. Its order and spacing carry dependencies — shift the block, do not
+# reorder it.
 
 SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin
@@ -12,25 +28,49 @@ PATH=/usr/local/bin:/usr/bin:/bin
 # swf development and must not operate on 30-min-stale swf software.
 */5 * * * * flock -n /tmp/git_pull_repos.lock /home/admin/github/tjai/scripts/cron/git_pull_repos.sh swf-only >> /tmp/cron_git_pull_swf.log 2>&1
 
-# Daily 03:00 — generate dev activity (upstream repo commits)
-0 3 * * * /var/www/tjai/.venv/bin/python /home/admin/github/tjai/scripts/section_dev.py >> /tmp/cron_section_dev.log 2>&1
+# Daily 03:30 ET — generate dev activity (upstream repo commits)
+30 7,8 * * * [ "$(TZ=America/New_York date +\%H)" = "03" ] && /var/www/tjai/.venv/bin/python /home/admin/github/tjai/scripts/section_dev.py >> /tmp/cron_section_dev.log 2>&1
 
-# Daily 04:00 — purge Claude Code session detritus older than 2 days
-0 4 * * * /home/admin/github/tjai/scripts/cron/cleanup_claude_sessions.sh >> /tmp/cron_cleanup_claude.log 2>&1
+# Daily 04:30 ET — purge Claude Code session detritus older than 2 days
+30 8,9 * * * [ "$(TZ=America/New_York date +\%H)" = "04" ] && /home/admin/github/tjai/scripts/cron/cleanup_claude_sessions.sh >> /tmp/cron_cleanup_claude.log 2>&1
 
-# Daily 03:30 — purge entry versions older than 30 days (keep min 10 per entry)
-30 3 * * * /home/admin/github/tjai/scripts/cron/purge_old_versions.py >> /tmp/cron_purge_versions.log 2>&1
+# Daily 04:00 ET — purge entry versions older than 30 days (keep min 10 per entry)
+0 8,9 * * * [ "$(TZ=America/New_York date +\%H)" = "04" ] && /home/admin/github/tjai/scripts/cron/purge_old_versions.py >> /tmp/cron_purge_versions.log 2>&1
 
-# Daily 03:45 — prune applog (info >7d, error >14d) and health-digest files (>7d)
-45 3 * * * /home/admin/github/tjai/scripts/cron/prune_logs_and_digests.py >> /tmp/cron_prune_logs.log 2>&1
+# Daily 04:15 ET — prune applog (info >7d, error >14d) and health-digest files (>7d)
+15 8,9 * * * [ "$(TZ=America/New_York date +\%H)" = "04" ] && /home/admin/github/tjai/scripts/cron/prune_logs_and_digests.py >> /tmp/cron_prune_logs.log 2>&1
 
 # Every 10 min — sync user accounts from swf-remote to corun-ai
 */10 * * * * /var/www/corun-ai/scripts/sync_users.sh >> /tmp/cron_sync_users.log 2>&1
 
-# Daily 02:30 — heal any empty git_daily .md files from prior days (page-load
+# Daily 03:00 ET — heal any empty git_daily .md files from prior days (page-load
 # refresh covers today+yesterday; this catches older days whose file was
 # written before that day's commits happened).
-30 2 * * * /var/www/tjai/.venv/bin/python /var/www/tjai/scripts/cron/refresh_git_daily.py >> /tmp/cron_refresh_git_daily.log 2>&1
+0 7,8 * * * [ "$(TZ=America/New_York date +\%H)" = "03" ] && /var/www/tjai/.venv/bin/python /var/www/tjai/scripts/cron/refresh_git_daily.py >> /tmp/cron_refresh_git_daily.log 2>&1
 
-# Daily 02:40 — weekly lines-added-by-project data for the git page chart
-40 2 * * * /var/www/tjai/.venv/bin/python /var/www/tjai/scripts/cron/refresh_git_weekly_loc.py >> /tmp/cron_git_weekly_loc.log 2>&1
+# Daily 03:10 ET — weekly lines-added-by-project data for the git page chart.
+# It ran at 02:40 UTC until 2026-09-16, which is 22:40 ET, mid-evening, so a
+# day's own commits never reached that day's chart.
+10 7,8 * * * [ "$(TZ=America/New_York date +\%H)" = "03" ] && /var/www/tjai/.venv/bin/python /var/www/tjai/scripts/cron/refresh_git_weekly_loc.py >> /tmp/cron_git_weekly_loc.log 2>&1
+
+# Daily 03:45 ET — epic-web-demo nightly maintenance: regenerate /demo/ pages,
+# curation checks, AI assessment report (docs/website-generation.md)
+45 7,8 * * * [ "$(TZ=America/New_York date +\%H)" = "03" ] && /home/admin/github/epic-web-demo/scripts/nightly_maintenance.sh >> /tmp/cron_epic_web_demo.log 2>&1
+
+# Every 5 min — drain S3 ObjectCreated events into the stage-out index
+# (swf-epicprod docs/JOB_REPORTING.md; the gateway learns the bucket by
+# being told, never by listing it)
+*/5 * * * * flock -n /tmp/stageout_drain.lock nice -n 19 /usr/bin/python3 /home/admin/github/swf-remote/scripts/stageout_index.py drain >> /tmp/cron_stageout_drain.log 2>&1
+
+# Daily 04:10 ET — authoritative count of the reports prefix, cross-checked
+# against the index; prunes expired objects and reports anything unheard
+10 8,9 * * * [ "$(TZ=America/New_York date +\%H)" = "04" ] && /usr/bin/python3 /home/admin/github/swf-remote/scripts/stageout_index.py reconcile >> /tmp/cron_stageout_reconcile.log 2>&1
+
+# Daily 04:20 ET — stage-out guard: objects and bytes against absolute and
+# relative ceilings, the day's totals kept for growth, and the reporting key
+# disabled if the traffic is an explosion (swf-epicprod docs/JOB_REPORTING.md)
+20 8,9 * * * [ "$(TZ=America/New_York date +\%H)" = "04" ] && /usr/bin/python3 /home/admin/github/swf-remote/scripts/stageout_index.py guard >> /tmp/cron_stageout_guard.log 2>&1
+
+# Hourly at :20 — sweep failed jobs' reports out of the bucket: read a
+# bounded number per failure signature, store them here, delete the objects
+#20 * * * * /usr/bin/python3 /home/admin/github/swf-remote/scripts/stageout_index.py sweep >> /tmp/cron_stageout_sweep.log 2>&1

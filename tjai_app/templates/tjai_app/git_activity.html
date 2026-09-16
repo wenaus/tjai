@@ -438,7 +438,9 @@ function buildLocPie(d) {
     if (!grand) return '';
     const fmt = v => v.toLocaleString('en-US');
 
-    const cx = 190, cy = 130, r = 105, labelR = r + 12;
+    // cx leaves room for the longest left-hand label (swf-epicprod 11%,
+    // ~106px at 11px monospace) between the box edge and the label ring.
+    const cx = 230, cy = 130, r = 105, labelR = r + 12;
     let a0 = -Math.PI / 2;  // start at 12 o'clock, stacking order
     let svg = '';
     for (const t of totals) {
@@ -463,7 +465,7 @@ function buildLocPie(d) {
     return `<div class="locchart">
         <div class="locchart-title">Share of lines added, by project</div>
         <div class="locchart-sub">${fmt(grand)} lines total over ${d.week_start.length} weeks</div>
-        <svg width="440" height="260" viewBox="0 0 440 260">${svg}</svg>
+        <svg width="500" height="260" viewBox="0 0 500 260">${svg}</svg>
     </div>`;
 }
 

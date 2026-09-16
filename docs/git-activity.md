@@ -33,7 +33,7 @@ its weekly lines contribute to the AI category.
 - **Producers** — a page load regenerates today's and yesterday's files from
   live git state (`_refresh_recent_git_daily`), so the page is current the
   moment it is viewed; `scripts/cron/refresh_git_daily.py` (system cron
-  02:30) rewrites the last three days, covering an in-flight day, a
+  03:00 ET) rewrites the last three days, covering an in-flight day, a
   late-midnight commit, and a push that arrived after its day ended. Nothing
   older is touched: the checkouts are pulled every 30 minutes and the script
   fetches before it reads, so a day's file is complete once the day is over.
@@ -45,7 +45,7 @@ its weekly lines contribute to the AI category.
   prefixes such as `tjai:` to their app) and rendered to HTML. Refresh
   errors are carried in the payload and surfaced on the page.
 - **Weekly lines-added** — `scripts/cron/refresh_git_weekly_loc.py` (system
-  cron 02:40) writes `data/git_weekly_loc.json`: lines added (`numstat`) in
+  cron 03:10 ET) writes `data/git_weekly_loc.json`: lines added (`numstat`) in
   the configured author's commits, bucketed by ISO week in the tjai
   timezone, attributed to a project by repository — for tjrepo, by top-level
   directory. Every repository under `/home/admin/github` is read; git
