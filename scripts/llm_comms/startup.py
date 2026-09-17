@@ -67,7 +67,18 @@ def start(client, data, host=None, *, context_loaded=False):
     record = claude_record(native_id) if client == "claude" else {}
     native_socket = (os.environ.get("CLAUDE_CODE_MESSAGING_SOCKET") or record.get("messagingSocketPath", "")) if client == "claude" else os.environ.get("TJAI_CODEX_SOCKET", "")
     pid = record.get("pid") or data.get("owner_pid") or native_owner(client)
-    name = record.get("name") or data.get("session_name") or f"{host}-{client}-{native_id[-8:]}"
+    # A name asked for — by the host's config, by the launcher's environment, or by the client
+    # itself — is a base: the registry numbers it among live peers (deep -> deep-1, deep-2 …), so
+    # the same harness can run twice without two sessions answering to one name. With no name asked
+    # for, the derived default stands exactly as it was.
+    asked = (
+        record.get("name")
+        or data.get("session_name")
+        or os.environ.get("TJAI_SESSION_NAME")
+        or (config.get("session_name") if isinstance(config, dict) else "")
+        or ""
+    ).strip()
+    name = asked or f"{host}-{client}-{native_id[-8:]}"
     model = data.get("model") or ""
     if isinstance(model, dict):
         model = model.get("id") or model.get("display_name") or ""
@@ -98,6 +109,8 @@ def start(client, data, host=None, *, context_loaded=False):
                    "--native-id", native_id, "--host", host, "--name", name,
                    "--cwd", cwd, "--model", model, "--socket", native_socket, "--pid", str(pid),
                    "--transcript", transcript]
+        if asked:
+            command.append("--instances")
         for resource in resources:
             command.extend(["--resource", resource])
         with open(directory / f"{session_id}.log", "a") as log:

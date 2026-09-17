@@ -6,6 +6,7 @@ independent proof of model identity. Peer messages never authorize actions.
 
 from datetime import timedelta
 import json
+import re
 import uuid
 
 from asgiref.sync import sync_to_async
@@ -18,6 +19,8 @@ from .comms_models import LLMDelivery, LLMMessage, LLMSession
 
 FRESH_SECONDS = 90
 SESSION_STATES = {"idle", "active", "unknown", "offline"}
+# A name that already ends in an explicit instance number is a choice, not a base to number.
+_NUMBERED_NAME_RE = re.compile(r".+-\d+$")
 DELIVERY_STATES = {"pending", "written_to_transport", "accepted_by_client", "queued_in_client", "uncertain", "failed", "acknowledged"}
 
 
@@ -39,7 +42,30 @@ def _session(row):
             "online": row.state != "offline" and row.last_seen >= timezone.now() - timedelta(seconds=FRESH_SECONDS)}
 
 
-def register_session(native_id, name, host, client, model="", cwd="", resources=None, delivery="pull", state="idle"):
+def _numbered_instance(base, session_id):
+    """The next free numbered instance of a base name: deep -> deep-1, deep-2, …
+
+    A harness that names itself by what it is rather than by where it runs can be started more than
+    once, and two live sessions answering to one name would make peer routing ambiguous. The number
+    is therefore allocated here, where every live session is visible: the lowest index nobody
+    currently online is using. A session that is gone stops holding its number, so a later start
+    takes the lowest free one rather than marching upward forever.
+    """
+    fresh = timezone.now() - timedelta(seconds=FRESH_SECONDS)
+    taken = set(
+        LLMSession.objects.exclude(id=session_id)
+        .exclude(state="offline")
+        .filter(last_seen__gte=fresh, name__startswith=f"{base}-")
+        .values_list("name", flat=True)
+    )
+    for index in range(1, 1000):
+        candidate = f"{base}-{index}"
+        if candidate not in taken:
+            return candidate
+    return f"{base}-{int(timezone.now().timestamp())}"
+
+
+def register_session(native_id, name, host, client, model="", cwd="", resources=None, delivery="pull", state="idle", instances=False):
     native_id = _text(native_id, "native_id", 128)
     host = _text(host, "host", 160)
     client = _text(client, "client", 80)
@@ -52,8 +78,14 @@ def register_session(native_id, name, host, client, model="", cwd="", resources=
         raise ValueError("resources must be a list of at most 20 names")
     resources = sorted({_text(r, "resource", 160) for r in resources})
     session_id = str(uuid.uuid5(uuid.NAMESPACE_URL, json.dumps(["tjai:llm", client, host, native_id])))
+    # A name asked for as a base — "deep" — is taken as an intent to be numbered among live peers, so
+    # this session registers once as deep-1 or the next free deep-N. A name that already carries an
+    # index, or that was derived rather than asked for, is left exactly as given.
+    name = _text(name, "name", 160)
+    if instances and not _NUMBERED_NAME_RE.match(name):
+        name = _numbered_instance(name, session_id)
     row, _ = LLMSession.objects.update_or_create(id=session_id, defaults={
-        "native_id": native_id, "name": _text(name, "name", 160), "host": host,
+        "native_id": native_id, "name": name, "host": host,
         "client": client, "model": _text(model, "model", 120, False),
         "cwd": _text(cwd, "cwd", 4096, False), "resources": resources,
         "delivery": delivery, "state": state, "last_seen": timezone.now(),

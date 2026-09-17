@@ -156,7 +156,7 @@ async def run(args):
             try:
                 registration = await call("register_session", native_id=args.native_id, name=args.name,
                     host=args.host, client=client_name, model=args.model, cwd=args.cwd,
-                    resources=args.resource, delivery=delivery, state=state)
+                    resources=args.resource, delivery=delivery, state=state, instances=args.instances)
                 break
             except (OSError, RuntimeError) as exc:
                 if args.once:
@@ -220,6 +220,8 @@ def main():
     parser.add_argument("--pid", type=int, help="Stop when this owning native process exits")
     parser.add_argument("--host", required=True)
     parser.add_argument("--name", required=True)
+    parser.add_argument("--instances", action="store_true",
+                        help="Treat --name as a base and register as the next free <name>-N")
     parser.add_argument("--model", default="")
     parser.add_argument("--transcript", default="", help="Claude transcript; refreshes --model each heartbeat")
     parser.add_argument("--cwd", default="")

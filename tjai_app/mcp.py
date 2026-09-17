@@ -115,7 +115,7 @@ async def _comms_call(function, **kwargs):
 @mcp.tool()
 async def register_session(native_id: str, name: str, host: str, client: str,
                            model: str = "", cwd: str = "", resources: list[str] = None,
-                           delivery: str = "pull", state: str = "idle") -> dict:
+                           delivery: str = "pull", state: str = "idle", instances: bool = False) -> dict:
     """Register an operator-owned LLM session. Adapter lifecycle operation.
 
     Returns a stable TJAI session ID for the client/host/native_id combination.
@@ -123,10 +123,13 @@ async def register_session(native_id: str, name: str, host: str, client: str,
     codex_app_server, codex_queue (deferred), or claude_socket. State is idle,
     active, unknown (turn status unavailable), or offline.
     This registration is asserted provenance within the operator's MCP account.
+    `instances` marks a name asked for as a base rather than a final name: the session then
+    registers as the next free `<name>-N` among live peers, so a harness can run more than once
+    without two sessions answering to one name.
     """
     return await _comms_call(comms.register_session, native_id=native_id, name=name,
                             host=host, client=client, model=model, cwd=cwd,
-                            resources=resources, delivery=delivery, state=state)
+                            resources=resources, delivery=delivery, state=state, instances=instances)
 
 
 @mcp.tool()
