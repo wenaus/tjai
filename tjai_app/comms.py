@@ -50,7 +50,14 @@ def _numbered_instance(base, session_id):
     is therefore allocated here, where every live session is visible: the lowest index nobody
     currently online is using. A session that is gone stops holding its number, so a later start
     takes the lowest free one rather than marching upward forever.
+
+    A session that already answers to `<base>-N` keeps that number for as long as it lives, even if a
+    lower one frees up: a name that changed under a running session would break every peer that had
+    learned it, so the allocation is stable for a session and free only for the next one to start.
     """
+    existing = LLMSession.objects.filter(id=session_id).values_list("name", flat=True).first()
+    if isinstance(existing, str) and re.match(rf"^{re.escape(base)}-\d+$", existing):
+        return existing
     fresh = timezone.now() - timedelta(seconds=FRESH_SECONDS)
     taken = set(
         LLMSession.objects.exclude(id=session_id)
