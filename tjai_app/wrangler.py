@@ -129,6 +129,11 @@ class TjaiRoster:
                         target = target - timedelta(days=1)
                     worker_type = 'ai_dispatch' if data.get('ai_prompt') else 'mechanical'
                     data['last_run'] = now
+                    # A pending retry is consumed by the claim that launches it. Left in place it
+                    # keeps the action due on every pass until the doer completes, and each pass
+                    # launches another doer (ideation-agent, 2026-09-18: one every 15 s).
+                    # retry_count stays for agent_complete's backoff and is cleared on success.
+                    data.pop('retry_after', None)
                     action.data = data
                     data['next_due'] = get_next_scheduled_time(action)
                     action.timestamp_modified = now

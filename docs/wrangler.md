@@ -92,11 +92,15 @@ On-demand reruns and backfills (daily-history, assessments) become enqueued
 workers carrying their target date; the backfill chain is a worker that
 enqueues its successor on completion. Force-run becomes a plain enqueue.
 
-Failed workers are not auto-retried: the failure lands in AppLog and Capcom,
-and the schedule's next firing is the recovery path. The `retry_after`
-mechanism is retired with the action agent. If operational experience shows a
-class of transient failures that cannot wait for the next firing, retry
-becomes a bullpen reclaim policy bounded by the existing `attempts` column.
+Failed mechanical workers are not auto-retried: the failure lands in AppLog
+and Capcom, and the schedule's next firing is the recovery path. A failed AI
+doer keeps `agent_complete.py`'s backoff: it writes `retry_after` (15 min, 1 h,
+4 h; three tries) onto the action entry, `get_next_scheduled_time` returns that
+instead of the schedule, and the claim that launches the retry consumes the
+flag — a `retry_after` left on the entry keeps the action due on every pass and
+launches a doer each pass (ideation-agent, 2026-09-18, one every 15 s). Success
+clears the retry state. If retries are ever wanted for mechanicals too, they
+become a bullpen reclaim policy bounded by the existing `attempts` column.
 
 ## Migration
 
