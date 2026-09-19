@@ -74,7 +74,7 @@ CLAUDE_TIMEOUT = 3600
 # 2026-09-10). 1M context, thinking on by default. A 175K-token pack is
 # read in one call.
 DEEPSEEK_MODEL = 'deepseek-flash'
-DEEPSEEK_EFFORT = 'max'      # low / high (default) / max; xhigh maps to high
+DEEPSEEK_EFFORT = 'high'     # low / high (default) / max; xhigh maps to high
 DEEPSEEK_MAX_OUTPUT = 64000
 DEEPSEEK_TIMEOUT = 3600
 
