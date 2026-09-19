@@ -76,6 +76,8 @@ Actions needing intelligence use `tj agent` to launch a detached Claude instance
 
 **Subagent cap:** every `tj agent` claude launch passes `--settings` with a PreToolUse hook (`scripts/claude_subagent_cap.py`) that hard-blocks Agent/Task tool calls past `TJAI_MAX_SUBAGENTS` (default 3), counting per session in a flock-guarded `/tmp` file. Prompt-level limits are not enforcement — a 2026-07-15 research run instructed to spawn at most 3 subagents spawned 74 and exhausted host memory. Claude Code has no built-in numeric subagent cap; PreToolUse is the supported enforcement point.
 
+**Background-subagent wait:** Claude Code print mode (2.1.275+) stops waiting for still-running background subagents 600 s after the main turn ends and exits with no report. The launch sets `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0` so the run waits for them; the action's `timeout` (the `timeout` wrapper on the command) remains the bound.
+
 **XML delimiters in `ai_prompt` templates:** When a prompt templates in variable content (e.g. `{guidance}`, entry content, data), wrap the injected content in XML tags to separate instructions from data. Without delimiters, Claude can confuse injected content with prompt instructions — especially when the injected text itself contains directive-like language.
 
 ```

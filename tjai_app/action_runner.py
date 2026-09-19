@@ -902,15 +902,15 @@ def _create_and_dispatch_synthesis(base_entry_id, base_entry, synth_entry_id):
     research_action.data = data
     research_action.timestamp_modified = now
     research_action.save(update_fields=['data', 'timestamp_modified'])
-    dispatch_ai(
-        research_action,
-        target_date=None,
-        data_overrides={
-            'model': 'gpt-5.6-sol',
-            'effort': 'xhigh',
-            'system_prompt_entry_id': None,
-        },
-    )
+    # Synthesis runs on the action's own model/effort unless the action's
+    # data names synthesis_model / synthesis_effort (UI-editable). The
+    # hard-coded gpt-5.6-sol it carried until 2026-09-19 failed every
+    # synthesis for the whole Codex quota outage.
+    data_overrides = {'system_prompt_entry_id': None}
+    for key in ('model', 'effort'):
+        if data.get(f'synthesis_{key}'):
+            data_overrides[key] = data[f'synthesis_{key}']
+    dispatch_ai(research_action, target_date=None, data_overrides=data_overrides)
     update_last_run(research_action, clear_retry_state=False)
 
     logger.info("Synthesis dispatched: %s (entry %s)", synth_entry_id, synth.id)

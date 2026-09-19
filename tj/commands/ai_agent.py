@@ -590,6 +590,11 @@ def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: 
     env = os.environ.copy()
     env.pop('CLAUDECODE', None)
     env.pop('ANTHROPIC_API_KEY', None)  # Force subscription auth, not API
+    # Claude Code print mode (2.1.275+) stops waiting for background subagents
+    # after 600 s and exits with no report — two research branches died that
+    # way on 2026-09-18. 0 waits for them; the run stays bounded by the
+    # action's timeout wrapper below.
+    env.setdefault('CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS', '0')
 
     # Record model/effort in tracking entry metadata
     try:
