@@ -57,8 +57,8 @@ MODEL = 'gemini-2.5-pro'
 
 # Comparison runs override these from the command line. The defaults are
 # the nightly assessor, so an unflagged run is unchanged.
-PROVIDER = 'claude'          # 'claude' or 'codex' (subscriptions), 'gemini' (API)
-VARIANT = 'opus'             # names the raw-response and plan files
+PROVIDER = 'deepseek'        # 'deepseek' or 'gemini' (API); 'claude' or 'codex' (subscriptions)
+VARIANT = 'deepseek'         # names the raw-response and plan files
 CODEX_MODEL = 'gpt-5.6-sol'
 CODEX_EFFORT = 'high'
 # Codex at high effort spends far longer on a 150K-token pack than the
@@ -68,12 +68,15 @@ CODEX_TIMEOUT = 3600
 CLAUDE_MODEL = 'opus'
 CLAUDE_EFFORT = 'xhigh'
 CLAUDE_TIMEOUT = 3600
-# Opus 5's API safeguards reject a pack whose dialog is about credentials
-# or the like ("safeguards flagged this message ... [cyber]", first seen on
-# the 2026-09-18 pack); the rejection names the model, so the call is
-# retried once on this one. Counted per run and written to the result.
-CLAUDE_FALLBACK_MODEL = 'sonnet'
-CLAUDE_FALLBACKS = []
+# DeepSeek through its Anthropic-compatible endpoint. `deepseek-flash` is
+# DeepSeek-V4.1-Flash, ahead of V4-Pro on DeepSeek's own and third-party
+# tests; since 2026-09-14 the pro id routes to it anyway (release note
+# 2026-09-10). 1M context, thinking on by default. A 175K-token pack is
+# read in one call.
+DEEPSEEK_MODEL = 'deepseek-flash'
+DEEPSEEK_EFFORT = 'max'      # low / high (default) / max; xhigh maps to high
+DEEPSEEK_MAX_OUTPUT = 64000
+DEEPSEEK_TIMEOUT = 3600
 
 # The largest input for one assessment call, in estimated tokens
 # (chars / CHARS_PER_TOKEN). Held in sysconfig so it is editable without a
@@ -267,18 +270,11 @@ def call_claude(prompt):
     tools, no MCP, no session: the assessor gets the dialog and the system
     prompt and nothing else. A -p run records no dialog (the record hook
     skips print mode), so the call does not read itself back the next day.
-    A call the model's safeguards reject is retried once on the fallback
-    model; any other failure is raised as it stands.
+    Opus 5's API safeguards reject a pack whose dialog is about credentials
+    ("safeguards flagged this message ... [cyber]", the 2026-09-18 pack);
+    that call fails and the part is named as not assessed.
     """
-    try:
-        return _call_claude(prompt, CLAUDE_MODEL)
-    except RuntimeError as exc:
-        if 'safeguards flagged' not in str(exc):
-            raise
-        logger.warning("%s safeguards rejected the call; retrying on %s",
-                       CLAUDE_MODEL, CLAUDE_FALLBACK_MODEL)
-        CLAUDE_FALLBACKS.append(CLAUDE_FALLBACK_MODEL)
-        return _call_claude(prompt, CLAUDE_FALLBACK_MODEL)
+    return _call_claude(prompt, CLAUDE_MODEL)
 
 
 def _call_claude(prompt, model):
@@ -332,8 +328,49 @@ def _call_claude(prompt, model):
     return out
 
 
+def call_deepseek(prompt):
+    """Run one assessment call through the DeepSeek API.
+
+    Same contract as call_gemini: prompt in, response text out. The
+    Anthropic-compatible endpoint is used with the anthropic SDK and a
+    base_url override, as research_multimodel.py does; no tools, one
+    message, thinking on at DEEPSEEK_EFFORT (output_config.effort). Thinking
+    blocks are dropped and the text blocks joined.
+    """
+    from anthropic import Anthropic
+
+    api_key = os.environ.get('DEEPSEEK_API_KEY')
+    if not api_key:
+        raise RuntimeError("DEEPSEEK_API_KEY not set in environment")
+    client = Anthropic(api_key=api_key,
+                       base_url='https://api.deepseek.com/anthropic',
+                       timeout=DEEPSEEK_TIMEOUT, max_retries=1)
+    logger.info("Calling DeepSeek (%s, effort=%s, Anthropic-compat), prompt %d chars...",
+                DEEPSEEK_MODEL, DEEPSEEK_EFFORT, len(prompt))
+    started = time.monotonic()
+    response = client.messages.create(
+        model=DEEPSEEK_MODEL, max_tokens=DEEPSEEK_MAX_OUTPUT,
+        messages=[{'role': 'user', 'content': prompt}],
+        extra_body={'output_config': {'effort': DEEPSEEK_EFFORT}})
+    duration = round(time.monotonic() - started)
+    text = ''.join(getattr(b, 'text', '') for b in (response.content or [])
+                   if getattr(b, 'type', None) == 'text')
+    if not text.strip():
+        raise RuntimeError(
+            f"DeepSeek returned no text after {duration}s "
+            f"(stop_reason={getattr(response, 'stop_reason', None)!r})")
+    usage = getattr(response, 'usage', None)
+    logger.info("DeepSeek returned %d chars in %ds (in %s, out %s tokens)",
+                len(text), duration,
+                getattr(usage, 'input_tokens', '?'),
+                getattr(usage, 'output_tokens', '?'))
+    return text
+
+
 def _call_model(prompt):
     """Dispatch one call to the configured provider."""
+    if PROVIDER == 'deepseek':
+        return call_deepseek(prompt)
     if PROVIDER == 'claude':
         return call_claude(prompt)
     if PROVIDER == 'codex':
@@ -431,7 +468,7 @@ def assessor_name():
     instead of overwriting the previous reader's history under the same
     name (docs/assessment.md).
     """
-    return {'claude': 'opus', 'codex': 'sol'}.get(PROVIDER, 'gemini')
+    return {'deepseek': 'deepseek', 'claude': 'opus', 'codex': 'sol'}.get(PROVIDER, 'gemini')
 
 
 def _response_dir():
@@ -677,8 +714,8 @@ def _write_result(date_str, parts, packs, scores_data, cap_tokens):
         'date': date_str,
         'variant': VARIANT,
         'provider': PROVIDER,
-        'model': {'claude': CLAUDE_MODEL, 'codex': CODEX_MODEL}.get(PROVIDER, MODEL),
-        'fallback_calls': list(CLAUDE_FALLBACKS),
+        'model': {'deepseek': DEEPSEEK_MODEL, 'claude': CLAUDE_MODEL,
+                  'codex': CODEX_MODEL}.get(PROVIDER, MODEL),
         'cap_tokens': cap_tokens,
         'calls': len(packs),
         'calls_ok': sum(1 for c in calls if c['ok']),

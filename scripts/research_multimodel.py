@@ -492,7 +492,9 @@ async def _call_deepseek(prompt, tier, entry_uuid=None):
     if not api_key:
         raise RuntimeError("DEEPSEEK_API_KEY not set in environment")
 
-    api_model = f'deepseek-v4-{tier}'
+    # One served model since 2026-09-14: deepseek-flash (V4.1-Flash); the
+    # v4-pro id routes to it until a V4.1-Pro exists (DeepSeek news 2026-09-10).
+    api_model = 'deepseek-flash'
     research_model = f'deepseek-{tier}'
     client = Anthropic(
         api_key=api_key,

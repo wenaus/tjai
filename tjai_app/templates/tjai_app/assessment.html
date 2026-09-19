@@ -181,8 +181,8 @@
         let allDates = [];
         let todayKey = '';
         let selectedEntryId = null;
-        const currentAssessor = 'opus';
-        const assessorSuffixes = ['-gemini', '-sol', '-opus'];
+        const currentAssessor = 'deepseek';
+        const assessorSuffixes = ['-gemini', '-sol', '-deepseek'];
 
         function focusContentArea() {
             const content = document.getElementById('content-panel');
@@ -546,7 +546,7 @@
                 {date: '2026-05-27', dateEnd: '2026-05-29', label: '4.8'},  // Opus 4.8 — no 05-28 assessment, so anchor to adjacent points; line lands in the 28/29 gap
                 {date: '2026-07-03', dateEnd: '2026-07-04', label: 'Fable'},
                 {date: '2026-09-05', dateEnd: '2026-09-06', label: 'RC'},  // first full team-dev day under remote control; the V2 assessor and the change to gpt-5.6-sol fall on the same boundary (docs/assessment.md)
-                {date: '2026-09-17', dateEnd: '2026-09-18', label: 'opus'},  // assessor moved from gpt-5.6-sol to Claude opus/xhigh when the Codex quota ran out (docs/assessment.md)
+                {date: '2026-09-17', dateEnd: '2026-09-18', label: 'DS'},  // assessor moved from gpt-5.6-sol to DeepSeek V4.1-Flash when the Codex quota ran out (docs/assessment.md)
             ];
             for (const m of markers) {
                 const idx = days.findIndex(d => d.date === m.date);
