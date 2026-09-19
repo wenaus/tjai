@@ -68,6 +68,12 @@ CODEX_TIMEOUT = 3600
 CLAUDE_MODEL = 'opus'
 CLAUDE_EFFORT = 'xhigh'
 CLAUDE_TIMEOUT = 3600
+# Opus 5's API safeguards reject a pack whose dialog is about credentials
+# or the like ("safeguards flagged this message ... [cyber]", first seen on
+# the 2026-09-18 pack); the rejection names the model, so the call is
+# retried once on this one. Counted per run and written to the result.
+CLAUDE_FALLBACK_MODEL = 'sonnet'
+CLAUDE_FALLBACKS = []
 
 # The largest input for one assessment call, in estimated tokens
 # (chars / CHARS_PER_TOKEN). Held in sysconfig so it is editable without a
@@ -261,7 +267,21 @@ def call_claude(prompt):
     tools, no MCP, no session: the assessor gets the dialog and the system
     prompt and nothing else. A -p run records no dialog (the record hook
     skips print mode), so the call does not read itself back the next day.
+    A call the model's safeguards reject is retried once on the fallback
+    model; any other failure is raised as it stands.
     """
+    try:
+        return _call_claude(prompt, CLAUDE_MODEL)
+    except RuntimeError as exc:
+        if 'safeguards flagged' not in str(exc):
+            raise
+        logger.warning("%s safeguards rejected the call; retrying on %s",
+                       CLAUDE_MODEL, CLAUDE_FALLBACK_MODEL)
+        CLAUDE_FALLBACKS.append(CLAUDE_FALLBACK_MODEL)
+        return _call_claude(prompt, CLAUDE_FALLBACK_MODEL)
+
+
+def _call_claude(prompt, model):
     import signal
     import subprocess
 
@@ -272,7 +292,7 @@ def call_claude(prompt):
         claude_path,
         '-p',
         '--output-format', 'text',
-        '--model', CLAUDE_MODEL,
+        '--model', model,
         '--effort', CLAUDE_EFFORT,
         '--tools', '',
         '--strict-mcp-config',
@@ -290,7 +310,7 @@ def call_claude(prompt):
     env['TJAI_DIALOG_TURNS'] = '0'
 
     logger.info("Calling Claude (%s, effort=%s), prompt %d chars...",
-                CLAUDE_MODEL, CLAUDE_EFFORT, len(prompt))
+                model, CLAUDE_EFFORT, len(prompt))
     started = time.monotonic()
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -658,6 +678,7 @@ def _write_result(date_str, parts, packs, scores_data, cap_tokens):
         'variant': VARIANT,
         'provider': PROVIDER,
         'model': {'claude': CLAUDE_MODEL, 'codex': CODEX_MODEL}.get(PROVIDER, MODEL),
+        'fallback_calls': list(CLAUDE_FALLBACKS),
         'cap_tokens': cap_tokens,
         'calls': len(packs),
         'calls_ok': sum(1 for c in calls if c['ok']),
