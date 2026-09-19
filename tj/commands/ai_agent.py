@@ -543,6 +543,11 @@ def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: 
 
     effort = os.environ.get('TJAI_AGENT_EFFORT', 'xhigh')
     timeout_secs = int(os.environ.get('TJAI_AGENT_TIMEOUT', '0'))
+    workdir = os.environ.get('TJAI_AGENT_WORKDIR') or None
+    if workdir and not os.path.isdir(workdir):
+        print(f"WARNING: TJAI_AGENT_WORKDIR {workdir} is not a directory; "
+              f"launching from the current one", file=sys.stderr)
+        workdir = None
 
     if not os.environ.get('TJAI_AGENT_MODEL'):
         print(f"WARNING: TJAI_AGENT_MODEL not set, defaulting to {model}", file=sys.stderr)
@@ -624,7 +629,7 @@ def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: 
             f'{claude_cmd} >"$ERRFILE" 2>&1 ; '
             f'{completion_cmd} $? "$ERRFILE"'
         )
-        _run_wrapper(['bash', '-c', shell_cmd], env)
+        _run_wrapper(['bash', '-c', shell_cmd], env, cwd=workdir)
     else:
         if timeout_secs > 0:
             cmd = ['timeout', str(timeout_secs)] + cmd
@@ -635,6 +640,7 @@ def _launch_claude(claude_path: str, system_prompt: str, prompt: str, entry_id: 
             stderr=subprocess.DEVNULL,
             start_new_session=True,
             env=env,
+            cwd=workdir,
         )
 
     print(f"Agent launched")

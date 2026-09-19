@@ -462,6 +462,10 @@ def dispatch_ai(action, entry_id=None, target_date=None, data_overrides=None,
                          system_prompt_entry_id_id)
     timeout_val = data.get('timeout', 7200)  # default 2 hours
     env['TJAI_AGENT_TIMEOUT'] = str(timeout_val)
+    # Working directory for the claude doer (research runs from the git
+    # checkouts so local forensics are in reach); default is this process's.
+    if data.get('workdir'):
+        env['TJAI_AGENT_WORKDIR'] = str(data['workdir'])
 
     # Link action to the research entry it dispatched
     target_entry_uuid = data.get('next_target_entry_id')

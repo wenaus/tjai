@@ -35,6 +35,7 @@ supervisord → action_agent.py (always-on daemon)
 | `model` | Optional model override (default: opus); Codex/GPT model names dispatch via the Codex CLI (default `gpt-5.6-sol`) |
 | `effort` | Optional reasoning-effort override for the dispatched agent |
 | `timeout` | Optional AI dispatch timeout in seconds |
+| `workdir` | Optional working directory for the claude doer (default: the agent's own). `research-agent` uses `/home/admin/github` so the research prompt's local forensics reach every checkout |
 | `system_prompt_entry_id` | Entry whose content becomes the agent's system prompt |
 | `prompt_is_system_prompt` | If true, `ai_prompt` is used verbatim as the system prompt |
 | `result_url` | Output page link shown in the agent-queue UI |

@@ -196,11 +196,14 @@ All subagent entries for a topic. Linked via `data.source_uuid`.
 
 ### Quality Controls
 
-Per-model system prompts enforce the research contract. The Codex prompt
-(`research-system-prompt-chatgpt`, kept for the branch's re-enable) requires
-TJAI and local repository investigation in addition to external standards
-research; with the branch off, no brief covers that ground. The Claude prompt
-(`research-system-prompt-claude`) enforces:
+Per-model system prompts enforce the research contract. The Claude prompt
+(`research-system-prompt-claude`) and the Codex prompt
+(`research-system-prompt-chatgpt`, kept for the branch's re-enable) require
+the same brief: the full tjai bootstrap, investigation of the knowledge base,
+dialog and logs through tjai MCP, local forensics on the checkouts and their
+Git history when the topic concerns a system implemented there (the Claude
+doer runs from `/home/admin/github` for this — the action's `workdir`), and
+external standards research. The Claude prompt also enforces:
 - Depth over breadth
 - Primary sources first (papers, docs, repos)
 - Cross-referencing with contradiction tracking
