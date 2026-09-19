@@ -3049,7 +3049,7 @@ def assessment_page(request):
 # Assessors whose entries make up the daily series. The suffix on an
 # assessment entry id names the reader that wrote it; only these are
 # plotted, so the pre-suffix era stays out until someone asks for it.
-ASSESSOR_SUFFIXES = ('-gemini', '-sol')
+ASSESSOR_SUFFIXES = ('-gemini', '-sol', '-opus')
 
 
 def strip_assessor(entry_id):

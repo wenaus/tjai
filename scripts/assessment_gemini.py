@@ -22,6 +22,7 @@ a single-call assessment. Design: docs/assessment.md.
 """
 import json
 import os
+import shutil
 import re
 import sys
 import time
@@ -56,14 +57,17 @@ MODEL = 'gemini-2.5-pro'
 
 # Comparison runs override these from the command line. The defaults are
 # the nightly assessor, so an unflagged run is unchanged.
-PROVIDER = 'codex'           # 'gemini' (API) or 'codex' (subscription)
-VARIANT = 'sol'              # names the raw-response and plan files
+PROVIDER = 'claude'          # 'claude' or 'codex' (subscriptions), 'gemini' (API)
+VARIANT = 'opus'             # names the raw-response and plan files
 CODEX_MODEL = 'gpt-5.6-sol'
 CODEX_EFFORT = 'high'
 # Codex at high effort spends far longer on a 150K-token pack than the
 # Gemini API takes to answer one, so the timeout that suits Gemini cuts
 # sol off mid-read.
 CODEX_TIMEOUT = 3600
+CLAUDE_MODEL = 'opus'
+CLAUDE_EFFORT = 'xhigh'
+CLAUDE_TIMEOUT = 3600
 
 # The largest input for one assessment call, in estimated tokens
 # (chars / CHARS_PER_TOKEN). Held in sysconfig so it is editable without a
@@ -250,8 +254,68 @@ def call_codex(prompt):
         return response
 
 
+def call_claude(prompt):
+    """Run one assessment call through the Claude subscription.
+
+    Same contract as call_codex: prompt on stdin, response text out. No
+    tools, no MCP, no session: the assessor gets the dialog and the system
+    prompt and nothing else. A -p run records no dialog (the record hook
+    skips print mode), so the call does not read itself back the next day.
+    """
+    import signal
+    import subprocess
+
+    claude_path = shutil.which('claude') or os.path.expanduser('~/.local/bin/claude')
+    if not os.access(claude_path, os.X_OK):
+        raise RuntimeError("claude CLI not found in PATH or ~/.local/bin")
+    cmd = [
+        claude_path,
+        '-p',
+        '--output-format', 'text',
+        '--model', CLAUDE_MODEL,
+        '--effort', CLAUDE_EFFORT,
+        '--tools', '',
+        '--strict-mcp-config',
+        '--no-session-persistence',
+    ]
+    env = os.environ.copy()
+    env['HOME'] = os.environ.get('HOME', '/home/admin')
+    env['PATH'] = ':'.join([
+        '/home/admin/.nvm/versions/node/v24.13.1/bin',
+        '/home/admin/.local/bin',
+        env.get('PATH', '/usr/local/bin:/usr/bin:/bin'),
+    ])
+    env.pop('CLAUDECODE', None)
+    env.pop('ANTHROPIC_API_KEY', None)  # subscription auth, never the API
+    env['TJAI_DIALOG_TURNS'] = '0'
+
+    logger.info("Calling Claude (%s, effort=%s), prompt %d chars...",
+                CLAUDE_MODEL, CLAUDE_EFFORT, len(prompt))
+    started = time.monotonic()
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, env=env, start_new_session=True)
+    try:
+        out, err = proc.communicate(input=prompt, timeout=CLAUDE_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        proc.communicate()
+        raise
+    duration = round(time.monotonic() - started)
+    if proc.returncode != 0:
+        tail = (err or out or '')[-2000:]
+        raise RuntimeError(
+            f"claude exited {proc.returncode} after {duration}s: {tail}")
+    if not out.strip():
+        raise RuntimeError("claude returned an empty response")
+    logger.info("Claude returned %d chars in %ds", len(out), duration)
+    return out
+
+
 def _call_model(prompt):
     """Dispatch one call to the configured provider."""
+    if PROVIDER == 'claude':
+        return call_claude(prompt)
     if PROVIDER == 'codex':
         return call_codex(prompt)
     if PROVIDER == 'gemini':
@@ -347,7 +411,7 @@ def assessor_name():
     instead of overwriting the previous reader's history under the same
     name (docs/assessment.md).
     """
-    return 'sol' if PROVIDER == 'codex' else 'gemini'
+    return {'claude': 'opus', 'codex': 'sol'}.get(PROVIDER, 'gemini')
 
 
 def _response_dir():
@@ -593,7 +657,7 @@ def _write_result(date_str, parts, packs, scores_data, cap_tokens):
         'date': date_str,
         'variant': VARIANT,
         'provider': PROVIDER,
-        'model': CODEX_MODEL if PROVIDER == 'codex' else MODEL,
+        'model': {'claude': CLAUDE_MODEL, 'codex': CODEX_MODEL}.get(PROVIDER, MODEL),
         'cap_tokens': cap_tokens,
         'calls': len(packs),
         'calls_ok': sum(1 for c in calls if c['ok']),

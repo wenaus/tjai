@@ -5,9 +5,9 @@ dialog with `role=peer`, sender provenance and the broker message UUID. The
 assessor sees an explicit PEER header; these messages are counted separately
 from human and assistant turns and never convey operator approval.
 
-The daily AI performance assessment scores a day's human–AI dialog against the rules in the `assessment-system-prompt` entry and writes one entry per day, which the assessment dashboard reads. The assessor is `gpt-5.6-sol`, run through the Codex subscription, a model outside the family that supplies most of the assessed dialog. Action `llm-assessment-gemini`, daily at 02:20 for the previous day, script `scripts/assessment_gemini.py`.
+The daily AI performance assessment scores a day's human–AI dialog against the rules in the `assessment-system-prompt` entry and writes one entry per day, which the assessment dashboard reads. The assessor since 2026-09-18 is Claude `opus` at `xhigh` effort, run through the Claude subscription (`claude -p`, no tools, no MCP). From 2026-09-06 to 2026-09-17 it was `gpt-5.6-sol` through the Codex subscription, a model outside the family that supplies most of the assessed dialog; that path is kept (`--provider codex`) and was left when the Codex usage limit stopped it on 2026-09-19. Action `llm-assessment-gemini`, daily at 02:20 for the previous day, script `scripts/assessment_gemini.py`.
 
-The entry id is `assessment-<date>-<assessor>`, so a change of assessor leaves the previous reader's history under its own name rather than overwriting it: days before 2026-09-06 end in `-gemini`, days from 2026-09-06 in `-sol`. The dashboard plots the assessors named in `ASSESSOR_SUFFIXES` (`tjai_app/views.py`); assessments written before the suffix existed are not plotted.
+The entry id is `assessment-<date>-<assessor>`, so a change of assessor leaves the previous reader's history under its own name rather than overwriting it: days before 2026-09-06 end in `-gemini`, days from 2026-09-06 in `-sol`, days from 2026-09-18 in `-opus`. The dashboard plots the assessors named in `ASSESSOR_SUFFIXES` (`tjai_app/views.py`); assessments written before the suffix existed are not plotted.
 
 ## Why a day is assessed in parts
 
