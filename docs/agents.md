@@ -83,7 +83,7 @@ An AI-driven news curation system that researches tech/science/culture sources o
 ### How It Works
 
 1. `prepare_picks_candidates.py` mechanically gathers recent RSS items and configured-source links, removes URLs already present in Picks, preserves source diversity, and writes a bounded candidate file.
-2. One Codex pass judges that file against the user profile. It may verify only a small finalist set on the web, then creates the selected bookmark entries with precis and rationale.
+2. One model pass (the `picks-agent` action's `model`; opus since 2026-09-19) judges that file against the user profile. It may verify only a small finalist set on the web, then creates the selected bookmark entries with precis and rationale.
 3. The Picks page (`/tjai/picks/`) presents them grouped by run for triage.
 
 **Sources:** Defined in a tjai entry (`picks-sources`, editable via the Sources link on the Picks page). Candidate preparation also uses recent items already collected by the RSS reader. The model does not crawl every source itself.
@@ -144,10 +144,10 @@ Entry(
 
 1. Create a memory entry tagged `:research_topic` with topic description
 2. Research page (`/tjai/research/`) shows the queue with status
-3. Click **Submit** or **Run**. The research-agent action runs `_dispatch_research_3way` (`tjai_app/action_runner.py`), which dispatches each model in `RESEARCH_MODELS` (currently `('claude', 'gemini', 'chatgpt')`; gemma, qwen, and deepseek are off with code retained for re-enable — see the tuple's comment in `action_runner.py` for per-model dates and reasons):
+3. Click **Submit** or **Run**. The research-agent action runs `_dispatch_research_3way` (`tjai_app/action_runner.py`), which dispatches each model in `RESEARCH_MODELS` (currently `('claude', 'gemini')`; chatgpt, gemma, qwen, and deepseek are off with code retained for re-enable — see the tuple's comment in `action_runner.py` for per-model dates and reasons):
    - **Claude** — detached Claude instance with research-optimized system prompt, spawning parallel subagents that search the web and write findings tagged `research-subagent`. Subagent spawns are hard-capped at 3 via a PreToolUse hook (see [action-agent.md](action-agent.md) § AI Dispatch) — re-enabled 2026-07-16 under that cap after a 2026-07-15 run's 74 subagents exhausted host memory
    - **Gemini** — `scripts/research_multimodel.py gemini` subprocess via the Gemini API (native grounding); retryable Gemini server/deadline errors (`500`/`502`/`503`/`504`, `INTERNAL`, `UNAVAILABLE`, `DEADLINE_EXCEEDED`) fall back through standard-tier retries with bounded backoff
-   - **Codex** — `scripts/research_multimodel.py chatgpt` subprocess (the `chatgpt` key is retained for research-history compatibility) via subscription-authenticated Codex CLI (`CODEX_RESEARCH_MODEL`, default `gpt-5.6-sol`; `CODEX_RESEARCH_REASONING_EFFORT`, default `xhigh`). It loads the normal Codex user configuration, hooks, skills, memories, and MCP servers; makes the tjai MCP server required with the complete configured tool set; enables live web search; and runs read-only from the `tjrepo` Git checkout so it can inspect current code and local history. `TJAI_RESEARCH_WORKDIR` overrides checkout discovery. The subprocess explicitly removes API-key environment variables, so this branch uses the ChatGPT subscription rather than paid Responses API calls. Failure to initialize tjai MCP or locate the checkout fails the model branch visibly instead of producing a context-poor report.
+   - **Codex** (off since 2026-09-19 — the Codex subscription's tokens are reserved for other work; code retained) — `scripts/research_multimodel.py chatgpt` subprocess (the `chatgpt` key is retained for research-history compatibility) via subscription-authenticated Codex CLI (`CODEX_RESEARCH_MODEL`, default `gpt-5.6-sol`; `CODEX_RESEARCH_REASONING_EFFORT`, default `xhigh`). It loads the normal Codex user configuration, hooks, skills, memories, and MCP servers; makes the tjai MCP server required with the complete configured tool set; enables live web search; and runs read-only from the `tjrepo` Git checkout so it can inspect current code and local history. `TJAI_RESEARCH_WORKDIR` overrides checkout discovery. The subprocess explicitly removes API-key environment variables, so this branch uses the ChatGPT subscription rather than paid Responses API calls. Failure to initialize tjai MCP or locate the checkout fails the model branch visibly instead of producing a context-poor report.
    - **Qwen** (and Gemma when re-enabled) — staged for the [remote worker pipeline](remote-workers.md) via the `REMOTE_WORKER_MODELS` mapping (`{'gemma': 'gemma4', 'qwen': 'qwen'}`). The prompt is written to a sub-entry with the mapped `worker_target`; the local research-agent then exits. `tj_agent` on the Mac Studio long-polls `/api/worker/poll`, claims the work, runs the locally-configured ollama model, and POSTs the result back. Adding another remote-worker research model is a one-line add to `REMOTE_WORKER_MODELS` + a matching entry in the Mac's `worker_models` config.
    - **DeepSeek-Flash / DeepSeek-Pro** — `scripts/research_multimodel.py deepseek-flash|deepseek-pro` subprocess via DeepSeek's Anthropic-compat endpoint (`https://api.deepseek.com/anthropic`, accessed with the `anthropic` SDK + `base_url` override; `DEEPSEEK_API_KEY` env var). The script exposes read-only tjai MCP tools (`get_*`, `list_*`, `search_*`) through a multi-turn `tool_use` / `tool_result` loop, then writes DeepSeek's final report text into the research entry.
 4. As each model finishes, `research_model_complete` updates the base entry's `{model}_status`. When **all dispatched models** are terminal (`done`, `failed`, or legacy `blocked`), synthesis is dispatched; the base entry stays `active` until synthesis completes, when `agent_complete.py` marks it done
@@ -196,11 +196,11 @@ All subagent entries for a topic. Linked via `data.source_uuid`.
 
 ### Quality Controls
 
-Per-model system prompts enforce the research contract. The Codex prompt is
-`research-system-prompt-chatgpt`, retaining the historical model key while
-describing the current subscription Codex runtime. It requires TJAI and local
-repository investigation in addition to external standards research. The
-Claude prompt (`research-system-prompt-claude`) enforces:
+Per-model system prompts enforce the research contract. The Codex prompt
+(`research-system-prompt-chatgpt`, kept for the branch's re-enable) requires
+TJAI and local repository investigation in addition to external standards
+research; with the branch off, no brief covers that ground. The Claude prompt
+(`research-system-prompt-claude`) enforces:
 - Depth over breadth
 - Primary sources first (papers, docs, repos)
 - Cross-referencing with contradiction tracking
