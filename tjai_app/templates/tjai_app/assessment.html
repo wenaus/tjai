@@ -324,7 +324,7 @@
 
             // Zero line
             const y0 = y(0);
-            let svg = `<svg width="${W}" height="${H}" style="display:block;margin-bottom:16px;">`;
+            let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;max-width:${W}px;margin-bottom:16px;">`;
             // Grid: zero line
             svg += `<line x1="${pad.l}" y1="${y0}" x2="${W-pad.r}" y2="${y0}" stroke="#555" stroke-dasharray="3,3"/>`;
             // Y axis labels
@@ -497,7 +497,7 @@
             function y(v) { return pad.t + plotH - ((v - mn) / range) * plotH; }
             const y0 = y(0);
 
-            let svg = `<svg width="${W}" height="${H}" style="display:block;margin-bottom:8px;">`;
+            let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;max-width:${W}px;margin-bottom:8px;">`;
             svg += `<text x="5" y="20" fill="#d8a070" font-size="22" font-family="monospace">${label}</text>`;
             // Zero line
             svg += `<line x1="${pad.l}" y1="${y0}" x2="${W-pad.r}" y2="${y0}" stroke="#555" stroke-dasharray="3,3"/>`;
@@ -564,15 +564,18 @@
             }
 
             // X labels (every Nth day)
+            // The last day is always labelled (right-anchored); a stepped label
+            // within one label width of it would print on top of it.
             const step = Math.max(1, Math.floor(days.length / 10));
+            const lastX = x(days.length - 1), labelW = 5 * 11;
             for (let i = 0; i < days.length; i += step) {
+                if (days.length > 1 && x(i) > lastX - labelW - 8) break;
                 const lbl = days[i].date.substring(5); // MM-DD
                 svg += `<text x="${x(i)}" y="${H-10}" text-anchor="middle" fill="#8a8a8a" font-size="18" font-family="monospace">${lbl}</text>`;
             }
-            // Always label last day
             if (days.length > 1) {
                 const last = days.length - 1;
-                svg += `<text x="${x(last)}" y="${H-10}" text-anchor="end" fill="#8a8a8a" font-size="18" font-family="monospace">${days[last].date.substring(5)}</text>`;
+                svg += `<text x="${lastX}" y="${H-10}" text-anchor="end" fill="#8a8a8a" font-size="18" font-family="monospace">${days[last].date.substring(5)}</text>`;
             }
 
             svg += `</svg>`;
