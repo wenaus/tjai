@@ -560,7 +560,9 @@
                     mxPos = x(idx);
                 }
                 svg += `<line x1="${mxPos}" y1="${pad.t}" x2="${mxPos}" y2="${pad.t + plotH}" stroke="#ff9800" stroke-width="1" stroke-dasharray="4,3"/>`;
-                svg += `<text x="${mxPos+3}" y="${pad.t + 16}" fill="#ff9800" font-size="16" font-family="monospace">${m.label}</text>`;
+                // A marker near the right edge labels to the left of its line.
+                const nearEdge = mxPos + 3 + m.label.length * 10 > W - pad.r;
+                svg += `<text x="${nearEdge ? mxPos-3 : mxPos+3}" y="${pad.t + 16}" text-anchor="${nearEdge ? 'end' : 'start'}" fill="#ff9800" font-size="16" font-family="monospace">${m.label}</text>`;
             }
 
             // X labels (every Nth day)
