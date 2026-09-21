@@ -423,10 +423,17 @@ function normalizeTimeRanges_(text) {
   // "September 11 - 1:00 PM" read 11 as the start of a range and returned
   // eleven at night.
   var end = '\\s*(?:[-–—]|\\bto\\b)\\s*\\d{1,2}(?::\\d{2})?\\s*([ap]\\.?m\\.?)';
-  return text
+  text = text
     .replace(new RegExp('(\\d{1,2}:\\d{2})(?!\\s*[ap]\\.?m)' + end, 'gi'), '$1 $2')
     .replace(new RegExp('\\b(at|from)\\s+(\\d{1,2}(?::\\d{2})?)(?!\\s*[ap]\\.?m)' + end, 'gi'),
              '$1 $2 $3');
+  // A bare start with neither minutes nor an introducer — "3-4 pm" — is a
+  // range too, unless the number follows a month name and so is the day.
+  var monthBefore = new RegExp('\\b(?:' + MONTH_PAT_ + ')\\.?\\s+$', 'i');
+  return text.replace(new RegExp('\\b(\\d{1,2})' + end, 'gi'),
+    function (whole, start, meridiem, offset, all) {
+      return monthBefore.test(all.slice(0, offset)) ? whole : start + ' ' + meridiem;
+    });
 }
 
 

@@ -165,6 +165,12 @@ eq('noon', whenFull('meeting September 11 at noon ET'), 'Sep 11, 12:00 PM');
 eq('hyphen range keeps pm', whenFull('meeting September 11, 1:00-2:00 PM ET'), AT_ONE);
 eq('en dash range keeps pm', whenFull('meeting September 11, 1:00 PM \u2013 2:00 PM ET'), AT_ONE);
 eq('day number is not a range', whenFull('September 11 - 1:00 PM ET'), AT_ONE);
+eq('bare range keeps pm', whenFull('meeting September 11 (Friday) 1-2 pm ET'), AT_ONE);
+eq('bare range after day name', whenFull('Friday Sept 11, 1 - 2 PM ET'), AT_ONE);
+eq('bare range across noon', whenFull('meeting September 11 12-1 pm ET'), 'Sep 11, 12:00 PM');
+eq('bare range, actual mail',
+   whenFull('Hi Torre,\nI haven\u2019t seen your vote yet. Will the time below works for you ?\n\nSept 23 (Wednesday) 3-4 pm EDT.\n\n(It seems rest of us can do this time)'),
+   'Sep 23, 3:00 PM');
 
 // Relative to the message date: Wednesday 9 September 2026.
 const MSG = new Date(Date.UTC(2026, 8, 9, 14, 0));
