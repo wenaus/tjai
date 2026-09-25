@@ -360,7 +360,7 @@ function buildLocChart(d) {
     const pow = Math.pow(10, Math.floor(Math.log10(rawMax)));
     const yMax = [1, 1.5, 2, 3, 4, 5, 6, 8, 10].map(m => m * pow).find(m => m >= rawMax);
 
-    const axisW = 34, plotH = 200, topPad = 6, xLabH = 16;
+    const axisW = 34, plotH = 400, topPad = 6, xLabH = 16;
     const slotW = Math.max(8, Math.floor((836 - axisW) / n));
     const barW = slotW - 2;
     const width = axisW + slotW * n, height = topPad + plotH + xLabH;
