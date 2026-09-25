@@ -12,6 +12,7 @@ import uuid
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.db import connection, transaction
+from django.db.models import F, Q
 from django.utils import timezone
 
 from .comms_models import LLMDelivery, LLMMessage, LLMSession
@@ -97,7 +98,50 @@ def register_session(native_id, name, host, client, model="", cwd="", resources=
         "cwd": _text(cwd, "cwd", 4096, False), "resources": resources,
         "delivery": delivery, "state": state, "last_seen": timezone.now(),
     })
+    _forward_stranded(session_id)
     return _session(row)
+
+
+# Stranded mail older than this is history, not work; a recurring background name
+# (a nightly agent) must not inherit last week's backlog.
+FORWARD_WINDOW = timedelta(hours=24)
+
+
+@transaction.atomic
+def _forward_stranded(session_id):
+    """Move mail a restarted peer never received to the session now bearing its name.
+
+    A delivery is forwarded when it is still `pending` (no client was ever handed
+    it), its message was sent while the old session was alive, and it is younger
+    than FORWARD_WINDOW. Mail handed to a client may have been read and is not
+    repeated; mail sent after the old session died is routed at send time
+    (`_current_recipient`). Runs on register and on every heartbeat, so a session
+    renamed into the name adopts its mail too.
+    """
+    row = LLMSession.objects.filter(id=session_id).first()
+    if row is None or row.state == "offline":
+        return 0
+    now = timezone.now()
+    stale = (LLMSession.objects.filter(name=row.name, host=row.host).exclude(id=row.id)
+             .filter(Q(state="offline") | Q(last_seen__lt=now - timedelta(seconds=FRESH_SECONDS))))
+    stranded = (LLMDelivery.objects.select_for_update()
+                .filter(recipient__in=stale, state="pending",
+                        message__created_at__lte=F("recipient__last_seen") + timedelta(seconds=FRESH_SECONDS),
+                        message__created_at__gte=now - FORWARD_WINDOW))
+    held = set(LLMDelivery.objects.filter(recipient_id=row.id).values_list("message_id", flat=True))
+    moved = 0
+    for delivery in stranded:
+        if delivery.message_id in held:
+            continue
+        delivery.detail = f"forwarded from {delivery.recipient_id}"
+        delivery.recipient_id = row.id
+        delivery.updated_at = now
+        delivery.save(update_fields=["recipient", "detail", "updated_at"])
+        held.add(delivery.message_id)
+        moved += 1
+    if moved:
+        _notify(row.id)
+    return moved
 
 
 def heartbeat_session(session_id, state="idle", name=None, model=None, cwd=None):
@@ -110,6 +154,7 @@ def heartbeat_session(session_id, state="idle", name=None, model=None, cwd=None)
     changed = LLMSession.objects.filter(id=_uuid(session_id)).update(**changes)
     if not changed:
         raise ValueError("Unknown session; register first")
+    _forward_stranded(_uuid(session_id))
     return {"session_id": session_id, "state": state}
 
 

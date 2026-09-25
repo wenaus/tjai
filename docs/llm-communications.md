@@ -66,7 +66,12 @@ A registration ID lasts one native session; the name is what peers know. A
 direct message to an offline ID goes to the freshest online session with the
 same name on the same host, so a sender holding a restarted peer's old ID still
 reaches it. With no such successor the message is stored for the offline
-recipient. Resource sends snapshot
+recipient. Mail the old session never received is forwarded when a session with
+its name and host registers or heartbeats: a delivery still `pending`, sent
+while the old session was alive (up to 90 seconds past its last heartbeat) and
+younger than 24 hours moves to the new session, noted `forwarded from <old ID>`.
+Mail already handed to a client may have been read and is not repeated. Resource
+sends snapshot
 the fresh group members at send time, excluding the sender. Retrying the same
 message UUID returns its existing receipt; changing its envelope is rejected.
 Resource membership changes do not expand an existing send.

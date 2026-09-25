@@ -17,6 +17,8 @@ django.setup()
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.db import connection, connections
+from django.utils import timezone
+from datetime import timedelta
 from tjai_app import comms
 from tjai_app.comms_models import LLMDelivery, LLMMessage, LLMSession
 from tjai_app.models import Context, Entry, Tag
@@ -97,6 +99,17 @@ def run():
         routed = comms.send_message(a["id"], "to its successor", fresh_id(), recipient_id=old["id"])
         assert [d["recipient_id"] for d in routed["deliveries"]] == [new["id"]]
         print("PASS a restarted peer's old ID resolves to its live successor by name and host")
+
+        gone = comms.register_session("native-gone", "forward-proof", "test-host-f", "claude")
+        unread = comms.send_message(a["id"], "sent while alive", fresh_id(), recipient_id=gone["id"])["message_id"]
+        seen = comms.send_message(a["id"], "handed to the client", fresh_id(), recipient_id=gone["id"])["message_id"]
+        comms.record_delivery(gone["id"], seen, "written_to_transport")
+        LLMSession.objects.filter(id=gone["id"]).update(
+            state="offline", last_seen=timezone.now() - timedelta(seconds=60))
+        heir = comms.register_session("native-heir", "forward-proof", "test-host-f", "claude")
+        assert LLMDelivery.objects.get(message_id=unread).recipient_id == heir["id"]
+        assert LLMDelivery.objects.get(message_id=seen).recipient_id == gone["id"]
+        print("PASS unread mail of a restarted peer is forwarded; mail handed to a client is not")
 
         import json
         from tjai_app.comms_dialog import recorded_native_peer
