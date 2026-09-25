@@ -146,6 +146,25 @@ def _receipt(message):
                            for d in message.deliveries.all().order_by("recipient_id")]}
 
 
+def _current_recipient(recipient_id):
+    """The live session now answering to the recipient's name.
+
+    A registration ID lasts one native session, while the name is what peers
+    know: a restarted peer comes back under a new ID with the same name, and a
+    sender still holding the old ID would otherwise leave its mail pending
+    for a session that will never read it (2026-09-24, nine replies to a
+    restarted swf-1). An ID that is offline resolves to the freshest online
+    session with the same name on the same host; with none, it stands.
+    """
+    row = LLMSession.objects.filter(id=recipient_id).first()
+    fresh = timezone.now() - timedelta(seconds=FRESH_SECONDS)
+    if row is None or (row.state != "offline" and row.last_seen >= fresh):
+        return recipient_id
+    successor = (LLMSession.objects.filter(name=row.name, host=row.host, last_seen__gte=fresh)
+                 .exclude(state="offline").exclude(id=row.id).order_by("-last_seen").first())
+    return successor.id if successor else recipient_id
+
+
 @transaction.atomic
 def send_message(sender_id, content, message_id, recipient_id=None, resource=None, reply_to=None, reply_requested=False):
     sender_id, message_id = _uuid(sender_id), _uuid(message_id)
@@ -153,7 +172,7 @@ def send_message(sender_id, content, message_id, recipient_id=None, resource=Non
     if bool(recipient_id) == bool(resource):
         raise ValueError("Specify exactly one recipient_id or resource")
     if recipient_id:
-        recipient_id = _uuid(recipient_id)
+        recipient_id = _current_recipient(_uuid(recipient_id))
     resource = _text(resource or "", "resource", 160, False)
     reply_to = _uuid(reply_to) if reply_to else None
     # Serialize duplicate client IDs before checking their immutable envelope.

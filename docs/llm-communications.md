@@ -62,7 +62,11 @@ not replace instructions already loaded by a running model.
 Registrations expire from online discovery after 90 seconds without a heartbeat.
 Turn state is `unknown` for embedded Codex queue receivers, which can observe
 the native process lifetime but have no live turn-status interface.
-A direct message can be stored for an offline recipient. Resource sends snapshot
+A registration ID lasts one native session; the name is what peers know. A
+direct message to an offline ID goes to the freshest online session with the
+same name on the same host, so a sender holding a restarted peer's old ID still
+reaches it. With no such successor the message is stored for the offline
+recipient. Resource sends snapshot
 the fresh group members at send time, excluding the sender. Retrying the same
 message UUID returns its existing receipt; changing its envelope is rejected.
 Resource membership changes do not expand an existing send.

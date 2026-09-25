@@ -89,6 +89,15 @@ def run():
         assert LLMDelivery.objects.get(message_id=mid).state == "acknowledged"
         print("PASS fixed group membership, single dispatch claim and monotonic acknowledgment")
 
+        old = comms.register_session("native-old", "restart-proof", "test-host-r", "claude")
+        comms.heartbeat_session(old["id"], "offline")
+        stranded = comms.send_message(a["id"], "to a gone peer", fresh_id(), recipient_id=old["id"])
+        assert [d["recipient_id"] for d in stranded["deliveries"]] == [old["id"]]
+        new = comms.register_session("native-new", "restart-proof", "test-host-r", "claude")
+        routed = comms.send_message(a["id"], "to its successor", fresh_id(), recipient_id=old["id"])
+        assert [d["recipient_id"] for d in routed["deliveries"]] == [new["id"]]
+        print("PASS a restarted peer's old ID resolves to its live successor by name and host")
+
         import json
         from tjai_app.comms_dialog import recorded_native_peer
         from dialog_prep import split_sessions, format_turn
