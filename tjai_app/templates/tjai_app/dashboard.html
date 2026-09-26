@@ -959,15 +959,22 @@
         (function() {
             const tip = document.getElementById('chart-tooltip');
             const container = document.getElementById('dialog-chart');
+            // Beside the cursor, on whichever side keeps it inside the window.
+            function placeTip(e, text) {
+                tip.textContent = text;
+                tip.style.display = '';
+                const cr = container.getBoundingClientRect();
+                const w = tip.offsetWidth;
+                const x = (e.clientX + 12 + w <= window.innerWidth - 4)
+                    ? e.clientX + 12 : Math.max(4, e.clientX - 12 - w);
+                tip.style.left = (x - cr.left) + 'px';
+                tip.style.top = (e.clientY - cr.top - 20) + 'px';
+            }
             function onMove(e, meta) {
                 const canvas = e.currentTarget;
                 const hit = _chartHit(canvas, e, meta);
                 if (!hit) { tip.style.display = 'none'; return; }
-                tip.textContent = `${hit.date}  ${hit.count}`;
-                const cr = container.getBoundingClientRect();
-                tip.style.display = '';
-                tip.style.left = (e.clientX - cr.left + 12) + 'px';
-                tip.style.top = (e.clientY - cr.top - 20) + 'px';
+                placeTip(e, `${hit.date}  ${hit.count}`);
             }
             const daily = document.getElementById('dialog-chart-canvas');
             const weekly = document.getElementById('dialog-weekly-canvas');
@@ -977,11 +984,7 @@
                 const hit = _chartHit(canvas, e, _weeklyBarMeta);
                 if (!hit) { tip.style.display = 'none'; return; }
                 const avg = (hit.count / 7).toFixed(0);
-                tip.textContent = `${hit.date}  ${hit.count} (${avg}/day)`;
-                const cr = container.getBoundingClientRect();
-                tip.style.display = '';
-                tip.style.left = (e.clientX - cr.left + 12) + 'px';
-                tip.style.top = (e.clientY - cr.top - 20) + 'px';
+                placeTip(e, `${hit.date}  ${hit.count} (${avg}/day)`);
             });
             daily.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
             weekly.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
