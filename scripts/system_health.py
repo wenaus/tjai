@@ -471,6 +471,32 @@ def _collect_agents(now):
     return agents
 
 
+# The Etaverse asset store's files, mirrored nightly to Dropbox (etaverse/scripts/backup_assets.py),
+# which writes each run's outcome here.
+ETAVERSE_ASSET_BACKUP_STATUS = Path.home() / 'etaverse-asset-backup' / 'status.json'
+
+
+def collect_etaverse_asset_backup():
+    """The last run of the Etaverse asset backup: when, whether it succeeded, how much it holds."""
+    try:
+        status = json.loads(ETAVERSE_ASSET_BACKUP_STATUS.read_text())
+    except FileNotFoundError:
+        return {'exists': False}
+    except (OSError, ValueError) as e:
+        logger.error("Cannot read %s: %s", ETAVERSE_ASSET_BACKUP_STATUS, e)
+        return {'exists': True, 'ok': False, 'message': f'status unreadable: {e}'}
+    finished = status.get('finished') or 0
+    return {
+        'exists': True,
+        'ok': bool(status.get('ok')),
+        'age_hours': round((time.time() - finished) / 3600, 1) if finished else None,
+        'files': status.get('files'),
+        'gb': round((status.get('bytes') or 0) / 1e9, 1),
+        'destination': status.get('destination'),
+        'message': status.get('message') or '',
+    }
+
+
 def collect_backups():
     """Check tjai backup health."""
     backup_root = Path.home() / 'tjai-backups' / 'server'
@@ -545,6 +571,7 @@ def collect_backups():
     data_file_count = sum(1 for f in data_dir.rglob('*') if f.is_file()) if data_dir.is_dir() else 0
 
     db_size = found.get('tjai-db.sql.gz')
+    result['etaverse_assets'] = collect_etaverse_asset_backup()
     result['latest'] = {
         'date': latest_dir.name,
         'files': found,
@@ -766,6 +793,13 @@ def assess_health(system, postgres, tjai=None, backups=None, web_apps=None, **_k
                 missing = [k for k, v in latest.get('files', {}).items() if v is None]
                 if missing:
                     issues.append(('yellow', f'Backup missing: {", ".join(missing)}'))
+            assets = backups.get('etaverse_assets') or {}
+            if not assets.get('exists'):
+                issues.append(('yellow', 'Etaverse asset backup has not run'))
+            elif not assets.get('ok'):
+                issues.append(('red', f"Etaverse asset backup failed: {assets.get('message') or 'no reason given'}"))
+            elif assets.get('age_hours') is not None and assets['age_hours'] > 36:
+                issues.append(('yellow', f"Etaverse asset backup is {assets['age_hours']:.0f} hours old"))
             db_mb = latest.get('db_size_mb')
             if db_mb is not None and db_mb < 1:
                 issues.append(('red', f'Backup DB dump too small ({db_mb} MB)'))

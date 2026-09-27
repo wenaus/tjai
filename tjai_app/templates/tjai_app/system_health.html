@@ -541,6 +541,11 @@
                 }
                 html += '</table>';
             }
+            const ea = bk.etaverse_assets || {};
+            const eaLine = !ea.exists ? '<span style="color:#d8b45d">not run yet</span>'
+                : (ea.ok ? `<span style="color:#9ccc65">&#10003;</span> ${ea.files} files, ${ea.gb} GB, ${ea.age_hours} h ago`
+                    : `<span style="color:#ef5350">failed: ${ea.message}</span>`);
+            html += `<div style="margin-top:8px">Etaverse asset files &rarr; ${ea.destination || 'dropbox:Archive/etaverse-assets'}: ${eaLine}</div>`;
             html += '</div>';
 
             // Processes section

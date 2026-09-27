@@ -163,6 +163,12 @@ Automated daily backup to `~/tjai-backups/server/YYYY-MM-DD/`, pushed to Dropbox
 
 Runs overnight as a tjai action (`trigger=overnight`, `interval_hours=24`). Health page monitors freshness and completeness. Backup runs around 09:00 UTC — changes after that are not covered until the next day.
 
+**Etaverse asset files** are backed up apart, not in the dated folders: the asset store's files (12.8 GB,
+content-addressed and never changed) are mirrored to one folder, `dropbox:Archive/etaverse-assets`, by
+`etaverse/scripts/backup_assets.py` at 05:30 ET (`scripts/cron/crontab`), copying only files not yet there
+and never deleting. The health page's Backups section shows its last run from
+`~/etaverse-asset-backup/status.json`. With the night's `etaverse-db.sql.gz` it restores the store.
+
 **File:** `scripts/backup.py`
 
 ### Restoration

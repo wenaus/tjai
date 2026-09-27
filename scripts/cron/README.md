@@ -21,6 +21,7 @@ crontab /home/admin/github/tjai/scripts/cron/crontab
 | Daily 03:30 | `purge_old_versions.py` | Purge entry versions older than 30 days, keeping min 10 most recent per entry |
 | Daily 03:45 | `prune_logs_and_digests.py` | Prune applog rows (info >7d, error >14d) and health-digest files (>7d) |
 | Daily 04:00 | `cleanup_claude_sessions.sh` | Purge Claude Code session files (tool-results, debug, file-history) older than 2 days |
+| Daily 05:30 | `/var/www/etaverse/scripts/backup_assets.py` | Mirror the Etaverse asset store's files to `dropbox:Archive/etaverse-assets` with rclone, new files only (etaverse script, scheduled from this crontab); outcome in `~/etaverse-asset-backup/status.json`, shown on the health page |
 
 ## Adding a new job
 
