@@ -296,14 +296,18 @@
         }
 
         // Extract hours and minutes in Eastern time
-        function etMinutes(isoStr) {
-            const d = new Date(isoStr);
-            const parts = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ }).split(':');
-            return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+        // A timestamp without a UTC offset is already Eastern wall time (the
+        // assessor writes both forms); new Date() would read it as the
+        // viewer's local time, so its HH:MM is taken as written.
+        function etTimeStr(isoStr) {
+            const s = String(isoStr || '');
+            if (!/(Z|[+-]\d\d:?\d\d)$/i.test(s)) return s.slice(11, 16);
+            return new Date(s).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: TZ });
         }
 
-        function etTimeStr(isoStr) {
-            return new Date(isoStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ });
+        function etMinutes(isoStr) {
+            const parts = etTimeStr(isoStr).split(':');
+            return parseInt(parts[0]) * 60 + parseInt(parts[1]);
         }
 
         function renderTimePlot(scores, cums, chartRange) {
