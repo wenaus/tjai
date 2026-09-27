@@ -456,7 +456,7 @@ function buildLocPie(d) {
         if (frac >= 0.025) {
             const mid = (a0 + a1) / 2;
             const lx = cx + labelR * Math.cos(mid), ly = cy + labelR * Math.sin(mid);
-            const anchor = Math.cos(mid) > 0.25 ? 'start' : (Math.cos(mid) < -0.25 ? 'end' : 'middle');
+            const anchor = Math.cos(mid) > 0.05 ? 'start' : (Math.cos(mid) < -0.05 ? 'end' : 'middle');
             svg += `<text x="${lx.toFixed(1)}" y="${(ly + 3).toFixed(1)}" text-anchor="${anchor}" font-size="11" fill="#e0e0e0">${t.p} <tspan fill="#888">${pct}%</tspan></text>`;
         }
         a0 = a1;
