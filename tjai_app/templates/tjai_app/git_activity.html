@@ -360,7 +360,7 @@ function buildLocChart(d) {
     const pow = Math.pow(10, Math.floor(Math.log10(rawMax)));
     const yMax = [1, 1.5, 2, 3, 4, 5, 6, 8, 10].map(m => m * pow).find(m => m >= rawMax);
 
-    const axisW = 46, plotH = 400, topPad = 6, xLabH = 16;
+    const axisW = 46, plotH = 600, topPad = 6, xLabH = 16;
     const slotW = Math.max(8, Math.floor((836 - axisW) / n));
     const barW = slotW - 2;
     const width = axisW + slotW * n, height = topPad + plotH + xLabH;
@@ -440,7 +440,7 @@ function buildLocPie(d) {
 
     // cx leaves room for the longest left-hand label (swf-epicprod 11%,
     // ~106px at 11px monospace) between the box edge and the label ring.
-    const cx = 230, cy = 130, r = 105, labelR = r + 12;
+    const cx = 340, cy = 240, r = 210, labelR = r + 12;
     let a0 = -Math.PI / 2;  // start at 12 o'clock, stacking order
     let svg = '';
     for (const t of totals) {
@@ -465,7 +465,7 @@ function buildLocPie(d) {
     return `<div class="locchart">
         <div class="locchart-title">Share of lines added, by project</div>
         <div class="locchart-sub">${fmt(grand)} lines total over ${d.week_start.length} weeks</div>
-        <svg width="500" height="260" viewBox="0 0 500 260">${svg}</svg>
+        <svg width="680" height="480" viewBox="0 0 680 480">${svg}</svg>
     </div>`;
 }
 
