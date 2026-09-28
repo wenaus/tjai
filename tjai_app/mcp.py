@@ -248,6 +248,8 @@ def _compact_startup_entry(entry):
 
 def _startup_context_page(entries, offset):
     """Build a compact page that cannot silently grow past the output budget."""
+    if isinstance(entries, dict) and 'error' in entries:
+        return entries
     if not isinstance(offset, int) or isinstance(offset, bool) or offset < 0:
         return {"error": "offset must be a non-negative integer"}
 
@@ -386,6 +388,7 @@ async def get_ai_guidance(
     location_name: str = None,
     offset: int = 0,
     audience: str = None,
+    include_general: bool = True,
 ) -> str:
     """
     Get AI guidance entries - behavioral instructions for AI assistants.
@@ -426,6 +429,8 @@ async def get_ai_guidance(
                  openai and anthropic. Entries with no data.audiences apply
                  universally. If audience is omitted, audience-specific entries
                  are excluded.
+        include_general: Default True. Set False with a context to fetch only
+                         that project's rules after general guidance is loaded.
 
     Returns:
         A bounded page with entries, entry_count, returned_count, offset,
@@ -435,7 +440,8 @@ async def get_ai_guidance(
         notice if absent) is included in the paginated result.
     """
     result = await sync_to_async(services.get_ai_guidance)(
-        context=context, location_name=location_name, audience=audience
+        context=context, location_name=location_name, audience=audience,
+        include_general=include_general,
     )
     return _json_text(_startup_context_page(result, offset))
 
@@ -541,6 +547,7 @@ async def get_todos(
     status: str = None,
     include_done: bool = False,
     max_content_length: int = DEFAULT_MAX_CONTENT_LENGTH,
+    summary_only: bool = False,
 ) -> str:
     """
     Get todo/task entries.
@@ -559,6 +566,9 @@ async def get_todos(
                 Overrides include_done.
         include_done: If True, include all todos regardless of status.
                       Default: False (excludes status='done' only).
+        summary_only: Return the complete index of ids, titles, contexts,
+                      statuses and open/done counts, without entry bodies.
+                      Use at session start; read the assigned activity in full.
 
     Returns:
         List of todos ordered by priority (1=highest first, nulls last) then by
@@ -569,6 +579,7 @@ async def get_todos(
     result = await sync_to_async(services.get_todos)(
         context=context, status=status, include_done=include_done,
         max_content_length=max_content_length,
+        summary_only=summary_only,
     )
     return _json_text(result)
 
@@ -930,7 +941,8 @@ async def get_named_entries(
 
 
 @mcp.tool()
-async def get_entry(entry_id: str) -> dict:
+async def get_entry(entry_id: str, heading: str = None,
+                    level: int = None, occurrence: int = None) -> dict:
     """
     Get a single entry by ID.
 
@@ -938,17 +950,24 @@ async def get_entry(entry_id: str) -> dict:
 
     Args:
         entry_id: The UUID of the entry to retrieve (required).
+        heading: Optional exact Markdown heading text. Return that complete
+                 section, including its heading and child sections.
+        level: Optional heading depth (1-6) to disambiguate.
+        occurrence: Optional 1-based matching heading number.
 
     Returns:
         Full entry with all fields: id, content, kind, context, created, modified,
         and optional name, priority, status, tags.
         Returns {"error": "..."} if entry not found.
     """
-    return await sync_to_async(services.get_entry)(entry_id=entry_id)
+    return await sync_to_async(services.get_entry)(
+        entry_id=entry_id, heading=heading, level=level, occurrence=occurrence,
+    )
 
 
 @mcp.tool()
-async def get_entry_by_entry_id(entry_id: str) -> dict:
+async def get_entry_by_entry_id(entry_id: str, heading: str = None,
+                                level: int = None, occurrence: int = None) -> dict:
     """
     Find an entry by its human-readable entry_id (stored in data.entry_id).
 
@@ -957,12 +976,19 @@ async def get_entry_by_entry_id(entry_id: str) -> dict:
 
     Args:
         entry_id: The human-readable entry_id (e.g., 'daily-2026-02-23').
+        heading: Optional exact Markdown heading text. Return that complete
+                 section, including its heading and child sections.
+                 For daily health use heading="Health Assessment", level=2.
+        level: Optional heading depth (1-6) to disambiguate.
+        occurrence: Optional 1-based matching heading number.
 
     Returns:
         Full entry with all fields including the UUID id.
         Returns {"error": "..."} if not found.
     """
-    return await sync_to_async(services.get_entry_by_entry_id)(entry_id=entry_id)
+    return await sync_to_async(services.get_entry_by_entry_id)(
+        entry_id=entry_id, heading=heading, level=level, occurrence=occurrence,
+    )
 
 
 @mcp.tool()

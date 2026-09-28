@@ -158,87 +158,17 @@ LOGGING = {
 TJAI_MCP_SERVER_CONFIG = {
     "name": "tjai",
     "stateless": True,
-    "instructions": """tjai is a personal AI memory and task management system.
-
-Tools:
-- get_ai_guidance(context, location_name, offset, audience): Get behavioral instructions
-  for AI assistants. Returns general guidance plus context-specific guidance if
-  context is provided and audience-specific guidance for the named provider
-  family. CALL THIS when starting work on any project, following next_offset
-  until complete=true.
-- get_profile(offset): Get personal facts and preferences about the user,
-  following next_offset until complete=true.
-- get_todos(context, status, include_done, max_content_length): Get task list with filtering.
-  Valid statuses: active, done, blocked, archive.
-- get_calendar(start_date, end_date, context, days, max_content_length): Get
-  calendar entries for a date range. Dates in ISO or YYYYMMDD format. Results
-  carry the entry id for use with copy_calendar_entry/get_entry.
-- list_contexts(): List all projects/topics to discover what contexts exist.
-- get_memories(context, limit, offset, start_date, end_date, max_content_length): Get memory entries.
-  Call unfiltered to see recent activity.
-- get_bookmarks(context, limit, offset, start_date, end_date, max_content_length): Get saved bookmarks.
-- get_dialog(host, start_date, end_date, limit, offset, max_content_length): Get
-  recorded human-AI dialog turns. Use host='all' for all machines. Every turn
-  carries its entry id and the session_id that recorded it.
-- get_logs(source, level, contains, ref, start_date, end_date, limit, max_content_length): Read
-  application log (AppLog) rows — agent/script/server logs (the Agent Log page
-  data). For operational/diagnostic questions; AppLog is not an Entry, so the
-  entry-query tools can't reach it. Use this instead of raw SQL.
-- get_capcom(source, severity, since, unread_only, limit, cursor): Read the
-  curated cross-system Capcom notice feed without changing read state. Source
-  filters match families, so source='swf' returns all SWF notices. Since values
-  are interpreted in Eastern Time. SWF notices may arrive up to one dispatcher
-  poll interval after their event.
-- search_entries(query, kind, context, limit, offset, start_date, end_date,
-  max_content_length, order_by, date_field): Search or list entries. Omit query
-  for structured listing/filtering by kind, context, or date. Use
-  order_by='rank' only with a non-empty query. Date filters apply to the event
-  date for kind='journal' (date_field overrides).
-- get_named_entries(name, context, max_content_length): Get entries by @name, or list all named.
-- get_entry(entry_id): Get a single entry by UUID.
-- get_entry_by_entry_id(entry_id): Find entry by human-readable entry_id.
-- get_entry_versions(entry_id, version, age, max_content_length): Get automatic
-  version history for an entry, including age-based baselines such as age='24h'.
-- create_entry(content, kind, context, name, tags, event_date, priority, status,
-  create_context): Add new entries. Context must exist unless create_context=True.
-- edit_entry_metadata(entry_id, tags, status, priority, ...): Edit metadata
-  fields only (no content).
-- replace_entry_content(entry_id, content): Replace an entry's content
-  (destructive full rewrite).
-- append_entry_content(entry_id, content, separator): Append text to an
-  entry's existing content (preserves existing).
-- copy_calendar_entry(entry_id, event_date, event_time): Copy a journal entry
-  to a new date, preserving all fields.
-- change_entry_kind(entry_id, kind): Change entry type and advance its
-  modification timestamp.
-- run_action(entry_id): Execute an action entry immediately.
-- delete_entry(entry_id): Soft delete an entry. Requires user approval.
-- create_goal(content, context, tags, priority, status, create_context, data):
-  Create a goal entry. Goals are the organizing nodes of the knowledge graph.
-- get_goal(entry_id): Get a goal entry with all its relations.
-- create_relation(entry1_id, entry2_id, relation_type, data): Create a relation
-  between any two entries. One relation per pair; use data field for metadata.
-- edit_relation(relation_id, relation_type, data): Edit a relation's type/data.
-- delete_relation(relation_id): Delete a relation.
-- get_relations(entry_id): Get all relations for an entry.
-- get_relation_graph(entry_id, depth, kinds): Traverse the relation graph from
-  an entry. BFS up to depth hops, optional kind filtering on results.
-
-Entry types: memory (notes), todo (tasks), journal (calendar events), profile
-(user facts), ai (AI instructions), bookmark (URLs), list (lists), action,
-goal (organizing nodes of the knowledge graph).
-Valid statuses: active, done, blocked, archive. Priority: positive integers (1=highest).
-
-Error handling: All tools return {"error": "message"} on validation failures.
-Always check for "error" key in response before processing results.
-
-Pagination: For read tools that accept limit and offset, limit is a page size,
-not a requirement. The hard maximum page size is 500. If a returned list has
-exactly the requested limit, more results may exist; at your discretion, fetch
-the next page with offset += limit until a page returns fewer than the requested
-limit or the requested window is complete. get_profile and get_ai_guidance use
-bounded pages with explicit next_offset and complete fields; every page is
-mandatory startup context, so continue until complete=true.""",
+    "instructions": """TJAI provides personal memory, guidance, tasks, dialog and peer messaging.
+At startup load get_profile, then get_ai_guidance for the project, location_name
+and provider audience. Follow next_offset until complete=true for both tools.
+Check every result for an error. List reads return JSON text; parse it once.
+For boot use get_todos(status="inflight", summary_only=True) and read only the
+assigned activity in full. Daily health: get_entry_by_entry_id("daily-YYYY-MM-DD",
+heading="Health Assessment", level=2). Fetch dialog only when relevant to the task.
+Nontrivial entries require data.entry_id with a readable kebab-case slug; use it
+in links. Read logs through get_logs. Prefer surgical edits; deletion requires
+operator approval. List reads use limit/offset pagination where supported;
+a full page can mean more results. Consult each tool's own parameters and limits.""",
 }
 
 

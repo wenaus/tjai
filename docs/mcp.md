@@ -69,6 +69,37 @@ The startup tools `get_profile` and `get_ai_guidance` return size-bounded
 pages with a 12,000-character budget per response; clients follow
 `next_offset` until `complete` is true.
 
+### Compact startup reads
+
+`yo. boot` loads the full profile, applicable guidance and machine rules.
+When switching projects after boot, use
+`get_ai_guidance(context="swf", audience="openai", include_general=False)`
+to load the project rules without repeating general guidance. Follow every
+page. A context is required when `include_general` is false; omit
+`location_name` when that machine's rules have already been loaded.
+Use `get_todos(status="inflight", summary_only=True)` for the activity index:
+every matching activity is returned with its identifiers, context, status,
+title and open/done counts. Read the assigned activity in full to obtain its
+Live list and Refs. The default todo response remains unchanged.
+
+`get_entry` and `get_entry_by_entry_id` accept `heading`, `level` and
+`occurrence`. A heading read returns the complete Markdown section,
+including its heading and nested sections, up to the next heading at the
+same or higher level. It uses the same heading parser as surgical section
+writes; fenced code headings are ignored. Missing or ambiguous headings
+return an error. Omitting these arguments returns the full entry.
+
+For the daily health review, read
+`get_entry_by_entry_id(entry_id="daily-YYYY-MM-DD",
+heading="Health Assessment", level=2)` instead of the complete synopsis.
+If that section is not yet available, report that fact. Fetch prior dialog
+when the current task requires continuity.
+
+MCP results may contain the same JSON in `content` and `structuredContent`.
+Print one decoded result when composing tool calls. Inspect only the
+needed tool's parameters during discovery. Server-wide instructions are
+kept concise because some clients repeat them in each tool description.
+
 ### Date filters
 
 `get_dialog`, `get_memories`, `get_bookmarks`, `search_entries`, and `get_logs`

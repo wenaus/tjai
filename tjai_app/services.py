@@ -370,7 +370,9 @@ def get_profile():
     return [_format_entry(entry) for entry in qs]
 
 
-def get_ai_guidance(context=None, location_name=None, audience=None):
+def get_ai_guidance(context=None, location_name=None, audience=None, include_general=True):
+    if not include_general and not context:
+        return {'error': 'context is required when include_general is false'}
     from django.db.models.functions import Coalesce
     qs = Entry.objects.filter(
         kind='ai',
@@ -388,6 +390,8 @@ def get_ai_guidance(context=None, location_name=None, audience=None):
         if entry_audiences and audience not in entry_audiences:
             continue
         entry_context = entry.context.name if entry.context else None
+        if entry_context is None and not include_general:
+            continue
         if context is None:
             if entry_context is None:
                 results.append(_format_entry(entry))
@@ -658,7 +662,8 @@ def copy_calendar_entry(entry_id, event_date, event_time=None):
     return _format_entry(entry)
 
 
-def get_todos(context=None, status=None, include_done=False, max_content_length=DEFAULT_MAX_CONTENT_LENGTH):
+def get_todos(context=None, status=None, include_done=False,
+              max_content_length=DEFAULT_MAX_CONTENT_LENGTH, summary_only=False):
     if status is not None and status not in VALID_STATUSES:
         return {"error": f"Invalid status '{status}'. Must be one of: {', '.join(VALID_STATUSES)}"}
 
@@ -675,6 +680,18 @@ def get_todos(context=None, status=None, include_done=False, max_content_length=
         qs = qs.exclude(status='done')
 
     qs = qs.order_by('-timestamp_modified')
+    if summary_only:
+        from .inflight import summary
+        return [
+            {
+                'id': entry.id,
+                'entry_id': (entry.data or {}).get('entry_id'),
+                'context': entry.context.name if entry.context else None,
+                'status': entry.status,
+                **summary(entry.content),
+            }
+            for entry in qs
+        ]
     return [_format_entry(entry, max_content_length=max_content_length) for entry in qs]
 
 
@@ -1168,7 +1185,7 @@ def search_entries(query=None, kind=None, context=None, limit=50, offset=0, star
     return [_format_entry(entry, max_content_length=max_content_length) for entry in qs]
 
 
-def get_entry(entry_id):
+def get_entry(entry_id, heading=None, level=None, occurrence=None):
     if not entry_id:
         return {"error": "entry_id is required"}
     entry = Entry.objects.select_related('context').filter(
@@ -1177,7 +1194,9 @@ def get_entry(entry_id):
     ).prefetch_related('tags').first()
     if not entry:
         return {"error": f"Entry '{entry_id}' not found"}
-    result = _format_entry(entry)
+    result = _format_entry_read(entry, heading=heading, level=level, occurrence=occurrence)
+    if 'error' in result:
+        return result
     relations = _get_relations_for_entry(entry_id)
     if relations:
         result["relations"] = relations
@@ -1205,7 +1224,7 @@ def get_named_entries(name=None, context=None, max_content_length=DEFAULT_MAX_CO
     return [_format_entry(entry, max_content_length=max_content_length) for entry in qs]
 
 
-def get_entry_by_entry_id(entry_id):
+def get_entry_by_entry_id(entry_id, heading=None, level=None, occurrence=None):
     """Find an entry by its human-readable entry_id stored in data.entry_id."""
     if not entry_id:
         return {"error": "entry_id is required"}
@@ -1215,7 +1234,36 @@ def get_entry_by_entry_id(entry_id):
     ).prefetch_related('tags').first()
     if not entry:
         return {"error": f"No entry found with entry_id '{entry_id}'"}
-    return _format_entry(entry)
+    return _format_entry_read(entry, heading=heading, level=level, occurrence=occurrence)
+
+
+def _format_entry_read(entry, heading=None, level=None, occurrence=None):
+    """Read a full entry or one complete section using the shared heading parser."""
+    if heading is None:
+        if level is not None or occurrence is not None:
+            return {'error': 'heading is required with level or occurrence', 'code': 'BAD_REQUEST'}
+        return _format_entry(entry)
+    if not isinstance(heading, str) or not heading.strip():
+        return {'error': 'heading must be nonempty text', 'code': 'BAD_REQUEST'}
+    if level is not None and (type(level) is not int or not 1 <= level <= 6):
+        return {'error': 'level must be an int 1-6', 'code': 'BAD_REQUEST'}
+    if occurrence is not None and (type(occurrence) is not int or occurrence < 1):
+        return {'error': 'occurrence must be a positive int', 'code': 'BAD_REQUEST'}
+    content = entry.content or ''
+    found = _find_section(content, heading, level=level, occurrence=occurrence)
+    if found[0] == 'not_found':
+        return {'error': f'No heading matching {heading!r}', 'code': 'HEADING_NOT_FOUND'}
+    if found[0] == 'multiple':
+        return {'error': f'Found {found[1]} matching headings; specify level or occurrence',
+                'code': 'MULTIPLE_HEADINGS', 'count': found[1]}
+    if found[0] == 'out_of_range':
+        return {'error': f'Only {found[1]} matching headings exist',
+                'code': 'OCCURRENCE_OUT_OF_RANGE', 'count': found[1]}
+    _, heading_line, _, body_end, _ = found
+    result = _format_entry(entry)
+    result['content'] = '\n'.join(content.split('\n')[heading_line:body_end])
+    result['section'] = {'heading': heading, 'level': level, 'occurrence': occurrence}
+    return result
 
 
 def edit_entry_metadata(entry_id, context=None, clear_context=False, tags=None,
