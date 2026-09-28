@@ -11,6 +11,7 @@ import sys
 import uuid
 
 from presentation import mark_instructions, session_instructions
+from runtime_socket import private_socket_path
 
 
 DIRECTORY = Path(__file__).resolve().parent
@@ -87,6 +88,13 @@ def start(client, data, host=None, *, context_loaded=False):
     transport = client if native_socket else "codex_queue" if client == "codex" else None
     if not transport or not pid:
         return "TJAI communications could not find this client's live inbox/owner; inspect ~/.tjai/comms."
+    if client == "codex" and native_socket:
+        try:
+            private_socket_path(native_socket)
+        except FileNotFoundError:
+            pass  # SessionStart may precede socket publication; the bridge retries.
+        except (OSError, ValueError) as exc:
+            return f"TJAI communications socket validation failed: {exc}. Registration and delivery are not confirmed; inspect ~/.tjai/comms."
     resources = config.get("comms_resources", [])
     if not isinstance(resources, list):
         resources = []
