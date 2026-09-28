@@ -36,6 +36,12 @@ class CodexClient:
         self.events = asyncio.Queue(maxsize=256)
 
     async def __aenter__(self):
+        selected = self.socket_path.lstat()
+        if selected.st_uid != os.getuid():
+            raise ValueError("Select an app-server socket owned by the current user")
+        # Codex may publish its selected socket as an owner-controlled symlink
+        # into the daemon's private runtime. Validate and connect to the target.
+        self.socket_path = self.socket_path.resolve(strict=True)
         info = self.socket_path.lstat()
         if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid():
             raise ValueError("Select an app-server socket owned by the current user")
