@@ -100,6 +100,25 @@ Print one decoded result when composing tool calls. Inspect only the
 needed tool's parameters during discovery. Server-wide instructions are
 kept concise because some clients repeat them in each tool description.
 
+### Codex session bootstrap
+
+`scripts/session_bootstrap.py` composes those existing MCP reads for the
+`yo. boot` protocol. It acquires the complete profile first, follows every
+guidance page for the host's project and `tjai`, and emits each shared entry
+once. Conflicting copies of an entry and non-forward cursors produce an error.
+Machine facts remain complete. SWF sessions also read workspace guidance.
+
+Supplementary reads supply the host project's inflight activity index, the
+latest daily Health Assessment section and online peer identities. The activity
+index projects titles, entry IDs and modification dates; activity bodies and
+their Refs are read when that activity is assigned. Supplementary read failures
+are reported in the packet. The packet has a 52,000-character ceiling; it is
+never silently truncated. `--measure` prints section sizes after the same reads.
+
+The shared Codex SessionStart hook supplies the command. Peer registration,
+reception and dialog recording retain their existing paths. Prior dialog is
+retrieved on demand for the relevant host or activity.
+
 ### Date filters
 
 `get_dialog`, `get_memories`, `get_bookmarks`, `search_entries`, and `get_logs`
