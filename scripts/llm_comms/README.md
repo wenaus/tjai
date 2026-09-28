@@ -13,6 +13,10 @@ active delivery uses `turn/steer` with the expected active turn ID. A stale turn
 is rejected rather than silently becoming a new turn. The adapter obtains the
 current turn with a bounded metadata query, without loading conversation history.
 
+An advertised socket may be an owner-controlled symlink. The adapter requires
+both the selected path and resolved socket to belong to the current user, checks
+the target is a Unix socket with private permissions, and connects to that target.
+
 Use a Python environment with `websockets`; on ec2dev the existing TJAI runtime
 provides it:
 
