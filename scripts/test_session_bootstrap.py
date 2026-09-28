@@ -65,4 +65,13 @@ def oversized(tool, arguments):
 
 
 rejects(lambda: boot.build("test-host", ("tjai",), oversized), "No content was truncated")
-print("Bootstrap completeness, deduplication, activity scope and budget checks passed.")
+
+own = {"id": "self", "native_id": "native-self", "host": "test-host", "client": "codex",
+       "online": True, "delivery": "codex_app_server", "name": "test-1", "state": "active"}
+assert "Self: test-1" in boot.peer_index(lambda *_: [own], native_id="native-self", location="test-host")
+for peers in ([], [{**own, "online": False}], [{**own, "delivery": "pull"}]):
+    rejects(lambda: boot.peer_index(lambda *_: peers, native_id="native-self", location="test-host"),
+            "no online native TJAI receiver")
+rejects(lambda: boot.build("test-host", ("tjai",), oversized, native_id="native-self"),
+        "TJAI readiness check failed")
+print("Bootstrap completeness, deduplication, activity scope, budget and receiver readiness checks passed.")

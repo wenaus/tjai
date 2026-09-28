@@ -2,6 +2,7 @@
 """Read the complete session guidance and a scoped work index through TJAI MCP."""
 import argparse
 import json
+import os
 import socket
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -112,14 +113,34 @@ def health_assessment(read=call):
     raise RuntimeError("Health assessment unavailable: " + "; ".join(errors))
 
 
-def peer_index(read=call):
-    peers = read("list_sessions", {"include_offline": False})
-    if not isinstance(peers, list):
-        raise RuntimeError("list_sessions: expected a session list")
-    return "\n".join(
+def peer_index(read=call, *, native_id=None, location=None):
+    peers = []
+    for offset in range(0, 1000, 100):
+        page = read("list_sessions", {"include_offline": False, "limit": 100, "offset": offset})
+        if not isinstance(page, list):
+            raise RuntimeError("list_sessions: expected a session list")
+        peers.extend(page)
+        if len(page) < 100:
+            break
+    else:
+        raise RuntimeError("Online peer directory exceeds bootstrap budget; no entries were truncated")
+    own = None
+    if native_id:
+        own = next((peer for peer in peers if peer.get("native_id") == native_id
+                    and peer.get("host") == location and peer.get("client") == "codex"), None)
+        if not own or not own.get("online") or own.get("delivery") not in {
+            "codex_app_server", "codex_queue",
+        }:
+            raise RuntimeError("This Codex session has no online native TJAI receiver. "
+                               "Inspect ~/.tjai/comms and recover its bridge/supervisor; "
+                               "do not report boot ready")
+    rows = "\n".join(
         f"- {peer['id']}: {peer['name']} on {peer['host']} ({peer['client']}; {peer['state']})"
-        for peer in peers
-    ) or "No online peers."
+        for peer in peers if peer is not own
+    ) or "No other online peers."
+    if own:
+        rows = f"Self: {own['name']} ({own['id']}); online native receiver: {own['delivery']}.\n\n" + rows
+    return rows
 
 
 def render_entries(title, entries):
@@ -131,7 +152,7 @@ def render_entries(title, entries):
     return "\n\n".join(parts)
 
 
-def build(location, contexts, read=call):
+def build(location, contexts, read=call, *, native_id=None):
     # Profile is acquired first. Every required guidance page follows.
     profile = list(pages("get_profile", {}, read))
     rules = guidance(contexts, location, read)
@@ -145,13 +166,15 @@ def build(location, contexts, read=call):
     work_context = contexts[0]
     reads = [(f"Inflight index ({work_context or 'general'})", lambda: activity_index(work_context, read)),
              ("Latest daily health assessment", lambda: health_assessment(read)),
-             ("Online peers", lambda: peer_index(read))]
+             ("TJAI receiver and online peers", lambda: peer_index(read, native_id=native_id, location=location))]
     with ThreadPoolExecutor(max_workers=3) as executor:
         futures = [(title, executor.submit(fetch)) for title, fetch in reads]
         for title, future in futures:
             try:
                 content = future.result()
             except (RuntimeError, OSError, SystemExit) as exc:
+                if title == "TJAI receiver and online peers":
+                    raise RuntimeError(f"TJAI readiness check failed: {exc}") from exc
                 content = f"Unavailable: {exc}. Report this gap; fetch it when needed."
             parts.append(f"## {title}\n\n{content}")
     parts.append(
@@ -181,8 +204,12 @@ def build(location, contexts, read=call):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--location")
+    parser.add_argument("--native-id", default=os.environ.get("CODEX_THREAD_ID"),
+                        help="Current Codex native session ID (defaults to CODEX_THREAD_ID)")
     parser.add_argument("--measure", action="store_true", help="Fetch and validate; emit only size counts")
     arguments = parser.parse_args()
+    if not arguments.native_id:
+        parser.error("--native-id or CODEX_THREAD_ID is required to verify this session's TJAI receiver")
     location = arguments.location
     if not location:
         config = Path.home() / ".tjai/config.json"
@@ -190,7 +217,7 @@ def main():
             location = json.loads(config.read_text()).get("location_name")
         location = location or socket.gethostname()
     contexts = HOST_CONTEXTS.get(location, (None,))
-    output, metrics = build(location, contexts)
+    output, metrics = build(location, contexts, native_id=arguments.native_id)
     print(json.dumps(metrics, indent=2) if arguments.measure else output, end="\n" if arguments.measure else "")
 
 
