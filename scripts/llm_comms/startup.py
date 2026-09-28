@@ -115,11 +115,13 @@ def start(client, data, host=None, *, context_loaded=False):
             command.extend(["--resource", resource])
         with open(directory / f"{session_id}.log", "a") as log:
             subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
-    capability = "immediate native delivery" if native_socket else "native queue delivery at the next input boundary (this embedded CLI cannot be steered)"
+    capability = "native inbox transport selected" if native_socket else "native queue transport selected (delivery at the next input boundary)"
+    status = ("A receiver process holds this session's lock." if running else
+              "Receiver launch requested; registration and delivery are not yet confirmed.")
     if context_loaded:
         mark_instructions(session_id)
     return (f"## TJAI peer communications\n\nName `{name}`; host `{host}`; {capability}. "
-            "Registration and reception run automatically in software. "
+            f"{status} Registration, delivery and errors are recorded in `{directory / f'{session_id}.log'}`. "
             "For shared work, use TJAI messaging so Claude-only native conversations do not omit other clients. "
             + session_instructions(session_id))
 
