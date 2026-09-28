@@ -36,6 +36,13 @@ activity. Indented lines continue the item above them. No other markup
 carries meaning; the `!!!` marker keeps its usual sense inside an item when
 the user chooses to use it. Missing sections are created when first needed.
 
+The body contains task state: actionable unfinished items in Live, concise
+completed outcomes in Done, and supporting references in Refs. Session
+handoff notes, cycle summaries, restart instructions, closeout/checkpoint
+snapshots and cumulative implementation logs are not stored in TJAI entries.
+Session continuity uses the client's session history or recorded dialog.
+Captured dialog and existing version history remain historical records.
+
 ## Surfaces
 
 The inflight surfaces are a view of the Capcom page, in its right panel with
