@@ -12,11 +12,11 @@ import json
 from presentation import envelope
 import os
 from pathlib import Path
-import stat
 import sys
 import uuid
 
 from websockets.asyncio.client import unix_connect
+from runtime_socket import private_socket_path
 
 
 class RPCError(RuntimeError):
@@ -36,19 +36,9 @@ class CodexClient:
         self.events = asyncio.Queue(maxsize=256)
 
     async def __aenter__(self):
-        selected = self.socket_path.lstat()
-        if selected.st_uid != os.getuid():
-            raise ValueError("Select an app-server socket owned by the current user")
-        # Codex may publish its selected socket as an owner-controlled symlink
-        # into the daemon's private runtime. Validate and connect to the target.
-        self.socket_path = self.socket_path.resolve(strict=True)
-        info = self.socket_path.lstat()
-        if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid():
-            raise ValueError("Select an app-server socket owned by the current user")
-        if info.st_mode & 0o077:
-            raise ValueError("The app-server socket must be private to its owner")
+        socket_path = private_socket_path(self.socket_path)
         self.ws = await unix_connect(
-            str(self.socket_path), uri="ws://localhost/", compression=None,
+            str(socket_path), uri="ws://localhost/", compression=None,
             proxy=None, open_timeout=self.timeout, max_size=4 * 1024 * 1024,
         )
         self._reader = asyncio.create_task(self._read())
