@@ -29,9 +29,15 @@ rejects(lambda: list(boot.pages("get_profile", {}, lambda *_: {
 
 
 def shared(tool, arguments):
-    return {"entries": [{"entry_id": "general", "content": "Full common instruction."},
-                        {"entry_id": arguments["context"], "content": "Full project instruction."}],
-            "complete": True}
+    if arguments["context"] == "swf":
+        assert arguments["location_name"] == "swf-testbed"
+        assert arguments.get("include_general", True)
+        entries = [{"entry_id": "general", "content": "Full common instruction."}]
+    else:
+        assert arguments["include_general"] is False and "location_name" not in arguments
+        entries = []
+    entries.append({"entry_id": arguments["context"], "content": "Full project instruction."})
+    return {"entries": entries, "complete": True}
 
 
 assert len(boot.guidance(("swf", "tjai"), "swf-testbed", shared)) == 3
@@ -42,15 +48,23 @@ rejects(lambda: boot.guidance(("swf", "tjai"), "swf-testbed", lambda _, argument
 
 def activities(tool, arguments):
     assert tool == "get_todos" and arguments["context"] == "swf"
-    assert arguments["max_content_length"] == 0 and arguments["status"] == "inflight"
-    return [{"id": "uuid", "data": {"entry_id": "swf-example"}, "modified": "2026-09-28",
-             "content": "Activity title\n\n## Live\n- A task\n\n## Done\n" + "History\n" * 10_000}]
+    assert arguments["summary_only"] is True and arguments["status"] == "inflight"
+    return [{"id": "uuid", "entry_id": "swf-example", "title": "Activity title",
+             "context": "swf", "status": "inflight", "open": 1, "done": 2}]
 
 
 index = boot.activity_index("swf", activities)
 assert "Activity title" in index and "swf-example" in index and "History" not in index
-assert boot.section("## Health Assessment\nFull assessment.\n\n## Other\nUnrelated.",
-                    "Health Assessment") == "Full assessment."
+assert "1 open, 2 done" in index
+
+
+def health(tool, arguments):
+    assert tool == "get_entry_by_entry_id"
+    assert arguments["heading"] == "Health Assessment" and arguments["level"] == 2
+    return {"modified": "2026-09-28", "content": "## Health Assessment\nFull assessment."}
+
+
+assert "Full assessment." in boot.health_assessment(health)
 
 
 def oversized(tool, arguments):

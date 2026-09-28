@@ -53,11 +53,13 @@ def pages(tool, arguments, read=call):
 def guidance(contexts, location, read=call):
     """Emit each authoritative entry once, preserving its entire content."""
     entries = {}
-    for context in contexts:
+    for index, context in enumerate(contexts):
         arguments = {"audience": "openai"}
         if context:
             arguments["context"] = context
-        if location:
+        if index:
+            arguments["include_general"] = False
+        if location and not index:
             arguments["location_name"] = location
         for entry in pages("get_ai_guidance", arguments, read):
             key = entry.get("entry_id") or json.dumps(entry, sort_keys=True)
@@ -67,22 +69,8 @@ def guidance(contexts, location, read=call):
     return list(entries.values())
 
 
-def section(content, title):
-    lines = []
-    selected = False
-    for line in content.splitlines():
-        if line == f"## {title}":
-            selected = True
-            continue
-        if selected and line.startswith("## "):
-            break
-        if selected:
-            lines.append(line)
-    return "\n".join(lines).strip()
-
-
 def activity_index(context, read=call):
-    arguments = {"status": "inflight", "max_content_length": 0}
+    arguments = {"status": "inflight", "summary_only": True}
     if context:
         arguments["context"] = context
     entries = read("get_todos", arguments)
@@ -90,9 +78,10 @@ def activity_index(context, read=call):
         raise RuntimeError("get_todos: expected an activity list")
     rows = []
     for entry in entries:
-        slug = entry.get("data", {}).get("entry_id") or entry["id"]
-        title = next((line for line in entry["content"].splitlines() if line.strip()), slug)
-        rows.append(f"- {slug}: {title.lstrip('# ')} (updated {entry['modified']})")
+        slug = entry.get("entry_id") or entry["id"]
+        rows.append(f"- {slug}: {entry['title']} "
+                    f"({entry.get('context') or 'general'}; {entry['status']}; "
+                    f"{entry['open']} open, {entry['done']} done)")
     return "\n".join(rows) or "No inflight activities in this context."
 
 
@@ -102,11 +91,13 @@ def health_assessment(read=call):
     for day in (today, today - timedelta(days=1)):
         slug = f"daily-{day.isoformat()}"
         try:
-            entry = read("get_entry_by_entry_id", {"entry_id": slug})
+            entry = read("get_entry_by_entry_id", {
+                "entry_id": slug, "heading": "Health Assessment", "level": 2,
+            })
         except RuntimeError as exc:
             errors.append(str(exc))
             continue
-        assessment = section(entry.get("content", ""), "Health Assessment")
+        assessment = entry.get("content", "").strip()
         if assessment:
             return f"Report: {slug}; recorded {entry['modified']}\n\n{assessment}"
         errors.append(f"{slug}: no Health Assessment section")

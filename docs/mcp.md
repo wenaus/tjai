@@ -105,15 +105,21 @@ kept concise because some clients repeat them in each tool description.
 `scripts/session_bootstrap.py` composes those existing MCP reads for the
 `yo. boot` protocol. It acquires the complete profile first, follows every
 guidance page for the host's project and `tjai`, and emits each shared entry
-once. Conflicting copies of an entry and non-forward cursors produce an error.
-Machine facts remain complete. SWF sessions also read workspace guidance.
+once. Only the first context requests general guidance and machine facts;
+later contexts use `include_general=False`. Conflicting copies of an entry
+and non-forward cursors produce an error. Machine facts remain complete.
+SWF sessions also read workspace guidance.
 
 Supplementary reads supply the host project's inflight activity index, the
 latest daily Health Assessment section and online peer identities. The activity
-index projects titles, entry IDs and modification dates; activity bodies and
-their Refs are read when that activity is assigned. Supplementary read failures
-are reported in the packet. The packet has a 52,000-character ceiling; it is
-never silently truncated. `--measure` prints section sizes after the same reads.
+index uses `summary_only=True` for titles, identifiers, context, status and
+open/done counts; activity bodies and their Refs are read when that activity
+is assigned. Health is requested by heading, not downloaded as a full synopsis.
+Supplementary read failures are reported in the packet, except receiver or
+directory failures, which block readiness. `CODEX_THREAD_ID` or `--native-id`
+identifies the current session; a pull-only registration is not a native
+receiver. The packet has a 52,000-character ceiling; it is never silently
+truncated. `--measure` prints section sizes after the same reads.
 
 The shared Codex SessionStart hook supplies the command. Peer registration,
 reception and dialog recording retain their existing paths. Prior dialog is
