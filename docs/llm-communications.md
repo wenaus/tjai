@@ -15,20 +15,15 @@ embedded sessions use a deferred native queue until restarted. Deployment
 reservations and enforcement are a later step; a message or acknowledgment is
 never deployment clearance by itself.
 
-## Everyday use and AI Hi
+## Everyday use
 
 Launch `claude` or `codex` through the shared shell setup. Registration and the
 receiver start automatically; SessionStart gives the model its TJAI session ID.
 Use that ID for `sender_id`, not the native Claude or Codex session UUID.
 
-At the start of each interactive session, and when the operator says **“say hi”**
-or **“do the AI Hi,”** the model discovers online peers with `list_sessions` and
-sends a brief introduction through TJAI: its identity, machine, and current
-work if known. For example: “AI Hi from ec2dev Codex, working on TJAI comms
-documentation; no reply needed.” Exclude the sending session. Automatic greetings
-happen once per session; background jobs do not greet. If nobody is online, stop
-without polling. Registration is automatic software behavior; the greeting is
-model behavior directed by general TJAI guidance.
+A session contacts a peer only when the contact has a purpose: overlapping
+edits, a deployment, a handoff, a question or its answer. Sessions do not greet
+or introduce themselves, at startup or otherwise.
 
 Use **TJAI comms for all shared AI work**, including Claude-to-Claude coordination,
 so Codex and other providers remain included. Claude's socket is a delivery
