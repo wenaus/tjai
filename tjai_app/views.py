@@ -9485,10 +9485,12 @@ def _inflight_payload(entry):
         'title': p['title'].lstrip('#').strip(),
         'description_html': _linkify_rendered_html(_render_markdown(p['description'])) if p['description'] else '',
         'live': [{'text': it['text'], 'html': _inflight_item_html(it)} for it in p['live']],
-        'done': [{'text': it['text'], 'html': _inflight_item_html(it)} for it in p['done']],
+        'done': ([{'text': it['text'], 'html': _inflight_item_html(it)} for it in p['done']]
+                 if inflight_lib.KEEP_DONE else []),
+        'keep_done': inflight_lib.KEEP_DONE,
         'refs_html': _linkify_rendered_html(_render_markdown(p['refs'])) if p['refs'] else '',
         'open_count': len(p['live']),
-        'done_count': len(p['done']),
+        'done_count': len(p['done']) if inflight_lib.KEEP_DONE else 0,
         'modified_ts': entry.timestamp_modified,
         'modified_display': fmt_datetime(entry.timestamp_modified),
         'context': entry.context_id or '',
@@ -9518,7 +9520,7 @@ def _inflight_list(statuses=None, activities_only=False):
         ref = eid or str(e.id)
         rows.append({
             'id': str(e.id), 'ref': ref, 'title': (s['title'] or '(untitled)').lstrip('#').strip(),
-            'open': s['open'], 'done': s['done'],
+            'open': s['open'], 'done': s.get('done'),
             'modified_ts': e.timestamp_modified,
             'modified_display': fmt_datetime(e.timestamp_modified),
             'ago': fmt_ago(e.timestamp_modified),
@@ -9592,7 +9594,7 @@ def api_inflight_state(request, entry_id):
 @login_required
 @require_http_methods(["POST"])
 def api_inflight_item(request, entry_id):
-    """Item actions on an inflight todo: done, reopen, add (docs/inflight.md).
+    """Item actions on an inflight todo: done (taken out), add (docs/inflight.md).
     The web twin of the inflight_item MCP tool; both run services.inflight_item."""
     from . import services
     try:

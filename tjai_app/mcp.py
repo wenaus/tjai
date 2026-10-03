@@ -561,13 +561,13 @@ async def get_todos(
         status: Filter by specific status: active, inflight, done, blocked, or archive.
                 If specified, returns only todos with this exact status.
                 'inflight' todos are activities being worked in sessions; their
-                body is the working record (description, ## Live items, ## Done
-                items, ## Refs). See docs/inflight.md.
+                body is the working record (description, ## Live items,
+                ## Refs). See docs/inflight.md.
                 Overrides include_done.
         include_done: If True, include all todos regardless of status.
                       Default: False (excludes status='done' only).
         summary_only: Return the complete index of ids, titles, contexts,
-                      statuses and open/done counts, without entry bodies.
+                      statuses and open counts, without entry bodies.
                       Use at session start; read the assigned activity in full.
 
     Returns:
@@ -1081,21 +1081,21 @@ async def replace_entry_content(entry_id: str, content: str) -> dict:
 async def inflight_item(entry_id: str, action: str, text: str) -> dict:
     """
     Item action on an inflight todo (docs/inflight.md): mark an open item
-    done, reopen a done item, or add an open item. An inflight todo is a todo
+    done, which takes it out, or add an open item. An inflight todo is a todo
     with status 'inflight', the working record of an activity in progress;
-    its ## Live section holds open items ("- item") and ## Done finished
-    ones (". item"). This is the way to keep an activity's list current:
-    a surgical edit of the current content, never a whole rewrite.
+    its ## Live section holds open items ("- item"). Finished items are not
+    kept: what is done is recorded in git and the docs. This is the way to
+    keep an activity's list current: a surgical edit of the current content,
+    never a whole rewrite.
 
     Args:
         entry_id: UUID or human-readable data.entry_id of the inflight todo.
-        action: 'done' (open -> Done), 'reopen' (Done -> open), or 'add'.
-        text: the item text, exactly as it appears (for done/reopen) or the
-            new item (for add).
+        action: 'done' (the open item is taken out) or 'add'.
+        text: the item text, exactly as it appears (for done) or the new
+            item (for add).
 
     Returns:
-        The updated entry with a unified `diff`, `open_count`, and
-        `done_count`. You MUST present the returned `diff` verbatim to the
+        The updated entry with a unified `diff` and `open_count`. You MUST present the returned `diff` verbatim to the
         user in a fenced diff block. On error: {"error": "...", "code": ...}
         with code NOT_FOUND, BAD_REQUEST (not inflight, bad action), or
         NO_MATCH (no such item).

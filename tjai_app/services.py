@@ -2224,10 +2224,11 @@ def restore_version(entry_id, version=None, source='api'):
 
 
 def inflight_item(entry_id, action, text, source='mcp'):
-    """Item action on an inflight todo (docs/inflight.md): done, reopen, or
-    add. `entry_id` is a UUID or a data.entry_id. A surgical edit of the
-    current content, serialized per entry; returns the updated entry with a
-    `diff` plus `open_count` and `done_count`."""
+    """Item action on an inflight todo (docs/inflight.md): done (the item is
+    taken out) or add; reopen is off with the Done section. `entry_id` is a
+    UUID or a data.entry_id. A surgical edit of the current content,
+    serialized per entry; returns the updated entry with a `diff` plus
+    `open_count`."""
     import uuid as _uuid
     from django.db import transaction
     from django.db.models import Q
@@ -2267,5 +2268,6 @@ def inflight_item(entry_id, action, text, source='mcp'):
     if isinstance(result, dict) and "error" not in result:
         counts = inflight_lib.summary(new_content)
         result['open_count'] = counts['open']
-        result['done_count'] = counts['done']
+        if 'done' in counts:
+            result['done_count'] = counts['done']
     return result

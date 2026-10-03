@@ -79,7 +79,7 @@ page. A context is required when `include_general` is false; omit
 `location_name` when that machine's rules have already been loaded.
 Use `get_todos(status="inflight", summary_only=True)` for the activity index:
 every matching activity is returned with its identifiers, context, status,
-title and open/done counts. Read the assigned activity in full to obtain its
+title and open counts. Read the assigned activity in full to obtain its
 Live list and Refs. The default todo response remains unchanged.
 
 `get_entry` and `get_entry_by_entry_id` accept `heading`, `level` and
@@ -113,7 +113,7 @@ SWF sessions also read workspace guidance.
 Supplementary reads supply the host project's inflight activity index, the
 latest daily Health Assessment section and online peer identities. The activity
 index uses `summary_only=True` for titles, identifiers, context, status and
-open/done counts; activity bodies and their Refs are read when that activity
+open counts; activity bodies and their Refs are read when that activity
 is assigned. Health is requested by heading, not downloaded as a full synopsis.
 Supplementary read failures are reported in the packet, except receiver or
 directory failures, which block readiness. `CODEX_THREAD_ID` or `--native-id`

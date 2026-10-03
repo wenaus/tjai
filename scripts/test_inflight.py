@@ -37,20 +37,21 @@ check('title', p['title'] == 'Port Simphony to Windows')
 check('description', p['description'].startswith('Goal:') and 'review comments.' in p['description'])
 check('live items', [i['text'] for i in p['live']] == ['answer plexoos on CMake standard', "reply to ggalgoczi's two questions"])
 check('continuation kept with item', p['live'][0]['lines'] == ['- answer plexoos on CMake standard', '  keep 17 for Ubuntu 22.04'])
-check('done items', [i['text'] for i in p['done']] == ['open PR 438'])
+check('an older Done section still parses', [i['text'] for i in p['done']] == ['open PR 438'])
 check('refs', p['refs'].startswith('- [PR 438]'))
-check('summary', inflight.summary(DOC) == {'open': 2, 'done': 1, 'title': 'Port Simphony to Windows'})
+check('summary has no done count', inflight.summary(DOC) == {'open': 2, 'title': 'Port Simphony to Windows'})
 
 d = inflight.mark_done(DOC, 'answer plexoos on CMake standard')
 pd = inflight.parse(d)
-check('mark_done moves item', [i['text'] for i in pd['live']] == ["reply to ggalgoczi's two questions"]
-      and [i['text'] for i in pd['done']] == ['open PR 438', 'answer plexoos on CMake standard'])
-check('mark_done keeps continuation', pd['done'][1]['lines'][1] == '  keep 17 for Ubuntu 22.04')
+check('mark_done takes the item out', [i['text'] for i in pd['live']] == ["reply to ggalgoczi's two questions"]
+      and [i['text'] for i in pd['done']] == ['open PR 438'] and 'answer plexoos' not in d)
+check('mark_done takes its continuation too', 'keep 17 for Ubuntu 22.04' not in d)
 check('mark_done leaves refs', inflight.parse(d)['refs'] == p['refs'])
 
-r = inflight.reopen(d, 'open PR 438')
-pr = inflight.parse(r)
-check('reopen moves item to end of Live', [i['text'] for i in pr['live']] == ["reply to ggalgoczi's two questions", 'open PR 438'])
+try:
+    inflight.reopen(DOC, 'open PR 438'); check('reopen refused', False)
+except ValueError:
+    check('reopen refused', True)
 
 a = inflight.add_item(DOC, '  ask about   a Windows CI machine ')
 pa = inflight.parse(a)
@@ -69,7 +70,7 @@ b1 = inflight.add_item(BARE, 'first item')
 check('sections created on demand', inflight.parse(b1)['live'][0]['text'] == 'first item' and '## Live' in b1)
 b2 = inflight.mark_done(b1, 'first item')
 pb = inflight.parse(b2)
-check('Done created after Live', pb['done'][0]['text'] == 'first item' and b2.index('## Live') < b2.index('## Done'))
+check('no Done section is created', pb['live'] == [] and '## Done' not in b2)
 b3 = inflight.add_item("Title\n\n## Refs\n- [x](y)", 'item')
 check('Live inserted before Refs', b3.index('## Live') < b3.index('## Refs') and inflight.parse(b3)['live'][0]['text'] == 'item')
 
@@ -81,7 +82,7 @@ m, conf = inflight.three_way_merge(base, ours, theirs)
 pm = inflight.parse(m)
 check('merge: both changes kept, no conflict', not conf
       and [i['text'] for i in pm['live']] == ["reply to ggalgoczi's two questions", 'new item from the editor']
-      and [i['text'] for i in pm['done']] == ['open PR 438', 'answer plexoos on CMake standard'], m)
+      and 'answer plexoos' not in m, m)
 m2, conf2 = inflight.three_way_merge(base, base.replace('Goal: MSVC', 'Goal: MSVC and clang'), base.replace('Goal: MSVC', 'Goal: MSVC only'))
 check('merge: same line both sides is a conflict', conf2 and '<<<<<<< yours' in m2 and '>>>>>>> server' in m2)
 m3, conf3 = inflight.three_way_merge(base, theirs, theirs)
@@ -93,7 +94,7 @@ ours5 = base.replace("- reply to ggalgoczi's two questions\n", '')
 m5, conf5 = inflight.three_way_merge(base, ours5, theirs)
 pm5 = inflight.parse(m5)
 check('merge: our deletion survives their adjacent change', not conf5 and pm5['live'] == []
-      and [i['text'] for i in pm5['done']] == ['open PR 438', 'answer plexoos on CMake standard'], m5)
+      and 'answer plexoos' not in m5, m5)
 ours7 = base.replace('- reply to ggalgoczi', '- reply to ggalgoczi promptly')
 theirs7 = base.replace("- reply to ggalgoczi's two questions\n", "- reply to ggalgoczi's two questions\n- check CI\n")
 m7, conf7 = inflight.three_way_merge(base, ours7, theirs7)

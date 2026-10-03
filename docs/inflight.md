@@ -2,8 +2,7 @@
 
 An inflight todo is the working record of an activity in progress: a todo
 entry with status `inflight` whose body carries the activity's description,
-its open and finished items, and the references a session needs to pick it
-up. The set of inflight todos is the list of activities currently being
+its open items, and the references a session needs to pick it up. The set of inflight todos is the list of activities currently being
 worked, by the user and by LLM sessions, and each one is visible and
 editable to all of them at once. Todos in other statuses are the user's
 backlog and are not touched by this machinery.
@@ -20,24 +19,26 @@ backlog and are not touched by this machinery.
 - open item
   an indented line continues the item above
 
-## Done
-. finished item
-
 ## Refs
 - [design doc](url)
 - [PR](url)
 ```
 
-`## Live` holds open items, one per line starting with `- `. `## Done` holds
-finished items, one per line starting with `. `; finishing an item changes
-its marker and moves it to the end of Done, reopening moves it back to the
-end of Live. `## Refs` lists what a session reads to bootstrap on the
+`## Live` holds open items, one per line starting with `- `; finishing an
+item takes it out. `## Refs` lists what a session reads to bootstrap on the
 activity. Indented lines continue the item above them. No other markup
 carries meaning; the `!!!` marker keeps its usual sense inside an item when
 the user chooses to use it. Missing sections are created when first needed.
 
-The body contains task state: actionable unfinished items in Live, concise
-completed outcomes in Done, and supporting references in Refs. Session
+The body contains task state: actionable unfinished items in Live and
+supporting references in Refs. **There is no Done.** Every session that takes
+up an activity reads its body whole, so finished work kept there would be
+carried into every one of them; what is done is recorded in git and the
+project's documents, and a session learns it there. Work built but waiting
+on the user's check stays in Live until it is confirmed, then is taken out.
+An older body's `## Done` section is still parsed (`. ` lines), and the
+switch that kept one (`inflight.py` `KEEP_DONE`) is off, with reopening and
+the done count. Session
 handoff notes, cycle summaries, restart instructions, closeout/checkpoint
 snapshots and cumulative implementation logs are not stored in TJAI entries.
 Session continuity uses the client's session history or recorded dialog.
@@ -54,7 +55,7 @@ visit to those paths redirects into the Capcom view. Navigating inside the
 frame (index to activity and back) is mirrored into the address bar.
 
 - **Index** lists the inflight todos, most recently touched first, with
-  open and done counts and time since last change, and below them a
+  open counts and time since last change, and below them a
   **Completed** section, dimmed: an activity with nothing outstanding,
   whatever its status, together with the ones since closed or parked. Those
   carry `data.activity`, stamped while the todo is inflight — a nightly agent
@@ -62,8 +63,8 @@ frame (index to activity and back) is mirrored into the address bar.
   nothing in a closed body distinguishes the two and the mark has to be set
   in advance. Each opens its live view in place; Refresh re-reads the list.
 - **Live view** renders one activity:
-  description, Live items each with a done button, an add-item field, Done
-  items each with a reopen button, and Refs. Every action is a surgical edit
+  description, Live items each with a done button (which takes the item
+  out), an add-item field, and Refs. Every action is a surgical edit
   of the current content, serialized per entry, attributed
   `inflight:<user>` in the version history. Refresh re-reads the
   entry's state and re-renders it if anyone has changed it, from the editor,
@@ -93,9 +94,9 @@ frame (index to activity and back) is mirrored into the address bar.
 the usual content preview; `max_content_length=0` requests full content.
 At session start, `get_todos(status='inflight', summary_only=True)` returns
 the complete activity index with identifiers, titles, contexts, statuses
-and open/done counts. A session starting on an activity reads it in full,
+and open counts. A session starting on an activity reads it in full,
 then reads its Refs and
-works from its Live list; it marks items done, reopens them, and adds
+works from its Live list; it marks items done (taking them out) and adds
 items with the `inflight_item` MCP tool (the web item endpoint's twin; both
 run `services.inflight_item`), or for other edits the surgical entry tools
 (`replace_text_in_entry`, `append_entry_content`), never by replacing the
@@ -109,8 +110,10 @@ accepted everywhere are `active`, `inflight`, `done`, `blocked`, `archive`,
 
 ## Files
 
-- `tjai_app/inflight.py` — parse, `summary`, `mark_done`, `reopen`,
+- `tjai_app/inflight.py` — parse, `summary`, `mark_done`, `reopen` (off),
   `add_item`, `three_way_merge`
+- `scripts/strip_inflight_done.py` — takes the Done section out of every
+  inflight activity, one surgical edit each
 - `tjai_app/services.py` — `inflight_item`; `tjai_app/mcp.py` — the
   `inflight_item` tool
 - `tjai_app/views.py` — `inflight_page`, `api_inflight_list`,

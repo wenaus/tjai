@@ -2,9 +2,11 @@
 
 An inflight todo is a todo entry with status ``inflight``. Its body has a
 fixed shape: the title line, a description, then the sections ``## Live``
-(open items, lines starting ``- ``), ``## Done`` (finished items, lines
-starting ``. ``), and ``## Refs`` (links). Indented lines continue the item
-above them. This module parses that shape, applies the item mutations the
+(open items, lines starting ``- ``) and ``## Refs`` (links). Indented lines
+continue the item above them. A finished item is taken out: what is done is
+recorded in git and the project's documents, never in the activity, which
+every session taking it up reads whole. An older body's ``## Done`` section
+(lines starting ``. ``) is still parsed. This module parses that shape, applies the item mutations the
 live view performs, and merges concurrent edits of one entry three-way.
 """
 import re
@@ -12,6 +14,9 @@ from difflib import SequenceMatcher
 
 STATUS = 'inflight'
 LIVE, DONE, REFS = 'Live', 'Done', 'Refs'
+# Off: a finished item is removed, not kept in a Done section; reopening and the
+# done count go with it (docs/inflight.md § Shape).
+KEEP_DONE = False
 _HEADING = re.compile(r'^##\s+(.+?)\s*$')
 _OPEN = re.compile(r'^- (.*\S.*)$')
 _DONE = re.compile(r'^\. (.*\S.*)$')
@@ -125,7 +130,9 @@ def parse(content):
 
 def summary(content):
     p = parse(content)
-    return {'open': len(p['live']), 'done': len(p['done']), 'title': p['title']}
+    if KEEP_DONE:
+        return {'open': len(p['live']), 'done': len(p['done']), 'title': p['title']}
+    return {'open': len(p['live']), 'title': p['title']}
 
 
 def _ensure_section(lines, name):
@@ -177,11 +184,15 @@ def mark_done(content, text):
     if item is None:
         raise ValueError(f'no open item {text!r}')
     lines = _take(p['lines'], item)
+    if not KEEP_DONE:
+        return '\n'.join(lines)
     moved = ['. ' + item['text']] + item['lines'][1:]
     return '\n'.join(_append_to_section(lines, DONE, moved))
 
 
 def reopen(content, text):
+    if not KEEP_DONE:
+        raise ValueError('finished items are not kept, so none can be reopened: add it again')
     p = parse(content)
     item = _find(p['done'], text)
     if item is None:

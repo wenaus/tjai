@@ -50,12 +50,12 @@ def activities(tool, arguments):
     assert tool == "get_todos" and arguments["context"] == "swf"
     assert arguments["summary_only"] is True and arguments["status"] == "inflight"
     return [{"id": "uuid", "entry_id": "swf-example", "title": "Activity title",
-             "context": "swf", "status": "inflight", "open": 1, "done": 2}]
+             "context": "swf", "status": "inflight", "open": 1}]
 
 
 index = boot.activity_index("swf", activities)
 assert "Activity title" in index and "swf-example" in index and "History" not in index
-assert "1 open, 2 done" in index
+assert "1 open)" in index and "done" not in index
 
 
 def health(tool, arguments):

@@ -65,7 +65,7 @@
         <div class="section-head">Live <span id="live-count"></span></div>
         <div id="live"></div>
         <div class="add"><input id="add-input" placeholder="new item, Enter to add"><button class="btn act" id="add-btn">Add</button></div>
-        <div class="section-head">Done <span id="done-count"></span></div>
+        <div class="section-head" id="done-head">Done <span id="done-count"></span></div>
         <div id="done"></div>
         <div class="section-head">Refs</div>
         <div class="refs" id="refs"></div>
@@ -101,7 +101,7 @@
                 const row = (i, dim) =>
                     '<div class="row' + (dim ? ' dim' : '') + '"><a class="t" href="' + escapeHtml(i.url) + '">' + escapeHtml(i.title) + '</a>' +
                     (i.context ? '<span class="ctx">' + escapeHtml(i.context) + '</span>' : '') +
-                    '<span class="counts">' + i.open + ' open <span class="d">· ' + i.done + ' done</span></span>' +
+                    '<span class="counts">' + i.open + ' open' + (i.done != null ? ' <span class="d">· ' + i.done + ' done</span>' : '') + '</span>' +
                     '<span class="ago" title="' + escapeHtml(i.modified_display) + '">' + escapeHtml(i.ago) + '</span></div>';
                 el.innerHTML = active.map(i => row(i)).join('')
                     + (completed.length ? '<div class="section-head">Completed</div>'
@@ -141,6 +141,9 @@
         document.getElementById('live').innerHTML = state.live.length
             ? state.live.map(it => itemRow(it, 'live', 'done', 'act', 'done')).join('')
             : '<div class="empty">nothing open</div>';
+        // Finished items are not kept (docs/inflight.md § Shape): the Done section shows only while keeping is on.
+        document.getElementById('done-head').hidden = !state.keep_done;
+        document.getElementById('done').hidden = !state.keep_done;
         document.getElementById('done').innerHTML = state.done.length
             ? state.done.map(it => itemRow(it, 'done', 'reopen', 'reopen', 'reopen')).join('')
             : '<div class="empty">nothing done yet</div>';
