@@ -144,6 +144,14 @@ Codex accounting is process-level and forward-looking. Each TJAI-launched subscr
 
 **Health banner:** Green (normal), Yellow (load > 2x CPUs, memory < 20%, disk > 80%, swap > 20%, backup > 1 day), Red (load > 3x CPUs, memory < 10%, disk > 90%, swap > 50%, agents down, no backups).
 
+**Red items are messaged to the host's live LLM sessions** ([LLM communications](llm-communications.md)): one
+peer message to the `host:<location_name>` group when an item turns red, then one every 24 hours while it stays red;
+yellow and clearing send nothing. Several items due at once go in one message. An item is known across runs by its
+text less its numbers, and one that clears is forgotten, so its next turn to red is said at once. With no live
+session on the host nothing is marked sent and the next run tries again. The sender is the script's own registration
+(`tjai health`, client `script`, kept offline so it is never listed as a peer); when each item was last sent is
+SysConfig `system_health_llm_alarms`.
+
 `system_health.py` writes to SysConfig (`system_health_data` JSON, `system_health_status` color). Agent execution tracked via SysConfig keys, written by `action_runner.py` and `agent_complete.py`.
 
 **Files:** `scripts/system_health.py`, `scripts/agent_complete.py`, `tjai_app/templates/tjai_app/system_health.html`, `tjai_app/views.py`

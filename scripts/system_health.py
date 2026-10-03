@@ -9,9 +9,11 @@ Writes two sysconfig keys:
 import json
 import logging
 import os
+import re
 import socket
 import sys
 import time
+import uuid
 from pathlib import Path
 
 import bootstrap  # noqa: F401 - Django setup
@@ -820,6 +822,53 @@ def assess_health(system, postgres, tjai=None, backups=None, web_apps=None, **_k
     return status, issues
 
 
+# A red item reaches the live LLM sessions on this host as one peer message: when it turns red, then again every
+# 24 hours while it stays red. Yellow sends nothing, and clearing sends nothing (docs/server.md § System Health
+# Monitoring). The sender is this script's own registration, kept offline so it is never listed as a peer.
+LLM_ALARMS_KEY = 'system_health_llm_alarms'
+LLM_ALARM_REPEAT_SECONDS = 24 * 3600
+LLM_ALARM_SENDER = ('tjai-system-health', 'tjai health')
+
+
+def _alarm_item(message):
+    """A red item's identity across runs: its text less its numbers, so "3 days old" and "4 days old" are one item."""
+    return re.sub(r'\d+(?:\.\d+)?', '#', message)
+
+
+def _host_name():
+    """This machine's location name (~/.tjai/config.json), which names its sessions' host group."""
+    return json.loads((Path.home() / '.tjai' / 'config.json').read_text())['location_name']
+
+
+def message_red_items(issues, now):
+    """Send the red items due a message to the host's live sessions, and keep when each was last sent."""
+    red = {_alarm_item(msg): msg for level, msg in issues if level == 'red'}
+    stored = SysConfig.objects.filter(key=LLM_ALARMS_KEY).values_list('value', flat=True).first()
+    try:
+        sent = json.loads(stored) if stored else {}
+    except ValueError as e:
+        logger.error("Unreadable %s, starting afresh: %s", LLM_ALARMS_KEY, e)
+        sent = {}
+    # An item that cleared is forgotten, so its next turn to red is said at once.
+    sent = {item: at for item, at in sent.items() if item in red}
+    due = {item: msg for item, msg in red.items() if now - sent.get(item, 0) >= LLM_ALARM_REPEAT_SECONDS}
+    if due:
+        try:
+            from tjai_app import comms
+            host = _host_name()
+            sender = comms.register_session(LLM_ALARM_SENDER[0], LLM_ALARM_SENDER[1], host, 'script', state='offline')
+            comms.send_message(sender['id'], f"System health red on {host}: {'; '.join(due.values())}. "
+                               "https://etaverse.com/tjai/system/ (said again every 24 h while it stays red)",
+                               str(uuid.uuid4()), resource=f'host:{host}')
+            sent.update({item: now for item in due})
+        except ValueError as e:
+            # No live session on the host: nothing is marked sent, so the next run tries again.
+            logger.info("Red items not messaged: %s", e)
+        except Exception as e:
+            logger.error("Red items not messaged: %s", e)
+    SysConfig.objects.update_or_create(key=LLM_ALARMS_KEY, defaults={'value': json.dumps(sent), 'timestamp_modified': now})
+
+
 def transition_reason(status, issues):
     """The causes that put the system in `status`, for a transition notice title."""
     return '; '.join(msg for level, msg in issues if level == status)
@@ -881,6 +930,8 @@ def main():
             )
         except Exception as e:
             logger.error("System transition Capcom notice failed: %s", e)
+
+    message_red_items(issues, now)
 
     if issue_msgs:
         logger.info("Health: %s (%s)", status.upper(), '; '.join(issue_msgs))
