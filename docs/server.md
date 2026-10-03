@@ -163,11 +163,18 @@ Automated daily backup to `~/tjai-backups/server/YYYY-MM-DD/`, pushed to Dropbox
 
 Runs overnight as a tjai action (`trigger=overnight`, `interval_hours=24`). Health page monitors freshness and completeness. Backup runs around 09:00 UTC — changes after that are not covered until the next day.
 
-**Etaverse asset files** are backed up apart, not in the dated folders: the asset store's files (12.8 GB,
-content-addressed and never changed) are mirrored to one folder, `dropbox:Archive/etaverse-assets`, by
-`etaverse/scripts/backup_assets.py` at 05:30 ET (`scripts/cron/crontab`), copying only files not yet there
-and never deleting. The health page's Backups section shows its last run from
-`~/etaverse-asset-backup/status.json`. With the night's `etaverse-db.sql.gz` it restores the store.
+**Etaverse files** are backed up apart, not in the dated folders, by `etaverse/scripts/backup_assets.py` at
+05:30 ET (`scripts/cron/crontab`): every file of the asset store (its directory, less the deploy's versioned
+links) to `dropbox:Archive/etaverse-assets`, the etaverse data area to `dropbox:Archive/etaverse-data`, and the
+StudioMax ingress `/home/admin/receiving` to `dropbox:Archive/ec2dev-receiving`; never deleting there, and
+keeping any copy a changed file replaces under `dropbox:Archive/etaverse-replaced/<date>/`
+(etaverse/docs/inventory.md § Keeping). The health page's Backups section shows its last run from
+`~/etaverse-asset-backup/status.json`, and a failed run is red. With the night's `etaverse-db.sql.gz` it restores
+the store.
+
+**Primus's texture and art files** (`/home/admin/primus-assets`) need no backup here: they are a one-way copy of
+`~/Dropbox/Blender/textures/` and the art folders of `~/Dropbox/OS/`, pushed from the Macs, and Dropbox holds
+the originals (tjrepo/primus/docs/TEXTURE_MANAGEMENT.md).
 
 **File:** `scripts/backup.py`
 
