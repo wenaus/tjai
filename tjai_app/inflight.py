@@ -17,6 +17,9 @@ LIVE, DONE, REFS = 'Live', 'Done', 'Refs'
 # Off: a finished item is removed, not kept in a Done section; reopening and the
 # done count go with it (docs/inflight.md § Shape).
 KEEP_DONE = False
+# On: an activity closed as done is deleted in the same write (signals.py
+# retire_closed_activity; docs/inflight.md § Closing).
+RETIRE_CLOSED = True
 _HEADING = re.compile(r'^##\s+(.+?)\s*$')
 _OPEN = re.compile(r'^- (.*\S.*)$')
 _DONE = re.compile(r'^\. (.*\S.*)$')

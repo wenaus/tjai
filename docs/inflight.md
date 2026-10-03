@@ -44,6 +44,17 @@ snapshots and cumulative implementation logs are not stored in TJAI entries.
 Session continuity uses the client's session history or recorded dialog.
 Captured dialog and existing version history remain historical records.
 
+## Closing
+
+**Inflight is transient**: the fast record of what is being worked now, never an
+archive. An activity closed as done is deleted (softly, its versions kept) in
+the same write, whichever path sets the status (`signals.py`
+`retire_closed_activity`, switch `inflight.py` `RETIRE_CLOSED`): a todo marked as
+an activity (`data.activity`) or one that was inflight until that save. A parked
+activity is `blocked` and stays. What was done is recorded in git and the docs.
+`scripts/retire_done_activities.py` retired the activities closed before the
+rule.
+
 ## Surfaces
 
 The inflight surfaces are a view of the Capcom page, in its right panel with
@@ -57,7 +68,8 @@ frame (index to activity and back) is mirrored into the address bar.
 - **Index** lists the inflight todos, most recently touched first, with
   open counts and time since last change, and below them a
   **Completed** section, dimmed: an activity with nothing outstanding,
-  whatever its status, together with the ones since closed or parked. Those
+  whatever its status, together with the parked ones (closed ones are
+  deleted, § Closing). Those
   carry `data.activity`, stamped while the todo is inflight — a nightly agent
   product is a todo with the same sections, entry_id shape and tag, so
   nothing in a closed body distinguishes the two and the mark has to be set
@@ -106,7 +118,8 @@ An LLM may create a todo on its own initiative only with status
 `inflight`, may edit only inflight todos, and only surgically. Every other
 todo write happens on the user's explicit instruction. The status values
 accepted everywhere are `active`, `inflight`, `done`, `blocked`, `archive`,
-`failed`; a parked activity is `blocked`, a finished one `done`.
+`failed`; a parked activity is `blocked`, and a finished one is set `done`,
+which deletes it (§ Closing).
 
 ## Files
 

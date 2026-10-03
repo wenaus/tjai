@@ -1,8 +1,9 @@
-"""Pre-save signal to snapshot entry state before modification."""
+"""Entry save signals: the version snapshot before a change, and an activity closed as done retired."""
 import contextvars
+import time
 from contextlib import contextmanager
 
-from django.db.models.signals import pre_save
+from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 
 from .models import Entry, create_entry_version
@@ -60,3 +61,28 @@ def snapshot_entry_before_save(sender, instance, **kwargs):
     # web_ui: fall through to create version (manual save)
 
     create_entry_version(old, changed_by)
+
+
+@receiver(pre_save, sender=Entry)
+def note_status_before_save(sender, instance, **kwargs):
+    """Keep a todo's stored status on the instance, so the save can tell an inflight activity being closed."""
+    if instance.kind != 'todo' or not instance.pk or instance.status != 'done':
+        return
+    instance._status_was = Entry.objects.filter(pk=instance.pk).values_list('status', flat=True).first()
+
+
+@receiver(post_save, sender=Entry)
+def retire_closed_activity(sender, instance, created, **kwargs):
+    """An activity closed as done is deleted (softly) in the same write: inflight is the transient record of current
+    work, and what was done is recorded in git and the docs (docs/inflight.md § Closing). An activity is a todo marked
+    as one (`data.activity`) or one that was inflight until this save; a parked one (blocked) stays."""
+    from .inflight import RETIRE_CLOSED, ACTIVITY_FLAG, STATUS
+    if not RETIRE_CLOSED or created or instance.kind != 'todo' or instance.status != 'done' or instance.deleted_at:
+        return
+    data = instance.data if isinstance(instance.data, dict) else {}
+    if not (data.get(ACTIVITY_FLAG) or getattr(instance, '_status_was', None) == STATUS):
+        return
+    now = time.time()
+    Entry.objects.filter(pk=instance.pk, deleted_at__isnull=True).update(
+        deleted_at=now, timestamp_modified=now, is_dirty=1)
+    instance.deleted_at = now
