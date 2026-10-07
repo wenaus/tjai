@@ -12,6 +12,7 @@ Runs via cron; the page's data endpoint just reads the JSON file.
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime, timedelta
@@ -111,10 +112,60 @@ CROSS_REPO_MOVE_COMMITS = {
 }
 
 
-def _excluded(path):
+# Content data and third-party material, by explicit path (tjrepo-relative
+# globs: '*' within one directory, '**' across directories). JSON is not
+# excluded wholesale: these are the paths where it is world content —
+# published component families, houses, finish catalogs, avatar and motion
+# libraries, asset manifests, storyboards — or generated inventories. The
+# generators that write them (Python, Blender), application code, tests and
+# docs stay counted.
+DATA_PATHS = {
+    'tjrepo': (
+        'etaverse/world/families/*.json',
+        'etaverse/world/houses/*.json',
+        'etaverse/world/*.json',  # finishes, bed_finishes, coverings, wall_panel_finishes
+        'etaverse/scripts/families/**/*.json',
+        'etaverse/scripts/thunderbird_landing_profile.json',
+        'etaverse/frontend/src/shared/avatars/**/*.json',
+        'etaverse/frontend/src/shared/spatial/celestial-layout.json',
+        'etaverse/assets/**/*.json',
+        'etaverse/assets/storyboards/**',
+        'etaverse/assets/bento/sl/*.xml',  # imported Second Life data
+        'etaverse/assets/bento/vendor/**',  # third-party code and data
+        'etaverse/docs/history/*.json',  # generated change inventories
+    ),
+}
+# Project build configuration is authored, never content data.
+KEEP_NAMES = ('package.json', 'tsconfig.json')
+
+
+def _glob_regex(pattern):
+    out = ''
+    i = 0
+    while i < len(pattern):
+        if pattern.startswith('**/', i):
+            out, i = out + '(?:.*/)?', i + 3
+        elif pattern.startswith('**', i):
+            out, i = out + '.*', i + 2
+        elif pattern[i] == '*':
+            out, i = out + '[^/]*', i + 1
+        else:
+            out, i = out + re.escape(pattern[i]), i + 1
+    return re.compile(out + r'\Z')
+
+
+DATA_REGEXES = {repo: tuple(_glob_regex(p) for p in patterns)
+                for repo, patterns in DATA_PATHS.items()}
+
+
+def _excluded(path, repo_name=''):
     if any(part in path for part in EXCLUDE_PARTS):
         return True
-    return path.endswith(EXCLUDE_SUFFIXES)
+    if path.endswith(EXCLUDE_SUFFIXES):
+        return True
+    if path.rsplit('/', 1)[-1] in KEEP_NAMES:
+        return False
+    return any(rx.match(path) for rx in DATA_REGEXES.get(repo_name, ()))
 
 
 def _project_for(repo_name, path):
@@ -205,7 +256,7 @@ def collect():
                     path = (pre + mid.split('=>')[1].strip() + post).replace('//', '/')
                 else:
                     path = path.split('=>')[1].strip()
-            if _excluded(path):
+            if _excluded(path, repo.name):
                 continue
             proj = _project_for(repo.name, path)
             if proj is not None:

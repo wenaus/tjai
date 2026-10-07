@@ -54,6 +54,36 @@ its weekly lines contribute to the AI category.
   `git_weekly_loc_data` serves the file; the stacked-bar chart below the
   grid renders it.
 
+### What the weekly lines count
+
+The metric is gross lines added: every added line in a counted file, with
+in-repository renames detected (`-M`) so a move counts near zero. It is not
+net source growth; deleted lines are not subtracted. Excluded:
+
+- **Generated and vendored build output** by path fragment (`node_modules/`,
+  `dist/`, `.venv/`, …) and suffix (`.min.js`, `package-lock.json`, `.lock`,
+  `.dae`, `.bvh`, `.dbml`); snapshot copies of own code (`-old.`, `_broken.`,
+  `SUPERSEDED`).
+- **World content data and third-party material**, by explicit tjrepo path
+  (`DATA_PATHS`): Etaverse's published component families
+  (`etaverse/world/families/*.json`), houses (`world/houses/*.json`), finish
+  and covering catalogs (`world/*.json`), family generator data
+  (`scripts/families/**/*.json`), avatar and motion libraries
+  (`frontend/src/shared/avatars/**/*.json`), the celestial layout, asset
+  manifests and catalogs (`assets/**/*.json`), storyboards
+  (`assets/storyboards/**`), imported Second Life XML (`assets/bento/sl/*.xml`),
+  the vendored LSL optimizer (`assets/bento/vendor/**`, code as well as data)
+  and generated change inventories (`docs/history/*.json`). JSON is excluded
+  only at these paths; `package.json` and `tsconfig.json` always count. The
+  generators that write the content (Python, Blender), application code,
+  tests and documentation count.
+- **Archives and staging directories** in tjrepo (`EXCLUDE_TJREPO_TOP`), the
+  enumerated cross-repository moves, and any single commit adding more than
+  100,000 counted lines (a bulk import, dropped whole).
+
+A new content location is added to `DATA_PATHS`; the next run recomputes every
+week from git history, so the whole chart follows the rule.
+
 ## Dates
 
 All page dates are Eastern, tjai's canonical timezone. The grid's current
