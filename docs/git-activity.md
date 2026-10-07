@@ -70,13 +70,14 @@ net source growth; deleted lines are not subtracted. Excluded:
   and covering catalogs (`world/*.json`), family generator data
   (`scripts/families/**/*.json`), avatar and motion libraries
   (`frontend/src/shared/avatars/**/*.json`), the celestial layout, asset
-  manifests and catalogs (`assets/**/*.json`), storyboards
-  (`assets/storyboards/**`), imported Second Life XML (`assets/bento/sl/*.xml`),
+  manifests and catalogs (`assets/**/*.json`), imported Second Life XML
+  (`assets/bento/sl/*.xml`),
   the vendored LSL optimizer (`assets/bento/vendor/**`, code as well as data)
   and generated change inventories (`docs/history/*.json`). JSON is excluded
   only at these paths; `package.json` and `tsconfig.json` always count. The
   generators that write the content (Python, Blender), application code,
-  tests and documentation count.
+  tests, documentation and authored storyboards (`assets/storyboards/*.md`)
+  count.
 - **Archives and staging directories** in tjrepo (`EXCLUDE_TJREPO_TOP`), the
   enumerated cross-repository moves, and any single commit adding more than
   100,000 counted lines (a bulk import, dropped whole).

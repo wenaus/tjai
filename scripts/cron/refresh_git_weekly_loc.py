@@ -116,9 +116,9 @@ CROSS_REPO_MOVE_COMMITS = {
 # globs: '*' within one directory, '**' across directories). JSON is not
 # excluded wholesale: these are the paths where it is world content —
 # published component families, houses, finish catalogs, avatar and motion
-# libraries, asset manifests, storyboards — or generated inventories. The
-# generators that write them (Python, Blender), application code, tests and
-# docs stay counted.
+# libraries, asset manifests — or generated inventories. The generators that
+# write them (Python, Blender), application code, tests, docs and authored
+# storyboards stay counted.
 DATA_PATHS = {
     'tjrepo': (
         'etaverse/world/families/*.json',
@@ -129,7 +129,6 @@ DATA_PATHS = {
         'etaverse/frontend/src/shared/avatars/**/*.json',
         'etaverse/frontend/src/shared/spatial/celestial-layout.json',
         'etaverse/assets/**/*.json',
-        'etaverse/assets/storyboards/**',
         'etaverse/assets/bento/sl/*.xml',  # imported Second Life data
         'etaverse/assets/bento/vendor/**',  # third-party code and data
         'etaverse/docs/history/*.json',  # generated change inventories
