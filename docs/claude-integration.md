@@ -124,6 +124,9 @@ any machine can load recent dialog context.
   → Extracts new assistant messages from the JSONL transcript
     (resuming from a per-transcript byte offset)
   → HTTP POST /api/dialog → creates tjai entry with role='assistant'
+
+[Session ends] → SessionEnd hook → record.py
+  → Uploads any final response the Stop hook ran too early to read
 ```
 
 The session-start fetch merges turns recorded under this machine's location
@@ -158,7 +161,11 @@ The Claude recorder serializes overlapping hooks per transcript, checkpoints
 after successful uploads, and leaves partial JSONL records for the next hook.
 A failed upload leaves its record pending. PreToolUse uploads narration before
 a long tool call; PostToolUse catches records flushed during the call; Stop
-uploads the final response. These command hooks run asynchronously. The
+uploads the final response. Stop can fire before Claude Code writes that
+response to the transcript; the next hook then uploads it, and after a
+session's last turn that hook is SessionEnd. These command hooks run
+asynchronously, except SessionEnd, which runs synchronously so its upload
+finishes before Claude Code exits. The
 [Claude hook reference](https://code.claude.com/docs/en/hooks) describes their
 lifecycle and settings.
 
@@ -181,8 +188,9 @@ Located in `computers/common/claude-hooks/`:
   authoritative local date in America/New_York (overriding Claude Code's
   UTC-derived date context), a mandatory session-start bootstrap directive
   (see below), and dialog history.
-- `record.py` — UserPromptSubmit, PreToolUse, PostToolUse and Stop (async).
-  Records prompts, during-turn updates and final responses.
+- `record.py` — UserPromptSubmit, PreToolUse, PostToolUse and Stop (async),
+  and SessionEnd (synchronous). Records prompts, during-turn updates and
+  final responses.
 - `SYSPROMPT.md` — Static context injected at session start.
 - `stop-phrase-guard.sh` — Stop hook that blocks the assistant from stopping
   when its last message matches ownership-dodging, session-quitting, or
