@@ -416,7 +416,45 @@ def _clean_json(raw):
     raise json.JSONDecodeError("Could not repair JSON", s, 0)
 
 
-def parse_response(response_text):
+_MD_TIME = r'(\d{2}:\d{2}(?::\d{2})?)'
+
+
+def _scores_from_markdown(md, date_str):
+    """Recover the scored events from an Assessment Log written without
+    the JSON block. On 2026-10-08 DeepSeek answered the day's largest call
+    with the markdown alone, every score on its own line in the form
+    `**Score: +2** — "precis". Cumulative **+3**.` under an event line
+    that opens with the time (`**13:05:15** \`{uuid}\``), or with the
+    time on the Score line itself. The cumulative is recomputed at the
+    merge, so only dt, score and precis are taken.
+    """
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    day = datetime.strptime(date_str, '%Y-%m-%d').replace(tzinfo=ZoneInfo('America/New_York'))
+    offset = day.strftime('%z')
+    offset = f"{offset[:3]}:{offset[3:]}"
+    scores, last_time = [], None
+    for line in md.splitlines():
+        t = re.match(r'\s*-\s+\*\*' + _MD_TIME, line)
+        if t:
+            last_time = t.group(1)
+        m = re.search(r'\*\*Score:\s*([+-]?\d+)\*\*(.*)', line)
+        if not m:
+            continue
+        score, tail = int(m.group(1)), m.group(2)
+        own = re.match(r'\s*\(' + _MD_TIME + r'\)', tail)
+        when = own.group(1) if own else last_time
+        if not when:
+            continue
+        if len(when) == 5:
+            when += ':00'
+        precis = re.search(r'["\u201c](.*?)["\u201d]', tail)
+        scores.append({'dt': f'{date_str}T{when}{offset}', 'score': score,
+                       'precis': precis.group(1) if precis else tail.strip(' —-.')})
+    return scores
+
+
+def parse_response(response_text, date_str=None):
     """Parse LLM response to extract scores JSON and markdown content.
 
     The closing ``` of the JSON fence is not reliably emitted: on
@@ -425,13 +463,26 @@ def parse_response(response_text):
     required both fences discarded a whole valid assessment. The JSON region
     therefore ends at whichever comes first — a closing fence or the
     markdown's first heading — and neither fence is required.
+
+    A response with no JSON block at all is read from its markdown log
+    (`_scores_from_markdown`) when `date_str` is given and the log carries
+    Score lines; a response with neither raises.
     """
     open_match = re.search(r'```json\s*\n', response_text)
     if open_match:
         rest = response_text[open_match.end():]
     else:
-        # No fence at all: the object may open the response bare.
+        # No fence at all: the object may open the response bare, or the
+        # scores may exist only as the log's Score lines.
         brace = response_text.find('{')
+        if date_str and (brace < 0 or not re.match(r'\{\s*"', response_text[brace:])):
+            scores = _scores_from_markdown(response_text, date_str)
+            if scores:
+                logger.warning("no JSON block in response; %d scored events read from the markdown log",
+                               len(scores))
+                header = re.search(r'^#\s', response_text, re.MULTILINE)
+                content = response_text[header.start():].strip() if header else response_text.strip()
+                return {'scores': scores, 'scored_events': len(scores), 'date': date_str}, content
         if brace < 0:
             raise RuntimeError("No JSON object found in response")
         rest = response_text[brace:]
@@ -503,7 +554,19 @@ def assess_part(date_str, part, n, pack, from_saved):
             response = _call_with_retry(prompt, f"part {part}/{n}")
             raw_path.write_text(response, encoding='utf-8')
             logger.info("Part %d/%d: saved raw response to %s (%d chars)", part, n, raw_path, len(response))
-        scores_data, content = parse_response(response)
+        try:
+            scores_data, content = parse_response(response, date_str)
+        except (json.JSONDecodeError, RuntimeError) as e:
+            # The response arrived but not in the asked form. A live call is
+            # asked once more; the first answer is kept beside it.
+            if from_saved:
+                raise
+            logger.error("Part %d/%d: response not in the asked form (%s); asking once more", part, n, e)
+            raw_path.rename(raw_path.with_name(raw_path.stem + '-first.txt'))
+            response = _call_model(prompt)
+            raw_path.write_text(response, encoding='utf-8')
+            logger.info("Part %d/%d: saved raw response to %s (%d chars)", part, n, raw_path, len(response))
+            scores_data, content = parse_response(response, date_str)
         rec['scores'] = scores_data.get('scores', [])
         rec['content'] = content
         rec['ok'] = True
