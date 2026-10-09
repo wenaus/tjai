@@ -81,7 +81,7 @@ def activity_index(context, read=call):
         slug = entry.get("entry_id") or entry["id"]
         rows.append(f"- {slug}: {entry['title']} "
                     f"({entry.get('context') or 'general'}; {entry['status']}; "
-                    f"{entry['open']} open" + (f", {entry['done']} done" if 'done' in entry else "") + ")")
+                    f"{entry['open']} open)")
     return "\n".join(rows) or "No inflight activities in this context."
 
 
