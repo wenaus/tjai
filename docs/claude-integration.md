@@ -125,6 +125,9 @@ any machine can load recent dialog context.
     (resuming from a per-transcript byte offset)
   → HTTP POST /api/dialog → creates tjai entry with role='assistant'
 
+[API error ends the turn] → StopFailure hook → record.py
+  → Uploads the error reply (500, overloaded, prompt too long, spend limit)
+
 [Session ends] → SessionEnd hook → record.py
   → Uploads any final response the Stop hook ran too early to read
 ```
@@ -188,9 +191,9 @@ Located in `computers/common/claude-hooks/`:
   authoritative local date in America/New_York (overriding Claude Code's
   UTC-derived date context), a mandatory session-start bootstrap directive
   (see below), and dialog history.
-- `record.py` — UserPromptSubmit, PreToolUse, PostToolUse and Stop (async),
-  and SessionEnd (synchronous). Records prompts, during-turn updates and
-  final responses.
+- `record.py` — UserPromptSubmit, PreToolUse, PostToolUse, Stop and
+  StopFailure (async), and SessionEnd (synchronous). Records prompts,
+  during-turn updates, final responses and API error replies.
 - `SYSPROMPT.md` — Static context injected at session start.
 - `stop-phrase-guard.sh` — Stop hook that blocks the assistant from stopping
   when its last message matches ownership-dodging, session-quitting, or
