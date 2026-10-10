@@ -5504,108 +5504,11 @@ def api_dialog(request):
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
-    content = data.get("content", "").strip()
-    role = data.get("role", "").strip()
-
-    if not content:
-        return JsonResponse({"error": "content is required"}, status=400)
-    if role not in ("user", "assistant"):
-        return JsonResponse({"error": "role must be 'user' or 'assistant'"}, status=400)
-
-    now = time.time()
-    recorded_at = now
-    source_timestamp = data.get("timestamp")
-    if source_timestamp is not None:
-        try:
-            stamp = datetime.fromisoformat(source_timestamp.replace('Z', '+00:00'))
-            if stamp.utcoffset() is None:
-                raise ValueError("timestamp requires a timezone")
-            recorded_at = stamp.timestamp()
-        except (ValueError, TypeError, AttributeError, OverflowError) as e:
-            return JsonResponse({"error": f"invalid timestamp: {e}"}, status=400)
-    source_id = data.get("source_id") or ""
-    if not isinstance(source_id, str) or len(source_id) > 512:
-        return JsonResponse({"error": "source_id must be a string of at most 512 characters"}, status=400)
-    if source_id and not all(data.get(k) for k in ("hostname", "client", "session_id")):
-        return JsonResponse({"error": "source_id requires hostname, client and session_id"}, status=400)
-    if role == "user":
-        from .comms_dialog import recorded_native_peer
-        peer_entry = recorded_native_peer(content, data, recorded_at)
-        if peer_entry:
-            return JsonResponse({"status": "ok", "entry_id": peer_entry.id})
-    entry_data = {
-        "role": role,
-        "client": data.get("client"),
-        "model": data.get("model"),
-        "model_provider": data.get("model_provider"),
-        "reasoning_effort": data.get("reasoning_effort"),
-        "session_id": data.get("session_id"),
-        "project_path": data.get("project_path"),
-        "hostname": data.get("hostname"),
-    }
-    if source_id:
-        entry_data["source_id"] = source_id
-    if source_timestamp is not None:
-        entry_data["source_timestamp"] = source_timestamp
-    if data.get("content_type"):
-        entry_data["content_type"] = data["content_type"]
-
-    extra_tags = []
-
-    # Detect research subagent products
-    if content.startswith('<task-notification>'):
-        summary_m = re.search(r'<summary>(.*?)</summary>', content, re.DOTALL)
-        if summary_m:
-            summary_text = summary_m.group(1).strip()
-            active_uuid = SysConfig.objects.filter(
-                key='agent_research-agent_entry'
-            ).values_list('value', flat=True).first()
-            if active_uuid:
-                source = Entry.objects.filter(
-                    id=active_uuid, deleted_at__isnull=True
-                ).first()
-                if source:
-                    source_eid = (source.data or {}).get('entry_id', '')
-                    entry_data['source_entry_id'] = source_eid
-                    entry_data['source_uuid'] = active_uuid
-                    slug = re.sub(r'[^a-z0-9]+', '-',
-                                  summary_text.lower().replace('agent ', '')
-                                  .replace('"', '').replace('completed', '')
-                                  .strip()).strip('-')[:40]
-                    if source_eid and slug:
-                        entry_data['entry_id'] = f'{source_eid}:{slug}'
-                    extra_tags.append('research-subagent')
-
-    Context.objects.get_or_create(
-        name=CURRENT_DIALOG_CONTEXT,
-        defaults={
-            'title': 'Co-development dialog',
-            'description': 'AI pair-programming and co-development dialog across clients',
-            'timestamp_created': now,
-            'timestamp_modified': now,
-        },
-    )
-    # Stable primary key makes retries (including a lost HTTP response) and
-    # overlapping async hooks idempotent without a content/time dedup window.
-    identity = json.dumps(["tjai-dialog-v1", data.get("hostname"), data.get("client"),
-                           data.get("session_id"), role, source_id])
-    entry_id = str(uuid.uuid5(uuid.NAMESPACE_URL, identity) if source_id else uuid.uuid7())
-    with transaction.atomic():
-        entry, created = Entry.objects.get_or_create(id=entry_id, defaults={
-            "content": content,
-            "kind": "memory",
-            "context_id": CURRENT_DIALOG_CONTEXT,
-            "timestamp_created": recorded_at,
-            "timestamp_modified": now,
-            "is_dirty": 0,
-            "data": entry_data,
-        })
-        if created:
-            Tag.objects.create(tag_name=DIALOG_TAG, entry=entry)
-            for tag in extra_tags:
-                Tag.objects.create(tag_name=tag, entry=entry)
-
-    return JsonResponse({"status": "ok", "entry_id": entry.id})
+    from .dialog import DialogValidationError, record_dialog
+    try:
+        return JsonResponse(record_dialog(data))
+    except DialogValidationError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
 
 
 @csrf_exempt

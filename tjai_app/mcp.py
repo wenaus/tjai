@@ -14,6 +14,7 @@ Available tools:
     get_todo_bangs    - Get the user's `!!!` bang-marked todo lines (the !!! page)
     get_memories      - Get memory entries. Call unfiltered to see general activity
     get_bookmarks     - Get saved bookmark entries (URLs)
+    record_dialog     - Record one visible user or assistant turn with retry identity
     get_dialog        - Get recorded human-AI dialog turns for a host/time range
     get_logs          - Read application log (AppLog) rows — agent/script/server logs
     get_capcom        - Read the curated cross-system Capcom notice feed
@@ -67,6 +68,10 @@ page returns fewer than the requested limit or the requested window is complete.
 """
 
 import json
+from typing import Annotated, Literal
+
+from pydantic import Field
+from mcp.types import ToolAnnotations
 
 from asgiref.sync import sync_to_async
 from django.conf import settings
@@ -74,7 +79,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
-from . import comms, services
+from . import comms, dialog, services
 from django.core.exceptions import ObjectDoesNotExist
 from .services import DEFAULT_MAX_CONTENT_LENGTH
 
@@ -664,6 +669,66 @@ async def get_memories(
         end_date=end_date, max_content_length=max_content_length,
     )
     return _json_text(result)
+
+
+@mcp.tool(annotations=ToolAnnotations(
+    readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False,
+))
+async def record_dialog(
+    content: str,
+    role: Literal["user", "assistant"],
+    client: Annotated[str, Field(min_length=1, pattern=r"\S")],
+    hostname: Annotated[str, Field(min_length=1, pattern=r"\S")],
+    session_id: Annotated[str, Field(min_length=1, pattern=r"\S")],
+    source_id: Annotated[str, Field(min_length=1, max_length=512, pattern=r"\S")],
+    timestamp: str,
+    model: str | None = None,
+    model_provider: str | None = None,
+    reasoning_effort: str | None = None,
+    project_path: str | None = None,
+) -> dict:
+    """Record one user-visible user or assistant message in TJAI dialog memory.
+
+    Use only when the user has authorized recording the supplied content.
+    Never submit hidden reasoning, system/developer instructions, tool calls,
+    tool results, or other internal content. This records one message; it does
+    not enable automatic recording or upload earlier conversation history.
+
+    Args:
+        content: Complete visible message text, without truncation.
+        role: Speaker, user or assistant.
+        client: Source application, for example chatgpt.
+        hostname: Source host/location label; cloud clients use a stable label.
+        session_id: Stable source conversation/session identifier.
+        source_id: Stable message/block identifier, at most 512 characters.
+                   Reuse it unchanged when retrying the same message. Separate
+                   messages require distinct IDs even when their text matches.
+        timestamp: Original ISO timestamp with timezone, e.g. 2026-10-10T09:00:00Z.
+                   Supply the actual message time; do not invent historical times.
+        model: Optional model identifier, when known.
+        model_provider: Optional provider, when known.
+        reasoning_effort: Optional configured effort label, never reasoning text.
+        project_path: Optional source project directory, when applicable.
+
+    Uses the same ingestion as POST /tjai/api/dialog: co-code context, ccdialog
+    tag, server-only storage and preserved creation time. Retry identity is
+    hostname/client/session_id/role/source_id; retries return the first entry
+    without replacing its content or timestamps. Authentication is enforced
+    by the existing MCP endpoint, including OAuth token resource/scope checks.
+
+    Returns:
+        {"status": "ok", "entry_id": "..."}, or {"error": "..."} for invalid input.
+    """
+    try:
+        return await sync_to_async(dialog.record_dialog)({
+            "content": content, "role": role, "client": client,
+            "hostname": hostname, "session_id": session_id, "source_id": source_id,
+            "timestamp": timestamp, "model": model, "model_provider": model_provider,
+            "reasoning_effort": reasoning_effort, "project_path": project_path,
+            "content_type": "text",
+        })
+    except dialog.DialogValidationError as exc:
+        return {"error": str(exc)}
 
 
 @mcp.tool()

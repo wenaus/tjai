@@ -185,6 +185,16 @@ Recovery reads only thinking blocks and keeps a separate
 make overlap with normal recording safe. This repairs the dialog and future
 assessment input; it does not rerun existing assessments.
 
+### MCP dialog recording
+
+Cloud clients may record an authorized visible message with `record_dialog`
+on the OAuth MCP endpoint. It shares the REST hook ingestion function and
+requires the source message ID, session, client, host label and timezone-aware
+timestamp. Only user-visible user/assistant text may be submitted through this
+tool. It does not activate automatic recording or upload history. The existing
+REST hooks retain their behavior. See [MCP recording dialog](mcp.md#recording-dialog)
+for the complete argument and retry contract.
+
 ### Hook Scripts
 
 Located in `computers/common/claude-hooks/`:

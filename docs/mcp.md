@@ -52,7 +52,7 @@ able to consume the gunicorn workers that serve the web UI and REST API.
 
 ## Tools
 
-36 tools are registered, defined in `tjai_app/mcp.py`:
+Tools are registered in `tjai_app/mcp.py`:
 
 - Read: `get_server_instructions`, `get_calendar`, `get_profile`,
   `get_ai_guidance`, `list_contexts`, `get_todos`, `get_todo_bangs`,
@@ -60,7 +60,7 @@ able to consume the gunicorn workers that serve the web UI and REST API.
   `get_dialog`, `get_logs`, `get_capcom`, `get_bookmarks`, `search_entries`,
   `get_named_entries`, `get_entry`, `get_entry_by_entry_id`, `get_goal`,
   `get_relations`, `get_relation_graph`, `get_entry_versions`
-- Write: `create_entry`, `edit_entry`, `edit_entry_metadata`,
+- Write: `record_dialog`, `create_entry`, `edit_entry`, `edit_entry_metadata`,
   `replace_entry_content`, `replace_text_in_entry`, `inflight_item`,
   `replace_section_in_entry`, `append_entry_content`, `copy_calendar_entry`,
   `change_entry_kind`, `delete_entry`, `create_goal`, `create_relation`,
@@ -70,6 +70,52 @@ able to consume the gunicorn workers that serve the web UI and REST API.
 The startup tools `get_profile` and `get_ai_guidance` return size-bounded
 pages with a 12,000-character budget per response; clients follow
 `next_offset` until `complete` is true.
+
+### Recording dialog
+
+`record_dialog` records one authorized, user-visible user or assistant message.
+Both MCP endpoints expose it through the same registry. The OAuth endpoint
+retains its existing access-token, resource and scope checks; the fixed-token
+endpoint retains its bearer check. The tool accepts no account, credential,
+context or tag override.
+
+Required arguments are `content`, `role` (`user` or `assistant`), `client`,
+`hostname`, `session_id`, `source_id`, and `timestamp`. Identity fields must be
+nonblank strings; `source_id` is at most 512 characters. `timestamp` is the
+original message time in ISO format with a timezone. Optional provenance fields
+are `model`, `model_provider`, `reasoning_effort` (a configuration label), and
+`project_path`. Unknown optional metadata should be omitted.
+
+```json
+{
+  "content": "Synthetic visible assistant message.",
+  "role": "assistant",
+  "client": "chatgpt",
+  "hostname": "chatgpt-cloud",
+  "session_id": "example-conversation",
+  "source_id": "example-message",
+  "timestamp": "2026-10-10T09:00:00Z"
+}
+```
+
+The shared `tjai_app/dialog.py::record_dialog` function also serves
+`POST /tjai/api/dialog`. It preserves `kind=memory`, the `co-code` context,
+`ccdialog` tag, `is_dirty=0`, metadata, original creation time and ingestion
+modification time. A stable UUID uses hostname, client, session, role and
+source ID. A retry returns the original entry ID without changing its content,
+timestamps or tags; equal text with distinct source IDs creates distinct turns.
+The response is `{"status": "ok", "entry_id": "..."}`. Invalid inputs return an
+error; the REST endpoint uses HTTP 400. Existing hooks can continue omitting
+source IDs or timestamps and retain their metadata and attribution behavior.
+
+The MCP tool records text only. Hidden reasoning, system/developer instructions,
+tool calls and tool results must never be submitted. Adding the tool does not
+enable standing recording or authorize a history upload. Clients must obtain
+recording authorization and use actual source IDs and timestamps.
+
+After an authorized deployment using `deploy/update_from_dev.sh`, refresh the
+cloud connector's tool catalog and confirm `record_dialog` appears in
+`tools/list`. No migration or credential change is needed for this tool.
 
 ### Compact startup reads
 
