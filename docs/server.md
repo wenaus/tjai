@@ -55,6 +55,7 @@ cd /home/admin/github/tjai
 |------|-------------|
 | `/tjai/` | Public landing page |
 | `/tjai/login/` | Authentication |
+| `/tjai/oauth-approve/<request>/` | Approve or deny an MCP client's OAuth sign-in; staff only; see [MCP Server](mcp.md#oauth) |
 | `/tjai/dashboard/` | Dashboard — entry list, filtering by kind/context/tags/status; see [Dashboard](dashboard.md) |
 | `/tjai/entry/` | Entry detail with human-readable data display |
 | `/tjai/diary/` | Diary page |

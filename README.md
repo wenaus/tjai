@@ -57,7 +57,7 @@ with `deploy/update_from_dev.sh`.
 | [Todo Bangs](docs/todo-bangs.md) | The `!!!` in-flow todo marker: extraction rule and index, dialog exclusions, the `!!!` page, and the `get_todo_bangs` MCP tool |
 | [Inflight Todos](docs/inflight.md) | Activities in progress as todos with status `inflight`: body shape (Live/Done/Refs), live view with per-item actions and auto-refresh, Capcom shelf, three-way editor merge, LLM rules |
 | [Server & Deployment](docs/server.md) | Production environment, deploy, endpoints, logging, health, backups |
-| [MCP Server](docs/mcp.md) | Standalone MCP ASGI service: transport policy, bearer auth, Apache routing, deployment; related read-only Postgres MCP |
+| [MCP Server](docs/mcp.md) | Standalone MCP ASGI service: transport policy, bearer auth, OAuth endpoint for ChatGPT, Apache routing, deployment; related read-only Postgres MCP |
 | [LLM Communications](docs/llm-communications.md) | User guide and current contract: AI Hi, shared-work coordination, MCP messaging, delivery recovery, dialog and assessment |
 | [Distributed LLM Communications Plan](docs/llm-communications-plan.md) | Approved design and rollout evidence; deployment locking remains planned |
 | [Action Agent](docs/action-agent.md) | Scheduled task daemon, execution pipeline, action entry schema |
@@ -72,7 +72,7 @@ with `deploy/update_from_dev.sh`.
 | [Indico Access](docs/indico-access.md) | Authenticated CERN Indico fetching via a logged-in Chrome session |
 | [Browser Offline Cache](docs/offline-cache.md) | Research and generic browser-side offline caching for tjai pages and APIs |
 | [Remote Worker Pipeline](docs/remote-workers.md) | Long-poll protocol for offloading inference (e.g. gemma) to a worker on another machine — capability whitelist, claim lifecycle, display contract, troubleshooting |
-| [Claude Integration](docs/claude-integration.md) | MCP setup, Claude Code settings, dialog memory, Claude.ai, OAuth |
+| [Claude Integration](docs/claude-integration.md) | MCP setup, Claude Code settings, dialog memory |
 | [Telegram Bot](docs/telegram.md) | Voice/text assistant, setup, voice commands, Mini App |
 | [Add-ons: Gmail & Chrome](docs/addons.md) | Gmail calendar add-on, Chrome bookmark extension |
 | [Bulk Import](docs/bulk-import.md) | Importing bookmarks from external sources |

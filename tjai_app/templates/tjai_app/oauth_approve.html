@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" type="image/svg+xml" href="/tjai/static/tjai/favicon.svg">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TJAI Sign-in</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html, body {
+      height: 100%;
+    }
+    body {
+      font-family: 'Rajdhani', sans-serif;
+      background: linear-gradient(to top,
+        #966342 0%,
+        #cb7e58 15%,
+        #da8d63 30%,
+        #d08975 45%,
+        #c592a1 55%,
+        #a892b8 70%,
+        #8e88b0 82%,
+        #75779e 92%,
+        #656589 100%
+      );
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 16px 10vh;
+    }
+    .approve-box {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 3rem;
+      border-radius: 8px;
+      width: 380px;
+      max-width: 100%;
+      backdrop-filter: blur(10px);
+      color: #f0e0d0;
+      font-size: 1.15rem;
+      line-height: 1.4;
+    }
+    .approve-title {
+      font-size: 3rem;
+      font-weight: 500;
+      color: #a83820;
+      text-align: center;
+      margin-bottom: 2rem;
+      text-shadow:
+        0 0 30px rgba(180, 60, 35, 0.5),
+        0 0 60px rgba(180, 60, 35, 0.3);
+    }
+    p {
+      margin-bottom: 1.25rem;
+    }
+    .detail {
+      color: #e0d0c0;
+      font-size: 1rem;
+    }
+    .buttons {
+      display: flex;
+      gap: 1rem;
+    }
+    button {
+      flex: 1;
+      padding: 0.75rem;
+      font-size: 1.1rem;
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 500;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .approve {
+      background: #a83820;
+    }
+    .approve:hover {
+      background: #c04828;
+    }
+    .deny {
+      background: rgba(0, 0, 0, 0.35);
+    }
+    .deny:hover {
+      background: rgba(0, 0, 0, 0.5);
+    }
+    a {
+      color: #f0e0d0;
+    }
+  </style>
+</head>
+<body>
+  <div class="approve-box">
+    <div class="approve-title">TJAI</div>
+    {% if expired %}
+    <p>This sign-in request has expired or was already answered. Start the connection again from the client.</p>
+    {% elif not_staff %}
+    <p><strong>{{ client_name }}</strong> asks to use tjai.</p>
+    <p class="detail">Only tjai's admin account can approve it, and you are signed in as {{ user.username }}. <a href="{% url 'logout' %}">Sign out</a>, sign in as the admin, and start the connection again.</p>
+    {% else %}
+    <p><strong>{{ client_name }}</strong> asks to use tjai's tools with your access.</p>
+    <p class="detail">On approval it returns to {{ callback_host }} and can read and write entries while it stays connected.</p>
+    <form method="post">
+      {% csrf_token %}
+      <div class="buttons">
+        <button type="submit" name="decision" value="approve" class="approve">Approve</button>
+        <button type="submit" name="decision" value="deny" class="deny">Deny</button>
+      </div>
+    </form>
+    {% endif %}
+  </div>
+</body>
+</html>

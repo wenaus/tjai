@@ -14,8 +14,9 @@ Requests without a valid token get HTTP 401/403 — `/tjai/mcp/` is not open.
 MCP is operated as finite JSON POST request/response only. Server-pushed MCP
 event streams are intentionally unsupported.
 
-claude.ai connectors are NOT supported. The endpoint is for personal MCP
-clients (Claude Code, custom tools) only.
+The endpoint is for personal MCP clients (Claude Code, custom tools). Clients
+that can only sign in with OAuth, such as ChatGPT's connectors, use
+`https://etaverse.com/tjai/mcp-oauth`; see `docs/mcp.md` § OAuth.
 
 ### Token rotation
 

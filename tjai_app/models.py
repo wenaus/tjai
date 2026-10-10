@@ -1,6 +1,7 @@
 import logging
 
 from .comms_models import LLMDelivery, LLMMessage, LLMSession  # noqa: F401
+from .oauth_models import OAuthClient, OAuthGrant, OAuthToken  # noqa: F401
 
 from django.contrib.postgres.search import SearchVectorField
 from django.db import connection, models, transaction

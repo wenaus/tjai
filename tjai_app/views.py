@@ -353,6 +353,7 @@ from django.conf import settings as django_settings
 from .api_auth import rest_api_auth_required
 from .models import AppLog, Context, Entry, KozyChat, Relation, RssItem, Tag, TagStats, SubNote, Machine, SysConfig, WrangleWorker
 from .llm_usage import summarize_codex_usage
+from . import oauth
 
 
 AGENT_GRACE_SECONDS = 300  # 5 min — never touch an agent younger than this
@@ -1618,6 +1619,23 @@ def logout_view(request):
     """Log out the user and redirect to login."""
     logout(request)
     return redirect('login')
+
+
+@login_required
+def oauth_approve(request, request_id):
+    """Approve or deny an MCP client's OAuth sign-in (docs/mcp.md § OAuth)."""
+    grant = oauth.pending_grant(request_id)
+    if grant is None:
+        return render(request, 'tjai_app/oauth_approve.html', {'expired': True}, status=404)
+    context = oauth.describe(grant)
+    if not request.user.is_staff:
+        return render(request, 'tjai_app/oauth_approve.html', {**context, 'not_staff': True}, status=403)
+    if request.method == 'POST':
+        url = oauth.decide(grant, request.user, approve=request.POST.get('decision') == 'approve')
+        if url is None:
+            return render(request, 'tjai_app/oauth_approve.html', {'expired': True}, status=404)
+        return redirect(url)
+    return render(request, 'tjai_app/oauth_approve.html', context)
 
 
 @login_required

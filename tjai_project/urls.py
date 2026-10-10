@@ -37,6 +37,7 @@ urlpatterns = [
     path("auto-login", views.auto_login, name="auto_login"),
     path("login/", views.login_view, name="login"),
     path("logout/", views.logout_view, name="logout"),
+    path("oauth-approve/<str:request_id>/", views.oauth_approve, name="oauth_approve"),
     # Dashboard (protected by login)
     path("dashboard/", views.dashboard, name="dashboard"),
     path("diary/", views.diary_page, name="diary_page"),

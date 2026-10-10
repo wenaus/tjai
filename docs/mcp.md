@@ -11,8 +11,10 @@ tjai exposes a remote MCP endpoint at:
 https://etaverse.com/tjai/mcp/
 ```
 
-The endpoint is for personal MCP clients such as Claude Code and local tooling.
-It is not intended for claude.ai connectors or public unauthenticated access.
+The endpoint is for personal MCP clients such as Claude Code and local tooling,
+which send a fixed bearer token. Clients that can only sign in with OAuth, such
+as ChatGPT's connectors, use the [OAuth endpoint](#oauth)
+`https://etaverse.com/tjai/mcp-oauth`, which serves the same tools.
 
 > **Scope.** This document describes the MCP server tjai *exposes* — its tools,
 > transport, auth, and deployment. A separate, read-only **Postgres MCP** that
@@ -184,7 +186,8 @@ Authorization: Bearer <token>
 The token is read from `SysConfig` key `mcp_bearer_token`. Missing token returns
 401, invalid token returns 403, and missing server-side configuration returns
 503. The token lookup retries once after closing stale database connections,
-so a dropped Postgres socket does not wedge an ASGI worker.
+so a dropped Postgres socket does not wedge an ASGI worker. This applies to
+`/tjai/mcp/` only; the OAuth endpoint below never accepts this token.
 
 Rotate the token from production:
 
@@ -202,11 +205,58 @@ print(tok)
 "
 ```
 
+## OAuth
+
+`https://etaverse.com/tjai/mcp-oauth` serves the same tools from the same
+process to clients that cannot send a fixed token. ChatGPT's connectors take
+OAuth or nothing. It accepts only access tokens issued by tjai's own
+authorization server, so `/tjai/mcp/` and its token are unaffected. tjai is the
+authorization server itself: the MCP SDK's handlers (`mcp.server.auth`) do the
+protocol, `tjai_app/oauth.py` stores clients, grants and tokens in Postgres
+(`oauth_clients`, `oauth_grants`, `oauth_tokens`), and approval is a page behind
+tjai's login. No outside identity service is involved.
+
+The flow, as a client sees it:
+
+1. A request without a valid token, of any method, gets 401 with
+   `WWW-Authenticate: Bearer resource_metadata="https://etaverse.com/.well-known/oauth-protected-resource/tjai/mcp-oauth", scope="tjai"`.
+2. That protected-resource document (RFC 9728) names the issuer
+   `https://etaverse.com/tjai/oauth`, whose metadata (RFC 8414) is at
+   `/.well-known/oauth-authorization-server/tjai/oauth`.
+3. The client registers itself at `/tjai/oauth/register` (RFC 7591). Only
+   callbacks on `chatgpt.com`, `claude.ai` and `claude.com` are accepted, so a
+   client registered by anyone can deliver a code only to one of those services.
+4. `/tjai/oauth/authorize` takes an authorization-code request with PKCE (S256
+   only) and sends the browser to `/tjai/oauth-approve/<request>/`, a Django page
+   behind tjai's login. Only a staff account can approve; the request waits ten
+   minutes. Approval returns the browser to the client's callback with a
+   single-use code valid five minutes and `iss` (RFC 9207).
+5. `/tjai/oauth/token` exchanges the code for an access token (one hour) and a
+   refresh token (90 days). A refresh spends its refresh token and issues a new
+   pair; a spent refresh token or a replayed code is refused, and a replayed code
+   also withdraws the tokens its first exchange issued.
+6. `/tjai/oauth/revoke` revokes a token and every token issued from the same
+   approval.
+
+Tokens are bound to the resource `https://etaverse.com/tjai/mcp-oauth`, with or
+without a trailing slash; an authorization request naming another resource is
+refused. Tokens are stored by SHA-256 only. Client secrets from registration
+are stored as issued, as the SDK's client authentication compares them.
+
+Connecting ChatGPT: turn on Developer mode (Settings → Apps → Advanced settings),
+create an app with the URL `https://etaverse.com/tjai/mcp-oauth` and OAuth
+authentication. ChatGPT registers itself; approve the request on the tjai page
+that opens.
+
 ## Code Layout
 
 - `tjai_app/mcp.py`: tool definitions and the `FastMCP` instance.
 - `tjai_project/mcp_asgi.py`: ASGI entrypoint, auth guard, transport guard,
-  `/health`, and path normalization.
+  `/health`, path normalization, and dispatch of the OAuth routes and endpoint.
+- `tjai_app/oauth.py`, `tjai_app/oauth_models.py`: the authorization server
+  behind the SDK's handlers, token check for `/tjai/mcp-oauth`, approval helpers.
+- `tjai_app/views.py::oauth_approve`, `templates/tjai_app/oauth_approve.html`:
+  the approve page.
 - `deploy/tjai-mcp-asgi.service`: systemd unit for the MCP ASGI process.
 - `deploy/update_from_dev.sh`: deploy script restart hook for MCP service and
   cleanup of the old `django-mcp-server` package.
@@ -220,11 +270,22 @@ not be served by the main Django/gunicorn app.
 Apache must route MCP before the general `/tjai/` proxy:
 
 ```apache
+ProxyPass /.well-known/oauth-protected-resource/tjai/ http://127.0.0.1:8003/.well-known/oauth-protected-resource/tjai/
+ProxyPass /.well-known/oauth-authorization-server/tjai/ http://127.0.0.1:8003/.well-known/oauth-authorization-server/tjai/
+ProxyPass /tjai/oauth/ http://127.0.0.1:8003/tjai/oauth/
+ProxyPass /tjai/mcp-oauth http://127.0.0.1:8003/tjai/mcp-oauth
 ProxyPass        /tjai/mcp/ http://127.0.0.1:8003/
 ProxyPassReverse /tjai/mcp/ http://127.0.0.1:8003/
 ProxyPass        /tjai/mcp  http://127.0.0.1:8003/
 ProxyPassReverse /tjai/mcp  http://127.0.0.1:8003/
 ```
+
+The OAuth paths keep their full path on the way to the MCP process, which
+tells them apart from the fixed-token endpoint by it. The discovery documents
+sit at the site root, as RFC 8414 and RFC 9728 place them for an issuer and a
+resource with a path. The approve page `/tjai/oauth-approve/` is Django and
+takes the general `/tjai/` proxy. The live config is repo-owned in
+`tjrepo/ops/ec2dev/apache/sites-enabled/etaverse.conf`.
 
 The general `/tjai/` proxy should continue to point to gunicorn on port 8002.
 
