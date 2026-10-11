@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -34,9 +35,10 @@
         <h3 style="color:#e0e0e0; margin-bottom: 12px; font-size: 14px;">Item Versions</h3>
         <table id="versions-table"></table>
     </div>
+    <script src="{% static 'tjai/tjai-utils.js' %}?v=20261011"></script>
     <script>
         var items = JSON.parse('{{ items_json|escapejs }}');
-        function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+        function esc(s) { return escapeHtml(s); }
         var html = '<tr><th>V</th><th>Date</th><th>Entry</th><th>Preview</th><th>By</th><th>Lines</th><th></th></tr>';
         for (var i = 0; i < items.length; i++) {
             var it = items[i];

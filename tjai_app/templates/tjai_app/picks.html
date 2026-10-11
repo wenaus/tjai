@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -230,6 +231,7 @@
         <div class="loading">Loading picks...</div>
     </div>
 
+    <script src="{% static 'tjai/tjai-utils.js' %}?v=20261011"></script>
     <script>
         let allRuns = [];
         let totalSources = 0;
@@ -354,12 +356,7 @@
         // formatRunTime removed — server provides run_display
         // formatDuration removed — server provides duration_display
 
-        function esc(s) {
-            if (!s) return '';
-            const el = document.createElement('span');
-            el.textContent = s;
-            return el.innerHTML;
-        }
+        function esc(s) { return escapeHtml(s); }
 
         function findPick(id) {
             for (const run of allRuns) {

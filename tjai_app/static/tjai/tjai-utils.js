@@ -7,15 +7,16 @@
  */
 
 /**
- * HTML-escape a string (for use before linkifyContent).
- * @param {string} s - Raw text
+ * HTML-escape a value for text and for attribute values alike (quotes included: a `"` left raw ends a
+ * data-text="..." attribute early). tjai's one escape; pages call it rather than keeping their own.
+ * null, undefined and false give ''; anything else is shown as its string (0 as "0").
+ * @param {*} s - Raw value
  * @returns {string} HTML-safe string
  */
 function escapeHtml(s) {
-    if (!s) return '';
-    var el = document.createElement('span');
-    el.textContent = s;
-    return el.innerHTML;
+    if (s === null || s === undefined || s === false) return '';
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /**

@@ -269,7 +269,7 @@
         </div>
     </main>
 
-    <script src="/tjai/static/tjai/tjai-utils.js"></script>
+    <script src="/tjai/static/tjai/tjai-utils.js?v=20261011"></script>
     <script src="/tjai/static/tjai/research-cache.js?v=3"></script>
     <script>
         const state = {
@@ -281,12 +281,7 @@
             latestStats: null,
         };
 
-        function esc(s) {
-            if (!s) return '';
-            const el = document.createElement('span');
-            el.textContent = s;
-            return el.innerHTML;
-        }
+        function esc(s) { return escapeHtml(s); }
 
         function getCsrf() {
             const c = document.cookie.match(/csrftoken=([^;]+)/);

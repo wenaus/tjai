@@ -28,6 +28,12 @@
         .item.done .txt::before { content: '. '; color: #666; }
         .item.live .txt::before { content: '- '; color: #9ccc65; }
         .item .btn { margin-left: 10px; vertical-align: baseline; }
+        /* priority (docs/inflight.md § Priority): the item's !!! marker, toggled here; such items stand first */
+        .item.priority { background: #2a2416; }
+        .item.priority .txt::before { content: '!!! '; color: #ff8a65; font-weight: bold; }
+        .btn.pri { color: #8a8a8a; }
+        .btn.pri.on { color: #ff8a65; border-color: #8a4a3a; }
+        .counts .p { color: #ff8a65; font-weight: bold; }
         .add { display: flex; gap: 8px; margin-top: 8px; }
         .add input { flex: 1; background: #232323; color: #e0e0e0; border: 1px solid #444; border-radius: 3px; padding: 5px 8px; font: inherit; }
         .refs { color: #bdbdbd; }
@@ -72,7 +78,7 @@
         <div class="err" id="err"></div>
     {% endif %}
     </div>
-<script src="{% static 'tjai/tjai-utils.js' %}"></script>
+<script src="{% static 'tjai/tjai-utils.js' %}?v=20261011"></script>
 <script>
 (function () {
     const csrf = "{{ csrf_token }}";
@@ -101,7 +107,7 @@
                 const row = (i, dim) =>
                     '<div class="row' + (dim ? ' dim' : '') + '"><a class="t" href="' + escapeHtml(i.url) + '">' + escapeHtml(i.title) + '</a>' +
                     (i.context ? '<span class="ctx">' + escapeHtml(i.context) + '</span>' : '') +
-                    '<span class="counts">' + i.open + ' open' + (i.done != null ? ' <span class="d">· ' + i.done + ' done</span>' : '') + '</span>' +
+                    '<span class="counts">' + (i.priority ? '<span class="p">!!! ' + i.priority + '</span> · ' : '') + i.open + ' open' + (i.done != null ? ' <span class="d">· ' + i.done + ' done</span>' : '') + '</span>' +
                     '<span class="ago" title="' + escapeHtml(i.modified_display) + '">' + escapeHtml(i.ago) + '</span></div>';
                 el.innerHTML = active.map(i => row(i)).join('')
                     + (completed.length ? '<div class="section-head">Completed</div>'
@@ -118,9 +124,15 @@
     let lastTs = state.modified_ts;
     const ref = encodeURIComponent(state.ref);
 
-    function itemRow(it, cls, btnLabel, btnCls, action) {
-        return '<div class="item ' + cls + '"><span class="txt">' + it.html + '</span>' +
-               '<button class="btn ' + btnCls + '" data-action="' + action + '" data-text="' + escapeHtml(it.text) + '">' + btnLabel + '</button></div>';
+    function itemRow(it, cls, btnLabel, btnCls, action, priorityToggle) {
+        const text = escapeHtml(it.text);
+        // The priority toggle (docs/inflight.md § Priority): raises the item to the top with its !!! marker, or lowers it.
+        const pri = priorityToggle
+            ? '<button class="btn pri' + (it.priority ? ' on' : '') + '" data-action="priority" data-text="' + text + '"'
+              + ' title="' + (it.priority ? 'Priority: click to lower' : 'Raise to priority (top of the list)') + '">!!!</button>'
+            : '';
+        return '<div class="item ' + cls + '"><span class="txt">' + it.html + '</span>' + pri +
+               '<button class="btn ' + btnCls + '" data-action="' + action + '" data-text="' + text + '">' + btnLabel + '</button></div>';
     }
 
     function render() {
@@ -136,10 +148,11 @@
         if (state.conflict) warnings.push('unresolved merge conflict in this entry (<<<<<<< yours / >>>>>>> server markers): open Edit and resolve it');
         warn.style.display = warnings.length ? '' : 'none';
         warn.textContent = warnings.join(' · ');
-        document.getElementById('live-count').textContent = state.open_count ? '(' + state.open_count + ')' : '';
+        document.getElementById('live-count').textContent = state.open_count
+            ? '(' + state.open_count + (state.priority_count ? ' · ' + state.priority_count + ' priority' : '') + ')' : '';
         document.getElementById('done-count').textContent = state.done_count ? '(' + state.done_count + ')' : '';
         document.getElementById('live').innerHTML = state.live.length
-            ? state.live.map(it => itemRow(it, 'live', 'done', 'act', 'done')).join('')
+            ? state.live.map(it => itemRow(it, 'live' + (it.priority ? ' priority' : ''), 'done', 'act', 'done', true)).join('')
             : '<div class="empty">nothing open</div>';
         // Finished items are not kept (docs/inflight.md § Shape): the Done section shows only while keeping is on.
         document.getElementById('done-head').hidden = !state.keep_done;

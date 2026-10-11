@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -72,9 +73,10 @@
         </div>
     </div>
 {% if can_delete %}
+    <script src="{% static 'tjai/tjai-utils.js' %}?v=20261011"></script>
     <script>
         var csrf = "{{ csrf_token }}";
-        function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+        function esc(s) { return escapeHtml(s); }
         document.getElementById('list').addEventListener('click', async function (ev) {
             var b = ev.target.closest('button.del');
             if (!b) return;

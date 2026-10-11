@@ -1,3 +1,4 @@
+{% load static %}
 <!--
     OBSOLETE — DO NOT EDIT FOR NEW WORK.
     This is the obsolete research page, served only at /tjai/research-obsolete/
@@ -204,13 +205,9 @@
         <div class="loading">Loading research queue...</div>
     </div>
 
+    <script src="{% static 'tjai/tjai-utils.js' %}?v=20261011"></script>
     <script>
-        function esc(s) {
-            if (!s) return '';
-            const el = document.createElement('span');
-            el.textContent = s;
-            return el.innerHTML;
-        }
+        function esc(s) { return escapeHtml(s); }
         function shortError(s) {
             if (!s) return '';
             const first = String(s).split('\n')[0].trim();

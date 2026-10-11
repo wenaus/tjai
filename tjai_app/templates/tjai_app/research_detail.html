@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -289,6 +290,7 @@
         <div class="loading">Loading research detail...</div>
     </main>
 
+    <script src="{% static 'tjai/tjai-utils.js' %}?v=20261011"></script>
     <script src="/tjai/static/tjai/research-cache.js?v=3"></script>
     <script>
         const routeDetailEntryId = '{{ detail_entry_id|escapejs }}';
@@ -324,12 +326,7 @@
             return value ? decodeURIComponent(value) : '';
         }
 
-        function esc(s) {
-            if (!s) return '';
-            const el = document.createElement('span');
-            el.textContent = s;
-            return el.innerHTML;
-        }
+        function esc(s) { return escapeHtml(s); }
 
         function getCsrf() {
             const c = document.cookie.match(/csrftoken=([^;]+)/);

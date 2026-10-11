@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Diary</title>
     <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
-    <script src="/tjai/static/tjai/tjai-utils.js"></script>
+    <script src="/tjai/static/tjai/tjai-utils.js?v=20261011"></script>
     {% include "tjai_app/_prism.html" %}
     {% include "tjai_app/_katex.html" %}
     <style>
@@ -136,9 +136,7 @@
         document.getElementById('openAllBtn').addEventListener('click', () => setAll(false));
         document.getElementById('closeAllBtn').addEventListener('click', () => setAll(true));
 
-        function escHtml(s) {
-            const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
-        }
+        function escHtml(s) { return escapeHtml(s); }
 
         function formatDateLabel(dateStr) {
             // dateStr = 'YYYY-MM-DD'

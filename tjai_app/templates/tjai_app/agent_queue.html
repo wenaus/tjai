@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -101,6 +102,7 @@
     </div>
     <div id="timeline-container" tabindex="-1">Loading...</div>
 
+    <script src="{% static 'tjai/tjai-utils.js' %}?v=20261011"></script>
     <script>
     let lastData = null;
     let lastFetch = 0;
@@ -115,10 +117,7 @@
         }
     }
 
-    function escHtml(s) {
-        if (!s) return '';
-        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    }
+    function escHtml(s) { return escapeHtml(s); }
 
     function fmtDuration(sec) {
         if (sec == null) return '';

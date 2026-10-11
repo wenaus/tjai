@@ -226,7 +226,7 @@
         </div>
     </div>
 
-    <script src="/tjai/static/tjai/tjai-utils.js"></script>
+    <script src="/tjai/static/tjai/tjai-utils.js?v=20261011"></script>
     <script src="/tjai/static/tjai/sortable.min.js"></script>
     <script>
     let view = 'feed';
@@ -307,7 +307,7 @@
         el.innerHTML = items.map(i =>
             '<div class="pin inflight-row"><a href="' + escapeHtml(i.capcom_url) + '" data-inflight="' +
             escapeHtml(i.ref) + '" title="' + escapeHtml(i.modified_display) + '">' + escapeHtml(i.title) + '</a>' +
-            '<span class="inflight-count">' + i.open + '</span>' +
+            '<span class="inflight-count">' + (i.priority ? '<span style="color:#ff8a65;font-weight:bold">!!! ' + i.priority + '</span> · ' : '') + i.open + '</span>' +
             '<span class="inflight-ago">' + escapeHtml(i.ago) + '</span></div>').join('');
     }
 
