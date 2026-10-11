@@ -161,6 +161,19 @@ Entry(
 
 **Ideation handoff:** `ideation-agent` runs daily at `0200` and creates new `:research_topic` entries from the day's material. Because research runs at `0300` — *after* ideation — ideation-created topics are auto-picked up the same morning. If you move research earlier than ideation, ideation-created topics will sit pending for a full 24 hours until the next research run. There is no separate auto-submit hook from ideation to research; the coupling is purely via scheduled-time ordering.
 
+### Ideation gold
+
+The ideation log is long, and its valuable observations had no reader. `ideation-gold-agent` (Opus, high
+effort; `trigger: after:ideation-agent`) runs when ideation completes: `agent_complete.py` queues every
+action whose trigger is `after:<the completed action>`, last of all, and the wrangler gives such an action
+no clock of its own. It reads the morning's log whole and the last seven gold reports, and writes
+`ideation-gold-YYYY-MM-DD`: one line per item that needs Torre's attention or someone's action (a defect or
+coupling nobody acted on, a promise not kept, an approved follow-up not done, a decision or deletion waiting
+on his word, something dropped), each checked against the current record first. Research topics, picks,
+optional offers, news, summaries and anything already a swf ping are never gold; zero items is a valid
+report. On its completion `agent_complete.py` puts the items in the daily synopsis under "Ideation gold",
+above the report's link, and posts each to Capcom as its own warning (source `tjai-pipeline`).
+
 ### Research Page (`/tjai/research/`)
 
 The page banner displays **three named, non-overlapping facts** so nothing reads as contradictory (this rule was learned the hard way — see `docs/remote-workers.md` § Display contract):
