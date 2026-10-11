@@ -120,6 +120,10 @@ class TjaiRoster:
                 for action in candidates:
                     if len(workers) >= limit:
                         break
+                    # An action chained after another (`trigger: after:<action>`) has no clock of its
+                    # own: agent_complete queues it when that action completes.
+                    if str((action.data or {}).get('trigger') or '').startswith('after:'):
+                        continue
                     if get_next_scheduled_time(action) > now:
                         continue
                     data = action.data or {}

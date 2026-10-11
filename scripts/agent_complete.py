@@ -45,6 +45,7 @@ CAPCOM_FAILURE_PRODUCTS = {
     'daily-assessment': ('Daily synopsis', '/tjai/synopsis/', 'daily-synopsis'),
     'picks-agent': ('Picks run', '/tjai/picks/', 'picks'),
     'ideation-agent': ('Ideation', '/tjai/research/', 'ideation'),
+    'ideation-gold-agent': ('Ideation gold', '/tjai/tag/ideation-gold/', 'ideation-gold'),
     'llm-assessment-mcp': ('AI performance assessment', '/tjai/assessment/', 'assessment'),
 }
 
@@ -963,6 +964,58 @@ def main():
 
     if status == 'failed' and not retry_scheduled:
         _emit_terminal_failure(action_id, failure_message)
+
+    if action_id == 'ideation-gold-agent' and status == 'completed':
+        _publish_ideation_gold(ref_extra)
+
+    # An action that runs after another (`trigger: after:<action>`) is queued when that one completes,
+    # last of all, so it reads everything this completion wrote (the ideation log's entry_id).
+    if status == 'completed':
+        _enqueue_chained(action_id, ref_extra)
+
+
+def _publish_ideation_gold(ref_extra):
+    """The gold report's items into the day's synopsis, above its link, and each onto Capcom as its own notice:
+    the filter on the ideation log that Torre reads instead of the log (docs/agents.md § Ideation gold)."""
+    import hashlib
+    import re
+    try:
+        from synopsis_utils import append_section, find_daily_entry
+        today = _local_date()
+        eid = f'ideation-gold-{today.isoformat()}'
+        report = Entry.objects.filter(data__entry_id=eid, deleted_at__isnull=True).order_by('-timestamp_created').first()
+        if report is None:
+            logger.warning("ideation-gold-agent: %s not found", eid, extra=ref_extra)
+            return
+        items = [g.strip() for g in re.findall(r'^- (.+)$', report.content or '', re.MULTILINE)
+                 if g.strip() and not g.strip().lower().startswith('(none')]
+        link = f'[Ideation gold, {today.isoformat()}](/tjai/entry/?entry_id={eid})'
+        synopsis = find_daily_entry(today)
+        if synopsis:
+            body = ''.join(f'- {g}\n' for g in items) if items else 'No gold today.\n'
+            append_section(synopsis, 'Ideation gold', f'{body}\n{link}')
+        for g in items:
+            _emit_capcom(
+                title=f'Ideation gold: {g}',
+                url=f'/tjai/entry/?entry_id={eid}',
+                dedup_key=f'ideation-gold-{today:%Y%m%d}-{hashlib.sha1(g.encode()).hexdigest()[:12]}',
+                severity='warning',
+            )
+        logger.info("ideation-gold-agent: %d items to the synopsis and Capcom", len(items), extra=ref_extra)
+    except Exception as e:
+        logger.error("ideation-gold-agent: publishing failed: %s", e, extra=ref_extra)
+
+
+def _enqueue_chained(action_id, ref_extra):
+    try:
+        from tjai_app import wrangler
+        for chained in (Entry.objects.filter(kind='action', deleted_at__isnull=True,
+                                             data__trigger=f'after:{action_id}')
+                        .exclude(status__in=['done', 'blocked'])):
+            wrangler.enqueue_action(chained)
+            logger.info("%s queued after %s", (chained.data or {}).get('entry_id'), action_id, extra=ref_extra)
+    except Exception as e:
+        logger.error("chained actions after %s not queued: %s", action_id, e, extra=ref_extra)
 
 
 
