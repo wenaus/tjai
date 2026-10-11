@@ -1154,9 +1154,11 @@ async def inflight_item(entry_id: str, action: str, text: str) -> dict:
     done, which takes it out, or add an open item. An inflight todo is a todo
     with status 'inflight', the working record of an activity in progress;
     its ## Live section holds open items ("- item"). Finished items are not
-    kept: what is done is recorded in git and the docs. This is the way to
-    keep an activity's list current: a surgical edit of the current content,
-    never a whole rewrite.
+    kept: what is done is recorded in git and the docs. Marking the last open
+    item done closes the activity and retires it (the answer carries
+    closed=true); add the next item first if the work goes on. This is the
+    way to keep an activity's list current: a surgical edit of the current
+    content, never a whole rewrite.
 
     Args:
         entry_id: UUID or human-readable data.entry_id of the inflight todo.

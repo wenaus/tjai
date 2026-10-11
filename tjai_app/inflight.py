@@ -20,6 +20,9 @@ KEEP_DONE = False
 # On: an activity closed as done is deleted in the same write (signals.py
 # retire_closed_activity; docs/inflight.md § Closing).
 RETIRE_CLOSED = True
+# On: the done action that takes the last Live item out closes the activity as
+# done in the same write, so it is retired (docs/inflight.md § Closing).
+CLOSE_WHEN_EMPTY = True
 _HEADING = re.compile(r'^##\s+(.+?)\s*$')
 _OPEN = re.compile(r'^- (.*\S.*)$')
 _DONE = re.compile(r'^\. (.*\S.*)$')

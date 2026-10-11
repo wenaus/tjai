@@ -2232,9 +2232,10 @@ def restore_version(entry_id, version=None, source='api'):
 
 def inflight_item(entry_id, action, text, source='mcp'):
     """Item action on an inflight todo (docs/inflight.md): done (the item is
-    taken out) or add; reopen is off with the Done section. `entry_id` is a
-    UUID or a data.entry_id. A surgical edit of the current content,
-    serialized per entry; returns the updated entry with a `diff` plus
+    taken out) or add; reopen is off with the Done section. Done on the last
+    open item closes the activity, which retires it (`closed` in the answer).
+    `entry_id` is a UUID or a data.entry_id. A surgical edit of the current
+    content, serialized per entry; returns the updated entry with a `diff` plus
     `open_count`."""
     import uuid as _uuid
     from django.db import transaction
@@ -2270,11 +2271,17 @@ def inflight_item(entry_id, action, text, source='mcp'):
                 new_content = inflight_lib.add_item(entry.content or '', text)
         except ValueError as e:
             return {"error": str(e), "code": "NO_MATCH"}
+        # The last open item done is the activity done: closed in the same write, and so retired.
+        closes = (action == 'done' and inflight_lib.CLOSE_WHEN_EMPTY
+                  and inflight_lib.summary(new_content)['open'] == 0)
         result = _edit_entry_impl(entry_id=str(entry.id), content=new_content,
+                                  status='done' if closes else None,
                                   source=source, locked_entry=entry)
     if isinstance(result, dict) and "error" not in result:
         counts = inflight_lib.summary(new_content)
         result['open_count'] = counts['open']
+        if closes:
+            result['closed'] = True
         if 'done' in counts:
             result['done_count'] = counts['done']
     return result

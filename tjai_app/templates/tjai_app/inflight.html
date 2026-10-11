@@ -153,6 +153,8 @@
     async function act(action, text) {
         try {
             const d = await getJson('/tjai/api/inflight/' + ref + '/item', {method: 'POST', body: JSON.stringify({action: action, text: text})});
+            // The last item done closes the activity (docs/inflight.md § Closing): back to the index, in the same frame.
+            if (d.closed) { location.href = '/tjai/inflight/' + location.search; return; }
             state = d; lastTs = d.modified_ts; render();
             document.getElementById('err').textContent = '';
         } catch (e) {

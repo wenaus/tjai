@@ -9530,6 +9530,9 @@ def api_inflight_item(request, entry_id):
         if status == 500:
             logger.error('inflight item %s on %s failed: %s', body.get('action'), entry_id, result['error'])
         return JsonResponse({'error': result['error']}, status=status)
+    if result.get('closed'):
+        # The last item done closed the activity, which is retired: nothing is left to render.
+        return JsonResponse({'closed': True, 'changed': True})
     entry = _inflight_lookup(entry_id)
     payload = _inflight_payload(entry)
     payload['changed'] = True

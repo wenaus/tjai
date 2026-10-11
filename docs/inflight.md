@@ -50,8 +50,12 @@ Captured dialog and existing version history remain historical records.
 archive. An activity closed as done is deleted (softly, its versions kept) in
 the same write, whichever path sets the status (`signals.py`
 `retire_closed_activity`, switch `inflight.py` `RETIRE_CLOSED`): a todo marked as
-an activity (`data.activity`) or one that was inflight until that save. A parked
-activity is `blocked` and stays. What was done is recorded in git and the docs.
+an activity (`data.activity`) or one that was inflight until that save. The done
+action that takes the last Live item out closes the activity in the same write
+(switch `inflight.py` `CLOSE_WHEN_EMPTY`), so it is retired and the live view
+returns to the index; a session whose work goes on adds the next item before
+marking the last one done. A parked activity is `blocked` and stays. What was
+done is recorded in git and the docs.
 `scripts/retire_done_activities.py` retired the activities closed before the
 rule.
 
@@ -67,8 +71,9 @@ frame (index to activity and back) is mirrored into the address bar.
 
 - **Index** lists the inflight todos, most recently touched first, with
   open counts and time since last change, and below them a
-  **Completed** section, dimmed: an activity with nothing outstanding,
-  whatever its status, together with the parked ones (closed ones are
+  **Completed** section, dimmed: an activity with nothing outstanding
+  that was never emptied by a done click (one made without items, or
+  emptied by an edit), together with the parked ones (closed ones are
   deleted, § Closing). Those
   carry `data.activity`, stamped while the todo is inflight — a nightly agent
   product is a todo with the same sections, entry_id shape and tag, so
