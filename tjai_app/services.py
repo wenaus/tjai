@@ -683,7 +683,7 @@ def get_todos(context=None, status=None, include_done=False,
     qs = qs.order_by('-timestamp_modified')
     if summary_only:
         from .inflight import summary
-        return [
+        rows = [
             {
                 'id': entry.id,
                 'entry_id': (entry.data or {}).get('entry_id'),
@@ -693,6 +693,9 @@ def get_todos(context=None, status=None, include_done=False,
             }
             for entry in qs
         ]
+        # An activity with priority items comes first (docs/inflight.md § Priority); otherwise most recent first.
+        rows.sort(key=lambda row: 0 if row.get('priority_items') else 1)
+        return rows
     return [_format_entry(entry, max_content_length=max_content_length) for entry in qs]
 
 
@@ -2232,7 +2235,8 @@ def restore_version(entry_id, version=None, source='api'):
 
 def inflight_item(entry_id, action, text, source='mcp'):
     """Item action on an inflight todo (docs/inflight.md): done (the item is
-    taken out) or add; reopen is off with the Done section. Done on the last
+    taken out), add, or priority (toggles the item's !!! marker, which puts it at
+    the top of Live); reopen is off with the Done section. Done on the last
     open item closes the activity, which retires it (`closed` in the answer).
     `entry_id` is a UUID or a data.entry_id. A surgical edit of the current
     content, serialized per entry; returns the updated entry with a `diff` plus
@@ -2243,8 +2247,8 @@ def inflight_item(entry_id, action, text, source='mcp'):
     from . import inflight as inflight_lib
     action = (action or '').strip()
     text = (text or '').strip()
-    if action not in ('done', 'reopen', 'add') or not text:
-        return {"error": "action must be done, reopen, or add, with a non-empty text",
+    if action not in ('done', 'reopen', 'add', 'priority') or not text:
+        return {"error": "action must be done, reopen, add, or priority, with a non-empty text",
                 "code": "BAD_REQUEST"}
     try:
         _uuid.UUID(str(entry_id))
@@ -2267,6 +2271,8 @@ def inflight_item(entry_id, action, text, source='mcp'):
                 new_content = inflight_lib.mark_done(entry.content or '', text)
             elif action == 'reopen':
                 new_content = inflight_lib.reopen(entry.content or '', text)
+            elif action == 'priority':
+                new_content = inflight_lib.toggle_priority(entry.content or '', text)
             else:
                 new_content = inflight_lib.add_item(entry.content or '', text)
         except ValueError as e:

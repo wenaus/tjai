@@ -134,11 +134,29 @@ def parse(content):
     }
 
 
+# A priority item opens with the knowledge base's own elevation marker, the todo bang (services.TODO_BANG_RE), and
+# stands at the top of Live: the live view toggles it, and a session sees it first in the activity and in the
+# get_todos index (docs/inflight.md § Priority).
+PRIORITY = '!!!'
+
+
+def is_priority(text):
+    return (text or '').lstrip().startswith(PRIORITY)
+
+
+def plain(text):
+    """An item's text without its priority marker."""
+    t = (text or '').lstrip()
+    return t.lstrip('!').lstrip() if t.startswith(PRIORITY) else t
+
+
 def summary(content):
     p = parse(content)
+    out = {'open': len(p['live']), 'priority_items': sum(1 for it in p['live'] if is_priority(it['text'])),
+           'title': p['title']}
     if KEEP_DONE:
-        return {'open': len(p['live']), 'done': len(p['done']), 'title': p['title']}
-    return {'open': len(p['live']), 'title': p['title']}
+        out['done'] = len(p['done'])
+    return out
 
 
 def _ensure_section(lines, name):
@@ -194,6 +212,28 @@ def mark_done(content, text):
         return '\n'.join(lines)
     moved = ['. ' + item['text']] + item['lines'][1:]
     return '\n'.join(_append_to_section(lines, DONE, moved))
+
+
+def toggle_priority(content, text):
+    """Mark an open item priority, which moves it to the top of Live, or unmark it, which moves it to just below
+    the items still marked."""
+    p = parse(content)
+    item = _find(p['live'], text)
+    if item is None:
+        raise ValueError(f'no open item {text!r}')
+    lines = _take(p['lines'], item)
+    body = item['lines'][0][2:]
+    raised = not is_priority(body)
+    head = '- ' + (f'{PRIORITY} {body.strip()}' if raised else plain(body))
+    lines = _ensure_section(lines, LIVE)
+    start, end = _sections(lines)[0][LIVE]
+    items = _items(lines, (start, end), _OPEN)
+    marked = [it for it in items if is_priority(it['text'])]
+    if raised:
+        at = items[0]['start'] if items else start
+    else:
+        at = marked[-1]['end'] if marked else (items[0]['start'] if items else start)
+    return '\n'.join(lines[:at] + [head] + item['lines'][1:] + lines[at:])
 
 
 def reopen(content, text):

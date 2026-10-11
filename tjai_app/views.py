@@ -9385,7 +9385,8 @@ def _inflight_item_html(item):
     """Render one item: its first line without the marker, continuation
     lines dedented so their indentation is not read as a code block."""
     import textwrap
-    head = item['lines'][0][2:]
+    from . import inflight as inflight_lib
+    head = inflight_lib.plain(item['lines'][0][2:])
     rest = textwrap.dedent('\n'.join(item['lines'][1:])) if len(item['lines']) > 1 else ''
     return _linkify_rendered_html(_render_markdown(head + ('\n' + rest if rest else '')))
 
@@ -9405,12 +9406,14 @@ def _inflight_payload(entry):
         'conflict': inflight_lib.has_conflict(content),
         'title': p['title'].lstrip('#').strip(),
         'description_html': _linkify_rendered_html(_render_markdown(p['description'])) if p['description'] else '',
-        'live': [{'text': it['text'], 'html': _inflight_item_html(it)} for it in p['live']],
+        'live': [{'text': it['text'], 'html': _inflight_item_html(it), 'priority': inflight_lib.is_priority(it['text'])}
+                 for it in p['live']],
         'done': ([{'text': it['text'], 'html': _inflight_item_html(it)} for it in p['done']]
                  if inflight_lib.KEEP_DONE else []),
         'keep_done': inflight_lib.KEEP_DONE,
         'refs_html': _linkify_rendered_html(_render_markdown(p['refs'])) if p['refs'] else '',
         'open_count': len(p['live']),
+        'priority_count': sum(1 for it in p['live'] if inflight_lib.is_priority(it['text'])),
         'done_count': len(p['done']) if inflight_lib.KEEP_DONE else 0,
         'modified_ts': entry.timestamp_modified,
         'modified_display': fmt_datetime(entry.timestamp_modified),
@@ -9441,7 +9444,7 @@ def _inflight_list(statuses=None, activities_only=False):
         ref = eid or str(e.id)
         rows.append({
             'id': str(e.id), 'ref': ref, 'title': (s['title'] or '(untitled)').lstrip('#').strip(),
-            'open': s['open'], 'done': s.get('done'),
+            'open': s['open'], 'done': s.get('done'), 'priority': s.get('priority_items', 0),
             'modified_ts': e.timestamp_modified,
             'modified_display': fmt_datetime(e.timestamp_modified),
             'ago': fmt_ago(e.timestamp_modified),
@@ -9450,6 +9453,8 @@ def _inflight_list(statuses=None, activities_only=False):
             'context': e.context_id or '',
             'status': e.status or '',
         })
+    # An activity with priority items comes first (docs/inflight.md § Priority); otherwise most recent first.
+    rows.sort(key=lambda row: 0 if row['priority'] else 1)
     return rows
 
 

@@ -576,13 +576,15 @@ async def get_todos(
         include_done: If True, include all todos regardless of status.
                       Default: False (excludes status='done' only).
         summary_only: Return the complete index of ids, titles, contexts,
-                      statuses and open counts, without entry bodies.
-                      Use at session start; read the assigned activity in full.
+                      statuses, open counts and priority_items (open items
+                      marked !!!), without entry bodies; activities with
+                      priority items come first. Use at session start; read
+                      the assigned activity in full, its !!! items first.
 
     Returns:
-        List of todos ordered by priority (1=highest first, nulls last) then by
-        modification date (newest first). Each contains: id, content, context,
-        kind, created, modified, and optional priority, status, tags.
+        List of todos, most recently modified first (with summary_only,
+        activities with priority items first). Each contains: id, content,
+        context, kind, created, modified, and optional priority, status, tags.
         Returns {"error": "..."} if status parameter is invalid.
     """
     result = await sync_to_async(services.get_todos)(
@@ -1162,7 +1164,9 @@ async def inflight_item(entry_id: str, action: str, text: str) -> dict:
 
     Args:
         entry_id: UUID or human-readable data.entry_id of the inflight todo.
-        action: 'done' (the open item is taken out) or 'add'.
+        action: 'done' (the open item is taken out), 'add', or 'priority'
+            (toggles the item's !!! marker: a priority item stands at the top
+            of Live, and get_todos lists its activity first with a priority count).
         text: the item text, exactly as it appears (for done) or the new
             item (for add).
 

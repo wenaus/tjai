@@ -59,6 +59,18 @@ done is recorded in git and the docs.
 `scripts/retire_done_activities.py` retired the activities closed before the
 rule.
 
+## Priority
+
+An open item can be raised to priority: its line opens with `!!!`, the knowledge
+base's own elevation marker (the todo bang, so it also shows on the `!!!` page),
+and it stands at the top of Live, the latest raised first; lowered, it goes back
+to just below the items still raised (`inflight.py` `toggle_priority`). The
+live view's `!!!` button toggles it, as the `inflight_item` action `priority`
+does. An activity with priority items comes first in the index, the Capcom
+shelf and `get_todos(summary_only=True)`, which counts them as `priority_items`,
+so a session sees at once which activities carry them and, reading one, finds
+them first.
+
 ## Surfaces
 
 The inflight surfaces are a view of the Capcom page, in its right panel with
@@ -80,8 +92,9 @@ frame (index to activity and back) is mirrored into the address bar.
   nothing in a closed body distinguishes the two and the mark has to be set
   in advance. Each opens its live view in place; Refresh re-reads the list.
 - **Live view** renders one activity:
-  description, Live items each with a done button (which takes the item
-  out), an add-item field, and Refs. Every action is a surgical edit
+  description, Live items each with a `!!!` priority toggle (§ Priority)
+  and a done button (which takes the item out), an add-item field, and
+  Refs. Every action is a surgical edit
   of the current content, serialized per entry, attributed
   `inflight:<user>` in the version history. Refresh re-reads the
   entry's state and re-renders it if anyone has changed it, from the editor,
@@ -110,8 +123,8 @@ frame (index to activity and back) is mirrored into the address bar.
 `get_todos(status='inflight')` returns the activities in progress with
 the usual content preview; `max_content_length=0` requests full content.
 At session start, `get_todos(status='inflight', summary_only=True)` returns
-the complete activity index with identifiers, titles, contexts, statuses
-and open counts. A session starting on an activity reads it in full,
+the complete activity index with identifiers, titles, contexts, statuses,
+open counts and `priority_items`, activities with priority items first. A session starting on an activity reads it in full,
 then reads its Refs and
 works from its Live list; it marks items done (taking them out) and adds
 items with the `inflight_item` MCP tool (the web item endpoint's twin; both
