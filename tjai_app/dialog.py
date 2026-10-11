@@ -6,10 +6,20 @@ import time
 import uuid
 from datetime import datetime
 
+from django.conf import settings
 from django.db import transaction
 
 from .dialog_context import CURRENT_DIALOG_CONTEXT, DIALOG_TAG
 from .models import Context, Entry, SysConfig, Tag
+
+# Text the harness writes into a user turn (a task notification, a client's own agent prompt) is not
+# Torre's words: it is recorded with role 'harness', never as his turn.
+HARNESS_PREFIXES = ('<task-notification>', '## Memory Writing Agent')
+
+
+def is_research_agent_turn(data):
+    """The research agent's Claude runs in the server's own tree; no other session does."""
+    return (data.get("project_path") or "").rstrip("/") == str(settings.BASE_DIR).rstrip("/")
 
 
 class DialogValidationError(ValueError):
@@ -69,11 +79,15 @@ def record_dialog(data):
         entry_data["source_timestamp"] = source_timestamp
     if data.get("content_type"):
         entry_data["content_type"] = data["content_type"]
+    if role == "user" and content.startswith(HARNESS_PREFIXES):
+        entry_data["role"] = "harness"
 
     extra_tags = []
 
-    # Detect research subagent products
-    if content.startswith('<task-notification>'):
+    # Detect research subagent products: only the research agent's own task notifications. Every
+    # session's harness writes task notifications; attributing them all to the running research topic
+    # filed hundreds of other sessions' turns under it.
+    if content.startswith('<task-notification>') and is_research_agent_turn(data):
         summary_m = re.search(r'<summary>(.*?)</summary>', content, re.DOTALL)
         if summary_m:
             summary_text = summary_m.group(1).strip()

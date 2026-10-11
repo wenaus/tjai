@@ -44,6 +44,16 @@ def record_peer_dialog(delivery, recorded_at=None):
     return entry
 
 
+# A dialog hook names its client by program (claude-code); the comms registry names the same session by
+# family (claude). Matching on one spelling left every Claude Code peer delivery unrecognized, so each
+# was stored again as Torre's turn.
+_CLIENT_SPELLINGS = {"claude-code": ("claude-code", "claude"), "claude": ("claude", "claude-code")}
+
+
+def client_spellings(client):
+    return _CLIENT_SPELLINGS.get(client, (client,))
+
+
 def recorded_native_peer(content, data, recorded_at):
     """Recognize only an adapter envelope backed by this recipient's mailbox.
 
@@ -62,7 +72,7 @@ quoted text from becoming a fabricated peer entry. The broker owns the body.
             return None
         delivery = LLMDelivery.objects.select_related("message", "recipient").filter(
             message_id=message_id, recipient__native_id=data.get("session_id"),
-            recipient__host=data.get("hostname"), recipient__client=data.get("client"),
+            recipient__host=data.get("hostname"), recipient__client__in=client_spellings(data.get("client")),
         ).first()
         return record_peer_dialog(delivery, recorded_at) if delivery else None
 
@@ -90,7 +100,7 @@ quoted text from becoming a fabricated peer entry. The broker owns the body.
         delivery = LLMDelivery.objects.select_related("message", "recipient").filter(
             message_id=message_id, message__sender_id=sender_id,
             recipient__native_id=data.get("session_id"), recipient__host=data.get("hostname"),
-            recipient__client=data.get("client"),
+            recipient__client__in=client_spellings(data.get("client")),
         ).first()
         if delivery and envelope.get("recipient") == delivery.recipient.native_id:
             return record_peer_dialog(delivery, recorded_at)

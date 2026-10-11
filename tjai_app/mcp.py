@@ -770,7 +770,8 @@ async def get_dialog(
     Returns:
         List of dialog turns ordered chronologically, each containing:
         id (the entry UUID, for citing a turn), timestamp, role
-        (user/assistant), speaker, speaker_type (human/ai/unknown), client,
+        (user/assistant/peer/harness), speaker, speaker_type
+        (human/ai/ai_peer/harness/unknown; only human is Torre), client,
         model, hostname, session_id (the client session that recorded the
         turn; a day's interleaved sessions separate on it), content.
     """

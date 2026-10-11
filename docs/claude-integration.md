@@ -145,9 +145,20 @@ Writes bypass the general 60s content deduplication. Metadata in
 `Entry.data` includes `role`, `client`, `model`, `model_provider`,
 `reasoning_effort`, `session_id`, `project_path`, and `hostname` when the
 recording hook can determine them. Older entries may lack the model fields.
-POSTed content starting with `<task-notification>` (research subagent
-products) is additionally tagged `research-subagent` and annotated with the
-source research action entry.
+A `<task-notification>` from the research agent's own Claude, which runs in
+the server's tree (`project_path` equal to `BASE_DIR`), is a research subagent
+product: it is additionally tagged `research-subagent` and annotated with the
+running research entry. Every session's harness writes task notifications, so
+no other session's is attributed.
+
+Only Torre's typed words are stored as `role: user`. A user turn that the
+harness wrote (a `<task-notification>`, a client's own agent prompt such as
+Codex's "Memory Writing Agent") is stored as `role: harness`. A peer delivery
+is recognised against the recipient's mailbox and stored once, as `role: peer`;
+the hook names a Claude Code client `claude-code` and the comms registry
+`claude`, and the match accepts either. `get_dialog` reports `speaker_type`
+`human` only for `user`, and leaves out `peer_echo` records, the user-turn
+copies `scripts/fix_dialog_attribution.py` marked on 2026-10-10.
 
 Claude records both `text` and plaintext `thinking` as assistant dialog, with
 `content_type` identifying the block type. Tool inputs, thinking signatures,

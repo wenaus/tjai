@@ -851,10 +851,11 @@ def get_dialog(host, start_date=None, end_date=None, limit=None, offset=0, max_c
         return err
 
     dialog_ids = Tag.objects.filter(tag_name=DIALOG_TAG).values_list('entry_id', flat=True)
+    # A peer echo is the user-turn copy of a peer message whose peer record already exists.
     qs = Entry.objects.filter(
         id__in=dialog_ids,
         deleted_at__isnull=True,
-    )
+    ).exclude(data__role='peer_echo')
     if host != 'all':
         qs = qs.filter(data__hostname=host)
 
@@ -872,13 +873,16 @@ def get_dialog(host, start_date=None, end_date=None, limit=None, offset=0, max_c
     for e in qs:
         data = e.data if isinstance(e.data, dict) else {}
         role = data.get('role', 'unknown')
-        speaker_type = 'human' if role == 'user' else 'ai' if role == 'assistant' else 'ai_peer' if role == 'peer' else 'unknown'
+        speaker_type = {'user': 'human', 'assistant': 'ai', 'peer': 'ai_peer',
+                        'harness': 'harness'}.get(role, 'unknown')
         if speaker_type == 'human':
             speaker = 'Torre'
         elif speaker_type == 'ai':
             speaker = data.get('client') or 'AI'
         elif speaker_type == 'ai_peer':
             speaker = (data.get('peer_sender') or {}).get('name') or 'AI peer'
+        elif speaker_type == 'harness':
+            speaker = 'Harness'
         else:
             speaker = 'Unknown'
         content = e.content
