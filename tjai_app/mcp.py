@@ -566,8 +566,8 @@ async def get_todos(
         status: Filter by specific status: active, inflight, done, blocked, or archive.
                 If specified, returns only todos with this exact status.
                 'inflight' todos are activities being worked in sessions; their
-                body is the working record (description, ## Live items,
-                ## Refs). See docs/inflight.md.
+                body is the working record (description, `## Live` with one
+                open item per `- ` line, `## Refs`). See docs/inflight.md.
                 Overrides include_done.
         include_done: If True, include all todos regardless of status.
                       Default: False (excludes status='done' only).
