@@ -292,6 +292,11 @@ Capcom carries as a notice like any other.
   level, so the reason for a transition reads directly from the feed line;
   the complete issue list, all levels, is the notice body. The notice links
   to the System page.
+- **etaverse** (listen) — a warning when the asset store refuses a system
+  writer's revision (a writer undoing the asset's last revision again, or
+  over 60 system revisions of one asset in an hour). The hub posts over
+  direct loopback; one notice per asset, a repeat threads onto it, and the
+  notice links the asset's record.
 - **corun-ai** (listen) — a notice when an interactive run is submitted,
   emitted from the submit path of the registration mechanism; runs
   submitted through the programmatic REST interface do not pass that point
