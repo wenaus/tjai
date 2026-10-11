@@ -165,6 +165,8 @@ Claude records both `text` and plaintext `thinking` as assistant dialog, with
 redacted thinking and sidechain messages are excluded. Transcript timestamps
 set the entry's creation time, so dialog and assessment retain the order in
 which updates were emitted. The modification time records ingestion.
+`get_dialog` windows and orders turns on the creation time, so turns recovered
+later appear on the day they were said and never in a recent window.
 
 Each transcript message UUID and content type supplies a `source_id`. The API
 derives a stable entry UUID from host, client, session, role and source ID;

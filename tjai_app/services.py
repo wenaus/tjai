@@ -173,7 +173,8 @@ def fts_normalize(text):
 def _apply_date_filter(qs, start_date, end_date, date_field='modified'):
     """Apply date range filter to queryset. Both dates optional; None means no filter.
 
-    date_field='modified' filters on timestamp_modified. date_field='event'
+    date_field='modified' filters on timestamp_modified; 'created' on
+    timestamp_created (a dialog turn's own time). date_field='event'
     filters on the calendar placement in data.event_date, excluding entries
     that have none.
     """
@@ -194,7 +195,7 @@ def _apply_date_filter(qs, start_date, end_date, date_field='modified'):
         qs = qs.annotate(_event_ts=Cast(KeyTextTransform('event_date', 'data'), FloatField()))
         field = '_event_ts'
     else:
-        field = 'timestamp_modified'
+        field = 'timestamp_created' if date_field == 'created' else 'timestamp_modified'
     if start_ts:
         qs = qs.filter(**{field + '__gte': start_ts})
     if end_ts:
@@ -859,7 +860,9 @@ def get_dialog(host, start_date=None, end_date=None, limit=None, offset=0, max_c
     if host != 'all':
         qs = qs.filter(data__hostname=host)
 
-    qs, err = _apply_date_filter(qs, start_date, end_date)
+    # A turn's window is the time it was said (its transcript time), not when it was recorded: turns
+    # recovered later carry their own time and must not flood a recent window.
+    qs, err = _apply_date_filter(qs, start_date, end_date, date_field='created')
     if err:
         return err
 
