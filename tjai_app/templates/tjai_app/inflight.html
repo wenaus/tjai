@@ -55,6 +55,7 @@
     <div class="main">
     {% if mode == 'index' %}
         <div class="head"><h1>Inflight</h1><span class="meta" id="idx-meta">activities being worked, most recently touched first</span><button class="btn" id="idx-refresh-btn">Refresh</button></div>
+        {% if gone %}<div class="warn">{{ gone }} is closed and has left the list.</div>{% endif %}
         <div id="idx-list"><div class="empty">Loading…</div></div>
         <div class="err" id="idx-err"></div>
     {% else %}
@@ -88,7 +89,7 @@
         const r = await fetch(url, Object.assign({headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf}}, opts || {}));
         let d = null;
         try { d = await r.json(); } catch (e) { throw new Error('bad response ' + r.status); }
-        if (!r.ok) throw new Error((d && d.error) || ('HTTP ' + r.status));
+        if (!r.ok) { const e = new Error((d && d.error) || ('HTTP ' + r.status)); e.status = r.status; throw e; }
         return d;
     }
 
@@ -163,6 +164,9 @@
         document.getElementById('refs').innerHTML = state.refs_html || '<div class="empty">no refs</div>';
     }
 
+    // The activity has left the list (closed elsewhere, so retired): back to the index, which says so.
+    function gone() { location.href = '/tjai/inflight/?embed=1&gone=' + ref; }
+
     async function act(action, text) {
         try {
             const d = await getJson('/tjai/api/inflight/' + ref + '/item', {method: 'POST', body: JSON.stringify({action: action, text: text})});
@@ -171,6 +175,7 @@
             state = d; lastTs = d.modified_ts; render();
             document.getElementById('err').textContent = '';
         } catch (e) {
+            if (e.status === 404) { gone(); return; }
             document.getElementById('err').textContent = action + ' failed: ' + e.message;
             refresh();
         }
@@ -184,6 +189,7 @@
             if (d.changed) { state = d; lastTs = d.modified_ts; render(); }
             document.getElementById('err').textContent = '';
         } catch (e) {
+            if (e.status === 404) { gone(); return; }
             document.getElementById('err').textContent = 'refresh failed: ' + e.message;
         }
     }

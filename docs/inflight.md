@@ -86,7 +86,9 @@ frame (index to activity and back) is mirrored into the address bar.
   **Completed** section, dimmed: an activity with nothing outstanding
   that was never emptied by a done click (one made without items, or
   emptied by an edit), together with the parked ones (closed ones are
-  deleted, § Closing). Those
+  deleted, § Closing). An activity that has left the list opens as the
+  index with a note naming it, and a live view whose activity was closed
+  elsewhere goes there on its next Refresh or action, never to an error page. Those
   carry `data.activity`, stamped while the todo is inflight — a nightly agent
   product is a todo with the same sections, entry_id shape and tag, so
   nothing in a closed body distinguishes the two and the mark has to be set

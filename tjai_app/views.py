@@ -9367,6 +9367,25 @@ def api_capcom_run(request):
 
 # ── Inflight todos: live view and item actions (docs/inflight.md) ───────────
 
+def _inflight_gone_title(ref):
+    """The title of an activity that has left the list (closed ones are retired), for the index's note; '' when
+    nothing was asked for, the ref itself when no such todo ever existed."""
+    if not ref:
+        return ''
+    from . import inflight as inflight_lib
+    base = Entry.objects.filter(kind='todo')
+    entry = None
+    try:
+        uuid.UUID(str(ref))
+        entry = base.filter(id=ref).first()
+    except (ValueError, AttributeError):
+        pass
+    if entry is None:
+        entry = base.filter(data__entry_id=ref).order_by('-timestamp_modified').first()
+    title = inflight_lib.summary(entry.content or '')['title'].lstrip('#').strip() if entry else ''
+    return title or str(ref)
+
+
 def _inflight_lookup(entry_id):
     """Resolve a UUID or data.entry_id to an inflight todo, else None."""
     base = Entry.objects.filter(deleted_at__isnull=True, kind='todo')
@@ -9474,10 +9493,12 @@ def inflight_page(request, entry_id=None):
             target += '&id=' + quote(str(entry_id), safe='')
         return redirect(target)
     if entry_id is None:
-        return render(request, 'tjai_app/inflight.html', {'mode': 'index', 'entry': None})
+        return render(request, 'tjai_app/inflight.html', {'mode': 'index', 'entry': None,
+                                                          'gone': _inflight_gone_title(request.GET.get('gone'))})
     entry = _inflight_lookup(entry_id)
     if entry is None:
-        raise Http404('No such todo')
+        # Closed (retired) or never there: the index, saying so, rather than an error page in the frame.
+        return redirect('/tjai/inflight/?embed=1&gone=' + quote(str(entry_id), safe=''))
     return render(request, 'tjai_app/inflight.html', {
         'mode': 'view', 'entry': entry,
         'initial_json': json.dumps(_inflight_payload(entry)),
