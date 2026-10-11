@@ -338,8 +338,11 @@ def collect_research(since_ts):
 
 def collect_processes(since_ts):
     """Key process status (1=running, 0=down)."""
+    # Two Apache instances: ePIC's runs with -d /etc/apache2-epic; the personal one is every other apache2 process
+    # (ops/ec2dev/caddy/README.md § The two Apache instances).
     targets = {
         'proc_apache': 'apache2',
+        'proc_apache_epic': '/etc/apache2-epic',
         'proc_supervisord': 'supervisord',
         'proc_action_agent': 'action_agent',
         'proc_cloudwatch': 'amazon-cloudwatch-agent',
@@ -352,6 +355,8 @@ def collect_processes(since_ts):
             with open(f'/proc/{pid_dir}/cmdline', 'rb') as f:
                 cmdline = f.read().decode('utf-8', errors='replace')
             for metric_key, search_term in targets.items():
+                if metric_key == 'proc_apache' and '/etc/apache2-epic' in cmdline:
+                    continue
                 if search_term in cmdline:
                     found[metric_key] = 1
         except (PermissionError, FileNotFoundError):
@@ -576,6 +581,7 @@ def format_markdown(target_date, metrics, averages, notes):
     lines.append('## Processes')
     proc_names = {
         'proc_apache': 'Apache',
+        'proc_apache_epic': 'Apache (ePIC)',
         'proc_supervisord': 'Supervisord',
         'proc_action_agent': 'Action Agent',
         'proc_cloudwatch': 'CloudWatch Agent',

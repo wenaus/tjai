@@ -230,8 +230,11 @@ def collect_postgres():
 
 def collect_processes():
     """Scan /proc for key processes."""
+    # Two Apache instances: ePIC's (apache2@epic, run with -d /etc/apache2-epic) and the personal one, every other
+    # apache2 process (ops/ec2dev/caddy/README.md § The two Apache instances).
     counts = {
         'apache2': 0,
+        'apache2-epic': 0,
         'cloudwatch-agent': 0,
         'action_agent': 0,
         'supervisord': 0,
@@ -243,7 +246,9 @@ def collect_processes():
         try:
             with open(f'/proc/{pid_dir}/cmdline', 'rb') as f:
                 cmdline = f.read().decode('utf-8', errors='replace').replace('\x00', ' ')
-            if 'apache2' in cmdline:
+            if '/etc/apache2-epic' in cmdline:
+                counts['apache2-epic'] += 1
+            elif 'apache2' in cmdline:
                 counts['apache2'] += 1
             if 'amazon-cloudwatch-agent' in cmdline:
                 counts['cloudwatch-agent'] += 1
