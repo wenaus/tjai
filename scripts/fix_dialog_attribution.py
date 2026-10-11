@@ -73,6 +73,7 @@ def main():
             e.data = {**e.data, 'role': 'harness', 'recorded_role': 'user'}
             e.save(update_fields=['data'])
         for e in stolen:
+            e.refresh_from_db(fields=['data'])  # a harness turn above may be the same record
             data = dict(e.data)
             data['misattributed_research'] = {k: data.pop(k) for k in RESEARCH_KEYS if k in data}
             e.data = data
