@@ -2,8 +2,8 @@
 
 `/tjai/git/` shows commit activity across every followed repository: a
 contributions grid from 2026-02-01 onward, monthly totals with a top-five-day
-leaderboard, a weekly lines-added chart by project, and reverse-chronological
-per-day commit lists linking each commit to GitHub.
+leaderboard, a weekly lines-added chart by project with its share pie, and
+reverse-chronological per-day commit lists linking each commit to GitHub.
 
 ## Repository registry
 
@@ -48,11 +48,12 @@ its weekly lines contribute to the AI category.
   cron 03:10 ET) writes `data/git_weekly_loc.json`: lines added (`numstat`) in
   the configured author's commits, bucketed by ISO week in the tjai
   timezone, attributed to a project by repository — for tjrepo, by top-level
-  directory. Every repository under `/home/admin/github` is read; git
+  directory, and for etaverse by subject (below). Every repository under
+  `/home/admin/github` is read; git
   worktrees (a `.git` file, not a directory) are skipped, since a worktree
   of a followed repository would count its history a second time.
   `git_weekly_loc_data` serves the file; the stacked-bar chart below the
-  grid renders it.
+  grid and the share pie under it render it.
 
 ### What the weekly lines count
 
@@ -85,6 +86,33 @@ net source growth; deleted lines are not subtracted. Excluded:
 A new content location is added to `DATA_PATHS`; the next run recomputes every
 week from git history, so the whole chart follows the rule.
 
+### Etaverse by subject
+
+Etaverse counts as six projects, shades of the virtual-world family's orange:
+`etaverse-core` (the server and federation), `etaverse-client` (scene,
+rendering, terrain, sky, physics, camera, navigation, the control window and
+the V1 client), `etaverse-building` (houses, structures, furniture, families,
+finishes, smart objects, editing and the built places), `etaverse-avatars`
+(bodies, hair, attire, outfits, animations, poses, seat fitting),
+`etaverse-vehicles` (ships, trains, boats, flight, docking) and `etaverse-rl`
+(the Earth atlas, the catalogue stars, astronomy and the voyage). Etaverse's
+directories divide by layer rather than subject, so `ETAVERSE_SUBJECTS` reads
+the subject from the file's path: ordered name patterns, the first match
+deciding, an unmatched file counting as client. A file serving several
+subjects counts where its name puts it; the world scene, the largest client
+file, also carries edits made for Earth. A new module whose name carries none
+of its subject's words is added to its pattern, and the next run recomputes
+every week.
+
+### Palette
+
+Each pair of neighbours in the stacking order, and the pie's last slice
+against its first, is compared by `scripts/check_git_chart_palette.py`:
+CIEDE2000 difference under normal vision and simulated protanopia,
+deuteranopia and tritanopia, and each colour against the page's dark surface.
+A change of palette or order is run through it (`uv run
+scripts/check_git_chart_palette.py`, which supplies its one dependency).
+
 ## Dates
 
 All page dates are Eastern, tjai's canonical timezone. The grid's current
@@ -111,4 +139,5 @@ reload always reflects the current git state.
 - `scripts/cron/refresh_git_daily.py`, `scripts/cron/refresh_git_weekly_loc.py`,
   `scripts/cron/git_pull_repos.sh` — producers (system cron; see
   `scripts/cron/crontab`)
+- `scripts/check_git_chart_palette.py` — the palette's neighbour check
 - `data/git_daily/*.md`, `data/git_weekly_loc.json` — the page's data

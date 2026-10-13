@@ -37,7 +37,9 @@ WEEK_ZERO = datetime(2025, 6, 2).date()  # Monday on/after 2025-06-01
 # color-validated (adjacent-pair CVD checks) — change it only with the
 # template palette revalidated to match.
 PROJECTS = ['tjai', 'AI', 'swf', 'swf-monitor',
-            'swf-epicprod', 'swf-testbed', 'primus', 'etaverse',
+            'swf-epicprod', 'swf-testbed', 'primus',
+            'etaverse-core', 'etaverse-client', 'etaverse-building',
+            'etaverse-avatars', 'etaverse-vehicles', 'etaverse-rl',
             'blender', 'pax-eden', 'dev', 'other']
 
 # Repo name -> project. Unlisted repos fall to 'other'; tjrepo is
@@ -69,7 +71,7 @@ REPO_PROJECT = {
 # and the infra/meta dirs count as dev.
 TJREPO_DIR_PROJECT = {
     'tjai': 'tjai', 'tj-getlink': 'tjai',
-    'etaverse': 'etaverse', 'kozykorner': 'dev',
+    'etaverse': 'etaverse-client', 'kozykorner': 'dev',  # etaverse: by subject, below
     'pax-eden': 'pax-eden', 'primus': 'primus', 'primus-blender': 'primus',
     'primus-sl': 'primus', 'primus-wright': 'primus',
     'blender': 'blender',
@@ -78,6 +80,48 @@ TJREPO_DIR_PROJECT = {
     'talks': 'dev', '.claude': 'dev', '.devcontainer': 'dev',
     '.vscode': 'dev', '': 'dev',
 }
+
+# Etaverse is factored by subject, as the swf family is by repository. Its
+# directories divide by layer (client, server, scripts, docs), so a file's
+# subject is read from its etaverse-relative path: the first pattern that
+# matches names the project, and an unmatched file belongs to the world
+# client (scene, rendering, terrain, sky, physics, camera, navigation, the
+# control window and the V1 client). A new module whose name carries none
+# of its subject's words is added to its pattern here; the next run
+# recomputes every week from history.
+_B = r'(?:^|[/_.-])'  # the word starts at a path or name boundary
+ETAVERSE_SUBJECTS = tuple((project, re.compile(pattern)) for project, pattern in (
+    # RL: the Earth atlas, the catalogue stars, astronomy and the voyage
+    ('etaverse-rl', _B + r'earth|astronom|star-(?:field|glow|body|model)|sky_stars'
+     r'|moon-disc|voyage-(?:control|places|card|url)|atlas-journey|^docs/sky\.md$'),
+    ('etaverse-vehicles', _B + r'(?:flight|vessel|rail|ship|boat|helm|dock'
+     r'|thunderbird|maglev|air.taxi|yacht|vehicle|tender|slipway|landing'
+     r'|ride-crossing|realm.crossing|rolling-wheels)'),
+    ('etaverse-avatars', _B + r'(?:avatar|attire|wear|outfit|hair|bento|plushead'
+     r'|mixamo|reallusion|poses?|seats?|sits?|anim|alpha-panel|shape-panel'
+     r'|looks|appearance|worn|stance|avsitter|kimmy)'),
+    # building: houses, structures, furniture, families, finishes, smart
+    # objects, editing, and the built places (Trantor, the Valley Forge,
+    # Arrakis, the shellworld)
+    ('etaverse-building', _B + r'(?:structure|house|famil|furniture|finish|kinds'
+     r'|piece|component|wall.panel|editing|edit-panel|refinement|layouts'
+     r'|materials?\.|asset-materials|covering|candle|faucet|tap|lamps?|fountain'
+     r'|doors?|kitchen|ranch|gable|prairie|place.family|scatter|smart-objects'
+     r'|modular|inworld-builds|frame-panel|construction|trantor|valley.forge'
+     r'|arrakis|shellworld|sandworm)'),
+    # core: the server and federation
+    ('etaverse-core', r'^(?:world/(?!static/|templates/)|hub/|deploy/|agent/'
+     r'|etaverse_project/|[^/]+$)|federation|persistence|inventory|asset.store'
+     r'|resident-state|schema|deployment'),
+))
+
+
+def _etaverse_subject(path):
+    """Project for an etaverse-relative path: its subject, else the client."""
+    for project, rx in ETAVERSE_SUBJECTS:
+        if rx.search(path):
+            return project
+    return 'etaverse-client'
 
 # Path fragments excluded from line counts (generated/vendored files,
 # and script-generated data files — data is not LOC). The -old/-broken/
@@ -172,6 +216,8 @@ def _project_for(repo_name, path):
         top = path.split('/', 1)[0] if '/' in path else ''
         if top in EXCLUDE_TJREPO_TOP:
             return None
+        if top == 'etaverse':
+            return _etaverse_subject(path.split('/', 1)[1])
         return TJREPO_DIR_PROJECT.get(top, 'other')
     return REPO_PROJECT.get(repo_name, 'other')
 

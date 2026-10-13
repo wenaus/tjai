@@ -331,10 +331,16 @@ function buildStats(heatmap) {
 const LOC_COLORS = {
     'tjai': '#4a9df0',
     'AI': '#00a800',
-    // virtual-world family: shades of one orange — primus deepest
-    // (SL/OS scripting dirs count here), etaverse mid, blender (the
-    // pipeline serving both) lightest
-    'primus': '#f26b35', 'etaverse': '#ff8f33', 'blender': '#ffb680',
+    // virtual-world family: shades of orange — primus (SL/OS scripting
+    // dirs count here), then etaverse by subject, alternating dark and
+    // light from rust to gold, the RL programme brightest; blender (the
+    // pipeline serving both) a pale peach. Neighbours are checked by
+    // scripts/check_git_chart_palette.py.
+    'primus': '#f26b35',
+    'etaverse-core': '#a94f1f', 'etaverse-client': '#ff8f33',
+    'etaverse-building': '#c97a29', 'etaverse-avatars': '#ffb35c',
+    'etaverse-vehicles': '#bf9a38', 'etaverse-rl': '#ffe066',
+    'blender': '#ffb680',
     'pax-eden': '#a89bff',
     // swf family: subtle shades of one pink — residual deepest
     'swf': '#d15c92', 'swf-monitor': '#e86ba0',
@@ -438,9 +444,9 @@ function buildLocPie(d) {
     if (!grand) return '';
     const fmt = v => v.toLocaleString('en-US');
 
-    // cx leaves room for the longest left-hand label (swf-epicprod 11%,
-    // ~106px at 11px monospace) between the box edge and the label ring.
-    const cx = 340, cy = 240, r = 210, labelR = r + 12;
+    // cx leaves room for the longest left-hand label (etaverse-building
+    // 6%, ~132px at 11px monospace) between the box edge and the label ring.
+    const cx = 400, cy = 240, r = 210, labelR = r + 12;
     let a0 = -Math.PI / 2;  // start at 12 o'clock, stacking order
     let svg = '';
     for (const t of totals) {
@@ -465,7 +471,7 @@ function buildLocPie(d) {
     return `<div class="locchart">
         <div class="locchart-title">Share of lines added, by project</div>
         <div class="locchart-sub">${fmt(grand)} lines total over ${d.week_start.length} weeks</div>
-        <svg width="680" height="480" viewBox="0 0 680 480">${svg}</svg>
+        <svg width="760" height="480" viewBox="0 0 760 480">${svg}</svg>
     </div>`;
 }
 
