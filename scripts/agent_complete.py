@@ -975,9 +975,8 @@ def main():
 
 
 def _publish_ideation_gold(ref_extra):
-    """The gold report's items into the day's synopsis, above its link, and each onto Capcom as its own notice:
-    the filter on the ideation log that Torre reads instead of the log (docs/agents.md § Ideation gold)."""
-    import hashlib
+    """The gold report's items into the day's synopsis, above its link, and onto Capcom as one notice carrying
+    them all: the filter on the ideation log that Torre reads instead of the log (docs/agents.md § Ideation gold)."""
     import re
     try:
         from synopsis_utils import append_section, find_daily_entry
@@ -994,11 +993,14 @@ def _publish_ideation_gold(ref_extra):
         if synopsis:
             body = ''.join(f'- {g}\n' for g in items) if items else 'No gold today.\n'
             append_section(synopsis, 'Ideation gold', f'{body}\n{link}')
-        for g in items:
+        if items:
+            # Capcom's detail is plain text: Markdown links flatten to their labels; the report keeps the links.
+            plain = [re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', g) for g in items]
             _emit_capcom(
-                title=f'Ideation gold: {g}',
+                title=f'Ideation gold: {len(items)} item{"s" if len(items) != 1 else ""}',
                 url=f'/tjai/entry/?entry_id={eid}',
-                dedup_key=f'ideation-gold-{today:%Y%m%d}-{hashlib.sha1(g.encode()).hexdigest()[:12]}',
+                dedup_key=f'ideation-gold-{today:%Y%m%d}',
+                detail='\n\n'.join(f'- {p}' for p in plain),
                 severity='warning',
             )
         logger.info("ideation-gold-agent: %d items to the synopsis and Capcom", len(items), extra=ref_extra)

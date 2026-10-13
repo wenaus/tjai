@@ -172,7 +172,8 @@ coupling nobody acted on, a promise not kept, an approved follow-up not done, a 
 on his word, something dropped), each checked against the current record first. Research topics, picks,
 optional offers, news, summaries and anything already a swf ping are never gold; zero items is a valid
 report. On its completion `agent_complete.py` puts the items in the daily synopsis under "Ideation gold",
-above the report's link, and posts each to Capcom as its own warning (source `tjai-pipeline`).
+above the report's link, and posts one Capcom warning per report (source `tjai-pipeline`), titled with the
+item count and linked to the report, with the items as its expandable detail.
 
 ### Research Page (`/tjai/research/`)
 
