@@ -199,6 +199,7 @@ DATA_PATHS = {
         'etaverse/assets/earth/curation/character-lodging.json',
         'etaverse/assets/earth/curation/much-loved-bookstores.json',
         'etaverse/assets/earth/curation/camping/*.json',
+        'etaverse/assets/earth/curation/hiking-cycling/*.json',
         'etaverse/assets/earth/curation/cultural-highlights/*.json',
         'etaverse/assets/bento/sl/*.xml',  # imported Second Life data
         'etaverse/assets/bento/vendor/**',  # third-party code and data
