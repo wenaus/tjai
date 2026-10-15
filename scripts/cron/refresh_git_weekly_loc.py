@@ -9,6 +9,7 @@ and for tjrepo by top-level directory.
 
 Runs via cron; the page's data endpoint just reads the JSON file.
 """
+import ast
 import json
 import logging
 import os
@@ -202,10 +203,46 @@ DATA_REGEXES = {repo: tuple(_glob_regex(p) for p in patterns)
                 for repo, patterns in DATA_PATHS.items()}
 
 
+def _generated_family_paths(repo):
+    """Read the family writer's registry without executing its generators."""
+    source_dir = repo / 'etaverse' / 'scripts' / 'families'
+    registry = source_dir / '__init__.py'
+    if not registry.exists():
+        return set()
+    tree = ast.parse(registry.read_text(encoding='utf-8'))
+    modules = next(ast.literal_eval(node.value) for node in tree.body
+                   if isinstance(node, ast.Assign) and any(
+                       isinstance(target, ast.Name) and target.id == 'MODULES'
+                       for target in node.targets))
+    family_names = {path.stem for path in
+                    (repo / 'etaverse' / 'world' / 'families').glob('*.json')}
+    generated = set()
+    for module in modules:
+        tree = ast.parse((source_dir / f'{module}.py').read_text(encoding='utf-8'))
+        literals = {node.value for node in ast.walk(tree)
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str)}
+        candidates = literals & family_names
+        conventional_name = module.replace('_', '-')
+        if conventional_name in family_names or not candidates:
+            name = conventional_name
+        elif len(candidates) == 1:
+            name = candidates.pop()
+        else:
+            logger.warning('Unresolved family output for %s; keeping it counted', module)
+            continue
+        generated.add(f'etaverse/world/families/{name}.json')
+    return generated
+
+
+GENERATED_FAMILY_PATHS = _generated_family_paths(GITHUB_ROOT / 'tjrepo')
+
+
 def _excluded(path, repo_name=''):
     if any(part in path for part in EXCLUDE_PARTS):
         return True
     if path.endswith(EXCLUDE_SUFFIXES):
+        return True
+    if repo_name == 'tjrepo' and path in GENERATED_FAMILY_PATHS:
         return True
     return any(rx.match(path) for rx in DATA_REGEXES.get(repo_name, ()))
 

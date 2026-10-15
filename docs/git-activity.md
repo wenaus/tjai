@@ -72,10 +72,15 @@ net source growth; deleted lines are not subtracted. Excluded:
   image-generation output, exported Second Life shape data, generated
   IAU/JPL catalogs and orbital states, imported Second Life XML,
   the vendored LSL optimizer and generated change inventories.
+- **Generated family JSON** identified from the registered generators in
+  `etaverse/scripts/families/__init__.py`. The counter reads generator source
+  without executing it. The Python generators count; their expanded records
+  under `world/families/` do not. Handwritten family JSON remains counted.
 - **Archives and staging directories** in tjrepo (`EXCLUDE_TJREPO_TOP`), the
   enumerated cross-repository moves.
 
-Authored material counts in every format: component families, houses,
+Authored material counts in every format: family generators, handwritten
+component definitions, houses,
 finishes, Blender presets and recipes, curated catalogs, avatar libraries,
 celestial layouts, biome and site definitions, application code, tests and
 documentation. JSON and commit size are not reasons for exclusion.
