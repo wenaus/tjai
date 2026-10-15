@@ -158,6 +158,9 @@ CROSS_REPO_MOVE_COMMITS = {
 # of format. '*' stays within one directory; '**' crosses directories.
 DATA_PATHS = {
     'tjrepo': (
+        'data/recipes*.xml',  # Yum recipe exports, not source code
+        'data/myrecipes.xml',
+        'data/newrecipes*.xml',
         'tjai/recipe_data/**',  # imported recipe collection
         'computers/common/claude-skills/synced/**',
         'primus-blender/factory/maglev/meadow-source.json',
@@ -178,6 +181,15 @@ DATA_PATHS = {
         'etaverse/assets/astronomy/venus-marks.json',
         'etaverse/assets/mars/features.json',
         'etaverse/assets/mars/system.json',
+        # Generated/imported Earth publication bundles. Authored *-selection.json
+        # inputs alongside them and the Python builders remain counted.
+        'etaverse/assets/earth/curation/mappeteer.json',
+        'etaverse/assets/earth/curation/appalachia.json',
+        'etaverse/assets/earth/curation/berkshires-bookmarks.json',
+        'etaverse/assets/earth/curation/loves-roadtrip.json',
+        'etaverse/assets/earth/curation/texas-roadhouse-roadtrip.json',
+        'etaverse/assets/earth/curation/national-parks-roadtrip.json',
+        'etaverse/assets/earth/curation/cultural-highlights/*.json',
         'etaverse/assets/bento/sl/*.xml',  # imported Second Life data
         'etaverse/assets/bento/vendor/**',  # third-party code and data
         'etaverse/docs/history/*.json',  # generated change inventories

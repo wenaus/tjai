@@ -66,12 +66,17 @@ net source growth; deleted lines are not subtracted. Excluded:
   `.dae`, `.bvh`, `.dbml`); snapshot copies of own code (`-old.`, `_broken.`,
   `SUPERSEDED`).
 - **Generated output and imported material**, by explicit tjrepo path
-  (`DATA_PATHS`): the imported recipe collection, synced third-party skills,
+  (`DATA_PATHS`): the imported recipe collection and Yum XML exports, synced third-party skills,
   meadow route geometry, Blender
   factory build output, recorded production evidence, rail survey reports,
   image-generation output, exported Second Life shape data, generated
   IAU/JPL catalogs and orbital states, imported Second Life XML,
   the vendored LSL optimizer and generated change inventories.
+- **Generated/imported Earth publication bundles**, by exact output path under
+  `etaverse/assets/earth/curation/`: Mappeteer recovery, Appalachia boundaries,
+  normalized Berkshires bookmarks, Love's, Texas Roadhouse, national parks, and
+  the `cultural-highlights/*.json` bundles. The adjacent authored
+  `*-selection.json` inputs and the builder/recovery/publisher code count.
 - **Generated family JSON** identified from the registered generators in
   `etaverse/scripts/families/__init__.py`. The counter reads generator source
   without executing it. The Python generators count; their expanded records
