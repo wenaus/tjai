@@ -73,7 +73,7 @@ net source growth; deleted lines are not subtracted. Excluded:
   IAU/JPL catalogs and orbital states, imported Second Life XML,
   the vendored LSL optimizer and generated change inventories.
 - **Generated/imported Earth publication bundles**, by exact output path under
-  `etaverse/assets/earth/curation/`: Mappeteer recovery, Appalachia boundaries,
+  `etaverse/assets/earth/curation/`: Mappeteer recovery and reviewed region geometry, Appalachia boundaries,
   normalized Berkshires bookmarks, Love's, Texas Roadhouse, national parks,
   Pathways, mountain regions, science labs, great universities, great museums
   and historic sites, and the `cultural-highlights/*.json` bundles. The adjacent authored

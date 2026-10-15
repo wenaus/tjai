@@ -184,6 +184,7 @@ DATA_PATHS = {
         # Generated/imported Earth publication bundles. Authored *-selection.json
         # inputs alongside them and the Python builders remain counted.
         'etaverse/assets/earth/curation/mappeteer.json',
+        'etaverse/assets/earth/curation/mappeteer-region-refinements.json',
         'etaverse/assets/earth/curation/appalachia.json',
         'etaverse/assets/earth/curation/berkshires-bookmarks.json',
         'etaverse/assets/earth/curation/loves-roadtrip.json',
