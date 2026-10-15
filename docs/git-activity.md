@@ -65,26 +65,24 @@ net source growth; deleted lines are not subtracted. Excluded:
   `dist/`, `.venv/`, …) and suffix (`.min.js`, `package-lock.json`, `.lock`,
   `.dae`, `.bvh`, `.dbml`); snapshot copies of own code (`-old.`, `_broken.`,
   `SUPERSEDED`).
-- **World content data and third-party material**, by explicit tjrepo path
-  (`DATA_PATHS`): Etaverse's published component families
-  (`etaverse/world/families/*.json`), houses (`world/houses/*.json`), finish
-  and covering catalogs (`world/*.json`), family generator data
-  (`scripts/families/**/*.json`), avatar and motion libraries
-  (`frontend/src/shared/avatars/**/*.json`), the celestial layout, asset
-  manifests and catalogs (`assets/**/*.json`), imported Second Life XML
-  (`assets/bento/sl/*.xml`),
-  the vendored LSL optimizer (`assets/bento/vendor/**`, code as well as data)
-  and generated change inventories (`docs/history/*.json`). JSON is excluded
-  only at these paths; `package.json` and `tsconfig.json` always count. The
-  generators that write the content (Python, Blender), application code,
-  tests, documentation and authored storyboards (`assets/storyboards/*.md`)
-  count.
+- **Generated output and imported material**, by explicit tjrepo path
+  (`DATA_PATHS`): the imported recipe collection, synced third-party skills,
+  meadow route geometry, Blender
+  factory build output, recorded production evidence, rail survey reports,
+  image-generation output, exported Second Life shape data, generated
+  IAU/JPL catalogs and orbital states, imported Second Life XML,
+  the vendored LSL optimizer and generated change inventories.
 - **Archives and staging directories** in tjrepo (`EXCLUDE_TJREPO_TOP`), the
-  enumerated cross-repository moves, and any single commit adding more than
-  100,000 counted lines (a bulk import, dropped whole).
+  enumerated cross-repository moves.
 
-A new content location is added to `DATA_PATHS`; the next run recomputes every
-week from git history, so the whole chart follows the rule.
+Authored material counts in every format: component families, houses,
+finishes, Blender presets and recipes, curated catalogs, avatar libraries,
+celestial layouts, biome and site definitions, application code, tests and
+documentation. JSON and commit size are not reasons for exclusion.
+Project `package.json` and `tsconfig.json` files count; copies inside excluded
+third-party packages or generated output do not. New generated or imported
+locations are added to `DATA_PATHS`; the next run recomputes every week from
+git history, so the whole chart follows the rule.
 
 ### Etaverse by subject
 

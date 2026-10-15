@@ -144,10 +144,6 @@ EXCLUDE_SUFFIXES = ('.min.js', '.min.css', 'package-lock.json', '.lock',
 EXCLUDE_TJREPO_TOP = {'etaverse-2014', 'tjai-archive', 'tjweb-old',
                       'tjweb-2013', 'sl2007', 'transfers'}
 
-# A single commit adding more than this is a bulk import (e.g. the 296k-line
-# recipe migration), dropped whole. Stated on the chart.
-BULK_COMMIT_LINES = 100_000
-
 # Cross-repo moves: git rename detection (-M) is per-repo, so code moved
 # between repositories books as new lines. Enumerated manually and dropped.
 CROSS_REPO_MOVE_COMMITS = {
@@ -156,31 +152,36 @@ CROSS_REPO_MOVE_COMMITS = {
 }
 
 
-# Content data and third-party material, by explicit path (tjrepo-relative
-# globs: '*' within one directory, '**' across directories). JSON is not
-# excluded wholesale: these are the paths where it is world content —
-# published component families, houses, finish catalogs, avatar and motion
-# libraries, asset manifests — or generated inventories. The generators that
-# write them (Python, Blender), application code, tests, docs and authored
-# storyboards stay counted.
+# Generated output and imported material, by explicit tjrepo-relative path.
+# Authored definitions, presets, catalogs and configuration count regardless
+# of format. '*' stays within one directory; '**' crosses directories.
 DATA_PATHS = {
     'tjrepo': (
-        'etaverse/world/families/*.json',
-        'etaverse/world/houses/*.json',
-        'etaverse/world/*.json',  # finishes, bed_finishes, coverings, wall_panel_finishes
-        'etaverse/scripts/families/**/*.json',
-        'etaverse/scripts/thunderbird_landing_profile.json',
-        'etaverse/frontend/src/shared/avatars/**/*.json',
-        'etaverse/frontend/src/shared/spatial/celestial-layout.json',
-        'etaverse/assets/**/*.json',
+        'tjai/recipe_data/**',  # imported recipe collection
+        'computers/common/claude-skills/synced/**',
+        'primus-blender/factory/maglev/meadow-source.json',
+        'primus-blender/factory/**/output/**',
+        'etaverse/frontend/src/world/epicprod-evidence.json',
+        'etaverse/scripts/data/trantor-rail-assessment.json',
+        'etaverse/output/**',
+        'etaverse/frontend/src/shared/avatars/sl-shape-data.json',
+        'etaverse/frontend/src/shared/avatars/sl-shape-sliders.json',
+        # Catalogs generated from IAU features and JPL orbital states.
+        'etaverse/assets/astronomy/charon-marks.json',
+        'etaverse/assets/astronomy/earth-spacecraft.json',
+        'etaverse/assets/astronomy/europa-marks.json',
+        'etaverse/assets/astronomy/jupiter-marks.json',
+        'etaverse/assets/astronomy/pluto-marks.json',
+        'etaverse/assets/astronomy/saturn-marks.json',
+        'etaverse/assets/astronomy/titan-marks.json',
+        'etaverse/assets/astronomy/venus-marks.json',
+        'etaverse/assets/mars/features.json',
+        'etaverse/assets/mars/system.json',
         'etaverse/assets/bento/sl/*.xml',  # imported Second Life data
         'etaverse/assets/bento/vendor/**',  # third-party code and data
         'etaverse/docs/history/*.json',  # generated change inventories
     ),
 }
-# Project build configuration is authored, never content data.
-KEEP_NAMES = ('package.json', 'tsconfig.json')
-
 
 def _glob_regex(pattern):
     out = ''
@@ -206,8 +207,6 @@ def _excluded(path, repo_name=''):
         return True
     if path.endswith(EXCLUDE_SUFFIXES):
         return True
-    if path.rsplit('/', 1)[-1] in KEEP_NAMES:
-        return False
     return any(rx.match(path) for rx in DATA_REGEXES.get(repo_name, ()))
 
 
@@ -268,9 +267,8 @@ def collect():
 
         def flush():
             if week is not None and week < n_weeks:
-                if sum(a for _, a in pending) <= BULK_COMMIT_LINES:
-                    for proj, adds in pending:
-                        counts[proj][week] += adds
+                for proj, adds in pending:
+                    counts[proj][week] += adds
             pending.clear()
 
         for line in result.stdout.splitlines():
@@ -314,7 +312,7 @@ def collect():
         'generated_at': datetime.now(tz=tz).isoformat(),
         'author': AUTHOR,
         'metric': 'lines added',
-        'bulk_commit_lines': BULK_COMMIT_LINES,
+        'bulk_commit_lines': None,  # Retained field; authored work has no size cutoff.
         'week_start': weeks,
         'projects': PROJECTS,
         'series': counts,
