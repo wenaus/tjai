@@ -192,6 +192,8 @@ DATA_PATHS = {
         'etaverse/assets/earth/curation/pathways.json',
         'etaverse/assets/earth/curation/mountain-regions.json',
         'etaverse/assets/earth/curation/science-labs.json',
+        'etaverse/assets/earth/curation/great-universities.json',
+        'etaverse/assets/earth/curation/great-museums-historic-sites.json',
         'etaverse/assets/earth/curation/cultural-highlights/*.json',
         'etaverse/assets/bento/sl/*.xml',  # imported Second Life data
         'etaverse/assets/bento/vendor/**',  # third-party code and data

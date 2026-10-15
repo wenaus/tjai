@@ -74,8 +74,9 @@ net source growth; deleted lines are not subtracted. Excluded:
   the vendored LSL optimizer and generated change inventories.
 - **Generated/imported Earth publication bundles**, by exact output path under
   `etaverse/assets/earth/curation/`: Mappeteer recovery, Appalachia boundaries,
-  normalized Berkshires bookmarks, Love's, Texas Roadhouse, national parks, Pathways, mountain regions, science labs, and
-  the `cultural-highlights/*.json` bundles. The adjacent authored
+  normalized Berkshires bookmarks, Love's, Texas Roadhouse, national parks,
+  Pathways, mountain regions, science labs, great universities, great museums
+  and historic sites, and the `cultural-highlights/*.json` bundles. The adjacent authored
   `*-selection.json` inputs and the builder/recovery/publisher code count.
 - **Generated family JSON** identified from the registered generators in
   `etaverse/scripts/families/__init__.py`. The counter reads generator source
