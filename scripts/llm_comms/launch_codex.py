@@ -63,6 +63,21 @@ def read_runtime(directory):
     return json.loads((directory / "runtime.json").read_text())
 
 
+TEAMCOMMS = Path.home() / ".config/teamcomms/torre-ai"
+
+
+def start_teamcomms(directory, data):
+    """Attach a SWF TeamComms receiver to this owning app-server on an enrolled host."""
+    python, config = TEAMCOMMS / "python", TEAMCOMMS / "connector.json"
+    if not (os.access(python, os.X_OK) and config.is_file() and (TEAMCOMMS / "token").is_file()):
+        return
+    with open(directory / f"teamcomms-{data['session_id']}.log", "a") as log:
+        subprocess.Popen([str(python), "-m", "teamcomms.connectors.cli", "--config", str(config), "receive",
+            "--client", "codex", "--native-id", data["session_id"], "--socket", str(directory / "codex.sock"),
+            "--pid", str(data["owner_pid"]), "--name", data["session_name"], "--cwd", data["cwd"],
+            "--model", data["model"]], stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
+
+
 async def supervise(directory):
     runtime = read_runtime(directory)
     host, _ = machine()
@@ -85,6 +100,7 @@ async def supervise(directory):
                                 "model": thread.get("model") or "",
                                 "owner_pid": runtime["server_pid"]}
                         start("codex", data, host)
+                        start_teamcomms(directory, data)
                         watched.add(native_id)
                 watched.intersection_update(loaded)
             # TUI exit keeps an already-running turn alive until completion.
