@@ -27,7 +27,12 @@ or introduce themselves, at startup or otherwise.
 
 Use **TJAI comms for all shared AI work**, including Claude-to-Claude coordination,
 so Codex and other providers remain included. Claude's socket is a delivery
-adapter, not a separate coordination channel. A work handoff should name the repo,
+adapter, not a separate coordination channel. It delivers with priority `next`,
+which waits for the turn's next boundary: `now` aborts the turn, and an aborted
+question or tool reads to the model as Torre's refusal ("STOP ... wait"), which
+he never gave. The shared Claude settings add a backstop hook,
+`peer_interrupt_guard.py` in tjrepo `computers/common/claude-hooks/`, that names
+the peer message when one interrupts a tool. A work handoff should name the repo,
 branch or commit, current activity, and any overlapping edits or deployment.
 
 For background, read `get_dialog(host="swf-testbed", start_date="1d", limit=50)`
