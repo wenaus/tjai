@@ -105,7 +105,12 @@ the V1 client), `etaverse-building` (houses, structures, furniture, families,
 finishes, smart objects, editing and the built places), `etaverse-avatars`
 (bodies, hair, attire, outfits, animations, poses, seat fitting),
 `etaverse-vehicles` (ships, trains, boats, flight, docking) and `etaverse-rl`
-(the Earth atlas, the catalogue stars, astronomy and the voyage). Etaverse's
+(the Earth atlas, the catalogue stars, astronomy, the voyage, and the ePIC experimental hall,
+detector/event display and computing centre). Dedicated `epic`, `epic_site`, `epicprod`
+and `comp-room`/`comp_room` paths, plus `scene/event-display.js`, count as RL before
+generic site, avatar, family or building matches. Their authored generators, simulation
+and conversion scripts, auditions and documentation follow the same classification;
+existing generated/imported exclusions still apply. Etaverse's
 directories divide by layer rather than subject, so `ETAVERSE_SUBJECTS` reads
 the subject from the file's path: ordered name patterns, the first match
 deciding, an unmatched file counting as client. A file serving several

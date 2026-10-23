@@ -92,6 +92,9 @@ TJREPO_DIR_PROJECT = {
 # recomputes every week from history.
 _B = r'(?:^|[/_.-])'  # the word starts at a path or name boundary
 ETAVERSE_SUBJECTS = tuple((project, re.compile(pattern)) for project, pattern in (
+    # Scientific builds precede generic site, family and scene-module matches.
+    ('etaverse-rl', _B + r'(?:epic(?:prod)?|comp[-_]room)(?=$|[/_.-])'
+     r'|^frontend/src/world/scene/event-display\.js$'),
     # RL: the Earth atlas, the catalogue stars, astronomy and the voyage
     ('etaverse-rl', _B + r'earth|astronom|star-(?:field|glow|body|model)|sky_stars'
      r'|moon-disc|voyage-(?:control|places|card|url)|atlas-journey|^docs/sky\.md$'),
