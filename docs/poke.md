@@ -18,6 +18,8 @@ Needs you contains current decisions and reviews. Keep contains retained
 proposals. Deferred items return on their selected date. Approval stays visible
 until an owner picks it up into a linked Inflight activity. Done and dismissed
 records leave the live list but retain their URLs and version history.
+Cancel discards unsaved form edits and returns to the saved item, or to the
+list when adding a new item.
 
 ## Keep maintenance
 

@@ -8,5 +8,8 @@
   <label>Responsible person / session <input name="owner" maxlength="100" required value="{% if form.action == 'save' %}{{ form.owner }}{% else %}{{ selected.owner }}{% endif %}"></label>
   <label>Group <select name="category"><option value="attention">Needs you</option><option value="keep"{% if form.category == 'keep' or selected.category == 'keep' %} selected{% endif %}>Keep</option></select></label>
   <label>References <textarea name="refs" rows="2" placeholder="One per line: label | https://…">{% if form.action == 'save' %}{{ form.refs }}{% else %}{{ selected.reference_lines }}{% endif %}</textarea></label>
-  <button type="submit" class="primary">{% if selected %}Save{% else %}Add{% endif %}</button>
+  <div class="actions">
+    <button type="submit" class="primary">{% if selected %}Save{% else %}Add{% endif %}</button>
+    <a class="button" href="{% if selected %}{{ selected.frame_url }}{% else %}/tjai/poke/?embed=1{% endif %}">Cancel</a>
+  </div>
 </form>
