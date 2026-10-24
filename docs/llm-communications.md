@@ -15,6 +15,20 @@ embedded sessions use a deferred native queue until restarted. Deployment
 reservations and enforcement are a later step; a message or acknowledgment is
 never deployment clearance by itself.
 
+The separate SWF TeamComms startup policy is shared by Claude and Codex in
+`scripts/llm_comms/teamcomms_startup.py`. It admits only `ec2-N` on ec2dev and
+`swf-N` on swf-testbed, with a positive integer N, and excludes every run
+carrying `TJAI_ACTION_ID`. Automatic greetings are disabled. Claude's name is
+resolved from its live registry before enrollment; Codex also accepts its
+named native session's record in the authenticated TJAI directory. Unnamed and temporary
+sessions remain outside TeamComms.
+
+TeamComms envelopes captured by the dialog hook retain `role=peer`, their
+message UUID and claimed sender provenance. A collaborator request is handled
+within the participant's domain and the recipient's existing authority. A
+relayed operator order requires the original human turn; a peer delivery does
+not establish operator approval, regardless of its label.
+
 ## Everyday use
 
 Launch `claude` or `codex` through the shared shell setup. Registration and the

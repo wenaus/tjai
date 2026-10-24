@@ -17,6 +17,7 @@ import time
 
 from codex_client import CodexClient
 from startup import machine, start
+from teamcomms_startup import codex_name, eligible, silence
 
 
 VALUE_OPTIONS = {"-c", "--config", "-C", "--cd", "-m", "--model", "-p", "--profile",
@@ -68,20 +69,27 @@ TEAMCOMMS = Path.home() / ".config/teamcomms/torre-ai"
 
 def start_teamcomms(directory, data):
     """Attach a SWF TeamComms receiver to this owning app-server on an enrolled host."""
+    host, _ = machine()
     python, config = TEAMCOMMS / "python", TEAMCOMMS / "connector.json"
     if not (os.access(python, os.X_OK) and config.is_file() and (TEAMCOMMS / "token").is_file()):
-        return
+        return False
+    name = codex_name(host, data["session_id"], data.get("session_name"))
+    if not eligible(host, name):
+        return False
+    silence(config)
     with open(directory / f"teamcomms-{data['session_id']}.log", "a") as log:
         subprocess.Popen([str(python), "-m", "teamcomms.connectors.cli", "--config", str(config), "receive",
             "--client", "codex", "--native-id", data["session_id"], "--socket", str(directory / "codex.sock"),
-            "--pid", str(data["owner_pid"]), "--name", data["session_name"], "--cwd", data["cwd"],
+            "--pid", str(data["owner_pid"]), "--name", name, "--cwd", data["cwd"],
             "--model", data["model"]], stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
+    return True
 
 
 async def supervise(directory):
     runtime = read_runtime(directory)
     host, _ = machine()
     watched = set()
+    teamcomms_watched, teamcomms_attempted = set(), {}
     while True:
         try:
             os.kill(runtime["server_pid"], 0)
@@ -94,15 +102,20 @@ async def supervise(directory):
                     if thread.get("threadSource") != "user":
                         continue  # Internal title/housekeeping models are not operator sessions.
                     active |= thread["status"]["type"] == "active"
-                    if native_id not in watched:
-                        data = {"session_id": native_id, "cwd": thread.get("cwd", runtime["cwd"]),
+                    data = {"session_id": native_id, "cwd": thread.get("cwd", runtime["cwd"]),
                                 "session_name": thread.get("name") or f"{host}-codex-{native_id[-8:]}",
                                 "model": thread.get("model") or "",
-                                "owner_pid": runtime["server_pid"]}
+                            "owner_pid": runtime["server_pid"]}
+                    if native_id not in watched:
                         start("codex", data, host)
-                        start_teamcomms(directory, data)
                         watched.add(native_id)
+                    if (native_id not in teamcomms_watched
+                            and time.monotonic() - teamcomms_attempted.get(native_id, 0) >= 30):
+                        teamcomms_attempted[native_id] = time.monotonic()
+                        if start_teamcomms(directory, data):
+                            teamcomms_watched.add(native_id)
                 watched.intersection_update(loaded)
+                teamcomms_watched.intersection_update(loaded)
             # TUI exit keeps an already-running turn alive until completion.
             disconnected = (directory / "disconnected").exists()
             try:

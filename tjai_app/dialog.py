@@ -58,11 +58,13 @@ def record_dialog(data):
         raise DialogValidationError("source_id must be a string of at most 512 characters")
     if source_id and not all(data.get(k) for k in ("hostname", "client", "session_id")):
         raise DialogValidationError("source_id requires hostname, client and session_id")
+    peer_data = None
     if role == "user":
-        from .comms_dialog import recorded_native_peer
+        from .comms_dialog import external_peer_data, recorded_native_peer
         peer_entry = recorded_native_peer(content, data, recorded_at)
         if peer_entry:
             return {"status": "ok", "entry_id": peer_entry.id}
+        peer_data = external_peer_data(content)
     entry_data = {
         "role": role,
         "client": data.get("client"),
@@ -81,6 +83,8 @@ def record_dialog(data):
         entry_data["content_type"] = data["content_type"]
     if role == "user" and content.startswith(HARNESS_PREFIXES):
         entry_data["role"] = "harness"
+    if peer_data:
+        entry_data.update(peer_data)
 
     extra_tags = []
 
@@ -138,5 +142,9 @@ def record_dialog(data):
             Tag.objects.create(tag_name=DIALOG_TAG, entry=entry)
             for tag in extra_tags:
                 Tag.objects.create(tag_name=tag, entry=entry)
+        elif peer_data and (entry.data or {}).get("role") == "user":
+            # A retry may refer to a turn ingested before peer attribution.
+            entry.data = {**(entry.data or {}), **peer_data, "recorded_role": "user"}
+            entry.save(update_fields=["data"])
 
     return {"status": "ok", "entry_id": entry.id}

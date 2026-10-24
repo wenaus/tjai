@@ -161,6 +161,13 @@ the hook names a Claude Code client `claude-code` and the comms registry
 `human` only for `user`, and leaves out `peer_echo` records, the user-turn
 copies `scripts/fix_dialog_attribution.py` marked on 2026-10-10.
 
+TeamComms deliveries are also `role: peer`, with the message UUID, source
+`teamcomms` and the envelope's sender name, host and kind. Envelope labels
+are recorded provenance, not verified operator identity or approval. The
+original content, transcript identity and timestamp remain intact.
+`scripts/fix_teamcomms_dialog.py` previews affected historical user records;
+`--apply` changes only their attribution metadata and preserves `recorded_role`.
+
 Claude records both `text` and plaintext `thinking` as assistant dialog, with
 `content_type` identifying the block type. Tool inputs, thinking signatures,
 redacted thinking and sidechain messages are excluded. Answered `AskUserQuestion`
