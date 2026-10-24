@@ -93,10 +93,11 @@ def refresh_supervisors():
         pid = int(pid_text)
         os.kill(pid, signal.SIGTERM)
         for _ in range(20):
-            try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
+            state = subprocess.run(["ps", "-p", str(pid), "-o", "stat="],
+                                   capture_output=True, text=True)
+            if state.returncode == 1 or state.stdout.strip().startswith("Z"):
                 break
+            state.check_returncode()
             time.sleep(.1)
         else:
             raise RuntimeError(f"Supervisor {pid} did not exit; no replacement started")
