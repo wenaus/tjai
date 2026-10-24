@@ -328,6 +328,22 @@ RssItem(guid, feed_url, source, category, title, url, precis, published, fetched
 - `tjai_app/views.py` — `rss_page`, `api_rss_*` endpoints
 - `tjai_app/templates/tjai_app/rss.html`
 
+### Backlog review
+
+`scripts/triage_rss_backlog.py` saves an unread snapshot and a proposed selection
+under `data/rss-review/`. Its title and summary ranking assists a manual review
+of approximately one fifth of the backlog, with source limits and duplicate-URL
+suppression. The review weights and exclusions are explicit in the script;
+they are not an automatic or scheduled reading policy.
+
+Run `snapshot <snapshot.json>`, then `rank <snapshot.json> --plan <plan.json>`.
+Review the plan's `keep` and `ranked` fields, then run `finish-review` with the
+same arguments. `apply` requires that review mark and the matching snapshot
+SHA-256. It calls the RSS reader's existing batch mark-read action for the
+snapshot items outside `keep`, leaves later arrivals and other reading-list
+state alone, and saves a receipt listing the cleared identifiers. Articles
+remain in the database. Feed fetch errors are independent of unread counts.
+
 ---
 
 ## Other Scheduled Actions
