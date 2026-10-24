@@ -1,0 +1,12 @@
+{% load l10n %}
+<form method="post">
+  {% csrf_token %}<input type="hidden" name="action" value="save">
+  {% if selected %}<input type="hidden" name="modified_ts" value="{{ selected.modified_ts|unlocalize }}">{% endif %}
+  <label>Title <input name="title" maxlength="100" required value="{% if form.action == 'save' %}{{ form.title }}{% else %}{{ selected.title }}{% endif %}"></label>
+  <label>Situation and ask <textarea name="explanation" rows="4" maxlength="900" required placeholder="2–4 short sentences: what matters, and what needs deciding or keeping.">{% if form.action == 'save' %}{{ form.explanation }}{% else %}{{ selected.explanation }}{% endif %}</textarea></label>
+  <div class="hint">At most 100 words. Put supporting detail behind links.</div>
+  <label>Responsible person / session <input name="owner" maxlength="100" required value="{% if form.action == 'save' %}{{ form.owner }}{% else %}{{ selected.owner }}{% endif %}"></label>
+  <label>Group <select name="category"><option value="attention">Needs you</option><option value="keep"{% if form.category == 'keep' or selected.category == 'keep' %} selected{% endif %}>Keep</option></select></label>
+  <label>References <textarea name="refs" rows="2" placeholder="One per line: label | https://…">{% if form.action == 'save' %}{{ form.refs }}{% else %}{{ selected.reference_lines }}{% endif %}</textarea></label>
+  <button type="submit" class="primary">{% if selected %}Save{% else %}Add{% endif %}</button>
+</form>

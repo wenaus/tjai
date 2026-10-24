@@ -9055,6 +9055,7 @@ def capcom_notepad(request):
 def api_capcom_feed(request):
     """Feed page + state tiles + pinned shelf + source registry, one poll."""
     from . import capcom as capcom_lib
+    from . import poke
     from .models import Notice
 
     try:
@@ -9213,6 +9214,7 @@ def api_capcom_feed(request):
         # The shelf is the quick list of what has work outstanding; the
         # Inflight view in the right panel carries every one of them.
         'inflight': [i for i in _inflight_list() if i['open']][:20],
+        'poke_attention': poke.attention_count(),
         'sources': capcom_lib.get_sources(),
         'counts_24h': counts_24h,
         'retention_days': capcom_lib._get_json_config('capcom_retention_days',

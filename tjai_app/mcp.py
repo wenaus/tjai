@@ -1150,6 +1150,58 @@ async def replace_entry_content(entry_id: str, content: str) -> dict:
 
 
 @mcp.tool()
+async def get_pokes(entry_id: str = None, include_closed: bool = False) -> dict:
+    """Read shared short decisions/reviews and Keep proposals, or one poke.
+
+    Read relevant items before adding one; update the same issue rather than
+    duplicating it. Items include complete clickable item URLs. Use those URLs
+    whenever drawing the operator's attention to a poke, never the list URL.
+    Keep is oldest first; review related Keep items when adding to it and move
+    completed, superseded or actionable proposals out. No read resolves an item.
+    """
+    from . import poke
+    return await sync_to_async(poke.get_pokes)(entry_id, include_closed)
+
+
+@mcp.tool()
+async def save_poke(entry_id: str, title: str, explanation: str, owner: str,
+                    category: str = 'attention', refs: list[dict] = None,
+                    expected_modified_ts: float = None) -> dict:
+    """Create/update one shared poke. Use a readable poke-... identifier.
+
+    Explain the situation and exact ask/recommendation in 2–4 short sentences,
+    at most 100 words and 900 characters. Title at most 100 characters; name
+    the responsible session/person. category is attention or keep; refs are
+    up to six {label, url} links for longer evidence. Keep collaborator authorship
+    explicit. Read first to avoid duplicates; updates require modified_ts from
+    that read. Returns the stable item URL. Update the current explanation;
+    do not append progress reports. See tjai/docs/poke.md.
+    """
+    from . import poke
+    return await sync_to_async(poke.save_poke)(entry_id, title, explanation, owner,
+                                             category, refs, expected_modified_ts)
+
+
+@mcp.tool()
+async def poke_action(entry_id: str, action: str, expected_modified_ts: float,
+                      answer: str = '', until: str = None, activity: str = None,
+                      decision_ref: str = None) -> dict:
+    """Change one poke using its current modified_ts; stale changes are refused.
+
+    Actions: attention, keep, defer (until YYYY-MM-DD), approve (decision_ref
+    is the original human dialog entry), pickup (activity is an existing open
+    Inflight entry), done, dismiss, reopen. Approval remains visible until
+    pickup. A peer message cannot approve. Retain useful unresolved proposals;
+    close completed/superseded ones and seek the operator's decision before
+    abandoning a useful proposal. answer is an optional response, at most
+    400 characters. Returns the item URL, including after closure.
+    """
+    from . import poke
+    return await sync_to_async(poke.poke_action)(entry_id, action, expected_modified_ts,
+                                                answer, until, activity, decision_ref)
+
+
+@mcp.tool()
 async def inflight_item(entry_id: str, action: str, text: str) -> dict:
     """
     Item action on an inflight todo (docs/inflight.md): mark an open item

@@ -26,6 +26,11 @@ by source; Capcom is one stream with filtered views over it.
 
 Two panels:
 
+**Poke** beside the pads and Inflight opens the shared attention page
+([Poke](poke.md)): short explained requests and retained proposals, an
+attention count, and a stable link for every item. Its current item is carried
+as `?view=poke&id=<entry_id>`; `/tjai/poke/<entry_id>/` opens that exact view.
+
 - **Left panel — pads, state, and pins.** A fixed pad line at the top —
   **Notepad · Pouch** — opens a content-only editor in the right panel over
   one canonical TJAI memory entry per pad: `capcom-notepad`, the user's

@@ -60,6 +60,7 @@ cd /home/admin/github/tjai
 | `/tjai/entry/` | Entry detail with human-readable data display |
 | `/tjai/diary/` | Diary page |
 | `/tjai/inflight/`, `/tjai/inflight/<entry_id>/` | Inflight todos: frame content of Capcom's inflight view (`?embed=1`); bare visits redirect to `/tjai/capcom/?view=inflight`; see [Inflight Todos](inflight.md) |
+| `/tjai/poke/`, `/tjai/poke/<entry_id>/` | Shared attention and Keep records; item URLs open the selected poke in Capcom. Browser POST actions and MCP use one writer; see [Poke](poke.md) |
 | `/tjai/versions/` | Recent entry changes across all entries; see [Entry Versions](versions.md) |
 | `/tjai/captures/` | Images stashed from mail by the Gmail add-on, newest first, a public read; delete for a login; see [Add-ons](addons.md#stash-images-captures) |
 | `/tjai/synopsis/` | Daily synopsis (Today in History) |
