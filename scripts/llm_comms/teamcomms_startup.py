@@ -5,8 +5,11 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
+import signal
 import subprocess
 import sys
+import time
 
 CONFIG = Path.home() / ".config/teamcomms/torre-ai"
 
@@ -70,11 +73,52 @@ def claude_hook(data):
                           input=json.dumps({**data, "session_name": name}), text=True).returncode
 
 
+def refresh_supervisors():
+    """Reload local Codex policy supervisors while preserving native clients."""
+    script = Path(__file__).with_name("launch_codex.py").resolve()
+    processes = subprocess.check_output(["ps", "-u", str(os.getuid()), "-o", "pid=,args="], text=True)
+    refreshed = []
+    for row in processes.splitlines():
+        pid_text, _, command = row.strip().partition(" ")
+        args = shlex.split(command)
+        if (len(args) != 4 or args[2] != "--tjai-supervise"
+                or Path(args[1]).resolve() != script):
+            continue
+        directory = Path(args[3])
+        runtime = json.loads((directory / "runtime.json").read_text())
+        if (directory / "disconnected").exists():
+            continue
+        os.kill(runtime["server_pid"], 0)
+        os.kill(runtime["launcher_pid"], 0)
+        pid = int(pid_text)
+        os.kill(pid, signal.SIGTERM)
+        for _ in range(20):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(.1)
+        else:
+            raise RuntimeError(f"Supervisor {pid} did not exit; no replacement started")
+        env = {**os.environ, "TJAI_CODEX_SOCKET": str(directory / "codex.sock"),
+               "TJAI_COMMS_PYTHON": args[0]}
+        with (directory / "supervisor.log").open("a") as log:
+            process = subprocess.Popen(args, cwd=runtime["cwd"], env=env,
+                stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
+        os.kill(runtime["server_pid"], 0)
+        refreshed.append({"old_supervisor": pid, "supervisor": process.pid,
+                          "native_server": runtime["server_pid"]})
+    print(json.dumps({"refreshed": refreshed}))
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--disable-greetings", action="store_true")
+    parser.add_argument("--refresh-supervisors", action="store_true")
     args = parser.parse_args()
-    if args.disable_greetings:
+    if args.refresh_supervisors:
+        refresh_supervisors()
+    elif args.disable_greetings:
         silence(CONFIG / "connector.json")
     else:
         raise SystemExit(claude_hook(json.load(sys.stdin)))

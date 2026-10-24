@@ -23,6 +23,11 @@ resolved from its live registry before enrollment; Codex also accepts its
 named native session's record in the authenticated TJAI directory. Unnamed and temporary
 sessions remain outside TeamComms.
 
+After updating that policy, `python3 scripts/llm_comms/teamcomms_startup.py
+--refresh-supervisors` replaces the current user's Codex policy supervisors.
+It verifies and preserves the native server and launcher PIDs. Existing
+receivers retain their sessions, locks and delivery cursors.
+
 TeamComms envelopes captured by the dialog hook retain `role=peer`, their
 message UUID and claimed sender provenance. A collaborator request is handled
 within the participant's domain and the recipient's existing authority. A
