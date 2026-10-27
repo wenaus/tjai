@@ -44,7 +44,8 @@ def read_page(args, cursor):
     page = json.loads(result.stdout)
     if page.get('error') or page.get('schema_version') != 1:
         raise ValueError('TeamComms history returned an error or unsupported schema')
-    if not isinstance(page.get('messages'), list) or not isinstance(page.get('has_more'), bool):
+    if (not isinstance(page.get('messages'), list) or len(page['messages']) > 100
+            or not isinstance(page.get('has_more'), bool)):
         raise ValueError('TeamComms history has an invalid page shape')
     if not isinstance(page.get('next_cursor'), str) or not page['next_cursor']:
         raise ValueError('TeamComms history did not return a continuation cursor')
@@ -73,7 +74,7 @@ def sync(args):
                     raise ValueError('TeamComms history contains an unrelated message')
                 added += project_message(source, message, message['author_identity'],
                     [recipient['identity'] for recipient in message['recipients']],
-                    message.get('sender_session'))
+                    message.get('sender_session'), local_person_id=owner_id)
             total = refresh_exchange_people()
             state = {**state, 'source': source, 'cursor': page['next_cursor'],
                      'viewer_participant_id': viewer['participant_id'],

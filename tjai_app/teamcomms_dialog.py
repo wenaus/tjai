@@ -33,8 +33,10 @@ def person(identity):
     return participant_id, name
 
 
-def speaker(identity, session=None):
-    _, name = person(identity)
+def speaker(identity, session=None, local_person_id=None):
+    person_id, name = person(identity)
+    if person_id == local_person_id:
+        name = 'Torre'
     kind = identity.get('participant_kind') or identity.get('kind') or 'unknown'
     label = f'{name} · {"AI" if kind == "ai" else kind}'
     if session and session.get('name'):
@@ -42,7 +44,7 @@ def speaker(identity, session=None):
     return label
 
 
-def project_message(source, message, author, recipients, sender_session=None):
+def project_message(source, message, author, recipients, sender_session=None, local_person_id=None):
     """Insert one canonical message. Retrying cannot add another dialog row."""
     message_id = str(uuid.UUID(message['message_id']))
     if message['author_id'] != author['participant_id']:
@@ -55,6 +57,8 @@ def project_message(source, message, author, recipients, sender_session=None):
     reply_to = str(uuid.UUID(message['reply_to'])) if message.get('reply_to') else None
     identities = [author, *recipients]
     parties = dict(person(identity) for identity in identities)
+    if local_person_id in parties:
+        parties[local_person_id] = 'Torre'
     sender_session = sender_session or {}
     data = {
         'entry_id': f'teamcomms-{message_id}',
@@ -68,8 +72,10 @@ def project_message(source, message, author, recipients, sender_session=None):
         'audience': message['audience'], 'viewer_relation': message['viewer_relation'],
         'sender_session_id': message.get('sender_session_id'),
         'recipient_identities': recipients, 'dialog_parties': parties,
-        'dialog_people': parties, 'dialog_speaker': speaker(author, sender_session),
-        'dialog_audience': ', '.join(sorted({speaker(identity) for identity in recipients})),
+        'dialog_people': parties,
+        'dialog_speaker': speaker(author, sender_session, local_person_id),
+        'dialog_audience': ', '.join(sorted({speaker(identity, local_person_id=local_person_id)
+                                            for identity in recipients})),
         'client': sender_session.get('client') or 'teamcomms',
         'model': sender_session.get('model') or '',
         'hostname': sender_session.get('host') or (message['publication_snapshot'] or {}).get('host') or 'teamcomms',
