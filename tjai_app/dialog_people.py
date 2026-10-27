@@ -80,7 +80,8 @@ def daily_counts(params, days=None):
         Func('timestamp_modified', function='to_timestamp', output_field=DateTimeField()),
         tzinfo=get_app_tz(),
     )).values('day').annotate(count=Count('pk')).order_by('day')
-    return [{'date': row['day'].isoformat(), 'count': row['count']} for row in rows]
+    counts = [{'date': row['day'].isoformat(), 'count': row['count']} for row in rows]
+    return list(reversed(counts)) if days is not None else counts
 
 
 def dialog_attribution(data):
