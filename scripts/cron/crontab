@@ -43,6 +43,9 @@ PATH=/usr/local/bin:/usr/bin:/bin
 # Every 10 min — sync user accounts from swf-remote to corun-ai
 */10 * * * * /var/www/corun-ai/scripts/sync_users.sh >> /tmp/cron_sync_users.log 2>&1
 
+# Every minute — authorized TeamComms sent/received history for Dialog people filters
+* * * * * /var/www/tjai/.venv/bin/python /home/admin/github/tjai/scripts/sync_teamcomms_dialog.py >> /tmp/cron_teamcomms_dialog.log 2>&1
+
 # Daily 03:00 ET — heal any empty git_daily .md files from prior days (page-load
 # refresh covers today+yesterday; this catches older days whose file was
 # written before that day's commits happened).
@@ -78,3 +81,6 @@ PATH=/usr/local/bin:/usr/bin:/bin
 # Hourly at :20 — sweep failed jobs' reports out of the bucket: read a
 # bounded number per failure signature, store them here, delete the objects
 #20 * * * * /usr/bin/python3 /home/admin/github/swf-remote/scripts/stageout_index.py sweep >> /tmp/cron_stageout_sweep.log 2>&1
+# Soft-deleted placed objects past 14 days and not journaled, purged with each row kept in a dump
+# (etaverse world/management/commands/purge_deleted_objects.py), 05:45 ET, after both backups.
+45 9,10 * * * [ "$(TZ=America/New_York date +\%H)" = "05" ] && flock -n /tmp/etaverse_purge_deleted.lock sudo -u www-data env PYTHONPATH=/var/www/etaverse DJANGO_SETTINGS_MODULE=etaverse_project.settings nice -n 19 /var/www/etaverse/.venv/bin/python /var/www/etaverse/manage.py purge_deleted_objects --nightly >> /home/admin/etaverse-asset-backup/purge-deleted.log 2>&1

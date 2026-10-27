@@ -13,6 +13,9 @@ from collections import Counter
 from urllib.parse import quote
 
 from .dialog_context import CURRENT_DIALOG_CONTEXT, DIALOG_CONTEXTS, DIALOG_TAG
+from .dialog_people import (apply_people_filters, dialog_attribution, dialog_options,
+                            dialog_population, sync_state as dialog_sync_state,
+                            daily_counts as _dialog_daily_counts)
 
 logger = logging.getLogger(__name__)
 
@@ -2413,8 +2416,7 @@ def dashboard_status(request):
     if filter_kind:
         base_qs = base_qs.filter(kind=filter_kind)
     if dialog_view:
-        dialog_ids = Tag.objects.filter(tag_name=DIALOG_TAG).values_list('entry_id', flat=True)
-        base_qs = base_qs.filter(id__in=dialog_ids)
+        base_qs = apply_people_filters(dialog_population(base_qs), request.GET)
     elif filter_context:
         base_qs = base_qs.filter(context_id=filter_context)
     if exclude_contexts:
@@ -2443,23 +2445,10 @@ def dashboard_status(request):
     daily_counts = None
     if (filter_context or dialog_view) and offset == 0:
         try:
-            tz = get_app_tz()
-            now_local = datetime.now(tz=tz)
-            cutoff_ts = (now_local - timedelta(days=14)).timestamp()
-            tz_name = str(tz)
-            count_contexts = list(DIALOG_CONTEXTS) if dialog_view or filter_context in DIALOG_CONTEXTS else [filter_context]
-            from django.db import connection
-            with connection.cursor() as cursor:
-                cursor.execute("""
-                    SELECT (to_timestamp(timestamp_modified) AT TIME ZONE %s)::date AS day,
-                           count(*) AS cnt
-                    FROM entries
-                    WHERE context = ANY(%s) AND deleted_at IS NULL
-                          AND (status IS NULL OR status != 'archive')
-                          AND timestamp_modified >= %s
-                    GROUP BY day ORDER BY day DESC
-                """, [tz_name, count_contexts, cutoff_ts])
-                daily_counts = [{'date': row[0].isoformat(), 'count': row[1]} for row in cursor.fetchall()]
+            if dialog_view:
+                daily_counts = _dialog_daily_counts(request.GET, days=14)
+            else:
+                daily_counts = _context_daily_counts(filter_context)
         except Exception:
             logger.exception("daily_counts query failed for context=%s view_dialog=%s", filter_context, dialog_view)
 
@@ -2563,6 +2552,7 @@ def dashboard_status(request):
             'event_date_display': event_date_display,
             'hostname': data.get('hostname') if data else None,
             'metadata': data or {},
+            'dialog_attribution': dialog_attribution(data or {}) if dialog_view else None,
             'relation_count': relation_counts.get(e.id, 0),
             'relations': expanded_relations.get(str(e.id)),
             'tags': missing_tags,
@@ -2711,15 +2701,14 @@ def dashboard_status(request):
 
     dialog_clients = []
     dialog_models = []
+    dialog_people = []
+    teamcomms_sync = None
     if dialog_view:
-        dialog_ids = Tag.objects.filter(tag_name=DIALOG_TAG).values_list('entry_id', flat=True)
-        dialog_qs = Entry.objects.filter(
-            id__in=dialog_ids,
-            deleted_at__isnull=True,
-            context_id__in=DIALOG_CONTEXTS,
-        )
+        dialog_qs = dialog_population(Entry.objects.filter(deleted_at__isnull=True))
         dialog_clients = sorted({v for v in dialog_qs.values_list('data__client', flat=True) if v})
         dialog_models = sorted({v for v in dialog_qs.values_list('data__model', flat=True) if v})
+        teamcomms_sync = dialog_sync_state()
+        dialog_people = dialog_options(teamcomms_sync)
 
     return JsonResponse({
         'timestamp': timestamp,
@@ -2743,7 +2732,25 @@ def dashboard_status(request):
         'daily_counts': daily_counts,
         'dialog_clients': dialog_clients,
         'dialog_models': dialog_models,
+        'dialog_people': dialog_people,
+        'teamcomms_sync': teamcomms_sync,
     })
+
+
+def _context_daily_counts(context):
+    from django.db import connection
+    tz = get_app_tz()
+    contexts = list(DIALOG_CONTEXTS) if context in DIALOG_CONTEXTS else [context]
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT (to_timestamp(timestamp_modified) AT TIME ZONE %s)::date AS day,
+                   count(*) AS cnt
+            FROM entries WHERE context = ANY(%s) AND deleted_at IS NULL
+                AND (status IS NULL OR status != 'archive')
+                AND timestamp_modified >= %s
+            GROUP BY day ORDER BY day DESC
+        """, [str(tz), contexts, (datetime.now(tz=tz) - timedelta(days=14)).timestamp()])
+        return [{'date': row[0].isoformat(), 'count': row[1]} for row in cursor.fetchall()]
 
 
 @login_required
@@ -2794,8 +2801,7 @@ def dashboard_search(request):
     filter_client = request.GET.get('client')
     filter_model = request.GET.get('model')
     if dialog_view:
-        dialog_ids = Tag.objects.filter(tag_name=DIALOG_TAG).values_list('entry_id', flat=True)
-        qs = qs.filter(id__in=dialog_ids)
+        qs = apply_people_filters(dialog_population(qs), request.GET)
     elif filter_context:
         qs = qs.filter(context_id=filter_context)
 
@@ -2888,7 +2894,7 @@ def dashboard_search(request):
         missing_tags = [t for t in entry_tags if f':{t}' not in e.content]
         result.append({
             'id': e.id,
-            'content': lines[0],
+            'content': e.content if request.GET.get('expand_dialog') == '1' else lines[0],
             'kind': e.kind,
             'context': e.context_id,
             'timestamp': e.timestamp_modified,
@@ -2900,6 +2906,7 @@ def dashboard_search(request):
             'event_date': data.get('event_date') if data else None,
             'hostname': data.get('hostname') if data else None,
             'metadata': data or {},
+            'dialog_attribution': dialog_attribution(data or {}) if dialog_view else None,
             'relation_count': relation_counts.get(e.id, 0),
             'relations': expanded_relations.get(str(e.id)),
             'tags': missing_tags,
@@ -5420,21 +5427,7 @@ def api_capture_file_delete(request, entry_id, filename):
 def api_dialog_daily_counts(request):
     """Return daily dialog turn counts for the full collection period."""
     try:
-        tz = get_app_tz()
-        from django.db import connection
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT (to_timestamp(timestamp_modified) AT TIME ZONE %s)::date AS day,
-                       count(*) AS cnt
-                FROM entries
-                WHERE id IN (
-                    SELECT entry_id FROM tags WHERE tag_name = %s
-                ) AND deleted_at IS NULL
-                      AND (status IS NULL OR status != 'archive')
-                GROUP BY day ORDER BY day
-            """, [str(tz), DIALOG_TAG])
-            rows = [{'date': row[0].isoformat(), 'count': row[1]}
-                    for row in cursor.fetchall()]
+        rows = _dialog_daily_counts(request.GET)
         return JsonResponse({'daily_counts': rows})
     except Exception as e:
         logger.exception("api_dialog_daily_counts failed")

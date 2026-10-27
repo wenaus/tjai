@@ -168,6 +168,12 @@ original content, transcript identity and timestamp remain intact.
 `scripts/fix_teamcomms_dialog.py` previews affected historical user records;
 `--apply` changes only their attribution metadata and preserves `recorded_role`.
 
+The browser Dialog page additionally reads a personal projection of authorized
+canonical TeamComms sent/received history. It supplies verified person filters,
+complete reply-linked exchanges and a TeamComms-only toggle. Native transcript
+records are retained; this projection does not change hook ingestion or the
+existing MCP/assessment input. See [Dialog people and TeamComms](dashboard.md#dialog-people-and-teamcomms).
+
 Claude records both `text` and plaintext `thinking` as assistant dialog, with
 `content_type` identifying the block type. Tool inputs, thinking signatures,
 redacted thinking and sidechain messages are excluded. Answered `AskUserQuestion`

@@ -872,21 +872,34 @@
         // Dialog charts — daily + weekly bar charts with tooltip + click-to-assessment
         let _dialogChartData = null;
         let _dialogChartDrawn = false;
+        let _dialogChartKey = null;
         let _dailyBarMeta = [];
         let _weeklyBarMeta = [];
         const _chartPad = {top: 10, right: 10, bottom: 30, left: 40};
         const _months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-        function updateDialogChart() {
+        async function updateDialogChart() {
             const el = document.getElementById('dialog-chart');
             if (!isDialogMode && !dialogContexts.has(activeContext)) { el.style.display = 'none'; return; }
             el.style.display = '';
-            if (_dialogChartDrawn) return;
-            if (_dialogChartData) { _renderBothCharts(_dialogChartData); return; }
-            fetch('/tjai/api/dialog/daily-counts')
-                .then(r => r.json())
-                .then(data => { if (data.daily_counts) { _dialogChartData = data.daily_counts; _renderBothCharts(data.daily_counts); } })
-                .catch(() => {});
+            const params = new URLSearchParams();
+            if (activePeople.size) params.set('people', [...activePeople].sort().join(','));
+            if (teamcommsOnly) params.set('teamcomms', '1');
+            if (activeClient) params.set('client', activeClient);
+            if (activeModel) params.set('model', activeModel);
+            if (activeMachine) params.set('machine', activeMachine);
+            const key = params.toString();
+            if (_dialogChartKey === key) return;
+            _dialogChartKey = key;
+            try {
+                const data = await fetchJson('/tjai/api/dialog/daily-counts?' + key);
+                if (_dialogChartKey !== key) return;
+                _dialogChartData = data.daily_counts;
+                _renderBothCharts(_dialogChartData);
+            } catch (err) {
+                _dialogChartKey = null;
+                flashNotice('Dialog counts failed: ' + err.message, '#ef5350');
+            }
         }
         function _renderBothCharts(rows) {
             _dailyBarMeta = _drawBarChart('dialog-chart-canvas', rows);
@@ -1139,6 +1152,15 @@
                 if (entry.context) line += `<span style="color:#ce93d8">=${entry.context}</span> `;
                 if (entry.name) line += `<span style="color:#c0d8f0;font-weight:bold">@${entry.name}</span>  `;
 
+                const attribution = entry.dialog_attribution;
+                let dialogLabel = '';
+                if (attribution) {
+                    dialogLabel = `${attribution.source}: ${attribution.speaker}`;
+                    if (attribution.audience) dialogLabel += ` → ${attribution.audience}`;
+                    if (attribution.unverified) dialogLabel += ' (envelope label)';
+                    line += `<span style="color:#80cbc4">${escapeHtml(dialogLabel)}</span> `;
+                }
+
                 const hasUrl = /https?:\/\//.test(entry.content) || /\[.*\]\(.*\)/.test(entry.content);
                 if (expandDialog) {
                     line += `</a>`;
@@ -1152,6 +1174,9 @@
                     line += `</a>`;
                 }
                 if (entry.line_count && !expandDialog) line += ` <span style="color:#daa520">[${entry.line_count} lines]</span>`;
+                if (attribution?.reply_entry_id) {
+                    line += ` <a href="${entryRefUrl(attribution.reply_entry_id)}" style="color:#90caf9;font-size:11px">in reply to</a>`;
+                }
                 if (entry.tags && entry.tags.length) {
                     for (const t of entry.tags) {
                         line += ` <span style="color:#9ccc65">:${t}</span><span class="tag-del" data-eid="${entry.id}" data-tag="${t}" style="color:#ef5350;cursor:pointer;margin-left:1px">-</span>`;
@@ -1174,6 +1199,7 @@
                 if (entry.event_date_display) plain += ` ${entry.event_date_display}`;
                 if (entry.context) plain += ` =${entry.context}`;
                 if (entry.name) plain += ` @${entry.name}`;
+                if (dialogLabel) plain += ` ${dialogLabel}`;
                 plain += ` ${entry.content}`;
                 if (entry.tags && entry.tags.length) plain += ' ' + entry.tags.map(t => ':' + t).join(' ');
 
@@ -1203,6 +1229,8 @@
         let activeContext = null;
         let activeClient = null;
         let activeModel = null;
+        let activePeople = new Set();
+        let teamcommsOnly = false;
         let activeStatuses = new Set();
         let excludedStatuses = new Set();
         let activeDate = null;
@@ -1224,6 +1252,8 @@
             if (activeContext) params.set('context', activeContext);
             if (activeClient) params.set('client', activeClient);
             if (activeModel) params.set('model', activeModel);
+            if (activePeople.size) params.set('people', [...activePeople].sort().join(','));
+            if (teamcommsOnly) params.set('teamcomms', '1');
             if (activeMachine) params.set('machine', activeMachine);
             if (activeStatuses.size > 0) params.set('status', [...activeStatuses].sort().join(','));
             if (excludedStatuses.size > 0) params.set('exclude_status', [...excludedStatuses].sort().join(','));
@@ -1253,6 +1283,8 @@
             activeContext = params.get('context') || null;
             activeClient = params.get('client') || null;
             activeModel = params.get('model') || null;
+            activePeople = new Set((params.get('people') || '').split(',').filter(Boolean));
+            teamcommsOnly = params.get('teamcomms') === '1';
             activeMachine = params.get('machine') || null;
             const statusParam = params.get('status');
             if (statusParam) statusParam.split(',').filter(Boolean).forEach(s => activeStatuses.add(s));
@@ -1275,7 +1307,7 @@
                 ? (namedSortParam === 'mod' ? 'mod' : 'alpha')
                 : SAVED_NAMED_SORT;
             setNamedSort(namedSort, false);
-            isFilterActive = !!(dialogView || activeTags.size > 0 || activeKind || activeContext || activeClient || activeModel || activeMachine || activeStatuses.size > 0 || excludedStatuses.size > 0 || activePublic || activeWithRelations || activeDate || activeFromTime || activeToTime || excludedContexts.size > 0);
+            isFilterActive = !!(dialogView || activeTags.size > 0 || activeKind || activeContext || activeClient || activeModel || activePeople.size || teamcommsOnly || activeMachine || activeStatuses.size > 0 || excludedStatuses.size > 0 || activePublic || activeWithRelations || activeDate || activeFromTime || activeToTime || excludedContexts.size > 0);
             const searchParam = params.get('search');
             if (searchParam) {
                 document.getElementById('entry-search').value = searchParam;
@@ -1296,6 +1328,8 @@
             if (activeContext) params.push(`context=${encodeURIComponent(activeContext)}`);
             if (activeClient) params.push(`client=${encodeURIComponent(activeClient)}`);
             if (activeModel) params.push(`model=${encodeURIComponent(activeModel)}`);
+            if (activePeople.size) params.push(`people=${encodeURIComponent([...activePeople].sort().join(','))}`);
+            if (teamcommsOnly) params.push('teamcomms=1');
             if (activeMachine) params.push(`machine=${encodeURIComponent(activeMachine)}`);
             if (activeStatuses.size > 0) params.push(`status=${encodeURIComponent([...activeStatuses].join(','))}`);
             if (excludedStatuses.size > 0) params.push(`exclude_status=${encodeURIComponent([...excludedStatuses].join(','))}`);
@@ -1719,6 +1753,16 @@
             }
 
             if (isDialogMode) {
+                const peopleLinks = (data.dialog_people || []).map(p => {
+                    const selected = activePeople.has(p.id);
+                    return `<a href="#" class="person-link" data-person="${dashAttr(p.id)}" aria-pressed="${selected}" style="color:${selected ? '#1a1a1a;background:#90caf9;padding:1px 4px;border-radius:3px' : '#90caf9'};text-decoration:none">${escapeHtml(p.name)}</a>`;
+                }).join(' &nbsp; ');
+                html += `<div class="status-line">People: <a href="#" id="people-all" style="color:${activePeople.size ? '#90caf9' : '#fff'};text-decoration:none">All</a> &nbsp; ${peopleLinks} &nbsp; <label style="cursor:pointer;white-space:nowrap"><input id="teamcomms-only" type="checkbox" ${teamcommsOnly ? 'checked' : ''}> TeamComms only</label></div>`;
+                const sync = data.teamcomms_sync || {};
+                if (sync.error || !sync.last_success || !sync.complete || Date.now()/1000 - sync.last_success > 300) {
+                    const note = sync.error ? 'TeamComms refresh failed; showing the last saved messages.' : !sync.last_success || !sync.complete ? 'TeamComms history is loading.' : 'TeamComms history is waiting for a refresh.';
+                    html += `<div class="status-line" style="color:#d8a070">${note}</div>`;
+                }
                 const clientLinks = (data.dialog_clients || []).map(c => {
                     const activeClass = activeClient === c ? ' active' : '';
                     return `<a href="#" class="client-link${activeClass}" data-client="${dashAttr(c)}" style="color:#80cbc4;text-decoration:none">${escapeHtml(c)}</a>`;
@@ -2103,6 +2147,24 @@
             const modelLink = e.target.closest('.model-link');
             if (modelLink) { e.preventDefault(); toggleFilter('model', modelLink.dataset.model, 'model-link'); return; }
 
+            const personLink = e.target.closest('.person-link');
+            if (personLink || e.target.closest('#people-all')) {
+                e.preventDefault();
+                if (!personLink) activePeople.clear();
+                else if (activePeople.has(personLink.dataset.person)) activePeople.delete(personLink.dataset.person);
+                else activePeople.add(personLink.dataset.person);
+                syncStateToUrl();
+                refresh();
+                return;
+            }
+            const teamcommsToggle = e.target.closest('#teamcomms-only');
+            if (teamcommsToggle) {
+                teamcommsOnly = teamcommsToggle.checked;
+                syncStateToUrl();
+                refresh();
+                return;
+            }
+
             const tagLink = e.target.closest('.tag-link');
             if (tagLink) { e.preventDefault(); toggleFilter('tag', tagLink.dataset.tag, 'tag-link'); return; }
 
@@ -2162,6 +2224,8 @@
             activeContext = null;
             activeClient = null;
             activeModel = null;
+            activePeople.clear();
+            teamcommsOnly = false;
             activePublic = false;
             activeWithRelations = false;
             activeDate = null;

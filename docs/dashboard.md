@@ -47,6 +47,8 @@ Query parameters and their state:
 | `status` | CSV of included statuses; `_none` is null/empty status |
 | `exclude_status` | CSV of excluded statuses |
 | `machine`, `client`, `model` | match `data.hostname`, `data.client`, `data.model` |
+| `people` | CSV of verified person IDs; any selected person matches a dialog exchange |
+| `teamcomms` | `1` restricts dialog to TeamComms messages |
 | `date` | restrict to one day (used by the dialog daily-count chips) |
 | `from_time`, `to_time` | ISO datetime window over modification time |
 | `public` | only entries marked `data.access=public`; the `poetry` and `recipe` contexts are excluded |
@@ -122,6 +124,43 @@ When the user toggles the sort, `setNamedSort()` writes the choice to sysconfig 
 - **Work sessions** — today's clock sessions with work and break totals.
 
 Dialog mode replaces most of this with a client/model filter row and a per-day dialog-count row, and shows the daily and weekly bar charts (`updateDialogChart`). Chart bars have hover tooltips and link to that day's assessment page.
+
+### Dialog people and TeamComms
+
+The **People** row supports multiple selections. Selection widens across people;
+**All** clears only that selection. **TeamComms only** intersects it with the
+TeamComms source. People, source, client, model and machine filters apply before
+pagination and use the same population for entries, search and daily/weekly
+counts. URL parameters preserve the selections on reload and in shared links.
+
+People follow broker-verified participant/operator IDs. An AI participant with a
+verified operator is grouped under that person. A participant without an operator
+keeps its own identity. Ordinary personal human/assistant turns belong to the
+local operator. TeamComms envelope labels alone do not establish person identity.
+
+TeamComms messages are imported through the configured participant's authorized
+sent/received history, with complete content and fixed visible recipients.
+Selecting a person includes both sides and other visible replies linked to that
+exchange. An LLM session ID does not connect otherwise unrelated messages. Each
+row labels its source, speaker and audience and links to an available parent.
+Remote private human–LLM transcripts are outside this message history.
+
+The importer is `scripts/sync_teamcomms_dialog.py`, scheduled once a minute in
+`scripts/cron/crontab`. It invokes the existing connector with its private
+configuration at `~/.config/teamcomms/torre-ai/connector.json`; credentials are
+not copied into the web application. A commit-safe broker cursor and projection
+inserts are saved together. A local process lock prevents overlapping runs.
+The page reports incomplete, failed or stale imports instead of implying full
+coverage. An initial bounded catch-up can be run with `--max-pages 1000`.
+
+The projection uses context `teamcomms`, tag `teamcomms-dialog`, and stable entry
+IDs derived from installation and message UUID. Source content and timestamps
+are retained, role remains `peer`, and no import grants operator authority.
+Canonical messages appear once regardless of delivery fan-out. Native transcript
+copies remain stored and are suppressed only in the browser population when a
+broker projection exists. Personal capture and its existing MCP/assessment inputs
+are unchanged. Shared selection and attribution are in `dialog_people.py`;
+projection and reply membership are in `teamcomms_dialog.py`.
 
 ## Entries list
 
