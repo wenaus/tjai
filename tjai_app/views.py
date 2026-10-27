@@ -2709,6 +2709,7 @@ def dashboard_status(request):
         dialog_models = sorted({v for v in dialog_qs.values_list('data__model', flat=True) if v})
         teamcomms_sync = dialog_sync_state()
         dialog_people = dialog_options(teamcomms_sync)
+        teamcomms_sync = {key: value for key, value in teamcomms_sync.items() if key != 'cursor'}
 
     return JsonResponse({
         'timestamp': timestamp,

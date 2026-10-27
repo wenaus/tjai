@@ -3,6 +3,7 @@
 
 import json
 import uuid
+import argparse
 
 import bootstrap  # noqa: F401
 
@@ -102,5 +103,58 @@ def main():
           'identity fallback, deduplication, counts, status and search; all writes rolled back')
 
 
+def check_served():
+    """Read the deployed page/API with a temporary session; no entry writes."""
+    import requests
+    from django.conf import settings
+    from django.contrib.auth import get_user_model
+    from django.contrib.sessions.backends.db import SessionStore
+
+    state = json.loads(SysConfig.objects.get(key=SYNC_KEY).value)
+    assert state['complete'] and not state.get('error'), 'History has not finished importing'
+    user = get_user_model().objects.filter(is_superuser=True, is_active=True).first()
+    assert user is not None, 'No active personal administrator'
+    session = SessionStore()
+    session['_auth_user_id'] = str(user.pk)
+    session['_auth_user_backend'] = 'django.contrib.auth.backends.ModelBackend'
+    session['_auth_user_hash'] = user.get_session_auth_hash()
+    session.save()
+    try:
+        with requests.Session() as web:
+            web.cookies.set(settings.SESSION_COOKIE_NAME, session.session_key,
+                            domain='etaverse.com', path=settings.SESSION_COOKIE_PATH or '/')
+
+            def get(path, params=None):
+                response = web.get('https://etaverse.com/tjai/' + path, params=params, timeout=30)
+                response.raise_for_status()
+                assert '/login/' not in response.url, 'Deployed check reached login'
+                return response
+
+            page = get('dashboard/', {'view': 'dialog', 'teamcomms': '1'})
+            assert 'id="teamcomms-only"' in page.text and 'class="person-link"' in page.text
+            all_rows = get('api/dashboard/status', {'view': 'dialog', 'teamcomms': '1'}).json()
+            selected = next(p for p in all_rows['dialog_people'] if p['name'] == 'Sakib Rahman')
+            params = {'view': 'dialog', 'teamcomms': '1', 'people': selected['id']}
+            result = get('api/dashboard/status', params).json()
+            rows = result['recent_entries']
+            assert rows, 'Selected person has no displayed messages'
+            messages = [row['metadata']['message_id'] for row in rows]
+            assert len(set(messages)) == len(messages), 'Duplicate broker messages in served view'
+            assert all(selected['id'] in row['metadata']['dialog_people'] for row in rows)
+            sent = sum(row['metadata']['viewer_relation']['sent'] for row in rows)
+            received = sum(row['metadata']['viewer_relation']['received'] for row in rows)
+            assert sent and received, 'Served view is missing one side'
+            assert all(row['dialog_attribution']['source'] == 'TeamComms' for row in rows)
+            counts = get('api/dialog/daily-counts', params).json()['daily_counts']
+            assert sum(day['count'] for day in counts) >= len(rows)
+            print(f'PASS: deployed page, person/source filtering, {len(rows)} unique messages '
+                  f'({sent} sent, {received} received), attribution and counts')
+    finally:
+        session.delete()
+
+
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--served', action='store_true', help='Read the deployed page and connected history')
+    args = parser.parse_args()
+    check_served() if args.served else main()

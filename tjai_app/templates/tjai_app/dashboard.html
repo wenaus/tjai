@@ -1753,12 +1753,17 @@
             }
 
             if (isDialogMode) {
+                const sync = data.teamcomms_sync || {};
+                if (activePeople.has('local') && sync.local_person_id) {
+                    activePeople.delete('local');
+                    activePeople.add(sync.local_person_id);
+                    syncStateToUrl();
+                }
                 const peopleLinks = (data.dialog_people || []).map(p => {
                     const selected = activePeople.has(p.id);
                     return `<a href="#" class="person-link" data-person="${dashAttr(p.id)}" aria-pressed="${selected}" style="color:${selected ? '#1a1a1a;background:#90caf9;padding:1px 4px;border-radius:3px' : '#90caf9'};text-decoration:none">${escapeHtml(p.name)}</a>`;
                 }).join(' &nbsp; ');
                 html += `<div class="status-line">People: <a href="#" id="people-all" style="color:${activePeople.size ? '#90caf9' : '#fff'};text-decoration:none">All</a> &nbsp; ${peopleLinks} &nbsp; <label style="cursor:pointer;white-space:nowrap"><input id="teamcomms-only" type="checkbox" ${teamcommsOnly ? 'checked' : ''}> TeamComms only</label></div>`;
-                const sync = data.teamcomms_sync || {};
                 if (sync.error || !sync.last_success || !sync.complete || Date.now()/1000 - sync.last_success > 300) {
                     const note = sync.error ? 'TeamComms refresh failed; showing the last saved messages.' : !sync.last_success || !sync.complete ? 'TeamComms history is loading.' : 'TeamComms history is waiting for a refresh.';
                     html += `<div class="status-line" style="color:#d8a070">${note}</div>`;
