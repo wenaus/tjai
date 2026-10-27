@@ -133,7 +133,7 @@ def refresh_exchange_people():
     for message_id, row in by_message.items():
         people = groups[root(message_id)]
         parent = by_message.get(row.data.get('reply_to'))
-        parent_id = str(parent.id) if parent else None
+        parent_id = parent.data['entry_id'] if parent else None
         if row.data.get('dialog_people') != people or row.data.get('reply_entry_id') != parent_id:
             row.data = {**row.data, 'dialog_people': people, 'reply_entry_id': parent_id}
             changed.append(row)

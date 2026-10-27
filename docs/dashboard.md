@@ -153,7 +153,7 @@ inserts are saved together. A local process lock prevents overlapping runs.
 The page reports incomplete, failed or stale imports instead of implying full
 coverage. An initial bounded catch-up can be run with `--max-pages 1000`.
 
-The projection uses context `teamcomms`, tag `teamcomms-dialog`, and stable entry
+The projection uses context `co-teamcomms`, tag `teamcomms-dialog`, and stable entry
 IDs derived from installation and message UUID. Source content and timestamps
 are retained, role remains `peer`, and no import grants operator authority.
 Canonical messages appear once regardless of delivery fan-out. Native transcript
