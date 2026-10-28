@@ -164,7 +164,7 @@ inserts are saved together. A local process lock prevents overlapping runs.
 The page reports incomplete, failed or stale imports instead of implying full
 coverage. An initial bounded catch-up can be run with `--max-pages 1000`.
 
-The projection uses context `co-teamcomms`, tag `teamcomms-dialog`, and stable entry
+The message projection uses context `co-teamcomms`, tag `teamcomms-dialog`, and stable entry
 IDs derived from installation and message UUID. Source content and timestamps
 are retained, role remains `peer`, and no import grants operator authority.
 Canonical messages appear once regardless of delivery fan-out. Native transcript
@@ -172,6 +172,21 @@ copies remain stored and are suppressed only in the browser population when a
 broker projection exists. Personal capture and its existing MCP/assessment inputs
 are unchanged. Shared selection and attribution are in `dialog_people.py`;
 projection and reply membership are in `teamcomms_dialog.py`.
+
+The same importer reads the broker's authorized shared transcript endpoint.
+Remote human and assistant turns use tag `shared-dialog`, explicit recorded
+authorship and stable event IDs. Other transports' peer copies and system
+records are excluded from this transcript projection. The personal recorder
+remains the source for local dialog, avoiding duplicate copies of local turns.
+Directory IDs establish the person; a recorded human role never grants
+operator authority. Transcript publication IDs drive incremental reads, so
+late-published older content is included. Interrupted walks retain their place,
+and shortened API content is fetched whole before it is stored. Source capture
+coverage can remain partial even after all currently available events are read.
+
+The transcript reader does not enable capture or change a session's sharing
+choice. Session notices and human opt-in are implemented by the TeamComms
+connector and service, independently of this browser projection.
 
 ## Entries list
 

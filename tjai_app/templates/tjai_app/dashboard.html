@@ -1818,6 +1818,9 @@
                     const note = sync.error ? 'TeamComms refresh failed; showing the last saved messages.' : !sync.last_success || !sync.complete ? 'TeamComms history is loading.' : 'TeamComms history is waiting for a refresh.';
                     html += `<div class="status-line" style="color:#d8a070">${note}</div>`;
                 }
+                if (sync.transcript_complete === false) {
+                    html += '<div class="status-line" style="color:#d8a070">Shared dialog is catching up.</div>';
+                }
                 html += `<details id="dialog-filter-options" class="dialog-options" ${dialogFiltersOpen ? 'open' : ''}><summary>More filters</summary>`;
                 const clientLinks = (data.dialog_clients || []).map(c => {
                     const activeClass = activeClient === c ? ' active' : '';

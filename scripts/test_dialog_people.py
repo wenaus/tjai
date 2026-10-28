@@ -4,6 +4,9 @@
 import json
 import uuid
 import argparse
+from copy import deepcopy
+from types import SimpleNamespace
+from unittest import mock
 
 import bootstrap  # noqa: F401
 
@@ -17,6 +20,8 @@ from tjai_app.models import Entry, SysConfig, Tag
 from tjai_app.teamcomms_dialog import (message_entry_id, person, project_message,
                                      refresh_exchange_people)
 from tjai_app.views import dashboard_search, dashboard_status
+from tjai_app.teamcomms_transcript import directory_identities, event_entry_id, project_event
+import sync_teamcomms_dialog as transcript_sync
 
 
 def identity(name):
@@ -108,9 +113,82 @@ def main():
         assert {row['id'] for row in json.loads(response.content)['entries']} == set(projection_ids[:3])
         Entry.objects.filter(pk=projection_ids[0]).update(deleted_at=1793134801)
         assert echo.id not in set(dialog_population(Entry.objects.filter(id__in=ids)).values_list('id', flat=True))
+
+        directory = []
+        for ai in (owner, collaborator):
+            directory.extend([
+                {'participant_id': ai['participant_id'], 'name': ai['participant_name'],
+                 'kind': 'ai', 'operator_id': ai['operator_id']},
+                {'participant_id': ai['operator_id'], 'name': ai['operator_name'],
+                 'kind': 'human', 'operator_id': None}])
+        identities = directory_identities(directory)
+
+        def event(number, role='assistant', ai=collaborator):
+            text = marker + ' shared ' + str(number)
+            return {'event_id': number, 'session_id': str(uuid.uuid4()),
+                    'native_id': str(uuid.uuid4()), 'source_id': 'native:' + str(number),
+                    'source_sequence': number, 'participant_id': ai['participant_id'],
+                    'occurred_at': '2026-10-27T21:00:00+00:00',
+                    'content': text, 'content_length': len(text), 'truncated': False,
+                    'role': role, 'phase': 'message' if role == 'human' else 'final',
+                    'host': 'remote-test', 'client': 'claude', 'topic': '',
+                    'attribution': {'recorder_id': ai['participant_id'],
+                                    'participant_id': ai['operator_id'] if role == 'human' else ai['participant_id']}}
+
+        human_event, ai_event = event(91, 'human'), event(92)
+        for shared in (human_event, ai_event):
+            assert project_event(source, shared, identities, owner['operator_id'])
+            assert not project_event(source, shared, identities, owner['operator_id'])
+            stored = Entry.objects.get(pk=event_entry_id(source, shared['event_id']))
+            assert stored.data['role'] == 'peer', 'Shared capture became a personal instruction'
+            assert collaborator['operator_id'] in stored.data['dialog_people']
+        assert not project_event(source, event(93, ai=owner), identities, owner['operator_id'])
+        try:
+            project_event(source, {**event(94), 'truncated': True}, identities, owner['operator_id'])
+        except ValueError:
+            pass
+        else:
+            raise AssertionError('Shortened shared content was accepted as complete')
+        refresh_exchange_people()  # Shared transcript rows cannot break message reply grouping.
+        response = dashboard_status.__wrapped__(factory.get('/tjai/api/dashboard/status', {
+            'view': 'dialog', 'people': collaborator['operator_id'], 'teamcomms': '1'}))
+        result = json.loads(response.content)
+        assert result['dialog_coverage']['human_turns'] == 1
+        assert {event_entry_id(source, 91), event_entry_id(source, 92)} <= {
+            row['id'] for row in result['recent_entries']}
+
+        batches = {
+            None: {'events': [event(103), event(102)], 'next_before_id': 102},
+            102: {'events': [event(101), event(100)], 'next_before_id': 100},
+        }
+        complete_103 = deepcopy(batches[None]['events'][0])
+        batches[None]['events'][0].update(content='short', truncated=True)
+
+        def call(_args, tool, query):
+            if tool == 'list_participants':
+                return {'participants': directory, 'next_offset': None}
+            if query.get('event_id'):
+                return {'events': [complete_103]}
+            return {**batches[query.get('before_id')], 'coverage': {'complete': False}}
+
+        state = {'local_person_id': owner['operator_id'], 'transcript_cursor': 100}
+        args = SimpleNamespace(max_pages=1)
+        with mock.patch.object(transcript_sync, 'call', side_effect=call), \
+                mock.patch.object(transcript_sync, 'save_state'):
+            added, state = transcript_sync.sync_transcripts(args, source, state)
+            assert added == 2 and state['transcript_cursor'] == 100
+            assert state['transcript_before'] == 102 and state['transcript_pending_head'] == 103
+            added, state = transcript_sync.sync_transcripts(args, source, state)
+            assert added == 1 and state['transcript_cursor'] == 103 and state['transcript_complete']
+            late = event(104)
+            late['occurred_at'] = '2020-01-01T00:00:00+00:00'
+            batches[None] = {'events': [late, complete_103], 'next_before_id': 103}
+            added, state = transcript_sync.sync_transcripts(args, source, state)
+            assert added == 1 and state['transcript_cursor'] == 104
         transaction.set_rollback(True)
     print('PASS: both directions, reply-linked people, unrelated-session exclusion, source toggle, '
-          'identity fallback, deduplication, counts, status and search; all writes rolled back')
+          'identity fallback, deduplication, counts, status and search; shared transcript attribution, '
+          'complete content and resumable publication-order reads; all writes rolled back')
 
 
 def check_served():

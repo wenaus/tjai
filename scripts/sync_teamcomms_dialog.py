@@ -20,6 +20,7 @@ from django.db import transaction
 from tjai_app.dialog_people import SYNC_KEY, sync_state
 from tjai_app.models import SysConfig
 from tjai_app.teamcomms_dialog import person, project_message, refresh_exchange_people
+from tjai_app.teamcomms_transcript import directory_identities, project_event
 
 
 def save_state(state):
@@ -28,21 +29,28 @@ def save_state(state):
     })
 
 
-def read_page(args, cursor):
-    query = {'direction': 'all', 'limit': 100}
-    if cursor:
-        query['cursor'] = cursor
+def call(args, tool, query):
     result = subprocess.run([
         args.connector_python, '-m', 'teamcomms.connectors.cli',
-        '--config', str(args.config), 'call', 'get_message_history', json.dumps(query),
+        '--config', str(args.config), 'call', tool, json.dumps(query),
     ], capture_output=True, text=True, timeout=45)
     if result.returncode:
         # The connector handles credential loading. Do not persist its process
         # environment, request headers or arbitrary response bodies in TJAI.
         print(result.stderr, file=sys.stderr)
-        raise RuntimeError(f'TeamComms history read failed (exit {result.returncode})')
+        raise RuntimeError(f'TeamComms {tool} read failed (exit {result.returncode})')
     page = json.loads(result.stdout)
-    if page.get('error') or page.get('schema_version') != 1:
+    if page.get('error'):
+        raise ValueError(f'TeamComms {tool} returned an error')
+    return page
+
+
+def read_page(args, cursor):
+    query = {'direction': 'all', 'limit': 100}
+    if cursor:
+        query['cursor'] = cursor
+    page = call(args, 'get_message_history', query)
+    if page.get('schema_version') != 1:
         raise ValueError('TeamComms history returned an error or unsupported schema')
     if (not isinstance(page.get('messages'), list) or len(page['messages']) > 100
             or not isinstance(page.get('has_more'), bool)):
@@ -52,6 +60,73 @@ def read_page(args, cursor):
     if page['messages'] and cursor == page['next_cursor']:
         raise ValueError('TeamComms history cursor did not advance')
     return page
+
+
+def read_identities(args):
+    rows, offset = [], 0
+    while True:
+        page = call(args, 'list_participants', {'limit': 200, 'offset': offset})
+        rows.extend(page['participants'])
+        following = page['next_offset']
+        if following is None:
+            return directory_identities(rows)
+        if type(following) is not int or following <= offset:
+            raise ValueError('TeamComms directory cursor did not advance')
+        offset = following
+
+
+def sync_transcripts(args, source, state):
+    """Walk newest-to-oldest to a committed event ID, retaining partial walks.
+
+    Occurrence times cannot be a cursor: an explicitly shared older turn can
+    be published later. Broker event IDs are serialized at publication.
+    """
+    cursor = state.get('transcript_cursor', 0)
+    before = state.get('transcript_before')
+    head = state.get('transcript_pending_head') or cursor
+    identities = None
+    added = 0
+    for _ in range(args.max_pages):
+        query = {'limit': 100, 'max_chars': 30000}
+        if before:
+            query['before_id'] = before
+        page = call(args, 'get_dialog', query)
+        events = page['events']
+        ids = [event['event_id'] for event in events]
+        if (any(type(value) is not int or value <= 0 for value in ids)
+                or ids != sorted(set(ids), reverse=True)
+                or (before and ids and ids[0] >= before)):
+            raise ValueError('TeamComms transcript event order is invalid')
+        if ids:
+            head = max(head, ids[0])
+        new = [event for event in events if event['event_id'] > cursor]
+        if new and identities is None:
+            identities = read_identities(args)
+        complete = not page['next_before_id'] or len(new) < len(events)
+        with transaction.atomic():
+            for event in new:
+                if event['role'] not in {'human', 'assistant'}:
+                    continue
+                if event['truncated']:
+                    full = call(args, 'get_dialog', {
+                        'event_id': event['event_id'], 'limit': 1, 'max_chars': 16000})
+                    if len(full['events']) != 1 or full['events'][0]['event_id'] != event['event_id']:
+                        raise ValueError('TeamComms transcript full-content read changed identity')
+                    event = full['events'][0]
+                added += project_event(source, event, identities, state['local_person_id'])
+            before = page['next_before_id']
+            if not complete and (type(before) is not int or not ids or before != ids[-1]):
+                raise ValueError('TeamComms transcript continuation is invalid')
+            state = {**state, 'transcript_cursor': head if complete else cursor,
+                     'transcript_before': None if complete else before,
+                     'transcript_pending_head': None if complete else head,
+                     'transcript_last_success': time.time(),
+                     'transcript_complete': complete,
+                     'transcript_coverage': page['coverage']}
+            save_state(state)
+        if complete:
+            break
+    return added, state
 
 
 def sync(args):
@@ -83,7 +158,10 @@ def sync(args):
             save_state(state)
         if not page['has_more']:
             break
-    print(json.dumps({'added': added, 'messages': state['messages'], 'complete': state['complete']}))
+    transcript_added, state = sync_transcripts(args, source, state)
+    print(json.dumps({'added': added, 'messages': state['messages'], 'complete': state['complete'],
+                      'transcript_added': transcript_added,
+                      'transcript_complete': state['transcript_complete']}))
 
 
 def main():

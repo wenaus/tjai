@@ -5,7 +5,7 @@ import json
 from django.db.models import Count, DateTimeField, Func, Q
 from django.db.models.functions import TruncDate
 
-from .dialog_context import DIALOG_TAG, TEAMCOMMS_DIALOG_TAG
+from .dialog_context import DIALOG_TAG, TEAMCOMMS_DIALOG_TAG, TEAMCOMMS_TRANSCRIPT_TAG
 from .models import Entry, SysConfig, Tag
 from .tjai_utils import get_app_tz
 
@@ -23,9 +23,10 @@ def coverage(qs):
     humans = Q(data__role='user') & (
         Q(data__peer_source__isnull=True) | ~Q(data__peer_source='teamcomms'))
     humans |= Q(data__author_identity__participant_kind='human')
+    humans |= Q(data__dialog_projection='teamcomms-transcript', data__recorded_role='human')
     return qs.aggregate(
         human_turns=Count('pk', filter=humans),
-        teamcomms_messages=Count('pk', filter=Q(data__dialog_projection='teamcomms')))
+        teamcomms_messages=Count('pk', filter=Q(data__peer_source='teamcomms')))
 
 
 def sync_state():
@@ -42,7 +43,7 @@ def projection_entries():
 
 def dialog_population(qs):
     """One browser row per broker message; native transcript records are retained."""
-    ids = Tag.objects.filter(tag_name__in=(DIALOG_TAG, TEAMCOMMS_DIALOG_TAG)).values('entry_id')
+    ids = Tag.objects.filter(tag_name__in=(DIALOG_TAG, TEAMCOMMS_DIALOG_TAG, TEAMCOMMS_TRANSCRIPT_TAG)).values('entry_id')
     # Even an archived/trashed projection supersedes its transcript copies.
     projected = Entry.objects.filter(id__in=Tag.objects.filter(
         tag_name=TEAMCOMMS_DIALOG_TAG).values('entry_id')).values('data__message_id')
@@ -74,7 +75,9 @@ def apply_people_filters(qs, params, state=None):
 def dialog_options(state=None):
     state = sync_state() if state is None else state
     people = {state.get('local_person_id', LOCAL_PERSON): 'Torre'}
-    for names in projection_entries().values_list('data__dialog_people', flat=True).distinct():
+    shared = Entry.objects.filter(deleted_at__isnull=True, id__in=Tag.objects.filter(
+        tag_name__in=(TEAMCOMMS_DIALOG_TAG, TEAMCOMMS_TRANSCRIPT_TAG)).values('entry_id'))
+    for names in shared.values_list('data__dialog_people', flat=True).distinct():
         people.update(names or {})
     people[state.get('local_person_id', LOCAL_PERSON)] = 'Torre'
     return [{'id': key, 'name': name} for key, name in
@@ -100,6 +103,9 @@ def daily_counts(params, days=None):
 
 
 def dialog_attribution(data, local_person_id=None):
+    if data.get('dialog_projection') == 'teamcomms-transcript':
+        return {'source': 'Shared dialog', 'speaker': data['dialog_speaker'],
+                'audience': '', 'recorded': True}
     if data.get('dialog_projection') == 'teamcomms':
         from .teamcomms_dialog import speaker
         # Directory identities stay available in Details; the row names the
