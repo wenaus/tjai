@@ -80,7 +80,7 @@ The page reads from these endpoints:
 | `api/dialog/daily-counts` | GET | Per-day dialog-turn counts for the charts |
 | `api/entry/<uuid>/relations` | GET | Relations for one entry, loaded on demand |
 
-`api/dashboard/status` and `api/dashboard/search` paginate by `offset` with a page size of 1000. They carry no incremental-sync cursor: each poll re-fetches the head of the list, and older entries load by offset. When `offset > 0`, `api/dashboard/status` returns only `recent_entries`, `has_more`, and `total_count`. The status endpoint's `total_count` is approximate — offset plus entries returned, plus one when more remain — avoiding a full count; the search endpoint computes an exact `total_count` on the first page.
+`api/dashboard/status` and `api/dashboard/search` paginate by `offset`, with 100 complete messages per page in Dialog and 1000 entries elsewhere. They carry no incremental-sync cursor: each poll re-fetches the head of the list, and older entries load by offset. When `offset > 0`, `api/dashboard/status` returns only `recent_entries`, `has_more`, and `total_count`. The status endpoint's `total_count` is approximate — offset plus entries returned, plus one when more remain — avoiding a full count; the search endpoint computes an exact `total_count` on the first page.
 
 ## Calendar panel
 
@@ -175,7 +175,7 @@ projection and reply membership are in `teamcomms_dialog.py`.
 
 ## Entries list
 
-`renderEntries()` renders each entry as one line in the `tj l` style: a timestamp, a kind abbreviation, optional event date, context, name, the content (first line, or full when Expand dialog is on), a line count, and inline tags. Server-provided `date_display` is used directly; the client does not format entry timestamps. URLs and markdown links in content are linkified.
+Outside Dialog, `renderEntries()` renders each entry as one line in the `tj l` style: a timestamp, a kind abbreviation, optional event date, context, name, the content (first line, or full when Expand dialog is on), a line count, and inline tags. Dialog uses the message layout described above. Server-provided `date_display` is used directly; the client does not format entry timestamps. URLs and markdown links in content are linkified.
 
 A refresh re-renders the list only when the entry payload differs from the one last rendered, compared as JSON in `lastEntriesJson`. A poll that returns the same entries leaves the list in place.
 
