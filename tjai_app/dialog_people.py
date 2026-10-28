@@ -13,6 +13,21 @@ SYNC_KEY = 'teamcomms_dialog_sync'
 LOCAL_PERSON = 'local'
 
 
+def expanded(params):
+    """Dialog opens with complete messages; an explicit zero keeps summaries."""
+    return params.get('expand_dialog', '1' if params.get('view') == 'dialog' else '0') == '1'
+
+
+def coverage(qs):
+    """Recorded human turns and broker messages in the selected population."""
+    humans = Q(data__role='user') & (
+        Q(data__peer_source__isnull=True) | ~Q(data__peer_source='teamcomms'))
+    humans |= Q(data__author_identity__participant_kind='human')
+    return qs.aggregate(
+        human_turns=Count('pk', filter=humans),
+        teamcomms_messages=Count('pk', filter=Q(data__dialog_projection='teamcomms')))
+
+
 def sync_state():
     raw = SysConfig.objects.filter(key=SYNC_KEY).values_list('value', flat=True).first()
     return json.loads(raw) if raw else {}
@@ -84,11 +99,16 @@ def daily_counts(params, days=None):
     return list(reversed(counts)) if days is not None else counts
 
 
-def dialog_attribution(data):
+def dialog_attribution(data, local_person_id=None):
     if data.get('dialog_projection') == 'teamcomms':
+        from .teamcomms_dialog import speaker
+        # Directory identities stay available in Details; the row names the
+        # actual AI speaker without presenting its operator as the author.
+        author = data.get('author_identity')
         return {
-            'source': 'TeamComms', 'speaker': data['dialog_speaker'],
-            'audience': data.get('dialog_audience', ''),
+            'source': 'TeamComms', 'speaker': speaker(author, local_person_id=local_person_id) if author else data['dialog_speaker'],
+            'audience': ', '.join(sorted({speaker(identity, local_person_id=local_person_id)
+                                         for identity in data.get('recipient_identities', [])})),
             'reply_entry_id': data.get('reply_entry_id'),
         }
     if data.get('peer_source') == 'teamcomms':

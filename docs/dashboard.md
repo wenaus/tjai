@@ -54,6 +54,7 @@ Query parameters and their state:
 | `public` | only entries marked `data.access=public`; the `poetry` and `recipe` contexts are excluded |
 | `with_relations` | only entries that participate in a relation |
 | `expand_dialog` | render full content instead of the first line |
+| `dialog_filters`, `dialog_activity` | `1` opens the additional dialog filters or activity charts |
 | `rel` | CSV of entry UUIDs whose relations are expanded |
 | `view` | `archive` or `dialog` |
 | `deleted` | `1` for Trash |
@@ -144,6 +145,16 @@ Selecting a person includes both sides and other visible replies linked to that
 exchange. An LLM session ID does not connect otherwise unrelated messages. Each
 row labels its source, speaker and audience and links to an available parent.
 Remote private human–LLM transcripts are outside this message history.
+
+Dialog opens with complete messages rendered through the shared sanitized
+Markdown pipeline. A concise header identifies the speaker, audience, source
+and time. Technical fields and entry actions are folded under **Details**;
+additional filters and activity charts are folded separately. Explicit
+`expand_dialog=0` keeps the first-line view across reloads. Dialog pages hold
+100 messages at a time; scrolling loads older messages. A selected-person
+view with broker messages and no recorded human turns states that limitation.
+An AI operator association does not turn an AI message into that person's
+typed dialog. Shared transcript capture is a separate opt-in TeamComms feature.
 
 The importer is `scripts/sync_teamcomms_dialog.py`, scheduled once a minute in
 `scripts/cron/crontab`. It invokes the existing connector with its private

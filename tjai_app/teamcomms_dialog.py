@@ -38,7 +38,7 @@ def speaker(identity, session=None, local_person_id=None):
     if person_id == local_person_id:
         name = 'Torre'
     kind = identity.get('participant_kind') or identity.get('kind') or 'unknown'
-    label = f'{name} · {"AI" if kind == "ai" else kind}'
+    label = f"{name}'s AI" if kind == 'ai' else f'{name} · {kind}'
     if session and session.get('name'):
         label += f' ({session["name"]})'
     return label

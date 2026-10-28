@@ -42,7 +42,7 @@ def main():
             'value': json.dumps({'local_person_id': owner['operator_id']}),
             'timestamp_modified': 0,
         })
-        incoming = message(collaborator, 'question')
+        incoming = message(collaborator, 'question\n\n**Message body**')
         outgoing = message(owner, 'reply', incoming['message_id'])
         followup = message(other, 'followup', outgoing['message_id'])
         unrelated = message(other, 'unrelated')
@@ -89,6 +89,16 @@ def main():
         result = json.loads(response.content)
         assert {row['id'] for row in result['recent_entries']} == set(projection_ids[:3])
         assert all(row['dialog_attribution']['source'] == 'TeamComms' for row in result['recent_entries'])
+        shown = next(row for row in result['recent_entries'] if row['metadata']['message_id'] == incoming['message_id'])
+        assert shown['content'] == incoming['content'], 'Dialog default discarded the message body'
+        assert '<strong>Message body</strong>' in shown['content_html']
+        assert shown['dialog_attribution']['speaker'] == "Collaborator's AI"
+        assert result['dialog_coverage'] == {'human_turns': 0, 'teamcomms_messages': 3}
+        request = factory.get('/tjai/api/dashboard/status', {
+            'view': 'dialog', 'people': collaborator['operator_id'], 'expand_dialog': '0',
+        })
+        compact = json.loads(dashboard_status.__wrapped__(request).content)['recent_entries']
+        assert all(row['content_html'] is None and '\n' not in row['content'] for row in compact)
         request = factory.get('/tjai/api/dashboard/search', {
             'q': marker, 'view': 'dialog', 'people': collaborator['operator_id'],
             'teamcomms': '1', 'expand_dialog': '1',

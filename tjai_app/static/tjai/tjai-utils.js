@@ -66,19 +66,32 @@ function entryRefUrl(ref) {
  * plus JSON-style "entry_id": "value" after HTML escaping.
  */
 function linkifyEntryReferences(content) {
-    var L = 'style="color:#90caf9"';
-    var uuidRe = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/ig;
-    var keyedRe = /((?:"|&quot;)?(?:entry_id|entry|uuid|current_entry|source_entry_id|result_entry_id)(?:"|&quot;)?\s*[:=]\s*(?:"|&quot;)?)([A-Za-z0-9][A-Za-z0-9_.:-]{2,})(?=(?:"|&quot;|[\s,)}\]]|$))/g;
-    return content.split(/(<[^>]+>)/g).map(function(part) {
-        if (part.startsWith('<')) return part;
-        part = part.replace(uuidRe, function(ref) {
-            return '<a href="' + entryRefUrl(ref) + '" ' + L + '>' + ref + '</a>';
-        });
-        return part.replace(keyedRe, function(m, prefix, ref, suffix) {
-            if (/^https?:/i.test(ref)) return m;
-            return prefix + '<a href="' + entryRefUrl(ref) + '" ' + L + '>' + ref + '</a>';
-        });
-    }).join('');
+    var template = document.createElement('template');
+    template.innerHTML = content;
+    var walker = document.createTreeWalker(template.content, NodeFilter.SHOW_TEXT);
+    var nodes = [], node;
+    while ((node = walker.nextNode())) {
+        if (!node.parentElement || !node.parentElement.closest('a,code,pre,script,style')) nodes.push(node);
+    }
+    var refs = /((?:")?(?:entry_id|entry|uuid|current_entry|source_entry_id|result_entry_id)(?:")?\s*[:=]\s*(?:")?)([A-Za-z0-9][A-Za-z0-9_.:-]{2,})(?=(?:"|[\s,)}\]]|$))|\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/gi;
+    nodes.forEach(function(text) {
+        var fragment = document.createDocumentFragment(), start = 0, match;
+        refs.lastIndex = 0;
+        while ((match = refs.exec(text.data))) {
+            var ref = match[2] || match[3];
+            if (/^https?:/i.test(ref)) continue;
+            fragment.append(document.createTextNode(text.data.slice(start, match.index) + (match[1] || '')));
+            var anchor = document.createElement('a');
+            anchor.href = entryRefUrl(ref);
+            anchor.style.color = '#90caf9';
+            anchor.textContent = ref;
+            fragment.append(anchor);
+            start = refs.lastIndex;
+        }
+        fragment.append(document.createTextNode(text.data.slice(start)));
+        text.replaceWith(fragment);
+    });
+    return template.innerHTML;
 }
 
 /**

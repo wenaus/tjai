@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>tjai Dashboard</title>
     <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
-    <script src="/tjai/static/tjai/tjai-utils.js?v=20261011"></script>
+    <script src="/tjai/static/tjai/tjai-utils.js?v=20261028"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -121,6 +121,21 @@
             text-decoration: none;
         }
         .entry-meta { margin-top: 2px; margin-left: 34px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+        .dialog-entry { padding: 10px 12px; margin: 0 0 10px; background: #202020; border-left: 2px solid #42645f; }
+        .dialog-body { margin-top: 8px; line-height: 1.55; overflow-wrap: anywhere; }
+        .dialog-body p, .dialog-body ul, .dialog-body ol, .dialog-body pre, .dialog-body table { margin: 0 0 .7em; }
+        .dialog-body ul, .dialog-body ol { padding-left: 1.6em; }
+        .dialog-body > :first-child { margin-top: 0; }
+        .dialog-body > :last-child { margin-bottom: 0; }
+        .dialog-body pre { overflow-x: auto; padding: 8px; background: #181818; }
+        .dialog-body table { border-collapse: collapse; }
+        .dialog-body th, .dialog-body td { border: 1px solid #444; padding: 3px 7px; }
+        .dialog-body a { color: #90caf9; }
+        .dialog-details { margin-top: 8px; font-size: 11px; color: #888; }
+        .dialog-details > summary, .dialog-options > summary { cursor: pointer; width: fit-content; }
+        .dialog-details .entry-meta { margin-left: 0; }
+        .dialog-options { margin: 6px 0; color: #999; }
+        .dialog-options[open] > summary { margin-bottom: 8px; }
         .entry-badge {
             color: #b0bec5;
             background: #242424;
@@ -272,7 +287,8 @@
         <div class="panel panel-right" id="status-panel">
             <div class="panel-header" style="display:flex; align-items:center;">{% if is_trash %}Trash <button id="empty-trash-btn" style="background:#8b0000;color:#fff;border:none;border-radius:3px;padding:1px 8px;margin-left:12px;cursor:pointer;font-size:11px;font-family:inherit">Empty Trash</button>{% elif is_archive %}Archive <a href="{% url 'versions_page' %}" style="color:#90caf9;font-size:12px;font-weight:normal;margin-left:12px">Item Versions</a>{% elif is_dialog %}<span id="dialog-panel-title">Dialog</span>{% else %}Status{% endif %}<span class="refresh-indicator"><span id="refresh-indicator"></span> <a href="{% url 'logout' %}" style="color:#999;margin-left:12px">Logout</a></span></div>
             <div id="status-fixed">Loading status...</div>
-            <div id="dialog-chart" style="display:none; margin:8px 0; padding:8px; background:#222; border:1px solid #333; border-radius:4px; position:relative;">
+            <details id="dialog-chart-wrap" class="dialog-options" style="display:none"><summary>Activity charts</summary>
+            <div id="dialog-chart" style="margin:8px 0; padding:8px; background:#222; border:1px solid #333; border-radius:4px; position:relative;">
                 <div style="display:flex; gap:12px;">
                     <div style="flex:1; min-width:0;">
                         <div style="color:#888; font-size:11px; margin-bottom:4px;">Daily dialog turns</div>
@@ -285,6 +301,7 @@
                 </div>
                 <div id="chart-tooltip" style="display:none; position:absolute; background:#333; color:#e0e0e0; padding:3px 8px; border-radius:3px; font-size:11px; pointer-events:none; white-space:nowrap; z-index:10;"></div>
             </div>
+            </details>
             <div id="entries-header" style="display:flex; align-items:center; gap:12px; margin-top:16px; margin-bottom:8px; border-top:1px solid #333; padding-top:12px; flex-shrink:0;">
                 <span id="entries-label" style="color: #d8a070;">Entries <span style="color:#8a8a8a">with modified time</span></span>
                 <input type="text" id="entry-search" placeholder="Search..." style="background:#2a2a2a; color:#e0e0e0; border:1px solid #555; padding:2px 6px; font-family:inherit; font-size:inherit; width:180px; border-radius:3px;">
@@ -879,9 +896,10 @@
         const _months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
         async function updateDialogChart() {
-            const el = document.getElementById('dialog-chart');
+            const el = document.getElementById('dialog-chart-wrap');
             if (!isDialogMode && !dialogContexts.has(activeContext)) { el.style.display = 'none'; return; }
             el.style.display = '';
+            if (!el.open) return;
             const params = new URLSearchParams();
             if (activePeople.size) params.set('people', [...activePeople].sort().join(','));
             if (teamcommsOnly) params.set('teamcomms', '1');
@@ -906,6 +924,20 @@
             _weeklyBarMeta = _drawBarChart('dialog-weekly-canvas', _buildWeekly(rows));
             _dialogChartDrawn = true;
         }
+        document.getElementById('dialog-chart-wrap').addEventListener('toggle', event => {
+            dialogActivityOpen = event.target.open;
+            syncStateToUrl();
+            if (event.target.open) {
+                _dialogChartKey = null;
+                updateDialogChart();
+            }
+        });
+        document.getElementById('status-fixed').addEventListener('toggle', event => {
+            if (event.target.id === 'dialog-filter-options') {
+                dialogFiltersOpen = event.target.open;
+                syncStateToUrl();
+            }
+        }, true);
         function _buildWeekly(rows) {
             const byDate = {};
             rows.forEach(r => { byDate[r.date] = r.count; });
@@ -1055,7 +1087,7 @@
             if (dashLooksLikeEpoch(key, value)) return dashFormatEpoch(value);
             if (dashLooksLikeIsoTime(key, value)) return dashFormatDate(new Date(value));
             let s;
-            if (Array.isArray(value)) s = value.join(',');
+            if (Array.isArray(value)) s = value.some(item => item && typeof item === 'object') ? JSON.stringify(value) : value.join(',');
             else if (typeof value === 'object') s = JSON.stringify(value);
             else s = String(value);
             if (!key.includes('entry_id') && s.length > 50) s = s.slice(0, 50) + '...';
@@ -1129,6 +1161,7 @@
 
         function renderEntries(entries, tz) {
             let html = '';
+            const conversation = isDialogMode || dialogView;
             for (const entry of entries) {
                 const tsStr = entry.date_display || '';
 
@@ -1141,15 +1174,15 @@
                     : entry.name ? `/tjai/entry/?name=${encodeURIComponent(entry.name)}`
                     : `/tjai/entry/?uuid=${entry.id}`;
                 let line = `<a href="${entryUrl}" style="color:inherit;text-decoration:none">`;
-                line += `<span style="color:#daa520">===</span>  `;
+                if (!conversation) line += `<span style="color:#daa520">===</span>  `;
                 line += `<span style="color:#8a8a8a">${tsStr}</span> `;
-                line += `<span style="color:#daa520">[${kindAbbr}]</span> `;
+                if (!conversation) line += `<span style="color:#daa520">[${kindAbbr}]</span> `;
 
                 if (entry.event_date_display) {
                     line += `<span style="color:#d8a070">${entry.event_date_display}</span> `;
                 }
 
-                if (entry.context) line += `<span style="color:#ce93d8">=${entry.context}</span> `;
+                if (entry.context && !conversation) line += `<span style="color:#ce93d8">=${entry.context}</span> `;
                 if (entry.name) line += `<span style="color:#c0d8f0;font-weight:bold">@${entry.name}</span>  `;
 
                 const attribution = entry.dialog_attribution;
@@ -1164,7 +1197,9 @@
                 const hasUrl = /https?:\/\//.test(entry.content) || /\[.*\]\(.*\)/.test(entry.content);
                 if (expandDialog) {
                     line += `</a>`;
-                    line += `<div style="white-space:pre-wrap;margin-top:4px">${hasUrl ? linkifyContent(escapeHtml(entry.content)) : escapeHtml(entry.content)}</div>`;
+                    line += conversation && entry.content_html
+                        ? `<div class="dialog-body">${entry.content_html}</div>`
+                        : `<div style="white-space:pre-wrap;margin-top:4px">${hasUrl ? linkifyContent(escapeHtml(entry.content)) : escapeHtml(entry.content)}</div>`;
                 } else if (hasUrl) {
                     // Close link before content so inner links aren't nested
                     line += `</a>`;
@@ -1177,7 +1212,7 @@
                 if (attribution?.reply_entry_id) {
                     line += ` <a href="${entryRefUrl(attribution.reply_entry_id)}" style="color:#90caf9;font-size:11px">in reply to</a>`;
                 }
-                if (entry.tags && entry.tags.length) {
+                if (!conversation && entry.tags && entry.tags.length) {
                     for (const t of entry.tags) {
                         line += ` <span style="color:#9ccc65">:${t}</span><span class="tag-del" data-eid="${entry.id}" data-tag="${t}" style="color:#ef5350;cursor:pointer;margin-left:1px">-</span>`;
                     }
@@ -1192,18 +1227,20 @@
                 line += ` <button class="search-del-btn entry-hidden-action" data-eid="${entry.id}" style="background:#8b0000;color:#fff;border:none;border-radius:3px;padding:1px 8px;margin-left:8px;cursor:pointer;font-size:11px;font-family:inherit" title="Delete">X</button>`;
                 const editUrl = entryUrl + (entryUrl.includes('?') ? '&' : '?') + 'edit=1';
                 const meta = renderEntryMeta(entry, entryUrl, editUrl);
-                if (meta) line += `<div class="entry-meta">${meta}</div>`;
+                if (meta) line += conversation
+                    ? `<details class="dialog-details"><summary>Details</summary><div class="entry-meta">${meta}</div></details>`
+                    : `<div class="entry-meta">${meta}</div>`;
 
                 // Build plain-text copy line: matches what's displayed, preserves markdown links
                 let plain = `=== ${tsStr} [${kindAbbr}]`;
                 if (entry.event_date_display) plain += ` ${entry.event_date_display}`;
-                if (entry.context) plain += ` =${entry.context}`;
+                if (entry.context && !conversation) plain += ` =${entry.context}`;
                 if (entry.name) plain += ` @${entry.name}`;
                 if (dialogLabel) plain += ` ${dialogLabel}`;
                 plain += ` ${entry.content}`;
-                if (entry.tags && entry.tags.length) plain += ' ' + entry.tags.map(t => ':' + t).join(' ');
+                if (!conversation && entry.tags && entry.tags.length) plain += ' ' + entry.tags.map(t => ':' + t).join(' ');
 
-                html += `<div class="entry" id="e-${entry.id}" style="margin-left:0" data-context="${entry.context || ''}" data-machine="${entry.hostname || ''}" data-kind="${entry.kind || ''}" data-tags="${(entry.all_tags || entry.tags || []).join(',')}" data-content="${escapeHtml(entry.content)}" data-plain="${escapeHtml(plain)}" data-entry-kind="${entry.kind || ''}">${line}</div>`;
+                html += `<div class="entry${conversation ? ' dialog-entry' : ''}" id="e-${entry.id}" style="margin-left:0" data-context="${entry.context || ''}" data-machine="${entry.hostname || ''}" data-kind="${entry.kind || ''}" data-tags="${(entry.all_tags || entry.tags || []).join(',')}" data-content="${escapeHtml(entry.content)}" data-plain="${escapeHtml(plain)}" data-entry-kind="${entry.kind || ''}">${line}</div>`;
             }
             return html;
         }
@@ -1238,6 +1275,8 @@
         let activeToTime = null;
         let expandDialog = false;
         let dialogView = false;
+        let dialogFiltersOpen = false;
+        let dialogActivityOpen = false;
         let cachedDailyCounts = null;
         let excludedContexts = new Set();
         let activePublic = false;
@@ -1263,6 +1302,9 @@
             if (activeFromTime) params.set('from_time', activeFromTime);
             if (activeToTime) params.set('to_time', activeToTime);
             if (expandDialog) params.set('expand_dialog', '1');
+            else if (dialogView || isDialogMode) params.set('expand_dialog', '0');
+            if (dialogFiltersOpen) params.set('dialog_filters', '1');
+            if (dialogActivityOpen) params.set('dialog_activity', '1');
             if (isArchiveMode) params.set('view', 'archive');
             else if (dialogView || isDialogMode) params.set('view', 'dialog');
             if (activeWithRelations) params.set('with_relations', '1');
@@ -1296,8 +1338,11 @@
             activePublic = params.get('public') === '1';
             activeFromTime = params.get('from_time') || null;
             activeToTime = params.get('to_time') || null;
-            expandDialog = params.get('expand_dialog') === '1';
             dialogView = params.get('view') === 'dialog';
+            expandDialog = params.has('expand_dialog') ? params.get('expand_dialog') === '1' : dialogView;
+            dialogFiltersOpen = params.get('dialog_filters') === '1';
+            dialogActivityOpen = params.get('dialog_activity') === '1';
+            document.getElementById('dialog-chart-wrap').open = dialogActivityOpen;
             activeWithRelations = params.get('with_relations') === '1';
             const rel = params.get('rel');
             if (rel) rel.split(',').filter(Boolean).forEach(id => expandedRelations.add(id));
@@ -1339,6 +1384,7 @@
             if (activeFromTime) params.push(`from_time=${encodeURIComponent(activeFromTime)}`);
             if (activeToTime) params.push(`to_time=${encodeURIComponent(activeToTime)}`);
             if (expandDialog) params.push('expand_dialog=1');
+            else if (dialogView || isDialogMode) params.push('expand_dialog=0');
             if (isArchiveMode) params.push('view=archive');
             else if (dialogView || isDialogMode) params.push('view=dialog');
             if (activeWithRelations) params.push('with_relations=1');
@@ -1764,10 +1810,15 @@
                     return `<a href="#" class="person-link" data-person="${dashAttr(p.id)}" aria-pressed="${selected}" style="color:${selected ? '#1a1a1a;background:#90caf9;padding:1px 4px;border-radius:3px' : '#90caf9'};text-decoration:none">${escapeHtml(p.name)}</a>`;
                 }).join(' &nbsp; ');
                 html += `<div class="status-line">People: <a href="#" id="people-all" style="color:${activePeople.size ? '#90caf9' : '#fff'};text-decoration:none">All</a> &nbsp; ${peopleLinks} &nbsp; <label style="cursor:pointer;white-space:nowrap"><input id="teamcomms-only" type="checkbox" ${teamcommsOnly ? 'checked' : ''}> TeamComms only</label></div>`;
+                const coverage = data.dialog_coverage;
+                if (activePeople.size && coverage && !coverage.human_turns && coverage.teamcomms_messages) {
+                    html += '<div class="status-line" style="color:#d8a070">AI TeamComms exchanges only. No human-written dialog is recorded for this selection.</div>';
+                }
                 if (sync.error || !sync.last_success || !sync.complete || Date.now()/1000 - sync.last_success > 300) {
                     const note = sync.error ? 'TeamComms refresh failed; showing the last saved messages.' : !sync.last_success || !sync.complete ? 'TeamComms history is loading.' : 'TeamComms history is waiting for a refresh.';
                     html += `<div class="status-line" style="color:#d8a070">${note}</div>`;
                 }
+                html += `<details id="dialog-filter-options" class="dialog-options" ${dialogFiltersOpen ? 'open' : ''}><summary>More filters</summary>`;
                 const clientLinks = (data.dialog_clients || []).map(c => {
                     const activeClass = activeClient === c ? ' active' : '';
                     return `<a href="#" class="client-link${activeClass}" data-client="${dashAttr(c)}" style="color:#80cbc4;text-decoration:none">${escapeHtml(c)}</a>`;
@@ -1917,6 +1968,7 @@
                 html += '</div>';
             }
 
+            if (isDialogMode) html += '</details>';
             document.getElementById('status-fixed').innerHTML = html;
             updateDialogChart();
 

@@ -15,6 +15,7 @@ from urllib.parse import quote
 from .dialog_context import CURRENT_DIALOG_CONTEXT, DIALOG_CONTEXTS, DIALOG_TAG
 from .dialog_people import (apply_people_filters, dialog_attribution, dialog_options,
                             dialog_population, sync_state as dialog_sync_state,
+                            expanded as dialog_expanded, coverage as dialog_coverage,
                             daily_counts as _dialog_daily_counts)
 
 logger = logging.getLogger(__name__)
@@ -2278,6 +2279,16 @@ def dashboard_calendar(request):
     })
 
 
+def _dashboard_content(content, params):
+    """Both list endpoints share complete, sanitized dialog rendering."""
+    full = dialog_expanded(params)
+    return {
+        'content': content if full else content.split('\n')[0],
+        'content_html': _linkify_rendered_html(_render_markdown(content))
+                        if full and params.get('view') == 'dialog' else None,
+    }
+
+
 @login_required
 def dashboard_status(request):
     """Return status data as JSON for dashboard."""
@@ -2378,7 +2389,7 @@ def dashboard_status(request):
     work_sessions.reverse()  # Oldest first for display
 
     # All entries (excluding archived), most recent first
-    DASHBOARD_PAGE = 1000
+    DASHBOARD_PAGE = 100 if request.GET.get('view') == 'dialog' else 1000
     offset = int(request.GET.get('offset', 0))
 
     # Server-side filters (applied to DB query before pagination)
@@ -2386,6 +2397,7 @@ def dashboard_status(request):
     filter_kind = request.GET.get('kind')
     filter_context = request.GET.get('context')
     dialog_view = request.GET.get('view') == 'dialog'
+    dialog_state = dialog_sync_state() if dialog_view else {}
     filter_client = request.GET.get('client')
     filter_model = request.GET.get('model')
     filter_machine = request.GET.get('machine')
@@ -2397,7 +2409,6 @@ def dashboard_status(request):
     filter_date = request.GET.get('date')  # YYYY-MM-DD, filter entries to this day
     filter_from_time = request.GET.get('from_time')  # ISO datetime e.g. 2026-03-04T03:30
     filter_to_time = request.GET.get('to_time')  # ISO datetime e.g. 2026-03-04T05:30
-    expand_dialog = request.GET.get('expand_dialog') == '1'
     user_exclude_contexts = [c for c in request.GET.get('exclude_context', '').split(',') if c]
     exclude_contexts = list(user_exclude_contexts)
 
@@ -2539,7 +2550,7 @@ def dashboard_status(request):
                 event_date_display = ev_dt.strftime('%a %m/%d/%H:%M')
         recent_entries.append({
             'id': e.id,
-            'content': e.content if expand_dialog else lines[0],
+            **_dashboard_content(e.content, request.GET),
             'kind': e.kind,
             'context': e.context_id,
             'timestamp': e.timestamp_modified,
@@ -2552,7 +2563,7 @@ def dashboard_status(request):
             'event_date_display': event_date_display,
             'hostname': data.get('hostname') if data else None,
             'metadata': data or {},
-            'dialog_attribution': dialog_attribution(data or {}) if dialog_view else None,
+            'dialog_attribution': dialog_attribution(data or {}, dialog_state.get('local_person_id')) if dialog_view else None,
             'relation_count': relation_counts.get(e.id, 0),
             'relations': expanded_relations.get(str(e.id)),
             'tags': missing_tags,
@@ -2707,7 +2718,7 @@ def dashboard_status(request):
         dialog_qs = dialog_population(Entry.objects.filter(deleted_at__isnull=True))
         dialog_clients = sorted({v for v in dialog_qs.values_list('data__client', flat=True) if v})
         dialog_models = sorted({v for v in dialog_qs.values_list('data__model', flat=True) if v})
-        teamcomms_sync = dialog_sync_state()
+        teamcomms_sync = dialog_state
         dialog_people = dialog_options(teamcomms_sync)
         teamcomms_sync = {key: value for key, value in teamcomms_sync.items() if key != 'cursor'}
 
@@ -2735,6 +2746,7 @@ def dashboard_status(request):
         'dialog_models': dialog_models,
         'dialog_people': dialog_people,
         'teamcomms_sync': teamcomms_sync,
+        'dialog_coverage': dialog_coverage(base_qs) if dialog_view else None,
     })
 
 
@@ -2858,7 +2870,7 @@ def dashboard_search(request):
     # Pagination, not a cap. The DB query is unbounded — what gets paged
     # in to the list view is one SEARCH_PAGE at a time, and the client
     # asks for more (offset=N) when the user scrolls past the bottom.
-    SEARCH_PAGE = 1000
+    SEARCH_PAGE = 100 if dialog_view else 1000
     offset = int(request.GET.get('offset', 0))
     # Total match count — only compute on the first page so the label can
     # show "N of TOTAL". Subsequent paginated fetches reuse the value the
@@ -2887,6 +2899,7 @@ def dashboard_search(request):
     expanded_relations = _relations_for_expanded_entry_ids(expanded_relation_ids)
 
     result = []
+    dialog_state = dialog_sync_state() if dialog_view else {}
     for e in entries:
         lines = e.content.split('\n')
         data = e.data if isinstance(e.data, dict) else None
@@ -2895,7 +2908,7 @@ def dashboard_search(request):
         missing_tags = [t for t in entry_tags if f':{t}' not in e.content]
         result.append({
             'id': e.id,
-            'content': e.content if request.GET.get('expand_dialog') == '1' else lines[0],
+            **_dashboard_content(e.content, request.GET),
             'kind': e.kind,
             'context': e.context_id,
             'timestamp': e.timestamp_modified,
@@ -2907,7 +2920,7 @@ def dashboard_search(request):
             'event_date': data.get('event_date') if data else None,
             'hostname': data.get('hostname') if data else None,
             'metadata': data or {},
-            'dialog_attribution': dialog_attribution(data or {}) if dialog_view else None,
+            'dialog_attribution': dialog_attribution(data or {}, dialog_state.get('local_person_id')) if dialog_view else None,
             'relation_count': relation_counts.get(e.id, 0),
             'relations': expanded_relations.get(str(e.id)),
             'tags': missing_tags,
