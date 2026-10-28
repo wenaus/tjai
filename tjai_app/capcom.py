@@ -6,6 +6,7 @@ call it directly.
 """
 import json
 import logging
+import re
 import time
 from datetime import timedelta
 
@@ -26,6 +27,13 @@ TJAI_PIPELINE_SOURCE = 'tjai-pipeline'
 TJAI_SYSTEM_SOURCE = 'tjai-system'
 
 
+def is_task_pause_resume_notice(source, title):
+    """Task pause/resume notices are retained outside the Capcom feed."""
+    return source in ('swf-notices', 'swf-panda-operations') and bool(re.match(
+        r'^(?:(?:pause|resume):|PanDA (?:bulk (?:pause|resume):|'
+        r'\d+: (?:pause|paused|resume|resumed)\b))', title, re.IGNORECASE))
+
+
 def emit_notice(source, title, severity='info', url='', dedup_key='', data=None):
     """Create a notice, threading onto an unarchived row with the same dedup_key.
 
@@ -36,6 +44,7 @@ def emit_notice(source, title, severity='info', url='', dedup_key='', data=None)
                      severity, source)
         severity = 'info'
     now = timezone.now()
+    archived = is_task_pause_resume_notice(source, title)
     if dedup_key:
         row = (Notice.objects.filter(dedup_key=dedup_key, archived=False)
                .order_by('-timestamp').first())
@@ -45,16 +54,17 @@ def emit_notice(source, title, severity='info', url='', dedup_key='', data=None)
             row.was_read = False
             row.title = title
             row.severity = severity
+            row.archived = archived
             if url:
                 row.url = url
             if data:
                 row.data = {**(row.data or {}), **data}
             row.save(update_fields=['timestamp', 'count', 'was_read', 'title',
-                                    'severity', 'url', 'data'])
+                                    'severity', 'archived', 'url', 'data'])
             return row
     return Notice.objects.create(
         timestamp=now, first_seen=now, source=source, severity=severity,
-        title=title, url=url, dedup_key=dedup_key, data=data or {},
+        title=title, url=url, dedup_key=dedup_key, data=data or {}, archived=archived,
     )
 
 
