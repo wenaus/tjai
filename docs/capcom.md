@@ -405,6 +405,9 @@ Candidate sources and features considered and not adopted:
   its notice timestamp, moving it to the top of the reverse-time feed while
   preserving its original `first_seen` time.
 - Read notices grey out, the whole line.
+- **Load more** adds another 100 notices. Read actions and automatic refreshes
+  refresh every loaded page, retaining older notices and their expanded
+  details. Changing a feed filter starts again at the first page.
 - `j`/`k` keyboard navigation through the feed.
 - Filters (source, severity, read state) encoded in the URL, following the
   dashboard's URL-as-state convention, so every view is bookmarkable.

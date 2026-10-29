@@ -291,11 +291,20 @@
 
     async function fetchData(append) {
         try {
-            const d = await fetchJson('/tjai/api/capcom/feed?' + feedParams(append ? offset : 0));
-            lastData = d;
-            if (append) { notices = notices.concat(d.notices); }
-            else { notices = d.notices; offset = 0; }
-            hasMore = d.has_more;
+            // Refresh every loaded page so read actions and polling retain
+            // the notices and expanded details reached through Load more.
+            const start = append ? offset + 100 : 0;
+            const end = append ? start : offset;
+            const requests = [];
+            for (let off = start; off <= end; off += 100) {
+                requests.push(fetchJson('/tjai/api/capcom/feed?' + feedParams(off)));
+            }
+            const pages = await Promise.all(requests);
+            lastData = pages[0];
+            const loaded = pages.flatMap(d => d.notices);
+            notices = append ? notices.concat(loaded) : loaded;
+            offset = end;
+            hasMore = pages[pages.length - 1].has_more;
             renderAll();
         } catch (e) {
             document.getElementById('feed-area').innerHTML =
@@ -793,7 +802,7 @@
             } catch (e) { flashNotice('Update failed: ' + e.message, '#ef5350'); }
             return;
         }
-        if (t.id === 'load-more') { offset += 100; fetchData(true); return; }
+        if (t.id === 'load-more') { fetchData(true); return; }
         if (t.id === 'cfg-add-feed' || t.id === 'cfg-add-state') {
             lastData.sources = collectConfig();
             lastData.sources.push({source: '', kind: t.id === 'cfg-add-state' ? 'state' : 'feed',
@@ -841,6 +850,7 @@
         }
         if (t.classList.contains('n-source')) {
             filterSource = (filterSource === t.dataset.source) ? '' : t.dataset.source;
+            offset = 0;
             syncStateToUrl(); fetchData(); return;
         }
         if (t.dataset.mark) {
@@ -869,7 +879,7 @@
     });
 
     document.getElementById('unread-only').addEventListener('change', (ev) => {
-        unreadOnly = ev.target.checked; syncStateToUrl(); fetchData();
+        unreadOnly = ev.target.checked; offset = 0; syncStateToUrl(); fetchData();
     });
     document.addEventListener('change', (ev) => {
         if (ev.target.closest('#config-area') &&
