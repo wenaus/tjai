@@ -12,12 +12,14 @@ import sys
 import time
 
 CONFIG = Path.home() / ".config/teamcomms/torre-ai"
+# Clients admitted to TeamComms. Codex is barred on every host.
+CLIENTS = {"claude"}
 
 
-def eligible(host, name):
-    """Only named interactive SWF/ec2 sessions join the collaboration directory."""
+def eligible(host, name, client):
+    """Only named interactive Claude SWF/ec2 sessions join the collaboration directory."""
     prefix = {"ec2dev": "ec2", "swf-testbed": "swf"}.get(host)
-    return bool(not os.environ.get("TJAI_ACTION_ID") and prefix
+    return bool(client in CLIENTS and not os.environ.get("TJAI_ACTION_ID") and prefix
                 and re.fullmatch(rf"{prefix}-[1-9][0-9]*", name or ""))
 
 
@@ -31,7 +33,9 @@ def silence(path):
 
 def codex_name(host, native_id, hint):
     """Resolve an explicitly named session from the authenticated TJAI directory."""
-    if eligible(host, hint):
+    if "codex" not in CLIENTS:
+        return ""
+    if eligible(host, hint, "codex"):
         return hint
     if os.environ.get("TJAI_ACTION_ID") or host not in {"ec2dev", "swf-testbed"}:
         return ""
@@ -62,7 +66,7 @@ def claude_hook(data):
     record = claude_record(data.get("session_id"))
     name = (record.get("name") or data.get("session_name")
             or data.get("session_title") or os.environ.get("TJAI_SESSION_NAME") or "")
-    if not eligible(host, name):
+    if not eligible(host, name, "claude"):
         return 0
     python, config = CONFIG / "python", CONFIG / "connector.json"
     if not (os.access(python, os.X_OK) and config.is_file() and (CONFIG / "token").is_file()):

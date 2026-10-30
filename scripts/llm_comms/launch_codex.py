@@ -74,7 +74,7 @@ def start_teamcomms(directory, data):
     if not (os.access(python, os.X_OK) and config.is_file() and (TEAMCOMMS / "token").is_file()):
         return False
     name = codex_name(host, data["session_id"], data.get("session_name"))
-    if not eligible(host, name):
+    if not eligible(host, name, "codex"):
         return False
     silence(config)
     with open(directory / f"teamcomms-{data['session_id']}.log", "a") as log:

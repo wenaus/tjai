@@ -15,13 +15,16 @@ embedded sessions use a deferred native queue until restarted. Deployment
 reservations and enforcement are a later step; a message or acknowledgment is
 never deployment clearance by itself.
 
-The separate SWF TeamComms startup policy is shared by Claude and Codex in
-`scripts/llm_comms/teamcomms_startup.py`. It admits only `ec2-N` on ec2dev and
-`swf-N` on swf-testbed, with a positive integer N, and excludes every run
-carrying `TJAI_ACTION_ID`. Automatic greetings are disabled. Claude's name is
-resolved from its live registry before enrollment; Codex also accepts its
-named native session's record in the authenticated TJAI directory. Unnamed and temporary
-sessions remain outside TeamComms.
+The separate SWF TeamComms startup policy in
+`scripts/llm_comms/teamcomms_startup.py` is the one enrollment gate for Claude
+startup and the Codex launcher. It admits only the clients in `CLIENTS`, which
+is Claude alone: Codex is barred from TeamComms on every host. Admitted sessions
+are `ec2-N` on ec2dev and `swf-N` on swf-testbed, with a positive integer N;
+every run carrying `TJAI_ACTION_ID` is excluded. Automatic greetings are
+disabled. Claude's name is resolved from its live registry before enrollment.
+Unnamed and temporary sessions remain outside TeamComms. The shared Codex
+configuration also keeps its `teamcomms` MCP server disabled, and the Codex
+launcher unsets `TEAMCOMMS_TOKEN`.
 
 After updating that policy, `python3 scripts/llm_comms/teamcomms_startup.py
 --refresh-supervisors` replaces the current user's Codex policy supervisors.
