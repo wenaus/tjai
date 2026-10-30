@@ -17,8 +17,10 @@ never deployment clearance by itself.
 
 The separate SWF TeamComms startup policy in
 `scripts/llm_comms/teamcomms_startup.py` is the one enrollment gate for Claude
-startup and the Codex launcher. It admits only the clients in `CLIENTS`, which
-is Claude alone: Codex is barred from TeamComms on every host. Admitted sessions
+startup and the Codex launcher. It governs only the operator's own sessions and
+admits only the clients in `CLIENTS`, which is Claude alone: the operator's
+Codex sessions never join TeamComms. Other participants choose their own
+clients. Admitted sessions
 are `ec2-N` on ec2dev and `swf-N` on swf-testbed, with a positive integer N;
 every run carrying `TJAI_ACTION_ID` is excluded. Automatic greetings are
 disabled. Claude's name is resolved from its live registry before enrollment.

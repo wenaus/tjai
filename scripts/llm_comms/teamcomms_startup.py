@@ -12,7 +12,8 @@ import sys
 import time
 
 CONFIG = Path.home() / ".config/teamcomms/torre-ai"
-# Clients admitted to TeamComms. Codex is barred on every host.
+# Clients of the operator's own sessions that this policy enrolls. The
+# operator's Codex sessions never join; other participants choose their own.
 CLIENTS = {"claude"}
 
 
