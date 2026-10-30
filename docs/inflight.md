@@ -124,9 +124,10 @@ frame (index to activity and back) is mirrored into the address bar.
 
 `get_todos(status='inflight')` returns the activities in progress with
 the usual content preview; `max_content_length=0` requests full content.
-At session start, `get_todos(status='inflight', summary_only=True)` returns
+At a fresh session start, `get_todos(status='inflight', summary_only=True)` returns
 the complete activity index with identifiers, titles, contexts, statuses,
-open counts and `priority_items`, activities with priority items first. A session starting on an activity reads it in full,
+open counts and `priority_items`, activities with priority items first. A session
+after /clear skips the index and reads only the activity its task continues. A session starting on an activity reads it in full,
 then reads its Refs and
 works from its Live list; it marks items done (taking them out) and adds
 items with the `inflight_item` MCP tool (the web item endpoint's twin; both

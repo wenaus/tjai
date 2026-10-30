@@ -159,8 +159,9 @@ TJAI_MCP_SERVER_CONFIG = {
     "name": "tjai",
     "stateless": True,
     "instructions": """TJAI provides personal memory, guidance, tasks, dialog and peer messaging.
-At startup load get_profile, then get_ai_guidance for the project, location_name
-and provider audience. Follow next_offset until complete=true for both tools.
+At a fresh start load get_profile, then get_ai_guidance for the project, location_name
+and provider audience; after /clear load only get_ai_guidance for the task's project
+and what the task needs. Follow next_offset until complete=true.
 Check every result for an error. List reads return JSON text; parse it once.
 For boot use get_todos(status="inflight", summary_only=True) and read only the
 assigned activity in full. Daily health: get_entry_by_entry_id("daily-YYYY-MM-DD",
