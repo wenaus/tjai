@@ -155,7 +155,10 @@ async def list_sessions(host: str = None, resource: str = None,
     """Discover independent LLM sessions by machine or shared resource.
 
     Returns stable IDs, readable names, native IDs, client/model, directory,
-    delivery capability and freshness. Offline sessions are omitted by default.
+    delivery capability and freshness. A session is online while its receiver
+    heartbeats and its model answers: one whose client has held mail for 30
+    minutes with no acknowledgment, send or assistant turn since is not online
+    (`unanswered_since`). Offline sessions are omitted by default.
     Use the returned stable ID for messaging; do not infer identity from a name.
     """
     return _json_text(await _comms_call(comms.list_sessions, host=host, resource=resource,
@@ -177,6 +180,8 @@ async def send_message(sender_id: str, content: str, message_id: str,
     acknowledgment or clearance. Set reply_requested only when an answer is
     needed; avoid reciprocal acknowledgment loops. Replies name the original
     message_id in reply_to and acknowledge its receipt by the replying session.
+    A receipt's `unanswered` names a recipient whose model is not answering;
+    the mail is kept for it, but no one is there to read it now.
     """
     return await _comms_call(comms.send_message, sender_id=sender_id, content=content,
                             message_id=message_id, recipient_id=recipient_id,

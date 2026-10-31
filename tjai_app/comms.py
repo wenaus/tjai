@@ -4,7 +4,7 @@ Session IDs are provenance asserted by authenticated operator clients, not
 independent proof of model identity. Peer messages never authorize actions.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 import json
 import re
 import uuid
@@ -35,12 +35,58 @@ def _text(value, field, maximum, required=True):
     return value
 
 
+# A receiver heartbeats whether or not a model is behind it (an owning Codex app-server outlives its
+# conversation), so a fresh heartbeat proves only the receiver. On 2026-10-31 max-1 had heartbeated
+# "active" for twelve days after its model last acted: every peer saw it online, and 88 messages sat with
+# its client, never considered. Online therefore also needs the model to answer: mail handed to the
+# client more than UNANSWERED ago, with no sign of the model since (an acknowledgment, a message it sent,
+# an assistant turn of its own in the dialog), makes the session unanswering, and so not online.
+UNANSWERED = timedelta(minutes=30)
+HANDED = ("written_to_transport", "accepted_by_client")
+
+
+def _oldest_unanswered(row, since):
+    rows = LLMDelivery.objects.filter(recipient_id=row.id, state__in=HANDED,
+                                      updated_at__lt=timezone.now() - UNANSWERED)
+    if since is not None:
+        rows = rows.filter(updated_at__gt=since)
+    return rows.order_by("updated_at").values_list("updated_at", flat=True).first()
+
+
+def unanswered_since(row):
+    """When mail the session's model has not answered was first handed to its client; None while it answers."""
+    acted = max(filter(None, [
+        LLMDelivery.objects.filter(recipient_id=row.id, acknowledged_at__isnull=False)
+        .order_by("-acknowledged_at").values_list("acknowledged_at", flat=True).first(),
+        LLMMessage.objects.filter(sender_id=row.id).order_by("-created_at")
+        .values_list("created_at", flat=True).first()]), default=None)
+    oldest = _oldest_unanswered(row, acted)
+    if oldest is None:
+        return None
+    # The session's own assistant turns, by the dialog's host and native session (index: hostname, time).
+    from .models import Entry
+    turn = (Entry.objects.filter(deleted_at__isnull=True, kind="memory", data__hostname=row.host,
+                                 data__session_id=row.native_id, data__role="assistant",
+                                 timestamp_created__gt=oldest.timestamp())
+            .order_by("-timestamp_created").values_list("timestamp_created", flat=True).first())
+    if turn is None:
+        return oldest
+    return _oldest_unanswered(row, datetime.fromtimestamp(turn, tz=dt_timezone.utc))
+
+
+def _fresh(row):
+    return row.state != "offline" and row.last_seen >= timezone.now() - timedelta(seconds=FRESH_SECONDS)
+
+
 def _session(row):
+    fresh = _fresh(row)
+    unanswered = unanswered_since(row) if fresh else None
     return {"id": row.id, "native_id": row.native_id, "name": row.name,
             "host": row.host, "client": row.client, "model": row.model,
             "cwd": row.cwd, "resources": row.resources, "delivery": row.delivery,
             "state": row.state, "last_seen": row.last_seen.isoformat(),
-            "online": row.state != "offline" and row.last_seen >= timezone.now() - timedelta(seconds=FRESH_SECONDS)}
+            "online": fresh and unanswered is None,
+            "unanswered_since": unanswered.isoformat() if unanswered else None}
 
 
 def _numbered_instance(base, session_id):
@@ -166,7 +212,9 @@ def list_sessions(host=None, resource=None, include_offline=False, limit=100, of
     if resource:
         rows = rows.filter(resources__contains=[resource])
     if not include_offline:
+        # Online needs a fresh receiver and a model that answers (unanswered_since); live sessions are few.
         rows = rows.exclude(state="offline").filter(last_seen__gte=timezone.now() - timedelta(seconds=FRESH_SECONDS))
+        return [s for s in map(_session, rows) if s["online"]][offset:offset + limit]
     return [_session(row) for row in rows[offset:offset + limit]]
 
 
@@ -198,16 +246,19 @@ def _current_recipient(recipient_id):
     know: a restarted peer comes back under a new ID with the same name, and a
     sender still holding the old ID would otherwise leave its mail pending
     for a session that will never read it (2026-09-24, nine replies to a
-    restarted swf-1). An ID that is offline resolves to the freshest online
-    session with the same name on the same host; with none, it stands.
+    restarted swf-1). An ID that is not online (stale, or its model not
+    answering) resolves to the freshest online session with the same name on
+    the same host; with none, it stands.
     """
     row = LLMSession.objects.filter(id=recipient_id).first()
-    fresh = timezone.now() - timedelta(seconds=FRESH_SECONDS)
-    if row is None or (row.state != "offline" and row.last_seen >= fresh):
+    if row is None or (_fresh(row) and unanswered_since(row) is None):
         return recipient_id
-    successor = (LLMSession.objects.filter(name=row.name, host=row.host, last_seen__gte=fresh)
-                 .exclude(state="offline").exclude(id=row.id).order_by("-last_seen").first())
-    return successor.id if successor else recipient_id
+    fresh = timezone.now() - timedelta(seconds=FRESH_SECONDS)
+    for successor in (LLMSession.objects.filter(name=row.name, host=row.host, last_seen__gte=fresh)
+                      .exclude(state="offline").exclude(id=row.id).order_by("-last_seen")):
+        if unanswered_since(successor) is None:
+            return successor.id
+    return recipient_id
 
 
 @transaction.atomic
@@ -243,6 +294,7 @@ def send_message(sender_id, content, message_id, recipient_id=None, resource=Non
                           .exclude(id=sender_id).exclude(state="offline").order_by("id")[:101])
         if len(recipients) > 100:
             raise ValueError("Resource group exceeds 100 recipients; narrow the destination")
+        recipients = [r for r in recipients if unanswered_since(r) is None]
         if not recipients:
             raise ValueError("No online peers are registered for that resource")
     if reply_to and not LLMDelivery.objects.filter(message_id=reply_to, recipient_id=sender_id).exists():
@@ -255,7 +307,13 @@ def send_message(sender_id, content, message_id, recipient_id=None, resource=Non
         _notify(recipient.id)
     if reply_to:
         acknowledge_message(sender_id, reply_to)
-    return _receipt(message)
+    receipt = _receipt(message)
+    # Mail to a session whose model is not answering is kept for it, and the sender is told it waits.
+    unanswered = [{"recipient_id": r.id, "name": r.name, "unanswered_since": since.isoformat()}
+                  for r in recipients if (since := unanswered_since(r))]
+    if unanswered:
+        receipt["unanswered"] = unanswered
+    return receipt
 
 
 def _page(limit, offset):

@@ -84,6 +84,15 @@ not replace instructions already loaded by a running model.
 | `record_delivery` | Receiver reserves a dispatch and reports its observed transport result. |
 
 Registrations expire from online discovery after 90 seconds without a heartbeat.
+A heartbeat proves only the receiver, which runs whether or not a model is behind
+it (an owning Codex app-server outlives its conversation), so a session is also
+not online while its model is not answering: mail handed to its client
+(`written_to_transport`, `accepted_by_client`) more than 30 minutes ago, with no
+acknowledgment, message sent or assistant dialog turn of its own since
+(`comms.unanswered_since`). `list_sessions` then omits it unless
+`include_offline=true`, where it shows `unanswered_since`; a direct message to it
+goes to a same-named online successor if there is one, and is otherwise kept for
+it with the receipt's `unanswered` saying so; a resource send leaves it out.
 Turn state is `unknown` for embedded Codex queue receivers, which can observe
 the native process lifetime but have no live turn-status interface.
 A registration ID lasts one native session; the name is what peers know. A
@@ -203,7 +212,7 @@ messages. Inbox history uses `direction="inbox"` with the same flag.
 
 | Symptom | Check |
 |---------|-------|
-| A peer is missing | Confirm its normal launcher and receiver are running, its canonical host name, and heartbeat freshness; `include_offline=true` shows stale registrations. |
+| A peer is missing | Confirm its normal launcher and receiver are running, its canonical host name, and heartbeat freshness; `include_offline=true` shows stale registrations. A fresh registration with `unanswered_since` has a receiver but no model answering: restart the session. |
 | A repo group has no recipients | Inspect each session's returned `resources`; repo membership is configured, not inferred from its working directory. |
 | A message stays `queued_in_client` | This is deferred Codex delivery. A future normal launch supplies an owning app-server; an existing execution is not moved. |
 | Delivery is `uncertain` or `failed` | Read the receipt detail and receiver log before recovery. Do not create a fresh message ID merely to repeat a possibly accepted action. |
