@@ -23,7 +23,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 LOCAL_BACKUP_DIR = Path.home() / 'tjai-backups' / 'server'
-RCLONE_DEST = 'dropbox:tjai-backups/server'
+RCLONE_DEST = 'dropbox:Archive/tjai-backups/server'  # Archive: in the cloud, on no Mac's disk
 TJAI_WWW = Path('/var/www/tjai')
 APACHE_CONF = Path('/etc/apache2/sites-enabled/etaverse.conf')
 

@@ -159,7 +159,8 @@ SysConfig `system_health_llm_alarms`.
 
 ## Server Backups
 
-Automated daily backup to `~/tjai-backups/server/YYYY-MM-DD/`, pushed to Dropbox via rclone (`dropbox:tjai-backups/server`).
+Automated daily backup to `~/tjai-backups/server/YYYY-MM-DD/`, pushed to Dropbox via rclone into the Archive
+(`dropbox:Archive/tjai-backups/server`), which no Mac syncs to its disk, like the etaverse file backups below.
 
 | Item | Filename | Source |
 |------|----------|--------|
