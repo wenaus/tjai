@@ -162,6 +162,8 @@ SysConfig `system_health_llm_alarms`.
 
 Automated daily backup to `~/tjai-backups/server/YYYY-MM-DD/`, pushed to Dropbox via rclone into the Archive
 (`dropbox:Archive/tjai-backups/server`), which no Mac syncs to its disk, like the etaverse file backups below.
+ec2dev keeps the newest eight days, the newest backup and the trailing week the health checks compare it
+with; older days move to the Archive (`rclone move`: uploaded where missing, compared by hash, then removed here).
 
 | Item | Filename | Source |
 |------|----------|--------|

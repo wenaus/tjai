@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Backup tjai server data, push to Dropbox via rclone.
+"""Backup tjai server data, push to the Dropbox Archive via rclone; older days move there.
 
 Creates a dated directory under ~/tjai-backups/server/YYYY-MM-DD/
 containing:
@@ -24,6 +24,7 @@ from urllib.parse import unquote, urlparse
 
 LOCAL_BACKUP_DIR = Path.home() / 'tjai-backups' / 'server'
 RCLONE_DEST = 'dropbox:Archive/tjai-backups/server'  # Archive: in the cloud, on no Mac's disk
+KEEP_LOCAL_DAYS = 8  # the newest backup and the trailing week the health checks compare it with
 TJAI_WWW = Path('/var/www/tjai')
 APACHE_CONF = Path('/etc/apache2/sites-enabled/etaverse.conf')
 
@@ -282,6 +283,25 @@ def main():
         print(f"ERROR: rclone push failed: {result.stderr}", file=sys.stderr)
         sys.exit(1)
     print(f"Backup complete: {date_str} (pushed to Dropbox)")
+    move_old_days()
+
+
+def move_old_days():
+    """Backups older than the newest KEEP_LOCAL_DAYS move to the Dropbox Archive: rclone uploads what is
+    missing there, compares each file by hash and only then removes it here. The health checks judge the
+    newest backup against the trailing week, which stays on this disk."""
+    days = sorted(d for d in LOCAL_BACKUP_DIR.iterdir() if d.is_dir() and len(d.name) == 10)
+    for day in days[:-KEEP_LOCAL_DAYS]:
+        result = subprocess.run(
+            ['rclone', 'move', str(day), f'{RCLONE_DEST}/{day.name}', '--delete-empty-src-dirs'],
+            capture_output=True, text=True, timeout=3600,
+        )
+        if result.returncode != 0:
+            print(f"ERROR: moving {day.name} to Dropbox failed: {result.stderr}", file=sys.stderr)
+            sys.exit(1)
+        if day.exists():
+            day.rmdir()
+        print(f"Moved {day.name} to {RCLONE_DEST}")
 
 
 if __name__ == '__main__':
