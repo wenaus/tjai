@@ -173,7 +173,8 @@ def fts_normalize(text):
 def _apply_date_filter(qs, start_date, end_date, date_field='modified'):
     """Apply date range filter to queryset. Both dates optional; None means no filter.
 
-    date_field='modified' filters on timestamp_modified. date_field='event'
+    date_field='modified' filters on timestamp_modified; 'created' on
+    timestamp_created (a dialog turn's own time). date_field='event'
     filters on the calendar placement in data.event_date, excluding entries
     that have none.
     """
@@ -194,7 +195,7 @@ def _apply_date_filter(qs, start_date, end_date, date_field='modified'):
         qs = qs.annotate(_event_ts=Cast(KeyTextTransform('event_date', 'data'), FloatField()))
         field = '_event_ts'
     else:
-        field = 'timestamp_modified'
+        field = 'timestamp_created' if date_field == 'created' else 'timestamp_modified'
     if start_ts:
         qs = qs.filter(**{field + '__gte': start_ts})
     if end_ts:
@@ -682,7 +683,7 @@ def get_todos(context=None, status=None, include_done=False,
     qs = qs.order_by('-timestamp_modified')
     if summary_only:
         from .inflight import summary
-        return [
+        rows = [
             {
                 'id': entry.id,
                 'entry_id': (entry.data or {}).get('entry_id'),
@@ -692,6 +693,9 @@ def get_todos(context=None, status=None, include_done=False,
             }
             for entry in qs
         ]
+        # An activity with priority items comes first (docs/inflight.md § Priority); otherwise most recent first.
+        rows.sort(key=lambda row: 0 if row.get('priority_items') else 1)
+        return rows
     return [_format_entry(entry, max_content_length=max_content_length) for entry in qs]
 
 
@@ -851,14 +855,17 @@ def get_dialog(host, start_date=None, end_date=None, limit=None, offset=0, max_c
         return err
 
     dialog_ids = Tag.objects.filter(tag_name=DIALOG_TAG).values_list('entry_id', flat=True)
+    # A peer echo is the user-turn copy of a peer message whose peer record already exists.
     qs = Entry.objects.filter(
         id__in=dialog_ids,
         deleted_at__isnull=True,
-    )
+    ).exclude(data__role='peer_echo')
     if host != 'all':
         qs = qs.filter(data__hostname=host)
 
-    qs, err = _apply_date_filter(qs, start_date, end_date)
+    # A turn's window is the time it was said (its transcript time), not when it was recorded: turns
+    # recovered later carry their own time and must not flood a recent window.
+    qs, err = _apply_date_filter(qs, start_date, end_date, date_field='created')
     if err:
         return err
 
@@ -872,13 +879,16 @@ def get_dialog(host, start_date=None, end_date=None, limit=None, offset=0, max_c
     for e in qs:
         data = e.data if isinstance(e.data, dict) else {}
         role = data.get('role', 'unknown')
-        speaker_type = 'human' if role == 'user' else 'ai' if role == 'assistant' else 'ai_peer' if role == 'peer' else 'unknown'
+        speaker_type = {'user': 'human', 'assistant': 'ai', 'peer': 'ai_peer',
+                        'harness': 'harness'}.get(role, 'unknown')
         if speaker_type == 'human':
             speaker = 'Torre'
         elif speaker_type == 'ai':
             speaker = data.get('client') or 'AI'
         elif speaker_type == 'ai_peer':
             speaker = (data.get('peer_sender') or {}).get('name') or 'AI peer'
+        elif speaker_type == 'harness':
+            speaker = 'Harness'
         else:
             speaker = 'Unknown'
         content = e.content
@@ -2225,9 +2235,11 @@ def restore_version(entry_id, version=None, source='api'):
 
 def inflight_item(entry_id, action, text, source='mcp'):
     """Item action on an inflight todo (docs/inflight.md): done (the item is
-    taken out) or add; reopen is off with the Done section. `entry_id` is a
-    UUID or a data.entry_id. A surgical edit of the current content,
-    serialized per entry; returns the updated entry with a `diff` plus
+    taken out), add, or priority (toggles the item's !!! marker, which puts it at
+    the top of Live); reopen is off with the Done section. Done on the last
+    open item closes the activity, which retires it (`closed` in the answer).
+    `entry_id` is a UUID or a data.entry_id. A surgical edit of the current
+    content, serialized per entry; returns the updated entry with a `diff` plus
     `open_count`."""
     import uuid as _uuid
     from django.db import transaction
@@ -2235,8 +2247,8 @@ def inflight_item(entry_id, action, text, source='mcp'):
     from . import inflight as inflight_lib
     action = (action or '').strip()
     text = (text or '').strip()
-    if action not in ('done', 'reopen', 'add') or not text:
-        return {"error": "action must be done, reopen, or add, with a non-empty text",
+    if action not in ('done', 'reopen', 'add', 'priority') or not text:
+        return {"error": "action must be done, reopen, add, or priority, with a non-empty text",
                 "code": "BAD_REQUEST"}
     try:
         _uuid.UUID(str(entry_id))
@@ -2259,15 +2271,23 @@ def inflight_item(entry_id, action, text, source='mcp'):
                 new_content = inflight_lib.mark_done(entry.content or '', text)
             elif action == 'reopen':
                 new_content = inflight_lib.reopen(entry.content or '', text)
+            elif action == 'priority':
+                new_content = inflight_lib.toggle_priority(entry.content or '', text)
             else:
                 new_content = inflight_lib.add_item(entry.content or '', text)
         except ValueError as e:
             return {"error": str(e), "code": "NO_MATCH"}
+        # The last open item done is the activity done: closed in the same write, and so retired.
+        closes = (action == 'done' and inflight_lib.CLOSE_WHEN_EMPTY
+                  and inflight_lib.summary(new_content)['open'] == 0)
         result = _edit_entry_impl(entry_id=str(entry.id), content=new_content,
+                                  status='done' if closes else None,
                                   source=source, locked_entry=entry)
     if isinstance(result, dict) and "error" not in result:
         counts = inflight_lib.summary(new_content)
         result['open_count'] = counts['open']
+        if closes:
+            result['closed'] = True
         if 'done' in counts:
             result['done_count'] = counts['done']
     return result

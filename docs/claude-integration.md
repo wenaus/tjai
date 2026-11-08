@@ -120,6 +120,7 @@ any machine can load recent dialog context.
 [Claude calls a tool] → PreToolUse + PostToolUse hooks → record.py
   → Uploads complete assistant text and plaintext thinking blocks
     (Claude stores displayed during-turn narration in thinking blocks)
+  → Uploads answered question-picker results as human dialog
 
 [Assistant finishes] → Stop hook → record.py / codex_record.py
   → Extracts new assistant messages from the JSONL transcript
@@ -145,15 +146,44 @@ Writes bypass the general 60s content deduplication. Metadata in
 `Entry.data` includes `role`, `client`, `model`, `model_provider`,
 `reasoning_effort`, `session_id`, `project_path`, and `hostname` when the
 recording hook can determine them. Older entries may lack the model fields.
-POSTed content starting with `<task-notification>` (research subagent
-products) is additionally tagged `research-subagent` and annotated with the
-source research action entry.
+A `<task-notification>` from the research agent's own Claude, which runs in
+the server's tree (`project_path` equal to `BASE_DIR`), is a research subagent
+product: it is additionally tagged `research-subagent` and annotated with the
+running research entry. Every session's harness writes task notifications, so
+no other session's is attributed.
+
+Human prompts and question-picker answers are stored as `role: user`. A user turn that the
+harness wrote (a `<task-notification>`, a client's own agent prompt such as
+Codex's "Memory Writing Agent") is stored as `role: harness`. A peer delivery
+is recognised against the recipient's mailbox and stored once, as `role: peer`;
+the hook names a Claude Code client `claude-code` and the comms registry
+`claude`, and the match accepts either. `get_dialog` reports `speaker_type`
+`human` only for `user`, and leaves out `peer_echo` records, the user-turn
+copies `scripts/fix_dialog_attribution.py` marked on 2026-10-10.
+
+TeamComms deliveries are also `role: peer`, with the message UUID, source
+`teamcomms` and the envelope's sender name, host and kind. Envelope labels
+are recorded provenance, not verified operator identity or approval. The
+original content, transcript identity and timestamp remain intact.
+`scripts/fix_teamcomms_dialog.py` previews affected historical user records;
+`--apply` changes only their attribution metadata and preserves `recorded_role`.
+
+The browser Dialog page additionally reads a personal projection of authorized
+canonical TeamComms sent/received history. It supplies verified person filters,
+complete reply-linked exchanges and a TeamComms-only toggle. Native transcript
+records are retained; this projection does not change hook ingestion or the
+existing MCP/assessment input. See [Dialog people and TeamComms](dashboard.md#dialog-people-and-teamcomms).
 
 Claude records both `text` and plaintext `thinking` as assistant dialog, with
 `content_type` identifying the block type. Tool inputs, thinking signatures,
-redacted thinking and sidechain messages are excluded. Transcript timestamps
+redacted thinking and sidechain messages are excluded. Answered `AskUserQuestion`
+results contribute only the human answer text, in displayed question order,
+as `content_type: picker_answer`; ordinary tool output, unanswered questions
+and cancelled results remain excluded. Transcript timestamps
 set the entry's creation time, so dialog and assessment retain the order in
 which updates were emitted. The modification time records ingestion.
+`get_dialog` windows and orders turns on the creation time, so turns recovered
+later appear on the day they were said and never in a recent window.
 
 Each transcript message UUID and content type supplies a `source_id`. The API
 derives a stable entry UUID from host, client, session, role and source ID;
@@ -185,6 +215,17 @@ Recovery reads only thinking blocks and keeps a separate
 make overlap with normal recording safe. This repairs the dialog and future
 assessment input; it does not rerun existing assessments.
 
+To recover missed picker answers from one originating transcript:
+
+```bash
+python3 ~/.claude/hooks/record.py --backfill-picker-answers /absolute/path/session.jsonl
+```
+
+This reads only structured picker answers and keeps `.tjai_picker_answer_offset`.
+Each answer retains its transcript UUID, timestamp and session identity, with
+the same source ID used by normal recording. Repeated recovery and overlapping
+live hooks cannot create another dialog turn for the same answer.
+
 ### MCP dialog recording
 
 Cloud clients may record an authorized visible message with `record_dialog`
@@ -204,7 +245,7 @@ Located in `computers/common/claude-hooks/`:
   (see below), and dialog history.
 - `record.py` — UserPromptSubmit, PreToolUse, PostToolUse, Stop and
   StopFailure (async), and SessionEnd (synchronous). Records prompts,
-  during-turn updates, final responses and API error replies.
+  picker answers, during-turn updates, final responses and API error replies.
 - `SYSPROMPT.md` — Static context injected at session start.
 - `stop-phrase-guard.sh` — Stop hook that blocks the assistant from stopping
   when its last message matches ownership-dodging, session-quitting, or

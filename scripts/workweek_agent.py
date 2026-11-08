@@ -160,13 +160,14 @@ def _call_claude(prompt):
         '-p',
         '--output-format', 'text',
         '--model', 'opus',
+        '--effort', 'high',
     ]
     env = os.environ.copy()
     env.pop('CLAUDECODE', None)
     env.pop('ANTHROPIC_API_KEY', None)  # Force subscription auth
     env['TJAI_ACTION_ID'] = 'workweek-agent'  # Prevent dialog recording
 
-    logger.info("workweek: calling claude -p (opus, subscription, %d char prompt)",
+    logger.info("workweek: calling claude -p (opus, high effort, subscription, %d char prompt)",
                 len(prompt))
     try:
         result = subprocess.run(

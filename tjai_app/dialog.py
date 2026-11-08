@@ -6,10 +6,20 @@ import time
 import uuid
 from datetime import datetime
 
+from django.conf import settings
 from django.db import transaction
 
 from .dialog_context import CURRENT_DIALOG_CONTEXT, DIALOG_TAG
 from .models import Context, Entry, SysConfig, Tag
+
+# Text the harness writes into a user turn (a task notification, a client's own agent prompt) is not
+# Torre's words: it is recorded with role 'harness', never as his turn.
+HARNESS_PREFIXES = ('<task-notification>', '## Memory Writing Agent')
+
+
+def is_research_agent_turn(data):
+    """The research agent's Claude runs in the server's own tree; no other session does."""
+    return (data.get("project_path") or "").rstrip("/") == str(settings.BASE_DIR).rstrip("/")
 
 
 class DialogValidationError(ValueError):
@@ -48,11 +58,13 @@ def record_dialog(data):
         raise DialogValidationError("source_id must be a string of at most 512 characters")
     if source_id and not all(data.get(k) for k in ("hostname", "client", "session_id")):
         raise DialogValidationError("source_id requires hostname, client and session_id")
+    peer_data = None
     if role == "user":
-        from .comms_dialog import recorded_native_peer
+        from .comms_dialog import external_peer_data, recorded_native_peer
         peer_entry = recorded_native_peer(content, data, recorded_at)
         if peer_entry:
             return {"status": "ok", "entry_id": peer_entry.id}
+        peer_data = external_peer_data(content)
     entry_data = {
         "role": role,
         "client": data.get("client"),
@@ -69,11 +81,17 @@ def record_dialog(data):
         entry_data["source_timestamp"] = source_timestamp
     if data.get("content_type"):
         entry_data["content_type"] = data["content_type"]
+    if role == "user" and content.startswith(HARNESS_PREFIXES):
+        entry_data["role"] = "harness"
+    if peer_data:
+        entry_data.update(peer_data)
 
     extra_tags = []
 
-    # Detect research subagent products
-    if content.startswith('<task-notification>'):
+    # Detect research subagent products: only the research agent's own task notifications. Every
+    # session's harness writes task notifications; attributing them all to the running research topic
+    # filed hundreds of other sessions' turns under it.
+    if content.startswith('<task-notification>') and is_research_agent_turn(data):
         summary_m = re.search(r'<summary>(.*?)</summary>', content, re.DOTALL)
         if summary_m:
             summary_text = summary_m.group(1).strip()
@@ -124,5 +142,9 @@ def record_dialog(data):
             Tag.objects.create(tag_name=DIALOG_TAG, entry=entry)
             for tag in extra_tags:
                 Tag.objects.create(tag_name=tag, entry=entry)
+        elif peer_data and (entry.data or {}).get("role") == "user":
+            # A retry may refer to a turn ingested before peer attribution.
+            entry.data = {**(entry.data or {}), **peer_data, "recorded_role": "user"}
+            entry.save(update_fields=["data"])
 
     return {"status": "ok", "entry_id": entry.id}

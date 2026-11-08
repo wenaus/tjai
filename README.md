@@ -69,6 +69,7 @@ with `deploy/update_from_dev.sh`.
 | [ec2dev-web Monitor](docs/ec2dev-web.md) | Cron-collected ingress traffic, backend load, automation evidence, Snapper history, and Capcom state |
 | [Picks Page Curation](docs/picks-curate-page.md) | Curating picks from the page being viewed: browser extension flow, curate-page endpoint, background job |
 | [Capcom](docs/capcom.md) | Design for the live notice page: notice feed with read/unread, state tiles and pinned bookmarks, Notice model, polling collectors, source registry |
+| [Poke](docs/poke.md) | Short shared decisions, reviews and retained proposals, individual links, Keep maintenance and MCP access |
 | [Indico Access](docs/indico-access.md) | Authenticated CERN Indico fetching via a logged-in Chrome session |
 | [Browser Offline Cache](docs/offline-cache.md) | Research and generic browser-side offline caching for tjai pages and APIs |
 | [Remote Worker Pipeline](docs/remote-workers.md) | Long-poll protocol for offloading inference (e.g. gemma) to a worker on another machine — capability whitelist, claim lifecycle, display contract, troubleshooting |

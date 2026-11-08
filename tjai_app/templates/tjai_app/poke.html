@@ -1,0 +1,68 @@
+{% load l10n %}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% if selected %}{{ selected.title }} · {% endif %}Poke · tjai</title>
+<style>
+body { background:#1a1a1a; color:#e0e0e0; font:14px/1.5 'SF Mono',Monaco,Menlo,Consolas,monospace; margin:0; }
+main { max-width:1000px; padding:8px 14px 40px; }
+a { color:#90caf9; text-decoration:none; } a:hover { text-decoration:underline; }
+h1 { font-size:18px; margin:0; } h2 { font-size:15px; color:#d8a070; margin:18px 0 2px; }
+.head,.actions,.meta { display:flex; align-items:baseline; gap:8px 14px; flex-wrap:wrap; }
+.meta,.hint { color:#aaa; font-size:12px; } .hint { margin:4px 0 10px; }
+.poke { border-bottom:1px solid #393939; padding:10px 0; scroll-margin-top:10px; }
+.poke h3 { font-size:14px; margin:0 0 4px; } .poke p { margin:4px 0; }
+.explanation { overflow-wrap:anywhere; } .refs { display:flex; flex-wrap:wrap; gap:4px 14px; margin:5px 0; }
+.state { color:#ffd180; } .closed { color:#999; } .error { color:#ff8a80; border:1px solid #a54a4a; padding:8px; }
+button,.button,input,textarea,select { font:inherit; color:inherit; background:#262626; border:1px solid #555; border-radius:3px; padding:3px 8px; }
+button,.button,summary { cursor:pointer; } button:hover,.button:hover { background:#353535; }
+button.primary { color:#b8df91; border-color:#66804b; } .actions { margin-top:8px; }
+label { display:block; margin:8px 0; } label input,label textarea { display:block; box-sizing:border-box; width:100%; }
+textarea { resize:vertical; } details { margin-top:12px; } details details { margin:8px 0; }
+.empty { color:#999; margin:6px 0; } .answer { border-left:2px solid #769e58; padding-left:8px; }
+form { margin:0; } .tools { margin-top:14px; } .tools input { max-width:100%; box-sizing:border-box; }
+</style>
+</head>
+<body><main>
+<header class="head"><h1>Poke{% if not selected %} · {{ data.attention_count }} need you{% endif %}</h1>
+{% if selected %}<a href="/tjai/poke/?embed=1">All pokes</a>{% endif %}
+<a href="">Refresh</a></header>
+{% if error %}<p class="error" role="alert">{{ error }} Your submitted fields remain below.</p>{% endif %}
+{% if selected %}
+  {% include 'tjai_app/_poke_card.html' with item=selected %}
+  {% if selected.group != 'closed' %}
+  <form method="post" class="tools">
+    {% csrf_token %}<input type="hidden" name="modified_ts" value="{{ selected.modified_ts|unlocalize }}">
+    <label>Response <input name="answer" maxlength="400" value="{{ form.answer }}" placeholder="Optional short answer or chosen option"></label>
+    <div class="actions">
+    {% if selected.state != 'approved' %}<button name="action" value="approve" class="primary">Approve</button>{% endif %}
+    {% if selected.category == 'keep' %}<button name="action" value="attention">Bring forward</button>{% else %}<button name="action" value="keep">Keep</button>{% endif %}
+    <button name="action" value="done">Done</button><button name="action" value="dismiss">Dismiss</button>
+    </div>
+    <details><summary>Later{% if selected.state == 'approved' %} / Pick up{% endif %}</summary>
+      <input type="date" name="until" aria-label="Return date"><button name="action" value="defer">Defer until date</button>
+      {% if selected.state == 'approved' %}<p><input name="activity" placeholder="Open Inflight entry ID" aria-label="Inflight activity"><button name="action" value="pickup">Pick up into Inflight</button></p>{% endif %}
+    </details>
+  </form>
+  <details{% if form.action == 'save' %} open{% endif %}><summary>Edit</summary>
+    {% include 'tjai_app/_poke_form.html' %}
+  </details>
+  {% else %}
+  <form method="post" class="tools">{% csrf_token %}<input type="hidden" name="modified_ts" value="{{ selected.modified_ts|unlocalize }}"><button name="action" value="reopen">Reopen</button></form>
+  {% endif %}
+{% else %}
+  <p class="hint">Short explanations and exact asks. Open an item to answer or act.</p>
+  {% for group in data.groups %}
+  <section><h2>{{ group.label }} · {{ group.items|length }}</h2>
+    {% if group.key == 'keep' %}<p class="hint">Oldest first · last 7 days: {{ data.keep_flow.in }} in / {{ data.keep_flow.out }} out. Review, promote or close as items arrive.</p>{% endif %}
+    {% for item in group.items %}{% include 'tjai_app/_poke_card.html' %}{% empty %}<p class="empty">Nothing here.</p>{% endfor %}
+  </section>
+  {% endfor %}
+  <details{% if error %} open{% endif %}><summary>Add a poke</summary>{% include 'tjai_app/_poke_form.html' %}</details>
+  <details><summary>Closed{% if data.closed %} · recent {{ data.closed|length }}{% endif %}</summary>
+    {% for item in data.closed %}{% include 'tjai_app/_poke_card.html' %}{% empty %}<p class="empty">Nothing closed.</p>{% endfor %}
+  </details>
+{% endif %}
+</main></body></html>

@@ -161,6 +161,20 @@ Entry(
 
 **Ideation handoff:** `ideation-agent` runs daily at `0200` and creates new `:research_topic` entries from the day's material. Because research runs at `0300` — *after* ideation — ideation-created topics are auto-picked up the same morning. If you move research earlier than ideation, ideation-created topics will sit pending for a full 24 hours until the next research run. There is no separate auto-submit hook from ideation to research; the coupling is purely via scheduled-time ordering.
 
+### Ideation gold
+
+The ideation log is long, and its valuable observations had no reader. `ideation-gold-agent` (Opus, high
+effort; `trigger: after:ideation-agent`) runs when ideation completes: `agent_complete.py` queues every
+action whose trigger is `after:<the completed action>`, last of all, and the wrangler gives such an action
+no clock of its own. It reads the morning's log whole and the last seven gold reports, and writes
+`ideation-gold-YYYY-MM-DD`: one line per item that needs Torre's attention or someone's action (a defect or
+coupling nobody acted on, a promise not kept, an approved follow-up not done, a decision or deletion waiting
+on his word, something dropped), each checked against the current record first. Research topics, picks,
+optional offers, news, summaries and anything already a swf ping are never gold; zero items is a valid
+report. On its completion `agent_complete.py` puts the items in the daily synopsis under "Ideation gold",
+above the report's link, and posts one Capcom warning per report (source `tjai-pipeline`), titled with the
+item count and linked to the report, with the items as its expandable detail.
+
 ### Research Page (`/tjai/research/`)
 
 The page banner displays **three named, non-overlapping facts** so nothing reads as contradictory (this rule was learned the hard way — see `docs/remote-workers.md` § Display contract):
@@ -314,6 +328,22 @@ RssItem(guid, feed_url, source, category, title, url, precis, published, fetched
 - `tjai_app/views.py` — `rss_page`, `api_rss_*` endpoints
 - `tjai_app/templates/tjai_app/rss.html`
 
+### Backlog review
+
+`scripts/triage_rss_backlog.py` saves an unread snapshot and a proposed selection
+under `data/rss-review/`. Its title and summary ranking assists a manual review
+of approximately one fifth of the backlog, with source limits and duplicate-URL
+suppression. The review weights and exclusions are explicit in the script;
+they are not an automatic or scheduled reading policy.
+
+Run `snapshot <snapshot.json>`, then `rank <snapshot.json> --plan <plan.json>`.
+Review the plan's `keep` and `ranked` fields, then run `finish-review` with the
+same arguments. `apply` requires that review mark and the matching snapshot
+SHA-256. It calls the RSS reader's existing batch mark-read action for the
+snapshot items outside `keep`, leaves later arrivals and other reading-list
+state alone, and saves a receipt listing the cleared identifiers. Articles
+remain in the database. Feed fetch errors are independent of unread counts.
+
 ---
 
 ## Other Scheduled Actions
@@ -322,7 +352,7 @@ Further actions on the same pipeline, not covered above:
 
 | Action | Schedule | What it does |
 |--------|----------|--------------|
-| `workweek-agent` | weekly, Sat 05:00 | `workweek_agent.py` builds a `workweek_<yyyymmdd>` entry from the prior Sat–Fri `workday_*` entries |
+| `workweek-agent` | weekly, Sat 05:00 | `workweek_agent.py` builds a `workweek_<yyyymmdd>` entry from the prior Sat–Fri `workday_*` entries, explicitly passing Opus at high effort to Claude |
 | `llm-assessment` / `llm-assessment-gemini` | daily 02:00 / 02:20 | Daily dialog scoring via `assessment_claude.py` / `assessment_gemini.py`; the Claude variant is currently blocked. Reruns and backfills are driven by sysconfig flags (see [action-agent.md](action-agent.md)). The day is assessed per session in capped calls and merged; see [assessment.md](assessment.md) |
 | `server-backup` | daily 05:00 | `backup.py` — pg_dump, env files, and data dir to `~/tjai-backups/server/`, pushed to Dropbox via rclone |
 | `system-health` | every 30 min | `system_health.py` metrics collection for the system page |

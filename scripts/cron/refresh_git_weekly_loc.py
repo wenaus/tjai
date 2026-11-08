@@ -9,6 +9,7 @@ and for tjrepo by top-level directory.
 
 Runs via cron; the page's data endpoint just reads the JSON file.
 """
+import ast
 import json
 import logging
 import os
@@ -37,7 +38,9 @@ WEEK_ZERO = datetime(2025, 6, 2).date()  # Monday on/after 2025-06-01
 # color-validated (adjacent-pair CVD checks) — change it only with the
 # template palette revalidated to match.
 PROJECTS = ['tjai', 'AI', 'swf', 'swf-monitor',
-            'swf-epicprod', 'swf-testbed', 'primus', 'etaverse',
+            'swf-epicprod', 'swf-testbed', 'primus',
+            'etaverse-core', 'etaverse-client', 'etaverse-building',
+            'etaverse-avatars', 'etaverse-vehicles', 'etaverse-rl',
             'blender', 'pax-eden', 'dev', 'other']
 
 # Repo name -> project. Unlisted repos fall to 'other'; tjrepo is
@@ -69,7 +72,7 @@ REPO_PROJECT = {
 # and the infra/meta dirs count as dev.
 TJREPO_DIR_PROJECT = {
     'tjai': 'tjai', 'tj-getlink': 'tjai',
-    'etaverse': 'etaverse', 'kozykorner': 'dev',
+    'etaverse': 'etaverse-client', 'kozykorner': 'dev',  # etaverse: by subject, below
     'pax-eden': 'pax-eden', 'primus': 'primus', 'primus-blender': 'primus',
     'primus-sl': 'primus', 'primus-wright': 'primus',
     'blender': 'blender',
@@ -78,6 +81,51 @@ TJREPO_DIR_PROJECT = {
     'talks': 'dev', '.claude': 'dev', '.devcontainer': 'dev',
     '.vscode': 'dev', '': 'dev',
 }
+
+# Etaverse is factored by subject, as the swf family is by repository. Its
+# directories divide by layer (client, server, scripts, docs), so a file's
+# subject is read from its etaverse-relative path: the first pattern that
+# matches names the project, and an unmatched file belongs to the world
+# client (scene, rendering, terrain, sky, physics, camera, navigation, the
+# control window and the V1 client). A new module whose name carries none
+# of its subject's words is added to its pattern here; the next run
+# recomputes every week from history.
+_B = r'(?:^|[/_.-])'  # the word starts at a path or name boundary
+ETAVERSE_SUBJECTS = tuple((project, re.compile(pattern)) for project, pattern in (
+    # Scientific builds precede generic site, family and scene-module matches.
+    ('etaverse-rl', _B + r'(?:epic(?:prod)?|comp[-_]room)(?=$|[/_.-])'
+     r'|^frontend/src/world/scene/event-display\.js$'),
+    # RL: the Earth atlas, the catalogue stars, astronomy and the voyage
+    ('etaverse-rl', _B + r'earth|astronom|star-(?:field|glow|body|model)|sky_stars'
+     r'|moon-disc|voyage-(?:control|places|card|url)|atlas-journey|^docs/sky\.md$'),
+    ('etaverse-vehicles', _B + r'(?:flight|vessel|rail|ship|boat|helm|dock'
+     r'|thunderbird|maglev|air.taxi|yacht|vehicle|tender|slipway|landing'
+     r'|ride-crossing|realm.crossing|rolling-wheels)'),
+    ('etaverse-avatars', _B + r'(?:avatar|attire|wear|outfit|hair|bento|plushead'
+     r'|mixamo|reallusion|poses?|seats?|sits?|anim|alpha-panel|shape-panel'
+     r'|looks|appearance|worn|stance|avsitter|kimmy)'),
+    # building: houses, structures, furniture, families, finishes, smart
+    # objects, editing, and the built places (Trantor, the Valley Forge,
+    # Arrakis, the shellworld)
+    ('etaverse-building', _B + r'(?:structure|house|famil|furniture|finish|kinds'
+     r'|piece|component|wall.panel|editing|edit-panel|refinement|layouts'
+     r'|materials?\.|asset-materials|covering|candle|faucet|tap|lamps?|fountain'
+     r'|doors?|kitchen|ranch|gable|prairie|place.family|scatter|smart-objects'
+     r'|modular|inworld-builds|frame-panel|construction|trantor|valley.forge'
+     r'|arrakis|shellworld|sandworm)'),
+    # core: the server and federation
+    ('etaverse-core', r'^(?:world/(?!static/|templates/)|hub/|deploy/|agent/'
+     r'|etaverse_project/|[^/]+$)|federation|persistence|inventory|asset.store'
+     r'|resident-state|schema|deployment'),
+))
+
+
+def _etaverse_subject(path):
+    """Project for an etaverse-relative path: its subject, else the client."""
+    for project, rx in ETAVERSE_SUBJECTS:
+        if rx.search(path):
+            return project
+    return 'etaverse-client'
 
 # Path fragments excluded from line counts (generated/vendored files,
 # and script-generated data files — data is not LOC). The -old/-broken/
@@ -100,10 +148,6 @@ EXCLUDE_SUFFIXES = ('.min.js', '.min.css', 'package-lock.json', '.lock',
 EXCLUDE_TJREPO_TOP = {'etaverse-2014', 'tjai-archive', 'tjweb-old',
                       'tjweb-2013', 'sl2007', 'transfers'}
 
-# A single commit adding more than this is a bulk import (e.g. the 296k-line
-# recipe migration), dropped whole. Stated on the chart.
-BULK_COMMIT_LINES = 100_000
-
 # Cross-repo moves: git rename detection (-M) is per-repo, so code moved
 # between repositories books as new lines. Enumerated manually and dropped.
 CROSS_REPO_MOVE_COMMITS = {
@@ -112,31 +156,59 @@ CROSS_REPO_MOVE_COMMITS = {
 }
 
 
-# Content data and third-party material, by explicit path (tjrepo-relative
-# globs: '*' within one directory, '**' across directories). JSON is not
-# excluded wholesale: these are the paths where it is world content —
-# published component families, houses, finish catalogs, avatar and motion
-# libraries, asset manifests — or generated inventories. The generators that
-# write them (Python, Blender), application code, tests, docs and authored
-# storyboards stay counted.
+# Generated output and imported material, by explicit tjrepo-relative path.
+# Authored definitions, presets, catalogs and configuration count regardless
+# of format. '*' stays within one directory; '**' crosses directories.
 DATA_PATHS = {
     'tjrepo': (
-        'etaverse/world/families/*.json',
-        'etaverse/world/houses/*.json',
-        'etaverse/world/*.json',  # finishes, bed_finishes, coverings, wall_panel_finishes
-        'etaverse/scripts/families/**/*.json',
-        'etaverse/scripts/thunderbird_landing_profile.json',
-        'etaverse/frontend/src/shared/avatars/**/*.json',
-        'etaverse/frontend/src/shared/spatial/celestial-layout.json',
-        'etaverse/assets/**/*.json',
+        'data/recipes*.xml',  # Yum recipe exports, not source code
+        'data/myrecipes.xml',
+        'data/newrecipes*.xml',
+        'tjai/recipe_data/**',  # imported recipe collection
+        'computers/common/claude-skills/synced/**',
+        'primus-blender/factory/maglev/meadow-source.json',
+        'primus-blender/factory/**/output/**',
+        'etaverse/frontend/src/world/epicprod-evidence.json',
+        'etaverse/scripts/data/trantor-rail-assessment.json',
+        'etaverse/output/**',
+        'etaverse/frontend/src/shared/avatars/sl-shape-data.json',
+        'etaverse/frontend/src/shared/avatars/sl-shape-sliders.json',
+        # Catalogs generated from IAU features and JPL orbital states.
+        'etaverse/assets/astronomy/charon-marks.json',
+        'etaverse/assets/astronomy/earth-spacecraft.json',
+        'etaverse/assets/astronomy/europa-marks.json',
+        'etaverse/assets/astronomy/jupiter-marks.json',
+        'etaverse/assets/astronomy/pluto-marks.json',
+        'etaverse/assets/astronomy/saturn-marks.json',
+        'etaverse/assets/astronomy/titan-marks.json',
+        'etaverse/assets/astronomy/venus-marks.json',
+        'etaverse/assets/mars/features.json',
+        'etaverse/assets/mars/system.json',
+        # Generated/imported Earth publication bundles. Authored *-selection.json
+        # inputs alongside them and the Python builders remain counted.
+        'etaverse/assets/earth/curation/mappeteer.json',
+        'etaverse/assets/earth/curation/mappeteer-region-refinements.json',
+        'etaverse/assets/earth/curation/appalachia.json',
+        'etaverse/assets/earth/curation/berkshires-bookmarks.json',
+        'etaverse/assets/earth/curation/loves-roadtrip.json',
+        'etaverse/assets/earth/curation/texas-roadhouse-roadtrip.json',
+        'etaverse/assets/earth/curation/national-parks-roadtrip.json',
+        'etaverse/assets/earth/curation/pathways.json',
+        'etaverse/assets/earth/curation/scenic-pathways.json',
+        'etaverse/assets/earth/curation/mountain-regions.json',
+        'etaverse/assets/earth/curation/science-labs.json',
+        'etaverse/assets/earth/curation/great-universities.json',
+        'etaverse/assets/earth/curation/great-museums-historic-sites.json',
+        'etaverse/assets/earth/curation/character-lodging.json',
+        'etaverse/assets/earth/curation/much-loved-bookstores.json',
+        'etaverse/assets/earth/curation/camping/*.json',
+        'etaverse/assets/earth/curation/hiking-cycling/*.json',
+        'etaverse/assets/earth/curation/cultural-highlights/*.json',
         'etaverse/assets/bento/sl/*.xml',  # imported Second Life data
         'etaverse/assets/bento/vendor/**',  # third-party code and data
         'etaverse/docs/history/*.json',  # generated change inventories
     ),
 }
-# Project build configuration is authored, never content data.
-KEEP_NAMES = ('package.json', 'tsconfig.json')
-
 
 def _glob_regex(pattern):
     out = ''
@@ -157,13 +229,47 @@ DATA_REGEXES = {repo: tuple(_glob_regex(p) for p in patterns)
                 for repo, patterns in DATA_PATHS.items()}
 
 
+def _generated_family_paths(repo):
+    """Read the family writer's registry without executing its generators."""
+    source_dir = repo / 'etaverse' / 'scripts' / 'families'
+    registry = source_dir / '__init__.py'
+    if not registry.exists():
+        return set()
+    tree = ast.parse(registry.read_text(encoding='utf-8'))
+    modules = next(ast.literal_eval(node.value) for node in tree.body
+                   if isinstance(node, ast.Assign) and any(
+                       isinstance(target, ast.Name) and target.id == 'MODULES'
+                       for target in node.targets))
+    family_names = {path.stem for path in
+                    (repo / 'etaverse' / 'world' / 'families').glob('*.json')}
+    generated = set()
+    for module in modules:
+        tree = ast.parse((source_dir / f'{module}.py').read_text(encoding='utf-8'))
+        literals = {node.value for node in ast.walk(tree)
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str)}
+        candidates = literals & family_names
+        conventional_name = module.replace('_', '-')
+        if conventional_name in family_names or not candidates:
+            name = conventional_name
+        elif len(candidates) == 1:
+            name = candidates.pop()
+        else:
+            logger.warning('Unresolved family output for %s; keeping it counted', module)
+            continue
+        generated.add(f'etaverse/world/families/{name}.json')
+    return generated
+
+
+GENERATED_FAMILY_PATHS = _generated_family_paths(GITHUB_ROOT / 'tjrepo')
+
+
 def _excluded(path, repo_name=''):
     if any(part in path for part in EXCLUDE_PARTS):
         return True
     if path.endswith(EXCLUDE_SUFFIXES):
         return True
-    if path.rsplit('/', 1)[-1] in KEEP_NAMES:
-        return False
+    if repo_name == 'tjrepo' and path in GENERATED_FAMILY_PATHS:
+        return True
     return any(rx.match(path) for rx in DATA_REGEXES.get(repo_name, ()))
 
 
@@ -172,6 +278,8 @@ def _project_for(repo_name, path):
         top = path.split('/', 1)[0] if '/' in path else ''
         if top in EXCLUDE_TJREPO_TOP:
             return None
+        if top == 'etaverse':
+            return _etaverse_subject(path.split('/', 1)[1])
         return TJREPO_DIR_PROJECT.get(top, 'other')
     return REPO_PROJECT.get(repo_name, 'other')
 
@@ -222,9 +330,8 @@ def collect():
 
         def flush():
             if week is not None and week < n_weeks:
-                if sum(a for _, a in pending) <= BULK_COMMIT_LINES:
-                    for proj, adds in pending:
-                        counts[proj][week] += adds
+                for proj, adds in pending:
+                    counts[proj][week] += adds
             pending.clear()
 
         for line in result.stdout.splitlines():
@@ -268,7 +375,7 @@ def collect():
         'generated_at': datetime.now(tz=tz).isoformat(),
         'author': AUTHOR,
         'metric': 'lines added',
-        'bulk_commit_lines': BULK_COMMIT_LINES,
+        'bulk_commit_lines': None,  # Retained field; authored work has no size cutoff.
         'week_start': weeks,
         'projects': PROJECTS,
         'series': counts,

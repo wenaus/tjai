@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -36,11 +37,12 @@
     <div class="page-content">
         <div id="bangs"></div>
     </div>
+    <script src="{% static 'tjai/tjai-utils.js' %}?v=20261011"></script>
     <script>
     (function(){
         var container = document.getElementById('bangs');
         var RETURN = encodeURIComponent('/tjai/todo-bangs/');
-        function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+        function esc(s) { return escapeHtml(s); }
         function editUrl(base, line) {
             return base + '&edit=1&line=' + line + '&return=' + RETURN;
         }

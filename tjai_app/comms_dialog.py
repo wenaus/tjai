@@ -44,6 +44,42 @@ def record_peer_dialog(delivery, recorded_at=None):
     return entry
 
 
+# A dialog hook names its client by program (claude-code); the comms registry names the same session by
+# family (claude). Matching on one spelling left every Claude Code peer delivery unrecognized, so each
+# was stored again as Torre's turn.
+_CLIENT_SPELLINGS = {"claude-code": ("claude-code", "claude"), "claude": ("claude", "claude-code")}
+
+
+def client_spellings(client):
+    return _CLIENT_SPELLINGS.get(client, (client,))
+
+
+def external_peer_data(content):
+    """Keep a native TeamComms envelope out of the operator's dialog.
+
+    Envelope labels describe the claimed sender; they never establish
+    operator identity or authority. The broker must verify those separately.
+    Quoted envelopes elsewhere in an ordinary prompt remain ordinary text.
+    """
+    match = re.match(r"(?:Another Claude session sent a message:\s*)?"
+                     r"\[TeamComms peer ([0-9a-fA-F-]{36})\]\r?\n([^\r\n]*)", content)
+    if not match:
+        return None
+    try:
+        message_id = str(uuid.UUID(match[1]))
+    except ValueError:
+        return None
+    labels = [part.strip() for part in match[2].split(" · ")]
+    sender = {"name": labels[0] or "TeamComms peer", "source": "teamcomms"}
+    if len(labels) > 1:
+        sender["host"] = labels[1]
+    if len(labels) > 2:
+        sender["kind"] = labels[2]
+    return {"role": "peer", "content_type": "peer_message", "message_id": message_id,
+            "peer_source": "teamcomms", "peer_sender": sender,
+            "peer_provenance": "native_envelope", "native_role": "user"}
+
+
 def recorded_native_peer(content, data, recorded_at):
     """Recognize only an adapter envelope backed by this recipient's mailbox.
 
@@ -62,7 +98,7 @@ quoted text from becoming a fabricated peer entry. The broker owns the body.
             return None
         delivery = LLMDelivery.objects.select_related("message", "recipient").filter(
             message_id=message_id, recipient__native_id=data.get("session_id"),
-            recipient__host=data.get("hostname"), recipient__client=data.get("client"),
+            recipient__host=data.get("hostname"), recipient__client__in=client_spellings(data.get("client")),
         ).first()
         return record_peer_dialog(delivery, recorded_at) if delivery else None
 
@@ -90,7 +126,7 @@ quoted text from becoming a fabricated peer entry. The broker owns the body.
         delivery = LLMDelivery.objects.select_related("message", "recipient").filter(
             message_id=message_id, message__sender_id=sender_id,
             recipient__native_id=data.get("session_id"), recipient__host=data.get("hostname"),
-            recipient__client=data.get("client"),
+            recipient__client__in=client_spellings(data.get("client")),
         ).first()
         if delivery and envelope.get("recipient") == delivery.recipient.native_id:
             return record_peer_dialog(delivery, recorded_at)

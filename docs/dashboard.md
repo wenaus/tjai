@@ -47,11 +47,14 @@ Query parameters and their state:
 | `status` | CSV of included statuses; `_none` is null/empty status |
 | `exclude_status` | CSV of excluded statuses |
 | `machine`, `client`, `model` | match `data.hostname`, `data.client`, `data.model` |
+| `people` | CSV of verified person IDs; any selected person matches a dialog exchange |
+| `teamcomms` | `1` restricts dialog to TeamComms messages |
 | `date` | restrict to one day (used by the dialog daily-count chips) |
 | `from_time`, `to_time` | ISO datetime window over modification time |
 | `public` | only entries marked `data.access=public`; the `poetry` and `recipe` contexts are excluded |
 | `with_relations` | only entries that participate in a relation |
 | `expand_dialog` | render full content instead of the first line |
+| `dialog_filters`, `dialog_activity` | `1` opens the additional dialog filters or activity charts |
 | `rel` | CSV of entry UUIDs whose relations are expanded |
 | `view` | `archive` or `dialog` |
 | `deleted` | `1` for Trash |
@@ -77,7 +80,7 @@ The page reads from these endpoints:
 | `api/dialog/daily-counts` | GET | Per-day dialog-turn counts for the charts |
 | `api/entry/<uuid>/relations` | GET | Relations for one entry, loaded on demand |
 
-`api/dashboard/status` and `api/dashboard/search` paginate by `offset` with a page size of 1000. They carry no incremental-sync cursor: each poll re-fetches the head of the list, and older entries load by offset. When `offset > 0`, `api/dashboard/status` returns only `recent_entries`, `has_more`, and `total_count`. The status endpoint's `total_count` is approximate — offset plus entries returned, plus one when more remain — avoiding a full count; the search endpoint computes an exact `total_count` on the first page.
+`api/dashboard/status` and `api/dashboard/search` paginate by `offset`, with 100 complete messages per page in Dialog and 1000 entries elsewhere. They carry no incremental-sync cursor: each poll re-fetches the head of the list, and older entries load by offset. When `offset > 0`, `api/dashboard/status` returns only `recent_entries`, `has_more`, and `total_count`. The status endpoint's `total_count` is approximate — offset plus entries returned, plus one when more remain — avoiding a full count; the search endpoint computes an exact `total_count` on the first page.
 
 ## Calendar panel
 
@@ -123,9 +126,71 @@ When the user toggles the sort, `setNamedSort()` writes the choice to sysconfig 
 
 Dialog mode replaces most of this with a client/model filter row and a per-day dialog-count row, and shows the daily and weekly bar charts (`updateDialogChart`). Chart bars have hover tooltips and link to that day's assessment page.
 
+### Dialog people and TeamComms
+
+The **People** row supports multiple selections. Selection widens across people;
+**All** clears only that selection. **TeamComms only** intersects it with the
+TeamComms source. People, source, client, model and machine filters apply before
+pagination and use the same population for entries, search and daily/weekly
+counts. URL parameters preserve the selections on reload and in shared links.
+
+People follow broker-verified participant/operator IDs. An AI participant with a
+verified operator is grouped under that person. A participant without an operator
+keeps its own identity. Ordinary personal human/assistant turns belong to the
+local operator. TeamComms envelope labels alone do not establish person identity.
+
+TeamComms messages are imported through the configured participant's authorized
+sent/received history, with complete content and fixed visible recipients.
+Selecting a person includes both sides and other visible replies linked to that
+exchange. An LLM session ID does not connect otherwise unrelated messages. Each
+row labels its source, speaker and audience and links to an available parent.
+Remote private human–LLM transcripts are outside this message history.
+
+Dialog opens with complete messages rendered through the shared sanitized
+Markdown pipeline. A concise header identifies the speaker, audience, source
+and time. Technical fields and entry actions are folded under **Details**;
+additional filters and activity charts are folded separately. Explicit
+`expand_dialog=0` keeps the first-line view across reloads. Dialog pages hold
+100 messages at a time; scrolling loads older messages. A selected-person
+view with broker messages and no recorded human turns states that limitation.
+An AI operator association does not turn an AI message into that person's
+typed dialog. Shared transcript capture is a separate opt-in TeamComms feature.
+
+The importer is `scripts/sync_teamcomms_dialog.py`, scheduled once a minute in
+`scripts/cron/crontab`. It invokes the existing connector with its private
+configuration at `~/.config/teamcomms/torre-ai/connector.json`; credentials are
+not copied into the web application. A commit-safe broker cursor and projection
+inserts are saved together. A local process lock prevents overlapping runs.
+The page reports incomplete, failed or stale imports instead of implying full
+coverage. An initial bounded catch-up can be run with `--max-pages 1000`.
+
+The message projection uses context `co-teamcomms`, tag `teamcomms-dialog`, and stable entry
+IDs derived from installation and message UUID. Source content and timestamps
+are retained, role remains `peer`, and no import grants operator authority.
+Canonical messages appear once regardless of delivery fan-out. Native transcript
+copies remain stored and are suppressed only in the browser population when a
+broker projection exists. Personal capture and its existing MCP/assessment inputs
+are unchanged. Shared selection and attribution are in `dialog_people.py`;
+projection and reply membership are in `teamcomms_dialog.py`.
+
+The same importer reads the broker's authorized shared transcript endpoint.
+Remote human and assistant turns use tag `shared-dialog`, explicit recorded
+authorship and stable event IDs. Other transports' peer copies and system
+records are excluded from this transcript projection. The personal recorder
+remains the source for local dialog, avoiding duplicate copies of local turns.
+Directory IDs establish the person; a recorded human role never grants
+operator authority. Transcript publication IDs drive incremental reads, so
+late-published older content is included. Interrupted walks retain their place,
+and shortened API content is fetched whole before it is stored. Source capture
+coverage can remain partial even after all currently available events are read.
+
+The transcript reader does not enable capture or change a session's sharing
+choice. Session notices and human opt-in are implemented by the TeamComms
+connector and service, independently of this browser projection.
+
 ## Entries list
 
-`renderEntries()` renders each entry as one line in the `tj l` style: a timestamp, a kind abbreviation, optional event date, context, name, the content (first line, or full when Expand dialog is on), a line count, and inline tags. Server-provided `date_display` is used directly; the client does not format entry timestamps. URLs and markdown links in content are linkified.
+Outside Dialog, `renderEntries()` renders each entry as one line in the `tj l` style: a timestamp, a kind abbreviation, optional event date, context, name, the content (first line, or full when Expand dialog is on), a line count, and inline tags. Dialog uses the message layout described above. Server-provided `date_display` is used directly; the client does not format entry timestamps. URLs and markdown links in content are linkified.
 
 A refresh re-renders the list only when the entry payload differs from the one last rendered, compared as JSON in `lastEntriesJson`. A poll that returns the same entries leaves the list in place.
 

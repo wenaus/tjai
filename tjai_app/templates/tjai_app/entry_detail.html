@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% if entry.name %}{{ entry.name }}{% elif entry.data.entry_id %}{{ entry.data.entry_id }}{% else %}tjai - Entry{% endif %}</title>
     <link rel="stylesheet" href="/tjai/static/tjai/menu.css">
-    <script src="/tjai/static/tjai/tjai-utils.js"></script>
+    <script src="/tjai/static/tjai/tjai-utils.js?v=20261011"></script>
     <script src="/tjai/static/tjai/turndown-7.2.0.js"></script>
     <link rel="stylesheet" href="/tjai/static/tjai/vendor/codemirror/5.65.18/codemirror.min.css">
     <link rel="stylesheet" href="/tjai/static/tjai/vendor/codemirror/5.65.18/theme/material-darker.min.css">
@@ -306,7 +306,7 @@
                 var raw = JSON.parse(document.getElementById('entry-data-json').textContent);
                 var el = document.getElementById('entry-data');
                 var DATA_TS_DISPLAY = JSON.parse('{{ data_ts_display_json|escapejs }}');
-                function escHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+                function escHtml(s) { return escapeHtml(s); }
                 var GITHUB_URL = '{{ github_url|escapejs }}';
                 var SCRIPT_PATH = 'blob/master/tjai/scripts/';
                 var ENTRY_REF_LINKS = JSON.parse('{{ linked_entry_ids_json|escapejs }}');
@@ -1377,7 +1377,7 @@
             if (relations.length === 0 && tagged.length === 0) return;
 
             var container = document.getElementById('goal-relations');
-            function esc(s) { var d = document.createElement('span'); d.textContent = s; return d.innerHTML; }
+            function esc(s) { return escapeHtml(s); }
             function entryUrl(id, data) {
                 if (data && data.entry_id) return '/tjai/entry/' + data.entry_id + '/';
                 return '/tjai/entry/?uuid=' + id;

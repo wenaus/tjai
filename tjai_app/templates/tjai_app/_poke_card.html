@@ -1,0 +1,15 @@
+<article class="poke{% if item.group == 'closed' %} closed{% endif %}" id="{{ item.entry_id }}">
+  <h3><a href="{{ item.frame_url }}">{{ item.title }}</a></h3>
+  <div class="explanation">{{ item.explanation_html|safe }}</div>
+  <div class="refs">{% for ref in item.refs %}<a href="{{ ref.url }}" target="_blank" rel="noopener">{{ ref.label }}</a>{% endfor %}</div>
+  {% if item.answer %}<p class="answer">{{ item.answer }}</p>{% endif %}
+  <div class="meta"><span>{{ item.owner }}</span>
+    {% if item.category == 'keep' %}<span>{{ item.keep_days }}d in Keep</span>{% else %}<span>{{ item.age_days }}d old</span>{% endif %}
+    {% if item.state == 'approved' %}<span class="state">Approved · awaiting pickup</span>
+    {% elif item.state == 'deferred' %}<span class="state">{% if item.group == 'attention' %}Due · {% endif %}{{ item.defer_date }}</span>
+    {% elif item.group == 'closed' %}<span>{{ item.state }}</span>{% endif %}
+    {% if item.activity %}<a href="/tjai/inflight/{{ item.activity }}/" target="_blank" rel="noopener">Inflight</a>{% endif %}
+    <a href="{{ item.url }}" target="_blank" rel="noopener">Link</a>
+    {% if selected %}<a href="{{ item.entry_url }}" target="_blank" rel="noopener">Entry / history</a>{% endif %}
+  </div>
+</article>

@@ -52,6 +52,11 @@ echo "[${SECONDS}s] migrate done"
 "$VENV/bin/python" manage.py validate_capcom_sources
 echo "[${SECONDS}s] capcom sources validated"
 
+# Person/source selection must preserve reply identity and leave native capture
+# intact. The boundary check runs in one rolled-back database transaction.
+"$VENV/bin/python" scripts/test_dialog_people.py
+echo "[${SECONDS}s] dialog identity boundary validated"
+
 # collect static only if static files changed
 STATIC_HASH=$(find "$TARGET_DIR/tjai_app/static" -type f -exec md5sum {} \; 2>/dev/null | sort | md5sum | cut -d' ' -f1)
 STATIC_HASH_FILE="$TARGET_DIR/.last_static_hash"

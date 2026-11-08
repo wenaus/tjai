@@ -26,6 +26,11 @@ by source; Capcom is one stream with filtered views over it.
 
 Two panels:
 
+**Poke** beside the pads and Inflight opens the shared attention page
+([Poke](poke.md)): short explained requests and retained proposals, an
+attention count, and a stable link for every item. Its current item is carried
+as `?view=poke&id=<entry_id>`; `/tjai/poke/<entry_id>/` opens that exact view.
+
 - **Left panel — pads, state, and pins.** A fixed pad line at the top —
   **Notepad · Pouch** — opens a content-only editor in the right panel over
   one canonical TJAI memory entry per pad: `capcom-notepad`, the user's
@@ -134,7 +139,7 @@ following the precedent of `RssItem` and `AppLog`. A `Notice` row carries:
 - `url` — deep link into the page or system the notice concerns; optional,
   and never self-referential — link-free notices are a normal category
 - `was_read`
-- `archived`
+- `archived` — threading boundary and notices excluded by feed policy
 - `dedup_key` — groups repeated notices on one ongoing condition
 - `count` — occurrences threaded into the row
 
@@ -267,10 +272,6 @@ Capcom carries as a notice like any other.
   that rebuild fails. The producer supplies the title, direct URL, severity,
   and stable day-specific dedup key at job completion; the swf-monitor
   collector's drain delivers it on the next poll.
-- **ePIC task operations** (poll, feed) — PanDA task pause and resume requests
-  and their verified outcomes, single and bulk, buffered by the production
-  operations agent under source `swf-panda-operations` and delivered by the
-  same drain.
 - **ePIC production report** (poll, state) — the `epicprod-report` tile shows
   the verdict from the latest daily campaign report and the time since that
   report. corun-ai owns the canonical assessment Page and returns its verdict,
@@ -292,6 +293,11 @@ Capcom carries as a notice like any other.
   level, so the reason for a transition reads directly from the feed line;
   the complete issue list, all levels, is the notice body. The notice links
   to the System page.
+- **etaverse** (listen) — a warning when the asset store refuses a system
+  writer's revision (a writer undoing the asset's last revision again, or
+  over 60 system revisions of one asset in an hour). The hub posts over
+  direct loopback; one notice per asset, a repeat threads onto it, and the
+  notice links the asset's record.
 - **corun-ai** (listen) — a notice when an interactive run is submitted,
   emitted from the submit path of the registration mechanism; runs
   submitted through the programmatic REST interface do not pass that point
@@ -362,6 +368,11 @@ Capcom carries as a notice like any other.
 
 Candidate sources and features considered and not adopted:
 
+- **PanDA pause and resume notices** — single and bulk task-operation
+  requests and outcomes are retained as archived notices, excluded from the
+  feed and unread count. The ingest writer applies this to the current
+  `swf-notices` format and legacy `swf-panda-operations` format. Assessments
+  that discuss a paused task remain ordinary notices.
 - **Raw failure and watchdog streams** — noise; only curated alarms are
   carried, per the contract above.
 - **Git and development activity** — already sufficiently visible through
@@ -394,6 +405,9 @@ Candidate sources and features considered and not adopted:
   its notice timestamp, moving it to the top of the reverse-time feed while
   preserving its original `first_seen` time.
 - Read notices grey out, the whole line.
+- **Load more** adds another 100 notices. Read actions and automatic refreshes
+  refresh every loaded page, retaining older notices and their expanded
+  details. Changing a feed filter starts again at the first page.
 - `j`/`k` keyboard navigation through the feed.
 - Filters (source, severity, read state) encoded in the URL, following the
   dashboard's URL-as-state convention, so every view is bookmarkable.

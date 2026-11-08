@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -177,6 +178,7 @@
         </div>
     </div>
 
+    <script src="{% static 'tjai/tjai-utils.js' %}?v=20261011"></script>
     <script>
         let allDates = [];
         let todayKey = '';
@@ -404,9 +406,7 @@
                 `</div>`;
         }
 
-        function escHtml(s) {
-            return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-        }
+        function escHtml(s) { return escapeHtml(s); }
 
         async function selectDate(entryId) {
             selectedEntryId = entryId;

@@ -50,10 +50,26 @@ Captured dialog and existing version history remain historical records.
 archive. An activity closed as done is deleted (softly, its versions kept) in
 the same write, whichever path sets the status (`signals.py`
 `retire_closed_activity`, switch `inflight.py` `RETIRE_CLOSED`): a todo marked as
-an activity (`data.activity`) or one that was inflight until that save. A parked
-activity is `blocked` and stays. What was done is recorded in git and the docs.
+an activity (`data.activity`) or one that was inflight until that save. The done
+action that takes the last Live item out closes the activity in the same write
+(switch `inflight.py` `CLOSE_WHEN_EMPTY`), so it is retired and the live view
+returns to the index; a session whose work goes on adds the next item before
+marking the last one done. A parked activity is `blocked` and stays. What was
+done is recorded in git and the docs.
 `scripts/retire_done_activities.py` retired the activities closed before the
 rule.
+
+## Priority
+
+An open item can be raised to priority: its line opens with `!!!`, the knowledge
+base's own elevation marker (the todo bang, so it also shows on the `!!!` page),
+and it stands at the top of Live, the latest raised first; lowered, it goes back
+to just below the items still raised (`inflight.py` `toggle_priority`). The
+live view's `!!!` button toggles it, as the `inflight_item` action `priority`
+does. An activity with priority items comes first in the index, the Capcom
+shelf and `get_todos(summary_only=True)`, which counts them as `priority_items`,
+so a session sees at once which activities carry them and, reading one, finds
+them first.
 
 ## Surfaces
 
@@ -67,16 +83,20 @@ frame (index to activity and back) is mirrored into the address bar.
 
 - **Index** lists the inflight todos, most recently touched first, with
   open counts and time since last change, and below them a
-  **Completed** section, dimmed: an activity with nothing outstanding,
-  whatever its status, together with the parked ones (closed ones are
-  deleted, § Closing). Those
+  **Completed** section, dimmed: an activity with nothing outstanding
+  that was never emptied by a done click (one made without items, or
+  emptied by an edit), together with the parked ones (closed ones are
+  deleted, § Closing). An activity that has left the list opens as the
+  index with a note naming it, and a live view whose activity was closed
+  elsewhere goes there on its next Refresh or action, never to an error page. Those
   carry `data.activity`, stamped while the todo is inflight — a nightly agent
   product is a todo with the same sections, entry_id shape and tag, so
   nothing in a closed body distinguishes the two and the mark has to be set
   in advance. Each opens its live view in place; Refresh re-reads the list.
 - **Live view** renders one activity:
-  description, Live items each with a done button (which takes the item
-  out), an add-item field, and Refs. Every action is a surgical edit
+  description, Live items each with a `!!!` priority toggle (§ Priority)
+  and a done button (which takes the item out), an add-item field, and
+  Refs. Every action is a surgical edit
   of the current content, serialized per entry, attributed
   `inflight:<user>` in the version history. Refresh re-reads the
   entry's state and re-renders it if anyone has changed it, from the editor,
@@ -104,9 +124,10 @@ frame (index to activity and back) is mirrored into the address bar.
 
 `get_todos(status='inflight')` returns the activities in progress with
 the usual content preview; `max_content_length=0` requests full content.
-At session start, `get_todos(status='inflight', summary_only=True)` returns
-the complete activity index with identifiers, titles, contexts, statuses
-and open counts. A session starting on an activity reads it in full,
+At a fresh session start, `get_todos(status='inflight', summary_only=True)` returns
+the complete activity index with identifiers, titles, contexts, statuses,
+open counts and `priority_items`, activities with priority items first. A session
+after /clear skips the index and reads only the activity its task continues. A session starting on an activity reads it in full,
 then reads its Refs and
 works from its Live list; it marks items done (taking them out) and adds
 items with the `inflight_item` MCP tool (the web item endpoint's twin; both

@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Screenshot a tjai page as the first superuser, for AI visual checks.
 
-Usage: screenshot_page.py <url> <out.png> [wait_ms]
+Usage: screenshot_page.py <url> <out.png> [wait_ms] [selector]
+With a CSS selector, the first matching element is captured, wherever it
+sits on the page; without one, the first 1600x1000 view.
 Creates a Django session for the superuser and injects its cookie into a
 playwright chromium context; the session is deleted afterwards. Run with
 the playwright venv's python wrapper (computers/common/setup-playwright-venv.sh),
@@ -15,6 +17,7 @@ import time
 TJAI = '/var/www/tjai'
 url, out = sys.argv[1], sys.argv[2]
 wait_ms = int(sys.argv[3]) if len(sys.argv) > 3 else 3000
+selector = sys.argv[4] if len(sys.argv) > 4 else None
 
 mk = subprocess.run([f'{TJAI}/.venv/bin/python', f'{TJAI}/manage.py', 'shell', '-c', '''
 from django.contrib.auth import get_user_model
@@ -36,7 +39,10 @@ try:
         page = ctx.new_page()
         page.goto(url, wait_until='networkidle')
         page.wait_for_timeout(wait_ms)
-        page.screenshot(path=out, full_page=False)
+        if selector:
+            page.locator(selector).first.screenshot(path=out)
+        else:
+            page.screenshot(path=out, full_page=False)
         print('saved', out, 'title:', page.title())
         browser.close()
 finally:

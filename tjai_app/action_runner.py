@@ -1169,6 +1169,7 @@ CAPCOM_FAILURE_ACTIONS = {
     'daily-assessment': ('Daily synopsis', '/tjai/synopsis/', 'daily-synopsis'),
     'picks-agent': ('Picks run', '/tjai/picks/', 'picks'),
     'ideation-agent': ('Ideation', '/tjai/research/', 'ideation'),
+    'ideation-gold-agent': ('Ideation gold', '/tjai/tag/ideation-gold/', 'ideation-gold'),
     'research-agent': ('Research', '/tjai/research/', 'research'),
     'llm-assessment': ('AI performance assessment', '/tjai/assessment/', 'assessment'),
     'llm-assessment-gemini': ('AI performance assessment', '/tjai/assessment/', 'assessment'),

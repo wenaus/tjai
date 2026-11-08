@@ -13,6 +13,10 @@ from collections import Counter
 from urllib.parse import quote
 
 from .dialog_context import CURRENT_DIALOG_CONTEXT, DIALOG_CONTEXTS, DIALOG_TAG
+from .dialog_people import (apply_people_filters, dialog_attribution, dialog_options,
+                            dialog_population, sync_state as dialog_sync_state,
+                            expanded as dialog_expanded, coverage as dialog_coverage,
+                            daily_counts as _dialog_daily_counts)
 
 logger = logging.getLogger(__name__)
 
@@ -2275,6 +2279,16 @@ def dashboard_calendar(request):
     })
 
 
+def _dashboard_content(content, params):
+    """Both list endpoints share complete, sanitized dialog rendering."""
+    full = dialog_expanded(params)
+    return {
+        'content': content if full else content.split('\n')[0],
+        'content_html': _linkify_rendered_html(_render_markdown(content))
+                        if full and params.get('view') == 'dialog' else None,
+    }
+
+
 @login_required
 def dashboard_status(request):
     """Return status data as JSON for dashboard."""
@@ -2375,7 +2389,7 @@ def dashboard_status(request):
     work_sessions.reverse()  # Oldest first for display
 
     # All entries (excluding archived), most recent first
-    DASHBOARD_PAGE = 1000
+    DASHBOARD_PAGE = 100 if request.GET.get('view') == 'dialog' else 1000
     offset = int(request.GET.get('offset', 0))
 
     # Server-side filters (applied to DB query before pagination)
@@ -2383,6 +2397,7 @@ def dashboard_status(request):
     filter_kind = request.GET.get('kind')
     filter_context = request.GET.get('context')
     dialog_view = request.GET.get('view') == 'dialog'
+    dialog_state = dialog_sync_state() if dialog_view else {}
     filter_client = request.GET.get('client')
     filter_model = request.GET.get('model')
     filter_machine = request.GET.get('machine')
@@ -2394,7 +2409,6 @@ def dashboard_status(request):
     filter_date = request.GET.get('date')  # YYYY-MM-DD, filter entries to this day
     filter_from_time = request.GET.get('from_time')  # ISO datetime e.g. 2026-03-04T03:30
     filter_to_time = request.GET.get('to_time')  # ISO datetime e.g. 2026-03-04T05:30
-    expand_dialog = request.GET.get('expand_dialog') == '1'
     user_exclude_contexts = [c for c in request.GET.get('exclude_context', '').split(',') if c]
     exclude_contexts = list(user_exclude_contexts)
 
@@ -2413,8 +2427,7 @@ def dashboard_status(request):
     if filter_kind:
         base_qs = base_qs.filter(kind=filter_kind)
     if dialog_view:
-        dialog_ids = Tag.objects.filter(tag_name=DIALOG_TAG).values_list('entry_id', flat=True)
-        base_qs = base_qs.filter(id__in=dialog_ids)
+        base_qs = apply_people_filters(dialog_population(base_qs), request.GET)
     elif filter_context:
         base_qs = base_qs.filter(context_id=filter_context)
     if exclude_contexts:
@@ -2443,23 +2456,10 @@ def dashboard_status(request):
     daily_counts = None
     if (filter_context or dialog_view) and offset == 0:
         try:
-            tz = get_app_tz()
-            now_local = datetime.now(tz=tz)
-            cutoff_ts = (now_local - timedelta(days=14)).timestamp()
-            tz_name = str(tz)
-            count_contexts = list(DIALOG_CONTEXTS) if dialog_view or filter_context in DIALOG_CONTEXTS else [filter_context]
-            from django.db import connection
-            with connection.cursor() as cursor:
-                cursor.execute("""
-                    SELECT (to_timestamp(timestamp_modified) AT TIME ZONE %s)::date AS day,
-                           count(*) AS cnt
-                    FROM entries
-                    WHERE context = ANY(%s) AND deleted_at IS NULL
-                          AND (status IS NULL OR status != 'archive')
-                          AND timestamp_modified >= %s
-                    GROUP BY day ORDER BY day DESC
-                """, [tz_name, count_contexts, cutoff_ts])
-                daily_counts = [{'date': row[0].isoformat(), 'count': row[1]} for row in cursor.fetchall()]
+            if dialog_view:
+                daily_counts = _dialog_daily_counts(request.GET, days=14)
+            else:
+                daily_counts = _context_daily_counts(filter_context)
         except Exception:
             logger.exception("daily_counts query failed for context=%s view_dialog=%s", filter_context, dialog_view)
 
@@ -2550,7 +2550,7 @@ def dashboard_status(request):
                 event_date_display = ev_dt.strftime('%a %m/%d/%H:%M')
         recent_entries.append({
             'id': e.id,
-            'content': e.content if expand_dialog else lines[0],
+            **_dashboard_content(e.content, request.GET),
             'kind': e.kind,
             'context': e.context_id,
             'timestamp': e.timestamp_modified,
@@ -2563,6 +2563,7 @@ def dashboard_status(request):
             'event_date_display': event_date_display,
             'hostname': data.get('hostname') if data else None,
             'metadata': data or {},
+            'dialog_attribution': dialog_attribution(data or {}, dialog_state.get('local_person_id')) if dialog_view else None,
             'relation_count': relation_counts.get(e.id, 0),
             'relations': expanded_relations.get(str(e.id)),
             'tags': missing_tags,
@@ -2711,15 +2712,15 @@ def dashboard_status(request):
 
     dialog_clients = []
     dialog_models = []
+    dialog_people = []
+    teamcomms_sync = None
     if dialog_view:
-        dialog_ids = Tag.objects.filter(tag_name=DIALOG_TAG).values_list('entry_id', flat=True)
-        dialog_qs = Entry.objects.filter(
-            id__in=dialog_ids,
-            deleted_at__isnull=True,
-            context_id__in=DIALOG_CONTEXTS,
-        )
+        dialog_qs = dialog_population(Entry.objects.filter(deleted_at__isnull=True))
         dialog_clients = sorted({v for v in dialog_qs.values_list('data__client', flat=True) if v})
         dialog_models = sorted({v for v in dialog_qs.values_list('data__model', flat=True) if v})
+        teamcomms_sync = dialog_state
+        dialog_people = dialog_options(teamcomms_sync)
+        teamcomms_sync = {key: value for key, value in teamcomms_sync.items() if key != 'cursor'}
 
     return JsonResponse({
         'timestamp': timestamp,
@@ -2743,7 +2744,26 @@ def dashboard_status(request):
         'daily_counts': daily_counts,
         'dialog_clients': dialog_clients,
         'dialog_models': dialog_models,
+        'dialog_people': dialog_people,
+        'teamcomms_sync': teamcomms_sync,
+        'dialog_coverage': dialog_coverage(base_qs) if dialog_view else None,
     })
+
+
+def _context_daily_counts(context):
+    from django.db import connection
+    tz = get_app_tz()
+    contexts = list(DIALOG_CONTEXTS) if context in DIALOG_CONTEXTS else [context]
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT (to_timestamp(timestamp_modified) AT TIME ZONE %s)::date AS day,
+                   count(*) AS cnt
+            FROM entries WHERE context = ANY(%s) AND deleted_at IS NULL
+                AND (status IS NULL OR status != 'archive')
+                AND timestamp_modified >= %s
+            GROUP BY day ORDER BY day DESC
+        """, [str(tz), contexts, (datetime.now(tz=tz) - timedelta(days=14)).timestamp()])
+        return [{'date': row[0].isoformat(), 'count': row[1]} for row in cursor.fetchall()]
 
 
 @login_required
@@ -2794,8 +2814,7 @@ def dashboard_search(request):
     filter_client = request.GET.get('client')
     filter_model = request.GET.get('model')
     if dialog_view:
-        dialog_ids = Tag.objects.filter(tag_name=DIALOG_TAG).values_list('entry_id', flat=True)
-        qs = qs.filter(id__in=dialog_ids)
+        qs = apply_people_filters(dialog_population(qs), request.GET)
     elif filter_context:
         qs = qs.filter(context_id=filter_context)
 
@@ -2851,7 +2870,7 @@ def dashboard_search(request):
     # Pagination, not a cap. The DB query is unbounded — what gets paged
     # in to the list view is one SEARCH_PAGE at a time, and the client
     # asks for more (offset=N) when the user scrolls past the bottom.
-    SEARCH_PAGE = 1000
+    SEARCH_PAGE = 100 if dialog_view else 1000
     offset = int(request.GET.get('offset', 0))
     # Total match count — only compute on the first page so the label can
     # show "N of TOTAL". Subsequent paginated fetches reuse the value the
@@ -2880,6 +2899,7 @@ def dashboard_search(request):
     expanded_relations = _relations_for_expanded_entry_ids(expanded_relation_ids)
 
     result = []
+    dialog_state = dialog_sync_state() if dialog_view else {}
     for e in entries:
         lines = e.content.split('\n')
         data = e.data if isinstance(e.data, dict) else None
@@ -2888,7 +2908,7 @@ def dashboard_search(request):
         missing_tags = [t for t in entry_tags if f':{t}' not in e.content]
         result.append({
             'id': e.id,
-            'content': lines[0],
+            **_dashboard_content(e.content, request.GET),
             'kind': e.kind,
             'context': e.context_id,
             'timestamp': e.timestamp_modified,
@@ -2900,6 +2920,7 @@ def dashboard_search(request):
             'event_date': data.get('event_date') if data else None,
             'hostname': data.get('hostname') if data else None,
             'metadata': data or {},
+            'dialog_attribution': dialog_attribution(data or {}, dialog_state.get('local_person_id')) if dialog_view else None,
             'relation_count': relation_counts.get(e.id, 0),
             'relations': expanded_relations.get(str(e.id)),
             'tags': missing_tags,
@@ -5420,21 +5441,7 @@ def api_capture_file_delete(request, entry_id, filename):
 def api_dialog_daily_counts(request):
     """Return daily dialog turn counts for the full collection period."""
     try:
-        tz = get_app_tz()
-        from django.db import connection
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT (to_timestamp(timestamp_modified) AT TIME ZONE %s)::date AS day,
-                       count(*) AS cnt
-                FROM entries
-                WHERE id IN (
-                    SELECT entry_id FROM tags WHERE tag_name = %s
-                ) AND deleted_at IS NULL
-                      AND (status IS NULL OR status != 'archive')
-                GROUP BY day ORDER BY day
-            """, [str(tz), DIALOG_TAG])
-            rows = [{'date': row[0].isoformat(), 'count': row[1]}
-                    for row in cursor.fetchall()]
+        rows = _dialog_daily_counts(request.GET)
         return JsonResponse({'daily_counts': rows})
     except Exception as e:
         logger.exception("api_dialog_daily_counts failed")
@@ -9055,6 +9062,7 @@ def capcom_notepad(request):
 def api_capcom_feed(request):
     """Feed page + state tiles + pinned shelf + source registry, one poll."""
     from . import capcom as capcom_lib
+    from . import poke
     from .models import Notice
 
     try:
@@ -9213,6 +9221,7 @@ def api_capcom_feed(request):
         # The shelf is the quick list of what has work outstanding; the
         # Inflight view in the right panel carries every one of them.
         'inflight': [i for i in _inflight_list() if i['open']][:20],
+        'poke_attention': poke.attention_count(),
         'sources': capcom_lib.get_sources(),
         'counts_24h': counts_24h,
         'retention_days': capcom_lib._get_json_config('capcom_retention_days',
@@ -9367,6 +9376,25 @@ def api_capcom_run(request):
 
 # ── Inflight todos: live view and item actions (docs/inflight.md) ───────────
 
+def _inflight_gone_title(ref):
+    """The title of an activity that has left the list (closed ones are retired), for the index's note; '' when
+    nothing was asked for, the ref itself when no such todo ever existed."""
+    if not ref:
+        return ''
+    from . import inflight as inflight_lib
+    base = Entry.objects.filter(kind='todo')
+    entry = None
+    try:
+        uuid.UUID(str(ref))
+        entry = base.filter(id=ref).first()
+    except (ValueError, AttributeError):
+        pass
+    if entry is None:
+        entry = base.filter(data__entry_id=ref).order_by('-timestamp_modified').first()
+    title = inflight_lib.summary(entry.content or '')['title'].lstrip('#').strip() if entry else ''
+    return title or str(ref)
+
+
 def _inflight_lookup(entry_id):
     """Resolve a UUID or data.entry_id to an inflight todo, else None."""
     base = Entry.objects.filter(deleted_at__isnull=True, kind='todo')
@@ -9385,7 +9413,8 @@ def _inflight_item_html(item):
     """Render one item: its first line without the marker, continuation
     lines dedented so their indentation is not read as a code block."""
     import textwrap
-    head = item['lines'][0][2:]
+    from . import inflight as inflight_lib
+    head = inflight_lib.plain(item['lines'][0][2:])
     rest = textwrap.dedent('\n'.join(item['lines'][1:])) if len(item['lines']) > 1 else ''
     return _linkify_rendered_html(_render_markdown(head + ('\n' + rest if rest else '')))
 
@@ -9405,12 +9434,14 @@ def _inflight_payload(entry):
         'conflict': inflight_lib.has_conflict(content),
         'title': p['title'].lstrip('#').strip(),
         'description_html': _linkify_rendered_html(_render_markdown(p['description'])) if p['description'] else '',
-        'live': [{'text': it['text'], 'html': _inflight_item_html(it)} for it in p['live']],
+        'live': [{'text': it['text'], 'html': _inflight_item_html(it), 'priority': inflight_lib.is_priority(it['text'])}
+                 for it in p['live']],
         'done': ([{'text': it['text'], 'html': _inflight_item_html(it)} for it in p['done']]
                  if inflight_lib.KEEP_DONE else []),
         'keep_done': inflight_lib.KEEP_DONE,
         'refs_html': _linkify_rendered_html(_render_markdown(p['refs'])) if p['refs'] else '',
         'open_count': len(p['live']),
+        'priority_count': sum(1 for it in p['live'] if inflight_lib.is_priority(it['text'])),
         'done_count': len(p['done']) if inflight_lib.KEEP_DONE else 0,
         'modified_ts': entry.timestamp_modified,
         'modified_display': fmt_datetime(entry.timestamp_modified),
@@ -9441,7 +9472,7 @@ def _inflight_list(statuses=None, activities_only=False):
         ref = eid or str(e.id)
         rows.append({
             'id': str(e.id), 'ref': ref, 'title': (s['title'] or '(untitled)').lstrip('#').strip(),
-            'open': s['open'], 'done': s.get('done'),
+            'open': s['open'], 'done': s.get('done'), 'priority': s.get('priority_items', 0),
             'modified_ts': e.timestamp_modified,
             'modified_display': fmt_datetime(e.timestamp_modified),
             'ago': fmt_ago(e.timestamp_modified),
@@ -9450,6 +9481,8 @@ def _inflight_list(statuses=None, activities_only=False):
             'context': e.context_id or '',
             'status': e.status or '',
         })
+    # An activity with priority items comes first (docs/inflight.md § Priority); otherwise most recent first.
+    rows.sort(key=lambda row: 0 if row['priority'] else 1)
     return rows
 
 
@@ -9469,10 +9502,12 @@ def inflight_page(request, entry_id=None):
             target += '&id=' + quote(str(entry_id), safe='')
         return redirect(target)
     if entry_id is None:
-        return render(request, 'tjai_app/inflight.html', {'mode': 'index', 'entry': None})
+        return render(request, 'tjai_app/inflight.html', {'mode': 'index', 'entry': None,
+                                                          'gone': _inflight_gone_title(request.GET.get('gone'))})
     entry = _inflight_lookup(entry_id)
     if entry is None:
-        raise Http404('No such todo')
+        # Closed (retired) or never there: the index, saying so, rather than an error page in the frame.
+        return redirect('/tjai/inflight/?embed=1&gone=' + quote(str(entry_id), safe=''))
     return render(request, 'tjai_app/inflight.html', {
         'mode': 'view', 'entry': entry,
         'initial_json': json.dumps(_inflight_payload(entry)),
@@ -9530,6 +9565,9 @@ def api_inflight_item(request, entry_id):
         if status == 500:
             logger.error('inflight item %s on %s failed: %s', body.get('action'), entry_id, result['error'])
         return JsonResponse({'error': result['error']}, status=status)
+    if result.get('closed'):
+        # The last item done closed the activity, which is retired: nothing is left to render.
+        return JsonResponse({'closed': True, 'changed': True})
     entry = _inflight_lookup(entry_id)
     payload = _inflight_payload(entry)
     payload['changed'] = True

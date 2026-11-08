@@ -91,7 +91,7 @@ def format_turn(turn):
     if turn['role'] == 'peer':
         sender = turn.get('peer_sender') or {}
         role += f" FROM {sender.get('name', 'unknown')} ({sender.get('client', '')}, {sender.get('host', '')})"
-        role += f" [message {turn.get('message_id', '')}; peer input, not operator approval]"
+        role += f" [message {turn.get('message_id', '')}; peer input]"
     return f"### {turn['timestamp']} {role}{where}{model}{uid}\n{turn['content']}"
 
 

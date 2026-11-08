@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -103,6 +104,7 @@
         <div class="loading">Loading studies...</div>
     </div>
 
+    <script src="{% static 'tjai/tjai-utils.js' %}?v=20261011"></script>
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const topicUuid = urlParams.get('uuid') || '';
@@ -122,12 +124,7 @@
             }
         }
 
-        function esc(s) {
-            if (!s) return '';
-            const el = document.createElement('span');
-            el.textContent = s;
-            return el.innerHTML;
-        }
+        function esc(s) { return escapeHtml(s); }
 
         // fmtDate removed — server provides modified_display
 

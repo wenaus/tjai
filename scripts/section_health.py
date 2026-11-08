@@ -127,7 +127,7 @@ def _format_health_snapshot(metrics, notes):
 
     # --- Processes ---
     proc_names = {
-        'proc_apache': 'Apache', 'proc_supervisord': 'Supervisord',
+        'proc_apache': 'Apache', 'proc_apache_epic': 'Apache (ePIC)', 'proc_supervisord': 'Supervisord',
         'proc_action_agent': 'Action Agent',
         'proc_cloudwatch': 'CloudWatch',
     }

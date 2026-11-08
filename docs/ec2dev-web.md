@@ -1,5 +1,9 @@
 # ec2dev-web traffic monitor
 
+**Status: specified, not built, and parked.** No collector script, cron line, tables, Snapper scope or Capcom state
+exists; nothing reads Caddy's access records on a schedule. It lost its urgency once bot traffic was brought under
+control at Caddy (`tjrepo/ops/ec2dev/caddy/Caddyfile`). What follows is the design, kept for if it is wanted again.
+
 `ec2dev-web` is the TJAI-owned monitor for the public web services entering
 ec2dev. It observes traffic at Caddy, relates it to backend load, records
 durable aggregate history, feeds the Snapper `ec2dev-web` scope, and owns the

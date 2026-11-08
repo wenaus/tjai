@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.urls import path
 
-from tjai_app import views
+from tjai_app import views, poke_views
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -103,6 +103,8 @@ urlpatterns = [
     path("api/inflight/list", views.api_inflight_list, name="api_inflight_list"),
     path("api/inflight/<str:entry_id>/state", views.api_inflight_state, name="api_inflight_state"),
     path("api/inflight/<str:entry_id>/item", views.api_inflight_item, name="api_inflight_item"),
+    path("poke/", poke_views.poke_page, name="poke_index"),
+    path("poke/<slug:entry_id>/", poke_views.poke_page, name="poke_item"),
     path("capcom/", views.capcom_page, name="capcom"),
     path("capcom/notepad/", views.capcom_notepad, name="capcom_notepad"),
     path("api/capcom/feed", views.api_capcom_feed, name="api_capcom_feed"),
