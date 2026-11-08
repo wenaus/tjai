@@ -25,7 +25,7 @@ def build(since_ts, target_date):
         return 'No backups found.'
 
     total_days = len(day_dirs)
-    lines = [f'{total_days} days archived']
+    lines = [f'{total_days} days on this disk; older days in the Dropbox Archive (dropbox:Archive/tjai-backups/server)']
     lines.append('')
     lines.append('| Date | Dump | Compressed | Data | Config |')
     lines.append('|------|-----:|-----------:|-----:|-------:|')
