@@ -83,6 +83,13 @@ net source growth; deleted lines are not subtracted. Excluded:
   `etaverse/scripts/families/__init__.py`. The counter reads generator source
   without executing it. The Python generators count; their expanded records
   under `world/families/` do not. Handwritten family JSON remains counted.
+- **Generated SL designs and Etaverse dumps** under
+  `primus-blender/factory/sl_builds/`: every `*_v2/design.json` (written from
+  the v1 design by `make_v2_designs.py`), each plant design named in
+  `plant_designs.json` (written from that table by `make_plant_designs.py`),
+  and the house builder's dumps of Etaverse records (`houses/*.json`,
+  `houses/furnishings/*.json`, committed until 2026-11-11 and transient since).
+  The generators, the table and the v1 tree designs count.
 - **Archives and staging directories** in tjrepo (`EXCLUDE_TJREPO_TOP`), the
   enumerated cross-repository moves.
 
