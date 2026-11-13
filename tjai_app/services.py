@@ -24,6 +24,7 @@ from .tagger import tag_bookmark
 from .tjai_utils import fmt_datetime, get_app_tz, safe_truncate
 from tj.commands.journal import parse_time
 from tj.date_utils import parse_date_filter
+from tj.entry_ids import copied_entry_id
 
 VALID_KINDS = ('memory', 'todo', 'journal', 'profile', 'ai', 'bookmark', 'list', 'action', 'goal')
 VALID_STATUSES = ('active', 'inflight', 'done', 'blocked', 'archive', 'failed')
@@ -599,7 +600,8 @@ def copy_calendar_entry(entry_id, event_date, event_time=None):
     """Copy a calendar/journal entry to a new date.
 
     ALWAYS use this tool to copy calendar entries. Do NOT manually create a new
-    entry — this tool copies content, data (links etc.), context, and tags exactly.
+    entry — this tool copies content, data (links etc.), context, and tags exactly,
+    except data.entry_id, which is re-dated for the copy (tj.entry_ids).
 
     Args:
         entry_id: UUID of the source journal entry to copy.
@@ -634,9 +636,15 @@ def copy_calendar_entry(entry_id, event_date, event_time=None):
     tz = get_timezone()
     dt = datetime.strptime(event_date, '%Y%m%d').replace(hour=hour, minute=minute, tzinfo=tz)
 
-    # Copy data, replacing event_date
+    # Copy data, replacing event_date and giving the copy its own entry_id
     new_data = source.data.copy() if source.data else {}
     new_data['event_date'] = dt.timestamp()
+    new_entry_id = copied_entry_id(
+        new_data.get('entry_id'), dt.date(),
+        exists=lambda c: Entry.objects.filter(data__entry_id=c, deleted_at__isnull=True).exists(),
+    )
+    if new_entry_id:
+        new_data['entry_id'] = new_entry_id
 
     now = time.time()
     entry = Entry.objects.create(

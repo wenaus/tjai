@@ -1434,7 +1434,9 @@ async def copy_calendar_entry(
 
     ALWAYS use this tool when asked to copy a calendar entry. Do NOT manually
     create a new entry — this tool copies content (with its line-1 meeting
-    links), data, context, and tags exactly from the source.
+    links), data, context, and tags exactly from the source. The copy gets its
+    own data.entry_id: a trailing date in the source's is replaced by the new
+    date, otherwise the new date is appended.
 
     Args:
         entry_id: UUID of the source journal entry to copy.
