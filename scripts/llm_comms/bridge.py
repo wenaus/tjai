@@ -66,6 +66,13 @@ async def target_state(args):
         os.kill(args.pid, 0)
     if args.client == "codex_queue":
         return "unknown"  # The embedded CLI exposes no live turn-status API.
+    if args.client == "antigravity_queue":
+        from antigravity_queue import name_file
+        try:
+            args.name = name_file(args.native_id).read_text().strip() or args.name
+        except FileNotFoundError:
+            pass
+        return "unknown"  # Antigravity exposes no turn status to an outside process.
     if args.client == "codex":
         from codex_client import CodexClient
         async with CodexClient(args.socket) as client:
@@ -113,6 +120,10 @@ async def deliver(args, registration, message):
             from codex_queue import send
             receipt = await asyncio.to_thread(send, args.native_id, instructions,
                                               message["sender_id"], message["message_id"])
+        elif args.client == "antigravity_queue":
+            from antigravity_queue import send as spool
+            receipt = await asyncio.to_thread(spool, args.native_id, instructions,
+                                              message["sender_id"], message["message_id"])
         else:
             receipt = await asyncio.to_thread(send_claude, args.socket, args.native_id,
                           instructions, message["sender_id"], message["message_id"],
@@ -142,7 +153,7 @@ async def run(args):
     # One receiver per client/host/native session on this machine. The server
     # also atomically claims each delivery to protect against overlapping hosts.
     import hashlib
-    client_name = "codex" if args.client == "codex_queue" else args.client
+    client_name = {"codex_queue": "codex", "antigravity_queue": "antigravity"}.get(args.client, args.client)
     identity = hashlib.sha256(f"{client_name}:{args.host}:{args.native_id}".encode()).hexdigest()
     directory = Path.home() / ".tjai" / "comms"
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -150,7 +161,8 @@ async def run(args):
     fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        delivery = {"codex": "codex_app_server", "codex_queue": "codex_queue", "claude": "claude_socket"}[args.client]
+        delivery = {"codex": "codex_app_server", "codex_queue": "codex_queue", "claude": "claude_socket",
+                    "antigravity_queue": "pull"}[args.client]
         retry_delay = 1
         while True:
             try:
@@ -214,7 +226,7 @@ async def run(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--client", choices=["codex", "claude", "codex_queue"], required=True)
+    parser.add_argument("--client", choices=["codex", "claude", "codex_queue", "antigravity_queue"], required=True)
     parser.add_argument("--native-id", required=True)
     parser.add_argument("--socket", default="")
     parser.add_argument("--pid", type=int, help="Stop when this owning native process exits")
@@ -229,9 +241,9 @@ def main():
     parser.add_argument("--once", action="store_true", help="Receive one bounded batch, then stop")
     try:
         args = parser.parse_args()
-        if args.client == "codex_queue" and not args.pid:
-            parser.error("codex_queue requires the live owning --pid")
-        if args.client != "codex_queue" and not args.socket:
+        if args.client in {"codex_queue", "antigravity_queue"} and not args.pid:
+            parser.error(f"{args.client} requires the live owning --pid")
+        if args.client not in {"codex_queue", "antigravity_queue"} and not args.socket:
             parser.error("native socket delivery requires --socket")
         asyncio.run(run(args))
     except (OSError, ValueError, RuntimeError) as exc:

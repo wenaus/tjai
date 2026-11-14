@@ -10,7 +10,8 @@ includes the local `scripts/mcp_call.py` fallback, which calls the same tools an
 authenticated endpoint without requiring a client restart or another service.
 
 Shared startup automatically registers interactive sessions and starts their
-receivers. Normal Codex launches use a private owning app-server; existing
+receivers. Antigravity (the Gemini App, CLI and IDE) joins through its own
+lifecycle hooks; see [Antigravity](#antigravity). Normal Codex launches use a private owning app-server; existing
 embedded sessions use a deferred native queue until restarted. Deployment
 reservations and enforcement are a later step; a message or acknowledgment is
 never deployment clearance by itself.
@@ -79,6 +80,34 @@ The active behavioral rules are the general guidance entries
 [`ai-peer-work-coordination`](https://etaverse.com/tjai/entry/ai-peer-work-coordination).
 Reload TJAI guidance to adopt a guidance change; updating a checkout alone does
 not replace instructions already loaded by a running model.
+
+## Antigravity
+
+`~/.gemini/config/hooks.json`, which every Antigravity interface reads, links to
+tjrepo `computers/common/antigravity-hooks.json`. Both of its events run
+`scripts/llm_comms/antigravity_hook.py`:
+
+- **SessionStart** calls the shared `startup.start("antigravity", ...)` with the
+  conversation's `conversationId` as native session id. It registers the
+  conversation (client `antigravity`, delivery `pull`), starts its `bridge.py`
+  receiver (`--client antigravity_queue`, owned by the `agy` process), and injects
+  the TJAI session instructions as a system message.
+- **PreInvocation** runs before every model call. It starts the receiver if none
+  holds the conversation's lock, so a conversation opened before the hook existed
+  joins at its next model call. It also injects the peer messages the receiver
+  has spooled since, as system messages, and records each as
+  `accepted_by_client`.
+
+Antigravity has no inbox an outside process can write to, so the receiver spools
+each delivery to `~/.tjai/comms/agy-<conversationId>.inbox`
+(`antigravity_queue.py`, state `queued_in_client`). Mail therefore reaches the
+agent at its next model call, mid-turn included, and waits while it is idle.
+Antigravity sessions have no names of their own: `antigravity_hook.py --rename
+NAME --conversation ID` writes `agy-<conversationId>.name`, which registration
+and every heartbeat read. The receiver lives as long as its `agy` process, so in
+the App, whose hub process serves every conversation, a finished conversation
+stays registered until the hub exits; `unanswered_since` marks it once mail goes
+unanswered. Dialog recording does not cover Antigravity.
 
 ## Tools and lifecycle
 
@@ -278,6 +307,8 @@ executions are not moved to another runtime.
   receiver lifecycle and compact native message presentation.
 - `scripts/llm_comms/claude_client.py`, `codex_client.py`, `codex_queue.py`,
   `launch_codex.py`: native delivery adapters and the owning Codex runtime.
+- `scripts/llm_comms/antigravity_hook.py`, `antigravity_queue.py`: Antigravity
+  registration, hook delivery and naming.
 - `computers/common/claude-hooks/`, `computers/common/codex-hooks/` and
   `computers/common/codex-launch.sh` in tjrepo: shared startup and dialog recording.
 - [Assessment](assessment.md): peer provenance in the AI assessment input.

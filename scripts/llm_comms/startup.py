@@ -54,24 +54,37 @@ def claude_record(native_id):
     return {}
 
 
+def session_id_for(client, native_id, host=None):
+    """The TJAI registration id: stable for client, host and native session id."""
+    host = host or machine()[0]
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, json.dumps(["tjai:llm", client, host, native_id])))
+
+
 def start(client, data, host=None, *, context_loaded=False):
     if os.environ.get("TJAI_ACTION_ID") and not os.environ.get("TJAI_COMMS_TEST"):
         return ""  # Scheduled research/action workers are not interactive peers.
-    native_id = data.get("session_id") or os.environ.get("CODEX_THREAD_ID", "")
+    native_id = (data.get("session_id") or data.get("conversationId")  # Antigravity
+                 or os.environ.get("CODEX_THREAD_ID", ""))
     try:
         uuid.UUID(native_id)
     except (ValueError, TypeError, AttributeError):
         return ""
     location, config = machine()
     host = host or location
-    cwd = data.get("cwd") or os.getcwd()
+    cwd = data.get("cwd") or next(iter(data.get("workspacePaths") or []), "") or os.getcwd()
     record = claude_record(native_id) if client == "claude" else {}
     native_socket = (os.environ.get("CLAUDE_CODE_MESSAGING_SOCKET") or record.get("messagingSocketPath", "")) if client == "claude" else os.environ.get("TJAI_CODEX_SOCKET", "")
-    pid = record.get("pid") or data.get("owner_pid") or native_owner(client)
+    pid = record.get("pid") or data.get("owner_pid") or native_owner("agy" if client == "antigravity" else client)
     # A name asked for — by the host's config, by the launcher's environment, or by the client
     # itself — is a base: the registry numbers it among live peers (deep -> deep-1, deep-2 …), so
     # the same harness can run twice without two sessions answering to one name. With no name asked
     # for, the derived default stands exactly as it was.
+    if client == "antigravity":
+        from antigravity_queue import name_file
+        try:
+            record = {"name": name_file(native_id).read_text().strip()}
+        except FileNotFoundError:
+            pass
     asked = (
         record.get("name")
         or data.get("session_name")
@@ -80,12 +93,13 @@ def start(client, data, host=None, *, context_loaded=False):
         or ""
     ).strip()
     name = asked or f"{host}-{client}-{native_id[-8:]}"
-    model = data.get("model") or ""
+    model = data.get("model") or data.get("modelName") or ""
     if isinstance(model, dict):
         model = model.get("id") or model.get("display_name") or ""
     transcript = data.get("transcript_path") or ""  # Claude: the live model is read from here
-    session_id = str(uuid.uuid5(uuid.NAMESPACE_URL, json.dumps(["tjai:llm", client, host, native_id])))
-    transport = client if native_socket else "codex_queue" if client == "codex" else None
+    session_id = session_id_for(client, native_id, host)
+    transport = (client if native_socket else "codex_queue" if client == "codex"
+                 else "antigravity_queue" if client == "antigravity" else None)
     if not transport or not pid:
         return "TJAI communications could not find this client's live inbox/owner; inspect ~/.tjai/comms."
     if client == "codex" and native_socket:
@@ -123,7 +137,9 @@ def start(client, data, host=None, *, context_loaded=False):
             command.extend(["--resource", resource])
         with open(directory / f"{session_id}.log", "a") as log:
             subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
-    capability = "native inbox transport selected" if native_socket else "native queue transport selected (delivery at the next input boundary)"
+    capability = ("native inbox transport selected" if native_socket else
+                  "hook delivery selected (peer messages arrive before the next model call)" if client == "antigravity" else
+                  "native queue transport selected (delivery at the next input boundary)")
     status = ("A receiver process holds this session's lock." if running else
               "Receiver launch requested; registration and delivery are not yet confirmed.")
     if context_loaded:
