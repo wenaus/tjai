@@ -24,8 +24,8 @@ clients. Admitted sessions
 are `ec2-N` on ec2dev and `swf-N` on swf-testbed, with a positive integer N;
 every run carrying `TJAI_ACTION_ID` is excluded. A session also needs its
 machine's Claude realm to join TeamComms and its login to be that realm's
-account, which only the tech realm satisfies (`claude_realm.py`, tjrepo
-`computers/common/README.md` § Claude realms). Automatic greetings are
+account, which only the tech realm satisfies (tjrepo
+`computers/common/claude-realms.md`). Automatic greetings are
 disabled. Claude's name is resolved from its live registry before enrollment.
 Unnamed and temporary sessions remain outside TeamComms. The shared Codex
 configuration also keeps its `teamcomms` MCP server disabled, and the Codex
