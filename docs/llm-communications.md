@@ -20,17 +20,17 @@ The separate SWF TeamComms startup policy in
 startup and the Codex launcher. It governs only the operator's own sessions and
 admits only the clients in `CLIENTS`, which is Claude alone: the operator's
 Codex sessions never join TeamComms. Other participants choose their own
-clients. Admitted sessions
-are `ec2-N` on ec2dev and `swf-N` on swf-testbed, with a positive integer N;
-every run carrying `TJAI_ACTION_ID` is excluded. A session also needs its
-machine's Claude realm to join TeamComms and its login to be that realm's
-account, which only the tech realm satisfies (tjrepo
-`computers/common/claude-realms.md`). Automatic greetings are
-disabled. Claude's name is resolved from its live registry before enrollment.
-The gate runs at SessionStart and again at each prompt until that Claude
-process has enrolled (a marker in `~/.tjai/teamcomms-enrolled/`), so a session
-named with `/rename` after startup joins at its next prompt.
-Unnamed and temporary sessions remain outside TeamComms. The shared Codex
+clients. Every interactive Claude session on a tech-realm machine logged into
+the tech account joins (tjrepo `computers/common/claude-realms.md`), named or
+not; runs carrying `TJAI_ACTION_ID` and non-interactive `claude -p` runs never
+join. Automatic greetings are disabled. The gate enrolls at SessionStart under
+the session's name from its live registry, or the connector's placeholder
+(`<host>-claude-<id>`) when it has none yet. At each prompt it compares the
+name with the one enrolled (a marker per Claude process in
+`~/.tjai/teamcomms-enrolled/`) and, after a `/rename`, registers the session
+again under the new name; registration is keyed by the native session id, so
+this renames it in place. If the startup enrollment was missed, the next
+prompt enrolls. The shared Codex
 configuration also keeps its `teamcomms` MCP server disabled, and the Codex
 launcher unsets `TEAMCOMMS_TOKEN`.
 

@@ -4,7 +4,6 @@ import argparse
 import json
 import os
 from pathlib import Path
-import re
 import shlex
 import signal
 import subprocess
@@ -18,11 +17,13 @@ ENROLLED = Path.home() / ".tjai/teamcomms-enrolled"
 CLIENTS = {"claude"}
 
 
-def eligible(host, name, client):
-    """Only named interactive Claude SWF/ec2 sessions join the collaboration directory."""
-    prefix = {"ec2dev": "ec2", "swf-testbed": "swf"}.get(host)
-    return bool(client in CLIENTS and not os.environ.get("TJAI_ACTION_ID") and prefix
-                and re.fullmatch(rf"{prefix}-[1-9][0-9]*", name or ""))
+def eligible(host, name, client, interactive=True):
+    """Every interactive session of an admitted client; the machine's realm decides the rest.
+
+    Scheduled runs (TJAI_ACTION_ID) and non-interactive runs (claude -p) never join.
+    host and name no longer restrict enrollment; they stay in the signature for callers.
+    """
+    return bool(client in CLIENTS and interactive and not os.environ.get("TJAI_ACTION_ID"))
 
 
 def realm_admits():
@@ -88,32 +89,68 @@ def enrolled_marker(pid, native_id):
     return ENROLLED / f"{pid}-{native_id}"
 
 
-def claude_hook(data):
-    """Enroll at SessionStart, or at the first prompt after a /rename makes the session eligible."""
-    from startup import claude_record, machine
+RENAME = """
+import asyncio, json, sys
+from teamcomms.connectors.config import load
+from teamcomms.connectors.startup import register
+d = json.load(sys.stdin)
+asyncio.run(asyncio.wait_for(register(load(d["config"]), d["native_id"], d["name"],
+                                      d["cwd"], d["model"]), timeout=10))
+"""
 
-    host, _ = machine()
-    record = claude_record(data.get("session_id"))
+
+def model_id(data):
+    model = data.get("model") or ""
+    return (model.get("id") or model.get("display_name") or "") if isinstance(model, dict) else model
+
+
+def claude_hook(data):
+    """Enroll at SessionStart; at each prompt, carry a /rename into TeamComms.
+
+    Registration is keyed by the native session id, so registering again under
+    the new name renames the enrolled session in place.
+    """
+    from startup import claude_record
+
+    native_id = data.get("session_id")
+    record = claude_record(native_id)
     name = (record.get("name") or data.get("session_name")
             or data.get("session_title") or os.environ.get("TJAI_SESSION_NAME") or "")
-    if not eligible(host, name, "claude"):
+    if not eligible(None, name, "claude", record.get("kind") == "interactive"):
         return 0
-    marker = enrolled_marker(record.get("pid"), data.get("session_id"))
+    marker = enrolled_marker(record.get("pid"), native_id)
     if marker.exists():
-        return 0
+        text = marker.read_text()
+        enrolled = json.loads(text) if text else {"name": name}   # marker from before renames
+        if not name or enrolled.get("name") == name:
+            return 0
+    else:
+        enrolled = None
     allowed, reason = realm_admits()
     if not allowed:
-        print(f"TeamComms: not enrolling {name}: {reason}", file=sys.stderr)
+        print(f"TeamComms: not enrolling {name or native_id}: {reason}", file=sys.stderr)
         return 0
     python, config = CONFIG / "python", CONFIG / "connector.json"
     if not (os.access(python, os.X_OK) and config.is_file() and (CONFIG / "token").is_file()):
         return 0
+    if enrolled is not None:
+        payload = {"config": str(config), "native_id": native_id, "name": name,
+                   "cwd": enrolled.get("cwd") or data.get("cwd") or os.getcwd(),
+                   "model": enrolled.get("model") or ""}
+        code = subprocess.run([str(python), "-c", RENAME], input=json.dumps(payload),
+                              text=True).returncode
+        if code == 0:
+            marker.write_text(json.dumps({**enrolled, "name": name}))
+        else:
+            print(f"TeamComms: renaming {native_id} to {name} failed (exit {code})", file=sys.stderr)
+        return code
     silence(config)
     code = subprocess.run([str(python), "-m", "teamcomms.connectors.cli", "--config",
                            str(config), "hook", "claude"],
                           input=json.dumps({**data, "session_name": name}), text=True).returncode
     if code == 0:
-        marker.touch()
+        marker.write_text(json.dumps({"name": name, "model": model_id(data),
+                                      "cwd": data.get("cwd") or os.getcwd()}))
     return code
 
 
