@@ -22,8 +22,11 @@ admits only the clients in `CLIENTS`, which is Claude alone: the operator's
 Codex sessions never join TeamComms. Other participants choose their own
 clients. Every interactive Claude session on a tech-realm machine logged into
 the tech account joins (tjrepo `computers/common/claude-realms.md`), named or
-not; runs carrying `TJAI_ACTION_ID` and non-interactive `claude -p` runs never
-join. Automatic greetings are disabled. The gate enrolls at SessionStart under
+not; runs carrying `TJAI_ACTION_ID`, non-interactive `claude -p` runs and
+sessions launched with `TJAI_TEAMCOMMS=off` (unattended watchers such as
+swf-watch, research helpers) never join, while keeping TJAI messaging.
+`teamcomms_startup.py --opt-out NAME` keeps a running, not yet enrolled session
+out until it restarts. Automatic greetings are disabled. The gate enrolls at SessionStart under
 the session's name from its live registry, or the connector's placeholder
 (`<host>-claude-<id>`) when it has none yet. At each prompt it compares the
 name with the one enrolled (a marker per Claude process in

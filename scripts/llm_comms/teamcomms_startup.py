@@ -20,10 +20,13 @@ CLIENTS = {"claude"}
 def eligible(host, name, client, interactive=True):
     """Every interactive session of an admitted client; the machine's realm decides the rest.
 
-    Scheduled runs (TJAI_ACTION_ID) and non-interactive runs (claude -p) never join.
-    host and name no longer restrict enrollment; they stay in the signature for callers.
+    Scheduled runs (TJAI_ACTION_ID), non-interactive runs (claude -p) and sessions
+    launched with TJAI_TEAMCOMMS=off (unattended watchers, research helpers) never
+    join; TJAI messaging is unaffected. host and name no longer restrict enrollment;
+    they stay in the signature for callers.
     """
-    return bool(client in CLIENTS and interactive and not os.environ.get("TJAI_ACTION_ID"))
+    return bool(client in CLIENTS and interactive and not os.environ.get("TJAI_ACTION_ID")
+                and os.environ.get("TJAI_TEAMCOMMS", "").lower() != "off")
 
 
 def realm_admits():
@@ -122,7 +125,8 @@ def claude_hook(data):
     if marker.exists():
         text = marker.read_text()
         enrolled = json.loads(text) if text else {"name": name}   # marker from before renames
-        if not name or enrolled.get("name") == name:
+        # {"opted_out": true} keeps an already running process out (opt_out()).
+        if enrolled.get("opted_out") or not name or enrolled.get("name") == name:
             return 0
     else:
         enrolled = None
@@ -152,6 +156,29 @@ def claude_hook(data):
         marker.write_text(json.dumps({"name": name, "model": model_id(data),
                                       "cwd": data.get("cwd") or os.getcwd()}))
     return code
+
+
+def opt_out(name):
+    """Keep a running, not yet enrolled Claude session of this name out of TeamComms.
+
+    For a process started before TJAI_TEAMCOMMS=off was set in its launcher; the
+    marker lasts for that process only.
+    """
+    for path in (Path.home() / ".claude/sessions").glob("*.json"):
+        record = json.loads(path.read_text())
+        if record.get("name") != name:
+            continue
+        try:
+            os.kill(record["pid"], 0)
+        except ProcessLookupError:
+            continue
+        marker = enrolled_marker(record["pid"], record["sessionId"])
+        if marker.exists() and not json.loads(marker.read_text() or "{}").get("opted_out"):
+            raise SystemExit(f"{name} is already enrolled; restart it with TJAI_TEAMCOMMS=off")
+        marker.write_text(json.dumps({"name": name, "opted_out": True}))
+        print(f"{name} (pid {record['pid']}) kept out of TeamComms")
+        return
+    raise SystemExit(f"no running Claude session named {name}")
 
 
 def refresh_supervisors():
@@ -197,8 +224,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--disable-greetings", action="store_true")
     parser.add_argument("--refresh-supervisors", action="store_true")
+    parser.add_argument("--opt-out", metavar="NAME",
+                        help="keep the running Claude session NAME out of TeamComms")
     args = parser.parse_args()
-    if args.refresh_supervisors:
+    if args.opt_out:
+        opt_out(args.opt_out)
+    elif args.refresh_supervisors:
         refresh_supervisors()
     elif args.disable_greetings:
         silence(CONFIG / "connector.json")
