@@ -207,6 +207,12 @@ DATA_PATHS = {
         'etaverse/assets/bento/sl/*.xml',  # imported Second Life data
         'etaverse/assets/bento/vendor/**',  # third-party code and data
         'etaverse/docs/history/*.json',  # generated change inventories
+        # The SL house builder's Etaverse dumps, committed until 2026-11-11 (now transient,
+        # primus-blender/factory/sl_builds/dumps.py).
+        'primus-blender/factory/sl_builds/houses/*.json',
+        'primus-blender/factory/sl_builds/houses/furnishings/*.json',
+        # v2 tree designs, written from the v1 designs by make_v2_designs.py.
+        'primus-blender/factory/sl_builds/*_v2/design.json',
     ),
 }
 
@@ -263,12 +269,25 @@ def _generated_family_paths(repo):
 GENERATED_FAMILY_PATHS = _generated_family_paths(GITHUB_ROOT / 'tjrepo')
 
 
+def _generated_plant_design_paths(repo):
+    """The SL plant designs make_plant_designs.py writes, one per species in its table (plant_designs.json, which
+    counts); read from the table, the generator not executed."""
+    table = repo / 'primus-blender' / 'factory' / 'sl_builds' / 'plant_designs.json'
+    if not table.exists():
+        return set()
+    return {f'primus-blender/factory/sl_builds/{name}/design.json'
+            for name in json.loads(table.read_text(encoding='utf-8'))}
+
+
+GENERATED_PLANT_DESIGN_PATHS = _generated_plant_design_paths(GITHUB_ROOT / 'tjrepo')
+
+
 def _excluded(path, repo_name=''):
     if any(part in path for part in EXCLUDE_PARTS):
         return True
     if path.endswith(EXCLUDE_SUFFIXES):
         return True
-    if repo_name == 'tjrepo' and path in GENERATED_FAMILY_PATHS:
+    if repo_name == 'tjrepo' and (path in GENERATED_FAMILY_PATHS or path in GENERATED_PLANT_DESIGN_PATHS):
         return True
     return any(rx.match(path) for rx in DATA_REGEXES.get(repo_name, ()))
 

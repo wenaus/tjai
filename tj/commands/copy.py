@@ -6,6 +6,7 @@ from datetime import datetime, date, time, timezone as dt_timezone
 from zoneinfo import ZoneInfo
 
 from tj.commands.common import get_entry_from_recent_list
+from tj.entry_ids import copied_entry_id
 from tj.repository_factory import RepositoryFactory
 from tj.timezone_manager import get_current_timezone
 from tj.uuid7 import uuid7
@@ -95,9 +96,12 @@ def handle_copy(args) -> None:
     # Create new entry by copying the old one
     now_ts = datetime.now(dt_timezone.utc).timestamp()
 
-    # Copy entry data with new event_date
+    # Copy entry data with new event_date and the copy's own entry_id
     new_data = dict(entry.data) if entry.data else {}
     new_data['event_date'] = new_event_ts
+    new_entry_id = copied_entry_id(new_data.get('entry_id'), new_dt.date())
+    if new_entry_id:
+        new_data['entry_id'] = new_entry_id
 
     repository = RepositoryFactory.get_repository()
 
