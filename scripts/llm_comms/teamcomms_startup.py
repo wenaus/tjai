@@ -12,6 +12,7 @@ import sys
 import time
 
 CONFIG = Path.home() / ".config/teamcomms/torre-ai"
+ENROLLED = Path.home() / ".tjai/teamcomms-enrolled"
 # Clients of the operator's own sessions that this policy enrolls. The
 # operator's Codex sessions never join; other participants choose their own.
 CLIENTS = {"claude"}
@@ -74,7 +75,21 @@ def codex_name(host, native_id, hint):
         offset += 50
 
 
+def enrolled_marker(pid, native_id):
+    """One marker per Claude process and session: present once that process has enrolled."""
+    ENROLLED.mkdir(parents=True, exist_ok=True)
+    for old in ENROLLED.iterdir():
+        try:
+            os.kill(int(old.name.split("-", 1)[0]), 0)
+        except (ValueError, ProcessLookupError):
+            old.unlink(missing_ok=True)
+        except PermissionError:
+            pass
+    return ENROLLED / f"{pid}-{native_id}"
+
+
 def claude_hook(data):
+    """Enroll at SessionStart, or at the first prompt after a /rename makes the session eligible."""
     from startup import claude_record, machine
 
     host, _ = machine()
@@ -82,6 +97,9 @@ def claude_hook(data):
     name = (record.get("name") or data.get("session_name")
             or data.get("session_title") or os.environ.get("TJAI_SESSION_NAME") or "")
     if not eligible(host, name, "claude"):
+        return 0
+    marker = enrolled_marker(record.get("pid"), data.get("session_id"))
+    if marker.exists():
         return 0
     allowed, reason = realm_admits()
     if not allowed:
@@ -91,9 +109,12 @@ def claude_hook(data):
     if not (os.access(python, os.X_OK) and config.is_file() and (CONFIG / "token").is_file()):
         return 0
     silence(config)
-    return subprocess.run([str(python), "-m", "teamcomms.connectors.cli", "--config",
+    code = subprocess.run([str(python), "-m", "teamcomms.connectors.cli", "--config",
                            str(config), "hook", "claude"],
                           input=json.dumps({**data, "session_name": name}), text=True).returncode
+    if code == 0:
+        marker.touch()
+    return code
 
 
 def refresh_supervisors():

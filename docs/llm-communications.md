@@ -27,6 +27,9 @@ machine's Claude realm to join TeamComms and its login to be that realm's
 account, which only the tech realm satisfies (tjrepo
 `computers/common/claude-realms.md`). Automatic greetings are
 disabled. Claude's name is resolved from its live registry before enrollment.
+The gate runs at SessionStart and again at each prompt until that Claude
+process has enrolled (a marker in `~/.tjai/teamcomms-enrolled/`), so a session
+named with `/rename` after startup joins at its next prompt.
 Unnamed and temporary sessions remain outside TeamComms. The shared Codex
 configuration also keeps its `teamcomms` MCP server disabled, and the Codex
 launcher unsets `TEAMCOMMS_TOKEN`.
