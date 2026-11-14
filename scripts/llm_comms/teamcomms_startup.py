@@ -24,6 +24,20 @@ def eligible(host, name, client):
                 and re.fullmatch(rf"{prefix}-[1-9][0-9]*", name or ""))
 
 
+def realm_admits():
+    """(allowed, reason) from the machine's Claude realm: TeamComms is the tech realm's alone.
+
+    The realm module ships with the Claude hooks (tjrepo computers/common/claude-hooks,
+    linked at ~/.claude/hooks); without it no session enrolls.
+    """
+    sys.path.append(str(Path.home() / ".claude/hooks"))
+    try:
+        import claude_realm
+    except ImportError as exc:
+        return False, f"claude_realm module unavailable: {exc}"
+    return claude_realm.admits_teamcomms()
+
+
 def silence(path):
     """Disable automatic greetings in the existing host configuration."""
     data = json.loads(path.read_text())
@@ -68,6 +82,10 @@ def claude_hook(data):
     name = (record.get("name") or data.get("session_name")
             or data.get("session_title") or os.environ.get("TJAI_SESSION_NAME") or "")
     if not eligible(host, name, "claude"):
+        return 0
+    allowed, reason = realm_admits()
+    if not allowed:
+        print(f"TeamComms: not enrolling {name}: {reason}", file=sys.stderr)
         return 0
     python, config = CONFIG / "python", CONFIG / "connector.json"
     if not (os.access(python, os.X_OK) and config.is_file() and (CONFIG / "token").is_file()):
