@@ -107,7 +107,16 @@ NAME --conversation ID` writes `agy-<conversationId>.name`, which registration
 and every heartbeat read. The receiver lives as long as its `agy` process, so in
 the App, whose hub process serves every conversation, a finished conversation
 stays registered until the hub exits; `unanswered_since` marks it once mail goes
-unanswered. Dialog recording does not cover Antigravity.
+unanswered.
+
+Dialog recording is the hooks file's second entry, tjrepo
+`computers/common/antigravity_record.py`, at PreInvocation and Stop. It reads
+the transcript steps added since its last run (`~/.tjai/antigravity_record_state.json`
+holds each conversation's byte offset; a conversation first seen starts at its
+latest user input). It posts user inputs, injected `[TJAI peer ...]` messages
+(filed under their canonical peer entry) and the agent's responses to
+`/tjai/api/dialog` as client `antigravity`, each with its step index as
+`source_id` and its own timestamp, so a repeated post is a no-op.
 
 ## Tools and lifecycle
 
