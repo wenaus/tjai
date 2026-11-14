@@ -6,6 +6,7 @@ Noninteractive and administrative subcommands pass through untouched.
 """
 
 import asyncio
+from datetime import date, datetime, time as toml_time
 import json
 import os
 from pathlib import Path
@@ -14,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 
 from codex_client import CodexClient
 from startup import machine, start
@@ -29,10 +31,48 @@ COMMANDS = {"agents", "exec", "e", "review", "login", "logout", "mcp", "plugin",
             "features", "help"}
 
 
+def toml_value(value):
+    """Render a parsed TOML value for Codex's key=value config override syntax."""
+    if isinstance(value, str):
+        return json.dumps(value)
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (datetime, date, toml_time)):
+        return value.isoformat()
+    if isinstance(value, list):
+        return "[" + ", ".join(toml_value(item) for item in value) + "]"
+    if isinstance(value, dict):
+        return "{ " + ", ".join(
+            f"{json.dumps(str(key))} = {toml_value(item)}" for key, item in value.items()
+        ) + " }"
+    return str(value)
+
+
+def profile_server_config(profile):
+    """Translate a runtime profile into app-server config overrides.
+
+    Codex loads --profile in the TUI but does not accept it on app-server. The
+    external server still needs the profile's provider and runtime settings, so
+    pass the resolved profile values through app-server's -c interface.
+    """
+    codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")).expanduser()
+    profile_path = codex_home / f"{profile}.config.toml"
+    if not profile_path.is_file():
+        return []
+    with profile_path.open("rb") as handle:
+        settings = tomllib.load(handle)
+
+    overrides = []
+    for key, value in settings.items():
+        overrides.extend(["-c", f"{key}={toml_value(value)}"])
+    return overrides
+
+
 def launch_options(arguments):
     """Inspect routing/cwd only; forward the original argument list verbatim."""
     cwd = os.getcwd()
     server_config = []
+    profile = None
     i = 0
     while i < len(arguments):
         arg = arguments[i]
@@ -44,12 +84,16 @@ def launch_options(arguments):
             value = arguments[i + 1]
             if arg in {"-C", "--cd"}:
                 cwd = os.path.abspath(os.path.expanduser(value))
+            if arg in {"-p", "--profile"}:
+                profile = value
             if arg in {"-c", "--config", "--enable", "--disable"}:
                 server_config.extend([arg, value])
             i += 2
             continue
         if arg.startswith("--cd="):
             cwd = os.path.abspath(os.path.expanduser(arg.split("=", 1)[1]))
+        elif arg.startswith("--profile="):
+            profile = arg.split("=", 1)[1]
         elif arg.startswith(("--config=", "--enable=", "--disable=")):
             server_config.append(arg)
         elif not arg.startswith("-"):
@@ -57,6 +101,8 @@ def launch_options(arguments):
                 return None
             break  # Interactive prompt, resume or fork: other arguments stay native.
         i += 1
+    if profile is not None:
+        server_config = profile_server_config(profile) + server_config
     return cwd, server_config
 
 
