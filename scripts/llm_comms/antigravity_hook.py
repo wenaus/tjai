@@ -9,7 +9,7 @@ as JSON on stdin and reads the hook result as JSON from stdout.
                  TJAI session instructions
   PreInvocation  start the receiver if it is not running (conversations opened
                  before this hook existed join here), then inject spooled peer
-                 messages as system messages
+                 messages as labelled user messages
 
   antigravity_hook.py --rename NAME --conversation CONVERSATION_ID
                  give the conversation a TJAI name (Antigravity has no session
@@ -25,6 +25,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 CLIENT = "antigravity"
+
+
+# Peer mail enters as a user message (Antigravity heeds those far more than system messages,
+# Torre 2026-11-14), labelled so it is never taken for his own typing. The [TJAI peer UUID]
+# envelope stays first, so TJAI files the recorded turn under its canonical peer entry.
+PEER_NOTE = ("\n\n(Delivered by TJAI from another AI session working on Torre's behalf; "
+             "not typed by Torre.)")
 
 
 def system(text):
@@ -61,7 +68,7 @@ def pre_invocation(data):
     if not messages:
         return {}
     record_accepted(messages, session_id_for(CLIENT, data["conversationId"]))
-    return {"injectSteps": [system(message["text"]) for message in messages]}
+    return {"injectSteps": [{"userMessage": message["text"] + PEER_NOTE} for message in messages]}
 
 
 def main():

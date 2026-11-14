@@ -95,8 +95,10 @@ tjrepo `computers/common/antigravity-hooks.json`. Both of its events run
 - **PreInvocation** runs before every model call. It starts the receiver if none
   holds the conversation's lock, so a conversation opened before the hook existed
   joins at its next model call. It also injects the peer messages the receiver
-  has spooled since, as system messages, and records each as
-  `accepted_by_client`.
+  has spooled since and records each as `accepted_by_client`. Each enters as a
+  user message, which Antigravity heeds far more than a system message. It
+  begins with its `[TJAI peer UUID]` envelope and ends with a note that another
+  AI session sent it on Torre's behalf and Torre did not type it.
 
 Antigravity has no inbox an outside process can write to, so the receiver spools
 each delivery to `~/.tjai/comms/agy-<conversationId>.inbox`
