@@ -74,7 +74,7 @@ TJREPO_DIR_PROJECT = {
     'tjai': 'tjai', 'tj-getlink': 'tjai',
     'etaverse': 'etaverse-client', 'kozykorner': 'dev',  # etaverse: by subject, below
     'pax-eden': 'pax-eden', 'primus': 'primus', 'primus-blender': 'primus',
-    'primus-sl': 'primus', 'primus-wright': 'primus',
+    'primus-grids': 'primus', 'primus-sl': 'primus', 'primus-wright': 'primus',
     'blender': 'blender',
     'sl': 'primus', 'lsl': 'primus', 'lslp': 'primus', 'wright': 'primus',
     'computers': 'dev', 'torre-code': 'dev', 'ops': 'dev', 'docs': 'dev',
