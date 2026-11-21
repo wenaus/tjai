@@ -57,6 +57,7 @@ with `deploy/update_from_dev.sh`.
 | [Todo Bangs](docs/todo-bangs.md) | The `!!!` in-flow todo marker: extraction rule and index, dialog exclusions, the `!!!` page, and the `get_todo_bangs` MCP tool |
 | [Inflight Todos](docs/inflight.md) | Activities in progress as todos with status `inflight`: body shape (Live/Done/Refs), live view with per-item actions and auto-refresh, Capcom shelf, three-way editor merge, LLM rules |
 | [Server & Deployment](docs/server.md) | Production environment, deploy, endpoints, logging, health, backups |
+| [SysConfig](docs/sysconfig.md) | Server key/value table for settings and runtime state: columns, value conventions, key families, access paths, increment and masking behaviour |
 | [MCP Server](docs/mcp.md) | Standalone MCP ASGI service: transport policy, bearer auth, OAuth endpoint for ChatGPT, Apache routing, deployment; related read-only Postgres MCP |
 | [LLM Communications](docs/llm-communications.md) | User guide and current contract: AI Hi, shared-work coordination, MCP messaging, delivery recovery, dialog and assessment |
 | [Distributed LLM Communications Plan](docs/llm-communications-plan.md) | Approved design and rollout evidence; deployment locking remains planned |
