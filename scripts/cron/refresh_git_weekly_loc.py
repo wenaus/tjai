@@ -213,6 +213,29 @@ DATA_PATHS = {
         'primus-blender/factory/sl_builds/houses/furnishings/*.json',
         # v2 tree designs, written from the v1 designs by make_v2_designs.py.
         'primus-blender/factory/sl_builds/*_v2/design.json',
+        # Checkin records, written by tools/model_checkout.py at every checkin.
+        'primus-blender/checkins/**',
+        # The atlas tools' measurement and delivery records beside each sheet (atlas_relayout.py, kit_atlas.py,
+        # screen_atlas.py, subject_pixels.py, the sheet finishers): bounds, layouts, proofs, resolutions, cells and
+        # tags, each relayout's delivery folder, and the atlas usage and redraw measurements.
+        'primus-blender/**/*.bounds.json',
+        'primus-blender/**/*.layout.json',
+        'primus-blender/**/*.relayout.json',
+        'primus-blender/**/*proof.json',
+        'primus-blender/**/*.resolution.json',
+        'primus-blender/**/*.cells.json',
+        'primus-blender/**/*.tags.json',
+        'primus-blender/factory/plants/assets/*/relayout/**',
+        'primus-blender/factory/plants/atlas_usage.json',
+        'primus-blender/factory/plants/small_pieces_redraw.json',
+        # Kit ledgers, inventories and asset keys; every version of the kit builders' scripts (sla_build.py);
+        # region names read from map pictures; inworld readbacks, surveys and censuses (the notes beside them count).
+        # primus-grids was primus-sl before its rename, and history carries both.
+        *(f'{top}/{path}' for top in ('primus-grids', 'primus-sl') for path in (
+            'sl_kit_status.json', 'sl_inventory.json', 'sl_asset_keys.json', 'lsl/generated.json',
+            'air_taxi/map_names/*.json', 'inworld/**/*.json', 'inworld/**/*.txt',
+            # function lists imported from OpenSim's source (lsl/grids/opensim_lsl.py) and Kitely's published list
+            'lsl/grids/opensim-lsl.json', 'lsl/grids/kitely-ossl.json')),
     ),
 }
 

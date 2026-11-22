@@ -90,6 +90,16 @@ net source growth; deleted lines are not subtracted. Excluded:
   and the house builder's dumps of Etaverse records (`houses/*.json`,
   `houses/furnishings/*.json`, committed until 2026-11-11 and transient since).
   The generators, the table and the v1 tree designs count.
+- **Primus generated records** under `primus-blender/` and `primus-grids/`
+  (`primus-sl/` before its rename): checkin records (`checkins/**`); the atlas
+  tools' measurement and delivery records beside each sheet (`*.bounds.json`,
+  `*.layout.json`, `*.relayout.json`, `*proof.json`, `*.resolution.json`,
+  `*.cells.json`, `*.tags.json`, `relayout/` folders) and the atlas usage and
+  redraw measurements; the kit ledgers, inventory and asset keys; every version
+  of the kit builders' scripts (`lsl/generated.json`); region names read from
+  map pictures; inworld readbacks, surveys and censuses (`inworld/**/*.json`,
+  `*.txt`); and the grid function lists imported from OpenSim and Kitely.
+  Level designs, recipes, notes and the tools themselves count.
 - **Archives and staging directories** in tjrepo (`EXCLUDE_TJREPO_TOP`), the
   enumerated cross-repository moves.
 
