@@ -56,6 +56,10 @@ Detection under `gemini-3.1-pro-preview` fell as the pack grew, 33 then 28 then 
 
 `gpt-5.6-sol` scores each event lower than `gemini-2.5-pro` (0.50 against 0.66), which steps the endpoint down at equal event counts. The `sol` marker on the dashboard divides the two.
 
+## Accepted deliveries (2026-11-26)
+
+Item-by-item reviews of delivered work (the Versal Yard's verdicts by cell) were scored one-sidedly: a rejection is a notable failure (-1), while a plain "ok" fell under routine mechanics (0) and only approvals with praise scored. On 2026-11-25 Torre approved builds in 296 verdict turns, about 26 of which scored, against roughly fifty rejections. The `assessment-system-prompt` entry now scores each approving verdict turn as an accepted delivery (+1; +2 with praise, never both), asks for every verdict to be scored rather than sampled, and drops the "5-15 events a day" guide. Days are rescored under the rule from 2026-11-25 backward, one at a time, on Torre's word.
+
 ## Calls and merge
 
 Each call receives the system prompt, a note naming which part of the day it holds and the sessions in it, and those sessions' turns, each session whole and in time order. Each turn's header carries the time, role, host and session, client and model, and the entry UUID, so a scored event can cite the turn it rests on. The call returns the JSON scores and the markdown log for its turns alone.
