@@ -484,7 +484,7 @@
             }
         }
 
-        function renderDailyPlot(days, field, label, color) {
+        function renderDailyPlot(days, field, label, color, span) {
             if (!days || days.length === 0) return '';
             const W = 1400, H = 390, pad = {l: 74, r: 20, t: 24, b: 46};
             const plotW = W - pad.l - pad.r;
@@ -494,8 +494,9 @@
                 ? (d.scored_events > 0 ? (d.endpoint_raw ?? d.endpoint) / d.scored_events : null)
                 : d[field]);
             const finiteVals = vals.filter(Number.isFinite);
-            const mx = Math.max(...finiteVals, 1);
-            const mn = Math.min(...finiteVals, -1);
+            // a plot given a span (the positive and negative totals share one) is drawn to it
+            const mx = span ? span.mx : Math.max(...finiteVals, 1);
+            const mn = span ? span.mn : Math.min(...finiteVals, -1);
             const range = mx - mn || 1;
             function x(i) { return pad.l + (i / Math.max(days.length - 1, 1)) * plotW; }
             function y(v) { return pad.t + plotH - ((v - mn) / range) * plotH; }
@@ -627,8 +628,11 @@
                 html += renderDailyPlot(days, 'mean', 'Daily Mean Score', '#90caf9');
                 // The day's two sides apart (Torre, 2026-11-26: "a +100 with no neg turns is very different from
                 // +500 -400"): the sum of its positive scores and the sum of its negative scores.
-                html += renderDailyPlot(days, 'positive', 'Daily Positive Total', '#9ccc65');
-                html += renderDailyPlot(days, 'negative', 'Daily Negative Total', '#ef5350');
+                // One scale for both (Torre, 2026-11-26: "put pos/neg plots on same scale. ie larger scale deter mines
+                // both."): the larger of the biggest positive and the biggest negative sets the span of each.
+                const sideSpan = Math.max(1, ...days.map(d => Math.max(d.positive || 0, -(d.negative || 0))));
+                html += renderDailyPlot(days, 'positive', 'Daily Positive Total', '#9ccc65', {mn: 0, mx: sideSpan});
+                html += renderDailyPlot(days, 'negative', 'Daily Negative Total', '#ef5350', {mn: -sideSpan, mx: 0});
                 // Daily integral plot — off; the endpoint is the series watched.
                 if (false) {
                     html += renderDailyPlot(days, 'integral', 'Daily Integral', '#ce93d8');
