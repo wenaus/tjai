@@ -506,14 +506,21 @@
             // Zero line
             svg += `<line x1="${pad.l}" y1="${y0}" x2="${W-pad.r}" y2="${y0}" stroke="#555" stroke-dasharray="3,3"/>`;
             // Mean scores need fractional ticks.
-            const tickStep = isMean ? 0.5 : field === 'endpoint' ? 10 : (field === 'positive' || field === 'negative') ? 50 : 200;
-            const tickMin = Math.ceil(mn / tickStep) * tickStep;
-            const tickMax = Math.floor(mx / tickStep) * tickStep;
-            for (let tv = tickMin; tv <= tickMax; tv += tickStep) {
+            // A tick step from the data's own range: about six ticks, each step 1, 2 or 5 times a power of ten
+            // (Torre, 2026-11-26: "use an intelligent y axis. cramming in 50 increment ticks is not smart.").
+            const tickStep = (() => {
+                const rough = range / 6;
+                const mag = Math.pow(10, Math.floor(Math.log10(rough)));
+                const f = rough / mag;
+                return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * mag;
+            })();
+            const tickDecimals = Math.max(0, -Math.floor(Math.log10(tickStep)));
+            for (let k = Math.ceil(mn / tickStep); k <= Math.floor(mx / tickStep); k++) {
+                const tv = k * tickStep;      // from an integer count, so no drift accumulates
                 const ty = y(tv);
                 svg += `<line x1="${pad.l-3}" y1="${ty}" x2="${pad.l}" y2="${ty}" stroke="#8a8a8a"/>`;
                 svg += `<line x1="${pad.l}" y1="${ty}" x2="${W-pad.r}" y2="${ty}" stroke="#333" stroke-dasharray="2,4"/>`;
-                svg += `<text x="${pad.l-5}" y="${ty+6}" text-anchor="end" fill="#8a8a8a" font-size="18" font-family="monospace">${tv > 0 ? '+' : ''}${isMean ? tv.toFixed(1) : tv}</text>`;
+                svg += `<text x="${pad.l-5}" y="${ty+6}" text-anchor="end" fill="#8a8a8a" font-size="18" font-family="monospace">${tv > 0 ? '+' : ''}${tv.toFixed(tickDecimals)}</text>`;
             }
 
             // Area fill
