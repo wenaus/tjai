@@ -506,7 +506,7 @@
             // Zero line
             svg += `<line x1="${pad.l}" y1="${y0}" x2="${W-pad.r}" y2="${y0}" stroke="#555" stroke-dasharray="3,3"/>`;
             // Mean scores need fractional ticks.
-            const tickStep = isMean ? 0.5 : field === 'endpoint' ? 10 : 200;
+            const tickStep = isMean ? 0.5 : field === 'endpoint' ? 10 : (field === 'positive' || field === 'negative') ? 50 : 200;
             const tickMin = Math.ceil(mn / tickStep) * tickStep;
             const tickMax = Math.floor(mx / tickStep) * tickStep;
             for (let tv = tickMin; tv <= tickMax; tv += tickStep) {
@@ -617,6 +617,10 @@
                 // Daily endpoint plot
                 html += renderDailyPlot(days, 'endpoint', 'Daily Endpoint', '#e0e0e0');
                 html += renderDailyPlot(days, 'mean', 'Daily Mean Score', '#90caf9');
+                // The day's two sides apart (Torre, 2026-11-26: "a +100 with no neg turns is very different from
+                // +500 -400"): the sum of its positive scores and the sum of its negative scores.
+                html += renderDailyPlot(days, 'positive', 'Daily Positive Total', '#9ccc65');
+                html += renderDailyPlot(days, 'negative', 'Daily Negative Total', '#ef5350');
                 // Daily integral plot — off; the endpoint is the series watched.
                 if (false) {
                     html += renderDailyPlot(days, 'integral', 'Daily Integral', '#ce93d8');

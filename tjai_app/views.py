@@ -3337,6 +3337,9 @@ def api_assessment_dashboard(request):
             # the day's real value stays in endpoint_raw for the mean and the tooltip
             'endpoint': min(endpoint, ENDPOINT_CAP),
             'endpoint_raw': endpoint,
+            # the two sides of the day apart: the sum of its positive scores and of its negative scores
+            'positive': sum(s.get('score', 0) for s in scores if s.get('score', 0) > 0),
+            'negative': sum(s.get('score', 0) for s in scores if s.get('score', 0) < 0),
             'integral': integral,
             'scored_events': len(scores),
             'sessions': session_summaries,
