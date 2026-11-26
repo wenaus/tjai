@@ -508,11 +508,17 @@
             // Mean scores need fractional ticks.
             // A tick step from the data's own range: about six ticks, each step 1, 2 or 5 times a power of ten
             // (Torre, 2026-11-26: "use an intelligent y axis. cramming in 50 increment ticks is not smart.").
+            // Never more than six ticks ("no more than 6 y axis ticks."): the step grows 1, 2, 5, 10 ... until
+            // the ticks inside the range number six or fewer.
             const tickStep = (() => {
                 const rough = range / 6;
-                const mag = Math.pow(10, Math.floor(Math.log10(rough)));
-                const f = rough / mag;
-                return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * mag;
+                let mag = Math.pow(10, Math.floor(Math.log10(rough)));
+                const nice = [1, 2, 5];
+                let n = nice.findIndex(m => m * mag >= rough);
+                if (n < 0) { n = 0; mag *= 10; }
+                const count = s => Math.floor(mx / s) - Math.ceil(mn / s) + 1;
+                while (count(nice[n] * mag) > 6) { n += 1; if (n === nice.length) { n = 0; mag *= 10; } }
+                return nice[n] * mag;
             })();
             const tickDecimals = Math.max(0, -Math.floor(Math.log10(tickStep)));
             for (let k = Math.ceil(mn / tickStep); k <= Math.floor(mx / tickStep); k++) {
