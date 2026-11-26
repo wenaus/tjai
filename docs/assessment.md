@@ -72,7 +72,7 @@ A failed call is retried once. If some parts fail, the day is written from the p
 
 ## Dashboard
 
-The assessment dashboard plots Daily Endpoint (final cumulative) and Daily Mean Score (endpoint divided by the number of scored exchanges). The mean uses the existing `endpoint` and `scored_events` dashboard fields; it requires no rescoring. Its tooltip shows the mean to two decimal places, endpoint, and exchange count. Days with no scored exchanges leave a gap. Both plots link each point to its daily assessment. The integral plot is disabled.
+The assessment dashboard plots Daily Endpoint (final cumulative) and Daily Mean Score (endpoint divided by the number of scored exchanges). The Daily Endpoint plot is capped at +100 (`ENDPOINT_CAP`, 2026-11-26, once accepted deliveries were scored); a capped day's tooltip gives its real endpoint, carried as `endpoint_raw`, and the mean is computed from `endpoint_raw`, so it is not capped. The mean uses the `endpoint_raw` and `scored_events` dashboard fields; it requires no rescoring. Its tooltip shows the mean to two decimal places, endpoint, and exchange count. Days with no scored exchanges leave a gap. Both plots link each point to its daily assessment. The integral plot is disabled.
 
 The daily view plots each event at its Eastern time of day. The assessor writes event times both with an offset and without one; a time without an offset is Eastern wall time and the page reads it as written, since a browser would otherwise take it as the viewer's local time.
 

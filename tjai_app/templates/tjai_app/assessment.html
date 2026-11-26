@@ -491,7 +491,7 @@
             const plotH = H - pad.t - pad.b;
             const isMean = field === 'mean';
             const vals = days.map(d => isMean
-                ? (d.scored_events > 0 ? d.endpoint / d.scored_events : null)
+                ? (d.scored_events > 0 ? (d.endpoint_raw ?? d.endpoint) / d.scored_events : null)
                 : d[field]);
             const finiteVals = vals.filter(Number.isFinite);
             const mx = Math.max(...finiteVals, 1);
@@ -537,8 +537,8 @@
                 if (!Number.isFinite(vals[i])) return;
                 const dotColor = vals[i] > 0 ? '#9ccc65' : vals[i] < 0 ? '#ef5350' : '#8a8a8a';
                 const tooltip = isMean
-                    ? `${d.date}: mean ${vals[i] > 0 ? '+' : ''}${vals[i].toFixed(2)}; endpoint ${d.endpoint > 0 ? '+' : ''}${d.endpoint}; ${d.scored_events} scored exchanges`
-                    : `${d.date}: ${vals[i]}`;
+                    ? `${d.date}: mean ${vals[i] > 0 ? '+' : ''}${vals[i].toFixed(2)}; endpoint ${(d.endpoint_raw ?? d.endpoint) > 0 ? '+' : ''}${d.endpoint_raw ?? d.endpoint}; ${d.scored_events} scored exchanges`
+                    : `${d.date}: ${vals[i]}${field === 'endpoint' && d.endpoint_raw > d.endpoint ? ` (capped; real +${d.endpoint_raw})` : ''}`;
                 svg += `<circle cx="${x(i)}" cy="${y(vals[i])}" r="3" fill="${dotColor}" style="cursor:pointer" onclick="selectDate('${d.entry_id || ('assessment-' + d.date + '-' + currentAssessor)}')"><title>${tooltip}</title></circle>`;
             });
 

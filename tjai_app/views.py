@@ -3254,6 +3254,9 @@ def api_assessment_rerun(request):
     return JsonResponse({'success': True, 'date': date_str})
 
 
+ENDPOINT_CAP = 100      # the Daily Endpoint plot's ceiling; the day's real endpoint is endpoint_raw
+
+
 @login_required
 def api_assessment_dashboard(request):
     """Return Gemini dashboard data: daily trends and session breakdowns."""
@@ -3330,7 +3333,10 @@ def api_assessment_dashboard(request):
         days.append({
             'date': date_str,
             'entry_id': data.get('entry_id', ''),
-            'endpoint': endpoint,
+            # the plotted endpoint is capped at ENDPOINT_CAP (Torre, 2026-11-26: "lets cap endpoint at 100");
+            # the day's real value stays in endpoint_raw for the mean and the tooltip
+            'endpoint': min(endpoint, ENDPOINT_CAP),
+            'endpoint_raw': endpoint,
             'integral': integral,
             'scored_events': len(scores),
             'sessions': session_summaries,
